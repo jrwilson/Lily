@@ -1,0 +1,19 @@
+2011-10-19
+
+I started developing the kernel with the tutorial at http://wiki.osdev.org/Bare_bones
+I decided to create ISO images for testing with Bochs.
+The code for doing this can be found in the Makefile.
+I also developed two functions for printing strings and numbers in hex.
+These functions were inspired by the tutorial at http://www.jamesmolloy.co.uk/tutorial_html/3.-The%20Screen.html
+I believe my next step is to work on the global descriptor table (GDT) and interrupt descriptor table (IDT).
+
+
+
+
+Development Order
+-----------------
+Interrupts (fault handling)
+Heap
+System automaton
+Userspace
+File system
