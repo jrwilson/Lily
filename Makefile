@@ -1,11 +1,12 @@
-AS=as
+AS=nasm
+AFLAGS=-f elf
 CC=gcc
 # Add -Werror at some point
 CFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=loader.o kernel.o kput.o
+OBJECTS=loader.o kernel.o kput.o memory.o
 
 KERNEL=lily
 
@@ -16,7 +17,7 @@ $(KERNEL) : $(OBJECTS)
 	$(LD) -T linker.ld -o $@ $^
 
 %.o : %.s
-	$(AS) -o $@ $<
+	$(AS) $(AFLAGS) -o $@ $<
 
 %.o : %.c
 	$(CC) -o $@ -c $< $(CFLAGS)
@@ -28,8 +29,11 @@ clean :
 .PHONY : iso
 iso : lily.iso
 
+#core.img :
+#	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh
+
 core.img :
-	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh
+	grub-mkimage -O i386-pc -p /boot/grub -o $@ biosdisk iso9660 multiboot configfile
 
 eltorito.img : core.img
 	cat /usr/lib/grub/i386-pc/cdboot.img $^ > $@

@@ -115,3 +115,20 @@ kputux (unsigned int n)
   buf[0] = '0';
   kputs (buf);
 }
+
+void
+clear_console ()
+{
+  /* Pointer to the text framebuffer. */
+  unsigned short* videoram = (unsigned short*)VIDEORAM;
+
+  unsigned int x, y;
+  for (y = 0; y < HEIGHT; ++y) {
+    for (x = 0; x < WIDTH; ++x) {
+      videoram[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
+    }
+  }
+
+  x_location = 0;
+  y_location = 0;
+}

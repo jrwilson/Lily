@@ -5,8 +5,12 @@ I decided to create ISO images for testing with Bochs.
 The code for doing this can be found in the Makefile.
 I also developed two functions for printing strings and numbers in hex.
 These functions were inspired by the tutorial at http://www.jamesmolloy.co.uk/tutorial_html/3.-The%20Screen.html
-I believe my next step is to work on the global descriptor table (GDT) and interrupt descriptor table (IDT).
 
+2011-10-20
+
+Added code to display a message and halt when there is multiboot error.
+Added code to halt the processor at the end of the kernel.
+Decided to use a higher-half kernel using the GDT trick described at http://wiki.osdev.org/Higher_Half_With_GDT
 
 
 

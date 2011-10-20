@@ -20,4 +20,7 @@ kputs (char* string);
 void
 kputux (unsigned int n);
 
+void
+clear_console ();
+
 #endif /* __kput_h__ */
