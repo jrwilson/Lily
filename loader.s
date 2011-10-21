@@ -27,6 +27,9 @@ multiboot_header:
 	dd MULTIBOOT_HEADER_FLAGS
 	dd MULTIBOOT_CHECKSUM
 
+	KERNEL_CODE_SEGMENT equ 0x08
+	KERNEL_DATA_SEGMENT equ 0x10
+	
 	;; The kernel starts here.
 start:
 	;; Load the global descriptor table (GDT).
@@ -37,7 +40,7 @@ start:
 	;; 0x8     Code segment
 	;; 0x10    Data segment
 	;; Change all of the data segments.
-	mov cx, 0x10
+	mov cx, KERNEL_DATA_SEGMENT
 	mov ds, cx
 	mov es, cx
 	mov fs, cx
@@ -45,7 +48,7 @@ start:
 	mov ss, cx
 	;; Change the code segment by executing a far jump.
 	;; Jump to offset higherhalf in the segment indexed by 0x08.
-	jmp 0x08:higherhalf
+	jmp KERNEL_CODE_SEGMENT:higherhalf
 
 higherhalf:
 	;; Setup the stack in order to call kmain.
@@ -65,19 +68,17 @@ hang:
 
 	;; Export gdt_flush.
 	[global gdt_flush]
-	;; Import gp which contains the limit and base of the GDT.
-	[extern gp]
-
 gdt_flush:
+	mov eax, [esp+4]	; Get a pointer.
 	;; Load the GDT.
-	lgdt [gp]
+	lgdt [eax]
 	;; This code assumes the global descriptor table looks like:
 	;; Offset  Content
 	;; 0x0     Null descriptor
 	;; 0x8     Code segment
 	;; 0x10    Data segment
 	;; Change all of the data segments.
-	mov ax, 0x10
+	mov ax, KERNEL_DATA_SEGMENT
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
@@ -85,9 +86,9 @@ gdt_flush:
 	mov ss, ax
 	;; Change the code segment by executing a far jump.
 	;; Jump to offset flush2 in the segment indexed by 0x08.
-	jmp 0x08:flush2
+	jmp KERNEL_CODE_SEGMENT:gdt_flush2
 
-flush2:
+gdt_flush2:
 	ret
 
 	;; The setup section will be identity mapped so the lgdt instruction in start can find trickgdt, gdt, etc.
@@ -97,9 +98,16 @@ flush2:
 	;; The trick we will use (from Tim Robinson) is to convert all the logical addresses in the 0xC0100000 range to physical addresses in the 0x0010000 range.
 	;; The solution is to add 0x40000000 using segmentation:
 	;; 0xC0100000 + 0x40000000 = 0x00100000
-	
-	[section .setup]
 
+	;; Export.
+	[global idt_flush]
+idt_flush:
+	mov eax, [esp+4]	; Get the pointer.
+	lidt [eax]
+	ret
+
+	;; This data goes in the setup section.  See the linker script.
+	[section .setup]
 trickgdt:
 	;; Size of the GDT.
 	dw gdt_end - gdt - 1

@@ -15,13 +15,14 @@
 
 #include "kput.h"
 #include "memory.h"
+#include "interrupt.h"
 
 #define MULTIBOOT_MAGIC 0x2BADB002
 
 void
 disable_interrupts ()
 {
-  __asm__("cli");
+  __asm__ __volatile__ ("cli");
 }
 
 void
@@ -29,7 +30,7 @@ halt ()
 {
   disable_interrupts ();
   for (;;) {
-    __asm__("hlt");
+    __asm__ __volatile__ ("hlt");
   }
 }
 
@@ -37,8 +38,10 @@ void
 kmain (void* mbd,
        unsigned int magic)
 {
+  disable_interrupts ();
   initialize_paging ();
-  gdt_install ();
+  install_gdt ();
+  install_idt ();
  
   clear_console ();
 
@@ -60,12 +63,8 @@ kmain (void* mbd,
   /* or do your offsets yourself. The following is merely an example. */ 
   //char * boot_loader_name =(char*) ((long*)mbd)[16];
 
-  /* Print out some numbers in hex. */
-  int i = 0;
-  for (i = 0; i < 16; ++i) {
-    kputux (i);
-    kputs ("\n");
-  }
+  asm volatile ("int $0x3");
+  asm volatile ("int $0x4");
 
   halt ();
 }

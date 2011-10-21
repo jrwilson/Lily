@@ -52,11 +52,11 @@ initialize_paging ()
   kernel_page_directory[768] = (unsigned int)low_page_table_paddr | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
 
   /* Enable paging. */
-  asm volatile ("mov %0, %%eax\n"
-		"mov %%eax, %%cr3\n"
-		"mov %%cr0, %%eax\n"
-		"orl $0x80000000, %%eax\n"
-		"mov %%eax, %%cr0\n" :: "m" (kernel_page_directory_paddr));
+  __asm__ __volatile__ ("mov %0, %%eax\n"
+			"mov %%eax, %%cr3\n"
+			"mov %%cr0, %%eax\n"
+			"orl $0x80000000, %%eax\n"
+			"mov %%eax, %%cr0\n" :: "m" (kernel_page_directory_paddr));
 }
 
 /* Macros for the access byte of descriptors. */
@@ -110,28 +110,31 @@ struct gdt_entry
   unsigned char granularity;
   unsigned char base_high;
 } __attribute__((packed));
+typedef struct gdt_entry gdt_entry_t;
 
 struct gdt_ptr
 {
   unsigned short limit;
-  unsigned int base;
+  gdt_entry_t* base;
 } __attribute__((packed));
+typedef struct gdt_ptr gdt_ptr_t;
 
 #define DESCRIPTOR_COUNT 3
 
-struct gdt_entry gdt[DESCRIPTOR_COUNT];
-struct gdt_ptr gp;
+static gdt_entry_t gdt[DESCRIPTOR_COUNT];
+static gdt_ptr_t gp;
 
-void
-gdt_flush ();
+extern void
+gdt_flush (gdt_ptr_t*);
 
 static void
-gdt_set_gate (int num,
+gdt_set_gate (unsigned int descriptor_offset,
 	      unsigned int base,
 	      unsigned int limit,
 	      unsigned char access,
 	      unsigned char granularity)
 {
+  unsigned int num = descriptor_offset / sizeof (gdt_entry_t);
   gdt[num].base_low = (base & 0xFFFF);
   gdt[num].base_middle = (base >> 16) & 0xFF;
   gdt[num].base_high = (base >> 24) & 0xFF;
@@ -142,14 +145,14 @@ gdt_set_gate (int num,
 }
 
 void
-gdt_install ()
+install_gdt ()
 {
-  gp.limit = (sizeof (struct gdt_entry) * DESCRIPTOR_COUNT) - 1;
-  gp.base = (unsigned int)&gdt;
+  gp.limit = (sizeof (gdt_entry_t) * DESCRIPTOR_COUNT) - 1;
+  gp.base = gdt;
 
   gdt_set_gate (0, 0, 0, 0, 0);
-  gdt_set_gate (1, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_CODE | DESC_ACCESS_NOT_CONFORMING | DESC_ACCESS_CODE_READABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
-  gdt_set_gate (2, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_DATA | DESC_ACCESS_EXPAND_UP | DESC_ACCESS_DATA_WRITABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
+  gdt_set_gate (KERNEL_CODE_SEGMENT, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_CODE | DESC_ACCESS_NOT_CONFORMING | DESC_ACCESS_CODE_READABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
+  gdt_set_gate (KERNEL_DATA_SEGMENT, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_DATA | DESC_ACCESS_EXPAND_UP | DESC_ACCESS_DATA_WRITABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
 
-  gdt_flush ();
+  gdt_flush (&gp);
 }

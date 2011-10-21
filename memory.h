@@ -15,10 +15,13 @@
   Justin R. Wilson
 */
 
+#define KERNEL_CODE_SEGMENT 0x08
+#define KERNEL_DATA_SEGMENT 0x10
+
 void
 initialize_paging ();
 
 void
-gdt_install ();
+install_gdt ();
 
 #endif /* __memory_h__ */
