@@ -17,6 +17,6 @@
 */
 
 void
-initialize_pit ();
+initialize_pit (unsigned short period);
 
 #endif /* __pit_h__ */

@@ -15,7 +15,31 @@
   Justin R. Wilson
 */
 
+struct registers
+{
+  unsigned int ds;
+  unsigned int edi, esi, ebp, esp, ebx, edx, ecx, eax;
+  unsigned int number;
+  unsigned int error;
+  unsigned int eip, cs, eflags, useresp, ss;
+};
+typedef struct registers registers_t;
+typedef void (*interrupt_handler_t) (registers_t*);
+
 void
 install_idt ();
+
+void
+enable_interrupts ();
+
+void
+disable_interrupts ();
+
+interrupt_handler_t
+get_interrupt_handler (unsigned int num);
+
+void
+set_interrupt_handler (unsigned int num,
+		       interrupt_handler_t handler);
 
 #endif /* __interrupt_h__ */

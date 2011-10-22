@@ -16,6 +16,8 @@
 
 #include "pit.h"
 #include "io.h"
+#include "interrupt.h"
+#include "kput.h"
 
 #define PIT_CHANNEL0 0x40
 #define PIT_CHANNEL1 0x41
@@ -55,11 +57,20 @@
 #define PIT_COUNTER1 (1 << 2)
 #define PIT_COUNTER2 (1 << 3)
 
-void
-initialize_pit ()
+static unsigned int tick = 0;
+
+static void
+pit_handler (registers_t* regs)
 {
-  unsigned short period = 0xFFFF;
-  
+  kputs ("Tick="); kputux (tick); kputs ("\n");
+  ++tick;
+}
+
+void
+initialize_pit (unsigned short period)
+{
+  set_interrupt_handler (32, pit_handler);
+
   /* Send the command byte. */
   outb (PIT_COMMAND, PIT_WRITE_CHANNEL0 | PIT_LOW_HIGH | PIT_MODE3 | PIT_BINARY);
   

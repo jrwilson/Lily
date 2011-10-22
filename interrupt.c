@@ -17,6 +17,7 @@
 #include "memory.h"
 #include "kput.h"
 #include "io.h"
+#include "halt.h"
 
 struct idt_entry
 {
@@ -40,55 +41,55 @@ typedef struct idt_ptr idt_ptr_t;
 static idt_entry_t idt[INTERRUPT_COUNT];
 static idt_ptr_t ip;
 
-extern void tsr0 ();
-extern void tsr1 ();
-extern void tsr2 ();
-extern void tsr3 ();
-extern void tsr4 ();
-extern void tsr5 ();
-extern void tsr6 ();
-extern void tsr7 ();
-extern void tsr8 ();
-extern void tsr9 ();
-extern void tsr10 ();
-extern void tsr11 ();
-extern void tsr12 ();
-extern void tsr13 ();
-extern void tsr14 ();
-extern void tsr15 ();
-extern void tsr16 ();
-extern void tsr17 ();
-extern void tsr18 ();
-extern void tsr19 ();
-extern void tsr20 ();
-extern void tsr21 ();
-extern void tsr22 ();
-extern void tsr23 ();
-extern void tsr24 ();
-extern void tsr25 ();
-extern void tsr26 ();
-extern void tsr27 ();
-extern void tsr28 ();
-extern void tsr29 ();
-extern void tsr30 ();
-extern void tsr31 ();
+extern void exception0 ();
+extern void exception1 ();
+extern void exception2 ();
+extern void exception3 ();
+extern void exception4 ();
+extern void exception5 ();
+extern void exception6 ();
+extern void exception7 ();
+extern void exception8 ();
+extern void exception9 ();
+extern void exception10 ();
+extern void exception11 ();
+extern void exception12 ();
+extern void exception13 ();
+extern void exception14 ();
+extern void exception15 ();
+extern void exception16 ();
+extern void exception17 ();
+extern void exception18 ();
+extern void exception19 ();
+extern void exception20 ();
+extern void exception21 ();
+extern void exception22 ();
+extern void exception23 ();
+extern void exception24 ();
+extern void exception25 ();
+extern void exception26 ();
+extern void exception27 ();
+extern void exception28 ();
+extern void exception29 ();
+extern void exception30 ();
+extern void exception31 ();
 
-extern void isr0 ();
-extern void isr1 ();
-extern void isr2 ();
-extern void isr3 ();
-extern void isr4 ();
-extern void isr5 ();
-extern void isr6 ();
-extern void isr7 ();
-extern void isr8 ();
-extern void isr9 ();
-extern void isr10 ();
-extern void isr11 ();
-extern void isr12 ();
-extern void isr13 ();
-extern void isr14 ();
-extern void isr15 ();
+extern void irq0 ();
+extern void irq1 ();
+extern void irq2 ();
+extern void irq3 ();
+extern void irq4 ();
+extern void irq5 ();
+extern void irq6 ();
+extern void irq7 ();
+extern void irq8 ();
+extern void irq9 ();
+extern void irq10 ();
+extern void irq11 ();
+extern void irq12 ();
+extern void irq13 ();
+extern void irq14 ();
+extern void irq15 ();
 
 extern void
 idt_flush (idt_ptr_t*);
@@ -187,49 +188,56 @@ idt_set_gate (unsigned char num,
   idt[num].flags = flags;
 }
 
+interrupt_handler_t interrupt_handlers[INTERRUPT_COUNT];
+
 void
 install_idt ()
 {
+  int k;
+
+  for (k = 0; k < INTERRUPT_COUNT; ++k) {
+    interrupt_handlers[k] = 0;
+  }
+
   ip.limit = (sizeof (idt_entry_t) * INTERRUPT_COUNT) - 1;
   ip.base = idt;
 
-  int k;
   for (k = 0; k < INTERRUPT_COUNT; ++k) {
     idt_set_gate (k, 0, 0, 0);
   }
 
-  idt_set_gate (0, (unsigned int)tsr0, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (1, (unsigned int)tsr1, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (2, (unsigned int)tsr2, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (3, (unsigned int)tsr3, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (4, (unsigned int)tsr4, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (5, (unsigned int)tsr5, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (6, (unsigned int)tsr6, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (7, (unsigned int)tsr7, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (8, (unsigned int)tsr8, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (9, (unsigned int)tsr9, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (10, (unsigned int)tsr10, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (11, (unsigned int)tsr11, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (12, (unsigned int)tsr12, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (13, (unsigned int)tsr13, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (14, (unsigned int)tsr14, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (15, (unsigned int)tsr15, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (16, (unsigned int)tsr16, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (17, (unsigned int)tsr17, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (18, (unsigned int)tsr18, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (19, (unsigned int)tsr19, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (20, (unsigned int)tsr20, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (21, (unsigned int)tsr21, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (22, (unsigned int)tsr22, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (23, (unsigned int)tsr23, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (24, (unsigned int)tsr24, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (25, (unsigned int)tsr25, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (26, (unsigned int)tsr26, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (27, (unsigned int)tsr27, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (28, (unsigned int)tsr28, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (29, (unsigned int)tsr29, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (30, (unsigned int)tsr30, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
-  idt_set_gate (31, (unsigned int)tsr31, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (0, (unsigned int)exception0, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (1, (unsigned int)exception1, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (2, (unsigned int)exception2, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (3, (unsigned int)exception3, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (4, (unsigned int)exception4, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (5, (unsigned int)exception5, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (6, (unsigned int)exception6, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (7, (unsigned int)exception7, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (8, (unsigned int)exception8, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (9, (unsigned int)exception9, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (10, (unsigned int)exception10, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (11, (unsigned int)exception11, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (12, (unsigned int)exception12, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (13, (unsigned int)exception13, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (14, (unsigned int)exception14, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (15, (unsigned int)exception15, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (16, (unsigned int)exception16, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (17, (unsigned int)exception17, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (18, (unsigned int)exception18, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (19, (unsigned int)exception19, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (20, (unsigned int)exception20, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (21, (unsigned int)exception21, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (22, (unsigned int)exception22, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (23, (unsigned int)exception23, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (24, (unsigned int)exception24, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (25, (unsigned int)exception25, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (26, (unsigned int)exception26, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (27, (unsigned int)exception27, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (28, (unsigned int)exception28, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (29, (unsigned int)exception29, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (30, (unsigned int)exception30, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
+  idt_set_gate (31, (unsigned int)exception31, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | TRAP_GATE_32);
 
   /* Remap IRQ 0-15 to ISR 32-47. */
   outb (PIC_MASTER_LOW, PIC_ICW1_LOW | PIC_ICW1_NEED_ICW4);
@@ -243,62 +251,98 @@ install_idt ()
   outb (PIC_MASTER_HIGH, 0x0);
   outb (PIC_SLAVE_HIGH, 0x0);
 
-  idt_set_gate (PIC_MASTER_BASE + 0, (unsigned int)isr0, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 1, (unsigned int)isr1, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 2, (unsigned int)isr2, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 3, (unsigned int)isr3, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 4, (unsigned int)isr4, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 5, (unsigned int)isr5, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 6, (unsigned int)isr6, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_MASTER_BASE + 7, (unsigned int)isr7, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 0, (unsigned int)isr8, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 1, (unsigned int)isr9, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 2, (unsigned int)isr10, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 3, (unsigned int)isr11, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 4, (unsigned int)isr12, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 5, (unsigned int)isr13, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 6, (unsigned int)isr14, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
-  idt_set_gate (PIC_SLAVE_BASE + 7, (unsigned int)isr15, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 0, (unsigned int)irq0, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 1, (unsigned int)irq1, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 2, (unsigned int)irq2, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 3, (unsigned int)irq3, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 4, (unsigned int)irq4, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 5, (unsigned int)irq5, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 6, (unsigned int)irq6, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_MASTER_BASE + 7, (unsigned int)irq7, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 0, (unsigned int)irq8, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 1, (unsigned int)irq9, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 2, (unsigned int)irq10, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 3, (unsigned int)irq11, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 4, (unsigned int)irq12, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 5, (unsigned int)irq13, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 6, (unsigned int)irq14, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
+  idt_set_gate (PIC_SLAVE_BASE + 7, (unsigned int)irq15, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
 
   idt_flush (&ip);
 }
 
-struct registers
+static void
+default_handler (registers_t* regs)
 {
-  unsigned int ds;
-  unsigned int edi, esi, ebp, esp, ebx, edx, ecx, eax;
-  unsigned int number;
-  unsigned int error;
-  unsigned int eip, cs, eflags, useresp, ss;
-};
-typedef struct registers registers_t;
+  kputs ("Unhandled interrupt!\n");
+  kputs ("Interrupt: "); kputux (regs->number); kputs (" Code: " ); kputux (regs->error); kputs ("\n");
+  
+  kputs ("CS: "); kputux (regs->cs); kputs (" EIP: "); kputux (regs->eip); kputs (" EFLAGS: "); kputux (regs->eflags); kputs ("\n");
+  kputs ("SS: "); kputux (regs->ss); kputs (" ESP: "); kputux (regs->useresp); kputs (" DS:"); kputux (regs->ds); kputs ("\n");
+  
+  kputs ("EAX: "); kputux (regs->eax); kputs (" EBX: "); kputux (regs->ebx); kputs (" ECX: "); kputux (regs->ecx); kputs (" EDX: "); kputux (regs->edx); kputs ("\n");
+  kputs ("ESP: "); kputux (regs->esp); kputs (" EBP: "); kputux (regs->ebp); kputs (" ESI: "); kputux (regs->esi); kputs (" EDI: "); kputux (regs->edi); kputs ("\n");
 
-void
-tsr_handler (registers_t regs)
-{
-  kputs ("Trap: "); kputux (regs.number); kputs (" Code: " ); kputux (regs.error); kputs ("\n");
-
-  kputs ("CS: "); kputux (regs.cs); kputs (" EIP: "); kputux (regs.eip); kputs (" EFLAGS: "); kputux (regs.eflags); kputs ("\n");
-  kputs ("SS: "); kputux (regs.ss); kputs (" ESP: "); kputux (regs.useresp); kputs (" DS:"); kputux (regs.ds); kputs ("\n");
-
-  kputs ("EAX: "); kputux (regs.eax); kputs (" EBX: "); kputux (regs.ebx); kputs (" ECX: "); kputux (regs.ecx); kputs (" EDX: "); kputux (regs.edx); kputs ("\n");
-  kputs ("ESP: "); kputux (regs.esp); kputs (" EBP: "); kputux (regs.ebp); kputs (" ESI: "); kputux (regs.esi); kputs (" EDI: "); kputux (regs.edi); kputs ("\n");
+  kputs ("Halting");
+  halt ();
 }
 
 void
-isr_handler (registers_t regs)
+exception_handler (registers_t regs)
 {
-  kputs ("Interrupt: "); kputux (regs.number); kputs (" Code: " ); kputux (regs.error); kputs ("\n");
+  if (interrupt_handlers[regs.number]) {
+    interrupt_handlers[regs.number] (&regs);
+  }
+  else {
+    default_handler (&regs);
+  }
+}
 
-  kputs ("CS: "); kputux (regs.cs); kputs (" EIP: "); kputux (regs.eip); kputs (" EFLAGS: "); kputux (regs.eflags); kputs ("\n");
-  kputs ("SS: "); kputux (regs.ss); kputs (" ESP: "); kputux (regs.useresp); kputs (" DS:"); kputux (regs.ds); kputs ("\n");
-
-  kputs ("EAX: "); kputux (regs.eax); kputs (" EBX: "); kputux (regs.ebx); kputs (" ECX: "); kputux (regs.ecx); kputs (" EDX: "); kputux (regs.edx); kputs ("\n");
-  kputs ("ESP: "); kputux (regs.esp); kputs (" EBP: "); kputux (regs.ebp); kputs (" ESI: "); kputux (regs.esi); kputs (" EDI: "); kputux (regs.edi); kputs ("\n");
+void
+irq_handler (registers_t regs)
+{
+  if (interrupt_handlers[regs.number]) {
+    interrupt_handlers[regs.number] (&regs);
+  }
+  else {
+    default_handler (&regs);
+  }
 
   /* Send end-of-interrupt. */
   if (PIC_SLAVE_BASE <= regs.number && regs.number < PIC_SLAVE_LIMIT) {
     outb (PIC_SLAVE_LOW, PIC_OCW2_LOW | PIC_OCW2_NON_SPECIFIC_EOI);
   }
   outb (PIC_MASTER_LOW, PIC_OCW2_LOW | PIC_OCW2_NON_SPECIFIC_EOI);
+}
+
+void
+enable_interrupts ()
+{
+  __asm__ __volatile__ ("sti");
+}
+
+void
+disable_interrupts ()
+{
+  __asm__ __volatile__ ("cli");
+}
+
+interrupt_handler_t
+get_interrupt_handler (unsigned int num)
+{
+  if (num < INTERRUPT_COUNT) {
+    return interrupt_handlers[num];
+  }
+  else {
+    return 0;
+  }
+}
+
+void
+set_interrupt_handler (unsigned int num,
+		       interrupt_handler_t handler)
+{
+  if (num < INTERRUPT_COUNT) {
+    interrupt_handlers[num] = handler;
+  }
 }

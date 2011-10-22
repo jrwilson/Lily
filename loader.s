@@ -27,6 +27,9 @@ multiboot_header:
 	dd MULTIBOOT_HEADER_FLAGS
 	dd MULTIBOOT_CHECKSUM
 
+	;; The size of the stack.
+	STACK_SIZE equ 0x1000
+	
 %include "segments.s"
 	
 	;; The kernel starts here.
@@ -51,7 +54,7 @@ start:
 
 higherhalf:
 	;; Setup the stack in order to call kmain.
-	mov esp, sys_stack
+	mov esp, stack + STACK_SIZE
 	;; Push the multiboot magic number.
 	push eax
 	;; Push the multiboot data structure.
@@ -149,6 +152,7 @@ gdt_end:
 	[section .bss]
 
 	;; Reserve space for the stack.
-	STACK_SIZE equ 0x1000
+	ALIGN 4
+	[global stack]
+stack:	
 	resb STACK_SIZE
-sys_stack:	

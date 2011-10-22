@@ -17,29 +17,11 @@
 #include "memory.h"
 #include "interrupt.h"
 #include "pit.h"
+#include "halt.h"
 
 #define MULTIBOOT_MAGIC 0x2BADB002
 
-void
-enable_interrupts ()
-{
-  __asm__ __volatile__ ("sti");
-}
-
-void
-disable_interrupts ()
-{
-  __asm__ __volatile__ ("cli");
-}
-
-void
-halt ()
-{
-  disable_interrupts ();
-  for (;;) {
-    __asm__ __volatile__ ("hlt");
-  }
-}
+extern unsigned int stack;
 
 void
 kmain (void* mbd,
@@ -70,10 +52,14 @@ kmain (void* mbd,
   /* or do your offsets yourself. The following is merely an example. */ 
   //char * boot_loader_name =(char*) ((long*)mbd)[16];
 
-  asm volatile ("int $0x3");
-  asm volatile ("int $0x4");
+  kputs ("Stack start: "); kputux ((unsigned int)&stack); kputs ("\n");
+  kputs ("Stack limit: "); kputux ((unsigned int)&stack + 0x1000); kputs ("\n");
 
-  initialize_pit ();
+  /* Unhandled interrupts. */
+  /* asm volatile ("int $0x3"); */
+  /* asm volatile ("int $0x4"); */
+
+  initialize_pit (0xFFFF);
 
   enable_interrupts ();
 

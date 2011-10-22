@@ -27,6 +27,12 @@ The following page describes x86 descriptor types: http://codewiki.wikispaces.co
 First implementation of interrupts/traps.
 Test on physical machine was successful.
 
+2011-10-22
+
+Added support for the programmable interrupt timer using code from http://www.jamesmolloy.co.uk/tutorial_html/5.-IRQs%20and%20the%20PIT.html and http://en.wikipedia.org/wiki/Intel_8253.
+Test on physical machine was successful.
+
+
 Development Order
 -----------------
 Interrupts (fault handling)

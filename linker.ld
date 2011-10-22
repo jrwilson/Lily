@@ -29,22 +29,21 @@ SECTIONS
 		*(.text)
 	}
 
+	/* Place read-only data on page boundary physically after the previous segment but logically after 0xC0000000. */
+	.rodata ALIGN (0x1000) : AT(ADDR(.rodata) - 0xC0000000)
+	{
+		*(.rodata)
+	}
+
 	/* Place the initialized data on page boundary physically after the previous segment but logically after 0xC0000000. */
-	/* TODO:  Why is there an asterisk after rodata below? */
 	.data ALIGN (0x1000) : AT(ADDR(.data) - 0xC0000000)
 	{
 		*(.data)
-		*(.rodata*)
 	}
 
 	/* Place the uninitialized data on a page boundary physically after the previous segment but logically after 0xC0000000. */
 	.bss ALIGN (0x1000) : AT(ADDR(.bss) - 0xC0000000)
 	{
-		/* Define a symbol for the beginning. */
-		begin_bss = .;
-		*(COMMON*)
-		*(.bss*)
-		/* Defind a symbol for the end. */
-		end_bss = .;
+		*(.bss)
 	}
 }

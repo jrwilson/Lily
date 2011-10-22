@@ -1,24 +1,23 @@
 %include "segments.s"
 	
-	;; Trap Service Routine
-%macro TSR_NOERRCODE 1
-	[global tsr%1]
-tsr%1:
+%macro EXCEPTION_NOERRCODE 1
+	[global exception%1]
+exception%1:
 	push dword 0
 	push dword %1
-	jmp tsr_common_stub
+	jmp exception_common_stub
 %endmacro
 
-%macro TSR_ERRCODE 1
-	[global tsr%1]
-tsr%1:
+%macro EXCEPTION_ERRCODE 1
+	[global exception%1]
+exception%1:
 	push dword %1
-	jmp tsr_common_stub
+	jmp exception_common_stub
 %endmacro
 
-	;; Import tsr_handler.
-	[extern tsr_handler]
-tsr_common_stub:
+	;; Import exception_handler.
+	[extern exception_handler]
+exception_common_stub:
 	;; Push the processor state.
 	pusha
 	mov ax, ds
@@ -31,7 +30,7 @@ tsr_common_stub:
 	mov fs, ax
 	;; TODO:  What about the stack segment?
 	mov gs, ax
-	call tsr_handler
+	call exception_handler
 	;; Pop the old data segment.
 	pop eax
 	;; Load the old data segment.
@@ -45,51 +44,50 @@ tsr_common_stub:
 	add esp, 8
 	iret
 	
-TSR_NOERRCODE 0
-TSR_NOERRCODE 1
-TSR_NOERRCODE 2
-TSR_NOERRCODE 3
-TSR_NOERRCODE 4
-TSR_NOERRCODE 5
-TSR_NOERRCODE 6
-TSR_NOERRCODE 7
-TSR_ERRCODE 8
-TSR_NOERRCODE 9
-TSR_ERRCODE 10
-TSR_ERRCODE 11
-TSR_ERRCODE 12
-TSR_ERRCODE 13
-TSR_ERRCODE 14
-TSR_NOERRCODE 15
-TSR_NOERRCODE 16
-TSR_NOERRCODE 17
-TSR_NOERRCODE 18
-TSR_NOERRCODE 19
-TSR_NOERRCODE 20
-TSR_NOERRCODE 21
-TSR_NOERRCODE 22
-TSR_NOERRCODE 23
-TSR_NOERRCODE 24
-TSR_NOERRCODE 25
-TSR_NOERRCODE 26
-TSR_NOERRCODE 27
-TSR_NOERRCODE 28
-TSR_NOERRCODE 29
-TSR_NOERRCODE 30
-TSR_NOERRCODE 31
+EXCEPTION_NOERRCODE 0
+EXCEPTION_NOERRCODE 1
+EXCEPTION_NOERRCODE 2
+EXCEPTION_NOERRCODE 3
+EXCEPTION_NOERRCODE 4
+EXCEPTION_NOERRCODE 5
+EXCEPTION_NOERRCODE 6
+EXCEPTION_NOERRCODE 7
+EXCEPTION_ERRCODE 8
+EXCEPTION_NOERRCODE 9
+EXCEPTION_ERRCODE 10
+EXCEPTION_ERRCODE 11
+EXCEPTION_ERRCODE 12
+EXCEPTION_ERRCODE 13
+EXCEPTION_ERRCODE 14
+EXCEPTION_NOERRCODE 15
+EXCEPTION_NOERRCODE 16
+EXCEPTION_NOERRCODE 17
+EXCEPTION_NOERRCODE 18
+EXCEPTION_NOERRCODE 19
+EXCEPTION_NOERRCODE 20
+EXCEPTION_NOERRCODE 21
+EXCEPTION_NOERRCODE 22
+EXCEPTION_NOERRCODE 23
+EXCEPTION_NOERRCODE 24
+EXCEPTION_NOERRCODE 25
+EXCEPTION_NOERRCODE 26
+EXCEPTION_NOERRCODE 27
+EXCEPTION_NOERRCODE 28
+EXCEPTION_NOERRCODE 29
+EXCEPTION_NOERRCODE 30
+EXCEPTION_NOERRCODE 31
 
-	;; Interrupt Service Routine
-%macro ISR 2
-	[global isr%1]
-isr%1:
+%macro IRQ 2
+	[global irq%1]
+irq%1:
 	push dword 0		; Error code.
 	push dword %2		; Interrupt number.
-	jmp isr_common_stub
+	jmp irq_common_stub
 %endmacro
 
-	;; Import isr_handler.
-	[extern isr_handler]
-isr_common_stub:
+	;; Import irq_handler.
+	[extern irq_handler]
+irq_common_stub:
 	;; Push the processor state.
 	pusha
 	;; Push the old data segment.
@@ -102,7 +100,7 @@ isr_common_stub:
 	mov fs, ax
 	mov gs, ax
 	;; TODO:  What about the stack segment?
-	call isr_handler
+	call irq_handler
 	;; Pop the old data segment.
 	pop eax
 	;; Load the old data segment.
@@ -118,19 +116,19 @@ isr_common_stub:
 	sti
 	iret
 	
-ISR 0, 32
-ISR 1, 33
-ISR 2, 34
-ISR 3, 35
-ISR 4, 36
-ISR 5, 37
-ISR 6, 38
-ISR 7, 39
-ISR 8, 40
-ISR 9, 41
-ISR 10, 42
-ISR 11, 43
-ISR 12, 44
-ISR 13, 45
-ISR 14, 46
-ISR 15, 47
+IRQ 0, 32
+IRQ 1, 33
+IRQ 2, 34
+IRQ 3, 35
+IRQ 4, 36
+IRQ 5, 37
+IRQ 6, 38
+IRQ 7, 39
+IRQ 8, 40
+IRQ 9, 41
+IRQ 10, 42
+IRQ 11, 43
+IRQ 12, 44
+IRQ 13, 45
+IRQ 14, 46
+IRQ 15, 47
