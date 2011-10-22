@@ -1,4 +1,4 @@
-	KERNEL_DATA_SEGMENT equ 0x10
+%include "segments.s"
 	
 	;; Trap Service Routine
 %macro TSR_NOERRCODE 1

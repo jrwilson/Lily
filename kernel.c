@@ -16,8 +16,15 @@
 #include "kput.h"
 #include "memory.h"
 #include "interrupt.h"
+#include "pit.h"
 
 #define MULTIBOOT_MAGIC 0x2BADB002
+
+void
+enable_interrupts ()
+{
+  __asm__ __volatile__ ("sti");
+}
 
 void
 disable_interrupts ()
@@ -66,5 +73,12 @@ kmain (void* mbd,
   asm volatile ("int $0x3");
   asm volatile ("int $0x4");
 
-  halt ();
+  initialize_pit ();
+
+  enable_interrupts ();
+
+  /* Wait for interrupts. */
+  for (;;) {
+    __asm__ __volatile__ ("hlt");
+  }
 }

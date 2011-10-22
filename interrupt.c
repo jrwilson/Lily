@@ -153,6 +153,7 @@ idt_flush (idt_ptr_t*);
 #define PIC_ICW4_FULLY_NESTED (1 << 4)
 
 /* Operation Command Words and options. */
+/* This OCW masks interrupts (0 -> enabled, 1 -> disabled). */
 #define PIC_OCW1_HIGH 0
 
 #define PIC_OCW2_LOW 0
@@ -287,7 +288,7 @@ tsr_handler (registers_t regs)
 void
 isr_handler (registers_t regs)
 {
-  kputs ("Trap: "); kputux (regs.number); kputs (" Code: " ); kputux (regs.error); kputs ("\n");
+  kputs ("Interrupt: "); kputux (regs.number); kputs (" Code: " ); kputux (regs.error); kputs ("\n");
 
   kputs ("CS: "); kputux (regs.cs); kputs (" EIP: "); kputux (regs.eip); kputs (" EFLAGS: "); kputux (regs.eflags); kputs ("\n");
   kputs ("SS: "); kputux (regs.ss); kputs (" ESP: "); kputux (regs.useresp); kputs (" DS:"); kputux (regs.ds); kputs ("\n");
