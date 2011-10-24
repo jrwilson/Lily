@@ -18,7 +18,10 @@ void
 kputs (char* string);
 
 void
-kputux (unsigned int n);
+kputucx (unsigned char n);
+
+void
+kputuix (unsigned int n);
 
 void
 clear_console ();

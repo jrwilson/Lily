@@ -275,13 +275,13 @@ static void
 default_handler (registers_t* regs)
 {
   kputs ("Unhandled interrupt!\n");
-  kputs ("Interrupt: "); kputux (regs->number); kputs (" Code: " ); kputux (regs->error); kputs ("\n");
+  kputs ("Interrupt: "); kputuix (regs->number); kputs (" Code: " ); kputuix (regs->error); kputs ("\n");
   
-  kputs ("CS: "); kputux (regs->cs); kputs (" EIP: "); kputux (regs->eip); kputs (" EFLAGS: "); kputux (regs->eflags); kputs ("\n");
-  kputs ("SS: "); kputux (regs->ss); kputs (" ESP: "); kputux (regs->useresp); kputs (" DS:"); kputux (regs->ds); kputs ("\n");
+  kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n");
+  kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n");
   
-  kputs ("EAX: "); kputux (regs->eax); kputs (" EBX: "); kputux (regs->ebx); kputs (" ECX: "); kputux (regs->ecx); kputs (" EDX: "); kputux (regs->edx); kputs ("\n");
-  kputs ("ESP: "); kputux (regs->esp); kputs (" EBP: "); kputux (regs->ebp); kputs (" ESI: "); kputux (regs->esi); kputs (" EDI: "); kputux (regs->edi); kputs ("\n");
+  kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n");
+  kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n");
 
   kputs ("Halting");
   halt ();

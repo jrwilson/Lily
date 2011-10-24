@@ -32,6 +32,25 @@ Test on physical machine was successful.
 Added support for the programmable interrupt timer using code from http://www.jamesmolloy.co.uk/tutorial_html/5.-IRQs%20and%20the%20PIT.html and http://en.wikipedia.org/wiki/Intel_8253.
 Test on physical machine was successful.
 
+2011-10-23
+
+Generalize interrupt handling.
+Started parsing the multiboot header.
+Wrote functions for extending the identity memory map.
+
+2011-10-24
+
+Wrote primitive page fault handler to debug extending the identity map.
+Parsed the memory map provided by GRUB.
+Test on physical machine was successful.
+
+
+
+Kernel Code
+Kernel Data
+Kernel Stack
+Grub Data (created by extending the identity map)
+Frame Bitsets
 
 Development Order
 -----------------

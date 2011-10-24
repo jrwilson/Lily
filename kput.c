@@ -91,7 +91,21 @@ to_hex (unsigned int n)
 }
 
 void
-kputux (unsigned int n)
+kputucx (unsigned char n)
+{
+  char buf[5];
+  buf[4] = 0;
+  buf[3] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[2] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[1] = 'x';
+  buf[0] = '0';
+  kputs (buf);
+}
+
+void
+kputuix (unsigned int n)
 {
   char buf[11];
   buf[10] = 0;

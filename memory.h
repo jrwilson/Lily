@@ -27,4 +27,7 @@ install_gdt ();
 void
 identity_map_up_to (unsigned int addr);
 
+void
+install_page_fault_handler ();
+
 #endif /* __memory_h__ */

@@ -14,6 +14,9 @@
 */
 
 #include "memory.h"
+#include "interrupt.h"
+#include "kput.h"
+#include "halt.h"
 
 /* Paging constants. */
 #define PAGE_SIZE 0x1000
@@ -71,7 +74,7 @@ initialize_paging ()
 			"mov %%eax, %%cr3\n"
 			"mov %%cr0, %%eax\n"
 			"orl $0x80000000, %%eax\n"
-			"mov %%eax, %%cr0\n" :: "m" (kernel_page_directory_paddr));
+			"mov %%eax, %%cr0\n" :: "m" (kernel_page_directory_paddr) : "%eax");
 }
 
 /* Macros for the access byte of descriptors. */
@@ -175,19 +178,75 @@ install_gdt ()
 void
 identity_map_up_to (unsigned int addr)
 {
-  addr = PAGE_ALIGN (addr);
-  if (identity_map_limit < addr) {
-    for (; identity_map_limit < addr; identity_map_limit += PAGE_SIZE) {
-      /* Must be in the low page table (first 4M of physical memory). */
-      if (PAGE_DIRECTORY_ENTRY (addr) == 0) {
-	low_page_table[PAGE_TABLE_ENTRY (identity_map_limit)] = identity_map_limit | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
-      }
+  addr = PAGE_ALIGN (addr) + PAGE_SIZE;
+  for (; identity_map_limit < addr; identity_map_limit += PAGE_SIZE) {
+    /* Must be in the low page table (first 4M of physical memory). */
+    if (PAGE_DIRECTORY_ENTRY (identity_map_limit) == 0) {
+      low_page_table[PAGE_TABLE_ENTRY (identity_map_limit)] = identity_map_limit | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+      /* Invalidate entry in TLB. */
+      __asm__ __volatile__ ("invlpg %0\n" :: "m" (identity_map_limit));
     }
-    
-    /* Reload CR3 to flush the TLB. */
-    void* kernel_page_directory_paddr = (char *)kernel_page_directory + 0x40000000;
-    __asm__ __volatile__ ("mov %0, %%eax\n"
-			  "mov %%eax, %%cr3\n" :: "m" (kernel_page_directory_paddr));
-
   }
+}
+
+#define PAGE_FAULT_INTERRUPT 14
+
+#define PAGE_PROTECTION_ERROR (1 << 0)
+#define PAGE_WRITE_ERROR (1 << 1)
+#define PAGE_USER_ERROR (1 << 2)
+#define PAGE_RESERVED_ERROR (1 << 3)
+#define PAGE_INSTRUCTION_ERROR (1 << 4)
+
+static void
+page_fault_handler (registers_t* regs)
+{
+  kputs ("Page fault!!\n");
+  unsigned int addr;
+  __asm__ __volatile__ ("mov %%cr2, %0\n" : "=r"(addr) :: );
+
+  kputs ("Address: "); kputuix (addr); kputs ("\n");
+  kputs ("Codes: ");
+  if (regs->error & PAGE_PROTECTION_ERROR) {
+    kputs ("PROTECTION ");
+  }
+  else {
+    kputs ("NOT_PRESENT ");
+  }
+  if (regs->error & PAGE_WRITE_ERROR) {
+    kputs ("WRITE ");
+  }
+  else {
+    kputs ("READ ");
+  }
+  if (regs->error & PAGE_USER_ERROR) {
+    kputs ("USER ");
+  }
+  else {
+    kputs ("SUPERVISOR ");
+  }
+  if (regs->error & PAGE_RESERVED_ERROR) {
+    kputs ("RESERVED ");
+  }
+  if (regs->error & PAGE_INSTRUCTION_ERROR) {
+    kputs ("INSTRUCTION ");
+  }
+  else {
+    kputs ("DATA ");
+  }
+  kputs ("\n");
+
+  kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n");
+  kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n");
+  
+  kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n");
+  kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n");
+
+  kputs ("Halting");
+  halt ();
+}
+
+void
+install_page_fault_handler ()
+{
+  set_interrupt_handler (PAGE_FAULT_INTERRUPT, page_fault_handler);
 }
