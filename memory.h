@@ -24,4 +24,7 @@ initialize_paging ();
 void
 install_gdt ();
 
+void
+identity_map_up_to (unsigned int addr);
+
 #endif /* __memory_h__ */

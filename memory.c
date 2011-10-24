@@ -23,28 +23,43 @@
 #define PAGE_READ_ONLY 0
 #define PAGE_PRESENT (1 << 0)
 #define PAGE_NOT_PRESENT
-  
-static unsigned int kernel_page_directory[1024] __attribute__ ((aligned (PAGE_SIZE)));
-static unsigned int low_page_table[1024] __attribute__ ((aligned (PAGE_SIZE)));
+
+#define PAGE_ENTRY_COUNT 1024
+
+#define PAGE_DIRECTORY_ENTRY(addr)  ((addr & 0xFFC00000) >> 22)
+#define PAGE_TABLE_ENTRY(addr) ((addr & 0x3FF000) >> 12)
+#define PAGE_ALIGN(addr) (addr & 0xFFFFF000)
+
+extern unsigned int end_of_kernel;  
+static unsigned int identity_map_limit;
+static unsigned int kernel_page_directory[PAGE_ENTRY_COUNT] __attribute__ ((aligned (PAGE_SIZE)));
+static unsigned int low_page_table[PAGE_ENTRY_COUNT] __attribute__ ((aligned (PAGE_SIZE)));
 
 void
 initialize_paging ()
 {
   /* Physical address of kernel_page_directory and low_page_table.
-     The 0x40000000 comes from the GDT trick in loader.s
+     The 0x40000000 comes from the GDT trick in loader.s.
+     The 0xC0000000 comes fromt he higher-half placement.
    */
   void* kernel_page_directory_paddr = (char *)kernel_page_directory + 0x40000000;
   void* low_page_table_paddr = (char *)low_page_table + 0x40000000;
-  int k;
+  unsigned int k;
 
-  /* Clear the kernel page directory. */
-  for (k = 0; k < 1024; ++k) {
+  /* &end_of_kernel is the first address in the page after the kernel.
+     We adust the value due to the higher-half placement (0xC0000000).
+     We will identity map up to this address. */
+  identity_map_limit = ((unsigned int)&end_of_kernel) - 0xC0000000;
+
+  /* Clear the kernel page directory and low page table. */
+  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
     kernel_page_directory[k] = 0;
+    low_page_table[k] = 0;
   }
 
-  /* Map the physical addresses 0:0x3FFFFF (4M). */
-  for (k = 0; k < 1024; ++k) {
-    low_page_table[k] = (k * PAGE_SIZE) | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+  /* Identity map the physical addresses from 0 to the end of the kernel. */
+  for (k = 0; k < identity_map_limit; k += PAGE_SIZE) {
+    low_page_table[PAGE_TABLE_ENTRY (k)] = k | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
 
   /* Low memory is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
@@ -155,4 +170,24 @@ install_gdt ()
   gdt_set_gate (KERNEL_DATA_SEGMENT, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_DATA | DESC_ACCESS_EXPAND_UP | DESC_ACCESS_DATA_WRITABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
 
   gdt_flush (&gp);
+}
+
+void
+identity_map_up_to (unsigned int addr)
+{
+  addr = PAGE_ALIGN (addr);
+  if (identity_map_limit < addr) {
+    for (; identity_map_limit < addr; identity_map_limit += PAGE_SIZE) {
+      /* Must be in the low page table (first 4M of physical memory). */
+      if (PAGE_DIRECTORY_ENTRY (addr) == 0) {
+	low_page_table[PAGE_TABLE_ENTRY (identity_map_limit)] = identity_map_limit | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+      }
+    }
+    
+    /* Reload CR3 to flush the TLB. */
+    void* kernel_page_directory_paddr = (char *)kernel_page_directory + 0x40000000;
+    __asm__ __volatile__ ("mov %0, %%eax\n"
+			  "mov %%eax, %%cr3\n" :: "m" (kernel_page_directory_paddr));
+
+  }
 }
