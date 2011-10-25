@@ -15,6 +15,7 @@
   Justin R. Wilson
 */
 
+#define KERNEL_OFFSET 0xC0000000
 #define KERNEL_CODE_SEGMENT 0x08
 #define KERNEL_DATA_SEGMENT 0x10
 
@@ -25,7 +26,7 @@ void
 install_gdt ();
 
 void
-identity_map_up_to (unsigned int addr);
+extend_identity (unsigned int addr);
 
 void
 install_page_fault_handler ();

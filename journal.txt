@@ -44,6 +44,13 @@ Wrote primitive page fault handler to debug extending the identity map.
 Parsed the memory map provided by GRUB.
 Test on physical machine was successful.
 
+2011-10-25
+
+Added a kassert macro to help debug and communicate assumptions.
+Changed framebuffer to work before and after paging/GDT.
+Added assertions related to identity mapping for memory management.
+Next step will be to implement a placement allocator.
+
 
 
 Kernel Code

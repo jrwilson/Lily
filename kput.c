@@ -1,10 +1,9 @@
 #include "kput.h"
 
-#define VIDEORAM 0xb8000
+#include "memory.h"
 
-/* x and y location of the cursor. */
-static unsigned int x_location = 0;
-static unsigned int y_location = 0;
+#define VIDEORAM (KERNEL_OFFSET + 0xB8000)
+
 /* Width and height of the framebuffer. */
 #define WIDTH 80
 #define HEIGHT 25
@@ -26,6 +25,10 @@ static unsigned int y_location = 0;
 #define LIGHT_MAGENTA 13
 #define LIGHT_BROWN 14
 #define WHITE 15
+
+/* x and y location of the cursor. */
+static unsigned int x_location = 0;
+static unsigned int y_location = 0;
 
 void
 kputs (char* string)

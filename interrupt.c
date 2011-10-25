@@ -18,81 +18,9 @@
 #include "kput.h"
 #include "io.h"
 #include "halt.h"
-
-struct idt_entry
-{
-  unsigned short base_low;
-  unsigned short segment;
-  unsigned char zero;
-  unsigned char flags;
-  unsigned short base_high;
-} __attribute__((packed));
-typedef struct idt_entry idt_entry_t;
-
-struct idt_ptr
-{
-  unsigned short limit;
-  idt_entry_t* base;
-} __attribute__((packed));
-typedef struct idt_ptr idt_ptr_t;
+#include "kassert.h"
 
 #define INTERRUPT_COUNT 256
-
-static idt_entry_t idt[INTERRUPT_COUNT];
-static idt_ptr_t ip;
-
-extern void exception0 ();
-extern void exception1 ();
-extern void exception2 ();
-extern void exception3 ();
-extern void exception4 ();
-extern void exception5 ();
-extern void exception6 ();
-extern void exception7 ();
-extern void exception8 ();
-extern void exception9 ();
-extern void exception10 ();
-extern void exception11 ();
-extern void exception12 ();
-extern void exception13 ();
-extern void exception14 ();
-extern void exception15 ();
-extern void exception16 ();
-extern void exception17 ();
-extern void exception18 ();
-extern void exception19 ();
-extern void exception20 ();
-extern void exception21 ();
-extern void exception22 ();
-extern void exception23 ();
-extern void exception24 ();
-extern void exception25 ();
-extern void exception26 ();
-extern void exception27 ();
-extern void exception28 ();
-extern void exception29 ();
-extern void exception30 ();
-extern void exception31 ();
-
-extern void irq0 ();
-extern void irq1 ();
-extern void irq2 ();
-extern void irq3 ();
-extern void irq4 ();
-extern void irq5 ();
-extern void irq6 ();
-extern void irq7 ();
-extern void irq8 ();
-extern void irq9 ();
-extern void irq10 ();
-extern void irq11 ();
-extern void irq12 ();
-extern void irq13 ();
-extern void irq14 ();
-extern void irq15 ();
-
-extern void
-idt_flush (idt_ptr_t*);
 
 /* Macros for the flag byte of interrupt descriptors. */
 
@@ -174,6 +102,80 @@ idt_flush (idt_ptr_t*);
 #define PIC_OCW3_RESET_SPECIAL_MASK (2 << 5)
 #define PIC_OCW3_SET_SPECIAL_MASK (3 << 5)
 
+struct idt_entry
+{
+  unsigned short base_low;
+  unsigned short segment;
+  unsigned char zero;
+  unsigned char flags;
+  unsigned short base_high;
+} __attribute__((packed));
+typedef struct idt_entry idt_entry_t;
+
+struct idt_ptr
+{
+  unsigned short limit;
+  idt_entry_t* base;
+} __attribute__((packed));
+typedef struct idt_ptr idt_ptr_t;
+
+static idt_entry_t idt[INTERRUPT_COUNT];
+static idt_ptr_t ip;
+static interrupt_handler_t interrupt_handlers[INTERRUPT_COUNT];
+
+extern void exception0 ();
+extern void exception1 ();
+extern void exception2 ();
+extern void exception3 ();
+extern void exception4 ();
+extern void exception5 ();
+extern void exception6 ();
+extern void exception7 ();
+extern void exception8 ();
+extern void exception9 ();
+extern void exception10 ();
+extern void exception11 ();
+extern void exception12 ();
+extern void exception13 ();
+extern void exception14 ();
+extern void exception15 ();
+extern void exception16 ();
+extern void exception17 ();
+extern void exception18 ();
+extern void exception19 ();
+extern void exception20 ();
+extern void exception21 ();
+extern void exception22 ();
+extern void exception23 ();
+extern void exception24 ();
+extern void exception25 ();
+extern void exception26 ();
+extern void exception27 ();
+extern void exception28 ();
+extern void exception29 ();
+extern void exception30 ();
+extern void exception31 ();
+
+extern void irq0 ();
+extern void irq1 ();
+extern void irq2 ();
+extern void irq3 ();
+extern void irq4 ();
+extern void irq5 ();
+extern void irq6 ();
+extern void irq7 ();
+extern void irq8 ();
+extern void irq9 ();
+extern void irq10 ();
+extern void irq11 ();
+extern void irq12 ();
+extern void irq13 ();
+extern void irq14 ();
+extern void irq15 ();
+
+extern void
+idt_flush (idt_ptr_t*);
+
 static void
 idt_set_gate (unsigned char num,
 	      unsigned int base,
@@ -188,7 +190,20 @@ idt_set_gate (unsigned char num,
   idt[num].flags = flags;
 }
 
-interrupt_handler_t interrupt_handlers[INTERRUPT_COUNT];
+static void
+default_handler (registers_t* regs)
+{
+  kputs ("Unhandled interrupt!\n");
+  kputs ("Interrupt: "); kputuix (regs->number); kputs (" Code: " ); kputuix (regs->error); kputs ("\n");
+  
+  kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n");
+  kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n");
+  
+  kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n");
+  kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n");
+
+  halt ();
+}
 
 void
 install_idt ()
@@ -196,7 +211,7 @@ install_idt ()
   int k;
 
   for (k = 0; k < INTERRUPT_COUNT; ++k) {
-    interrupt_handlers[k] = 0;
+    set_interrupt_handler (k, default_handler);
   }
 
   ip.limit = (sizeof (idt_entry_t) * INTERRUPT_COUNT) - 1;
@@ -271,22 +286,6 @@ install_idt ()
   idt_flush (&ip);
 }
 
-static void
-default_handler (registers_t* regs)
-{
-  kputs ("Unhandled interrupt!\n");
-  kputs ("Interrupt: "); kputuix (regs->number); kputs (" Code: " ); kputuix (regs->error); kputs ("\n");
-  
-  kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n");
-  kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n");
-  
-  kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n");
-  kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n");
-
-  kputs ("Halting");
-  halt ();
-}
-
 void
 exception_handler (registers_t regs)
 {
@@ -301,12 +300,9 @@ exception_handler (registers_t regs)
 void
 irq_handler (registers_t regs)
 {
-  if (interrupt_handlers[regs.number]) {
-    interrupt_handlers[regs.number] (&regs);
-  }
-  else {
-    default_handler (&regs);
-  }
+  /* STABLE:  interrupt_handlers[regs.number] != 0.
+     This is established in install_idt and maintained by get_interrupt_handler and set_interrupt_handler. */
+  interrupt_handlers[regs.number] (&regs);
 
   /* Send end-of-interrupt. */
   if (PIC_SLAVE_BASE <= regs.number && regs.number < PIC_SLAVE_LIMIT) {
@@ -330,19 +326,19 @@ disable_interrupts ()
 interrupt_handler_t
 get_interrupt_handler (unsigned int num)
 {
-  if (num < INTERRUPT_COUNT) {
-    return interrupt_handlers[num];
-  }
-  else {
-    return 0;
-  }
+  kassert (num < INTERRUPT_COUNT);
+  return interrupt_handlers[num];
 }
 
 void
 set_interrupt_handler (unsigned int num,
 		       interrupt_handler_t handler)
 {
-  if (num < INTERRUPT_COUNT) {
+  kassert (num < INTERRUPT_COUNT);
+  if (handler != 0) {
     interrupt_handlers[num] = handler;
+  }
+  else {
+    interrupt_handlers[num] = default_handler;
   }
 }

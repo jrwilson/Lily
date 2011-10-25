@@ -60,7 +60,7 @@
 static unsigned int tick = 0;
 
 static void
-pit_handler (registers_t* regs)
+pit_handler (/*registers_t* regs*/)
 {
   kputs ("Tick="); kputuix (tick); kputs ("\n");
   ++tick;

@@ -17,9 +17,12 @@
 #include "interrupt.h"
 #include "kput.h"
 #include "halt.h"
+#include "kassert.h"
 
-/* Paging constants. */
+/* Page is 4 kilobytes. */
 #define PAGE_SIZE 0x1000
+
+/* Flags for page table entries. */
 #define PAGE_USER_MODE (1 << 2)
 #define PAGE_KERNEL_MODE 0
 #define PAGE_WRITABLE (1 << 1)
@@ -27,55 +30,16 @@
 #define PAGE_PRESENT (1 << 0)
 #define PAGE_NOT_PRESENT
 
+/* Number of entries in a page table or directory. */
 #define PAGE_ENTRY_COUNT 1024
 
+/* Macros for address manipulation. */
 #define PAGE_DIRECTORY_ENTRY(addr)  ((addr & 0xFFC00000) >> 22)
 #define PAGE_TABLE_ENTRY(addr) ((addr & 0x3FF000) >> 12)
 #define PAGE_ALIGN(addr) (addr & 0xFFFFF000)
 
-extern unsigned int end_of_kernel;  
-static unsigned int identity_map_limit;
-static unsigned int kernel_page_directory[PAGE_ENTRY_COUNT] __attribute__ ((aligned (PAGE_SIZE)));
-static unsigned int low_page_table[PAGE_ENTRY_COUNT] __attribute__ ((aligned (PAGE_SIZE)));
-
-void
-initialize_paging ()
-{
-  /* Physical address of kernel_page_directory and low_page_table.
-     The 0x40000000 comes from the GDT trick in loader.s.
-     The 0xC0000000 comes fromt he higher-half placement.
-   */
-  void* kernel_page_directory_paddr = (char *)kernel_page_directory + 0x40000000;
-  void* low_page_table_paddr = (char *)low_page_table + 0x40000000;
-  unsigned int k;
-
-  /* &end_of_kernel is the first address in the page after the kernel.
-     We adust the value due to the higher-half placement (0xC0000000).
-     We will identity map up to this address. */
-  identity_map_limit = ((unsigned int)&end_of_kernel) - 0xC0000000;
-
-  /* Clear the kernel page directory and low page table. */
-  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    kernel_page_directory[k] = 0;
-    low_page_table[k] = 0;
-  }
-
-  /* Identity map the physical addresses from 0 to the end of the kernel. */
-  for (k = 0; k < identity_map_limit; k += PAGE_SIZE) {
-    low_page_table[PAGE_TABLE_ENTRY (k)] = k | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
-  }
-
-  /* Low memory is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
-  kernel_page_directory[0] = (unsigned int)low_page_table_paddr | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
-  kernel_page_directory[768] = (unsigned int)low_page_table_paddr | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
-
-  /* Enable paging. */
-  __asm__ __volatile__ ("mov %0, %%eax\n"
-			"mov %%eax, %%cr3\n"
-			"mov %%cr0, %%eax\n"
-			"orl $0x80000000, %%eax\n"
-			"mov %%eax, %%cr0\n" :: "m" (kernel_page_directory_paddr) : "%eax");
-}
+/* Macros for segmentation. */
+#define SEGMENT_COUNT 3
 
 /* Macros for the access byte of descriptors. */
 
@@ -119,6 +83,32 @@ initialize_paging ()
 #define DESC_GRANULARITY_OP16 (0 << 6)
 #define DESC_GRANULARITY_OP32 (1 << 6)
 
+/* Macros for page faults. */
+#define PAGE_FAULT_INTERRUPT 14
+
+#define PAGE_PROTECTION_ERROR (1 << 0)
+#define PAGE_WRITE_ERROR (1 << 1)
+#define PAGE_USER_ERROR (1 << 2)
+#define PAGE_RESERVED_ERROR (1 << 3)
+#define PAGE_INSTRUCTION_ERROR (1 << 4)
+
+/* Can identity map up to 4 megabytes. */
+#define IDENTITY_LIMIT 0x400000
+
+/* The heap progresses through three modes.
+   The IDENTITY mode extends the mapping of the low memory.
+   The main purpose of this mode is to read GRUB data structures.
+   The PLACEMENT mode is similar but is used to allocate data structures necessary for HEAP mode.
+   IDENTITY mode and PLACEMENT mode are distinguished because memory associated with IDENTITY mode can be reclaimed.
+   The HEAP mode represents a fully functional dynamic memory system.
+ */
+enum heap_mode {
+  IDENTITY,
+  PLACEMENT,
+  HEAP
+};
+typedef enum heap_mode heap_mode_t;
+
 struct gdt_entry
 {
   unsigned short limit_low;
@@ -137,13 +127,60 @@ struct gdt_ptr
 } __attribute__((packed));
 typedef struct gdt_ptr gdt_ptr_t;
 
-#define DESCRIPTOR_COUNT 3
-
-static gdt_entry_t gdt[DESCRIPTOR_COUNT];
-static gdt_ptr_t gp;
-
 extern void
 gdt_flush (gdt_ptr_t*);
+	       
+/* Take the address of this symbol to find the end of the kernel rounded up to the next page. */
+extern unsigned int end_of_kernel; 
+
+static heap_mode_t heap_mode = IDENTITY;
+static unsigned int identity_base = ((unsigned int)&end_of_kernel) - KERNEL_OFFSET;
+static unsigned int identity_limit = ((unsigned int)&end_of_kernel) - KERNEL_OFFSET;
+
+static unsigned int kernel_page_directory[PAGE_ENTRY_COUNT] __attribute__ ((aligned (PAGE_SIZE)));
+static unsigned int low_page_table[PAGE_ENTRY_COUNT] __attribute__ ((aligned (PAGE_SIZE)));
+
+static gdt_entry_t gdt[SEGMENT_COUNT];
+static gdt_ptr_t gp;
+
+void
+initialize_paging ()
+{
+
+  heap_mode = IDENTITY;
+  identity_base = ((unsigned int)&end_of_kernel) - KERNEL_OFFSET;
+  identity_limit = identity_base;
+  kassert (identity_limit <= IDENTITY_LIMIT); 
+
+  /* Physical address of kernel_page_directory and low_page_table.
+     Add 0x40000000 to get the physical address according to the GDT trick in loader.s.
+   */
+  void* kernel_page_directory_paddr = (char *)kernel_page_directory + 0x40000000;
+  void* low_page_table_paddr = (char *)low_page_table + 0x40000000;
+  unsigned int k;
+
+  /* Clear the kernel page directory and low page table. */
+  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
+    kernel_page_directory[k] = 0;
+    low_page_table[k] = 0;
+  }
+
+  /* Identity map the physical addresses from 0 to the end of the kernel. */
+  for (k = 0; k < identity_limit; k += PAGE_SIZE) {
+    low_page_table[PAGE_TABLE_ENTRY (k)] = k | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+  }
+
+  /* Low memory (4 megabytes) is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
+  kernel_page_directory[PAGE_DIRECTORY_ENTRY (0)] = (unsigned int)low_page_table_paddr | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+  kernel_page_directory[PAGE_DIRECTORY_ENTRY (KERNEL_OFFSET)] = (unsigned int)low_page_table_paddr | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+
+  /* Enable paging. */
+  __asm__ __volatile__ ("mov %0, %%eax\n"
+			"mov %%eax, %%cr3\n"
+			"mov %%cr0, %%eax\n"
+			"orl $0x80000000, %%eax\n"
+			"mov %%eax, %%cr0\n" :: "m" (kernel_page_directory_paddr) : "%eax");
+}
 
 static void
 gdt_set_gate (unsigned int descriptor_offset,
@@ -165,7 +202,7 @@ gdt_set_gate (unsigned int descriptor_offset,
 void
 install_gdt ()
 {
-  gp.limit = (sizeof (gdt_entry_t) * DESCRIPTOR_COUNT) - 1;
+  gp.limit = (sizeof (gdt_entry_t) * SEGMENT_COUNT) - 1;
   gp.base = gdt;
 
   gdt_set_gate (0, 0, 0, 0, 0);
@@ -176,26 +213,18 @@ install_gdt ()
 }
 
 void
-identity_map_up_to (unsigned int addr)
+extend_identity (unsigned int addr)
 {
+  kassert (heap_mode == IDENTITY);
+  kassert (addr < IDENTITY_LIMIT);
+
   addr = PAGE_ALIGN (addr) + PAGE_SIZE;
-  for (; identity_map_limit < addr; identity_map_limit += PAGE_SIZE) {
-    /* Must be in the low page table (first 4M of physical memory). */
-    if (PAGE_DIRECTORY_ENTRY (identity_map_limit) == 0) {
-      low_page_table[PAGE_TABLE_ENTRY (identity_map_limit)] = identity_map_limit | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
-      /* Invalidate entry in TLB. */
-      __asm__ __volatile__ ("invlpg %0\n" :: "m" (identity_map_limit));
-    }
+  for (; identity_limit < addr; identity_limit += PAGE_SIZE) {
+    low_page_table[PAGE_TABLE_ENTRY (identity_limit)] = identity_limit | (PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    /* Invalidate entry in TLB. */
+    __asm__ __volatile__ ("invlpg %0\n" :: "m" (identity_limit));
   }
 }
-
-#define PAGE_FAULT_INTERRUPT 14
-
-#define PAGE_PROTECTION_ERROR (1 << 0)
-#define PAGE_WRITE_ERROR (1 << 1)
-#define PAGE_USER_ERROR (1 << 2)
-#define PAGE_RESERVED_ERROR (1 << 3)
-#define PAGE_INSTRUCTION_ERROR (1 << 4)
 
 static void
 page_fault_handler (registers_t* regs)
