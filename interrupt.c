@@ -57,6 +57,7 @@
 #define PIC_SLAVE_BASE 40
 #define PIC_SLAVE_LIMIT 48
 
+/* The slave is connected to this pin on the master. */
 #define PIC_SLAVE_PIN 2
 
 /* Initialization Command Words and options. */
@@ -122,6 +123,9 @@ typedef struct idt_ptr idt_ptr_t;
 static idt_entry_t idt[INTERRUPT_COUNT];
 static idt_ptr_t ip;
 static interrupt_handler_t interrupt_handlers[INTERRUPT_COUNT];
+
+static unsigned char pic_master_mask = ~(1 << PIC_SLAVE_PIN);
+static unsigned char pic_slave_mask = 0xFF;
 
 extern void exception0 ();
 extern void exception1 ();
@@ -211,7 +215,8 @@ install_idt ()
   int k;
 
   for (k = 0; k < INTERRUPT_COUNT; ++k) {
-    set_interrupt_handler (k, default_handler);
+    /* Do not use set_interrupt_handler because it changes the interrupt controller masks. */
+    interrupt_handlers[k] = default_handler;
   }
 
   ip.limit = (sizeof (idt_entry_t) * INTERRUPT_COUNT) - 1;
@@ -263,8 +268,9 @@ install_idt ()
   outb (PIC_SLAVE_HIGH, PIC_ICW3_HIGH | PIC_ICW3_SLAVEIO_1);
   outb (PIC_MASTER_HIGH, PIC_ICW4_HIGH | PIC_ICW4_MODE86);
   outb (PIC_SLAVE_HIGH, PIC_ICW4_HIGH | PIC_ICW4_MODE86);
-  outb (PIC_MASTER_HIGH, 0x0);
-  outb (PIC_SLAVE_HIGH, 0x0);
+  /* Set the interrupt masks. */
+  outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask);
+  outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask);
 
   idt_set_gate (PIC_MASTER_BASE + 0, (unsigned int)irq0, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
   idt_set_gate (PIC_MASTER_BASE + 1, (unsigned int)irq1, KERNEL_CODE_SEGMENT, PRESENT | RING0 | SYSTEM | INTERRUPT_GATE_32);
@@ -337,8 +343,29 @@ set_interrupt_handler (unsigned int num,
   kassert (num < INTERRUPT_COUNT);
   if (handler != 0) {
     interrupt_handlers[num] = handler;
+
+    /* Change the masks on the interrupt controllers. */
+    if (PIC_MASTER_BASE <= num && num < PIC_MASTER_LIMIT) {
+      pic_master_mask &= ~(1 << (num - PIC_MASTER_BASE));
+      outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask); 
+    }
+    else if (PIC_SLAVE_BASE <= num && num < PIC_SLAVE_LIMIT) {
+      pic_slave_mask &= ~(1 << (num - PIC_SLAVE_BASE));
+      outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask);
+    }
   }
   else {
     interrupt_handlers[num] = default_handler;
+
+    /* Change the masks on the interrupt controllers. */
+    if (PIC_MASTER_BASE <= num && num < PIC_MASTER_LIMIT) {
+      pic_master_mask |= (1 << (num - PIC_MASTER_BASE));
+      outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask); 
+    }
+    else if (PIC_SLAVE_BASE <= num && num < PIC_SLAVE_LIMIT) {
+      pic_slave_mask |= (1 << (num - PIC_SLAVE_BASE));
+      outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask);
+    }
   }
+
 }

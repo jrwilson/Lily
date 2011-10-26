@@ -47,5 +47,5 @@ SECTIONS
 		*(.bss)
 	}
 
-	end_of_kernel = ALIGN (0x1000);
+	end_of_kernel_page_aligned = ALIGN (0x1000);
 }

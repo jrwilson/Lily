@@ -134,6 +134,12 @@ kputuix (unsigned int n)
 }
 
 void
+kputp (void* p)
+{
+  kputuix ((unsigned int)p);
+}
+
+void
 clear_console ()
 {
   /* Pointer to the text framebuffer. */

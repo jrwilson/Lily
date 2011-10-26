@@ -24,6 +24,9 @@ void
 kputuix (unsigned int n);
 
 void
+kputp (void* p);
+
+void
 clear_console ();
 
 #endif /* __kput_h__ */

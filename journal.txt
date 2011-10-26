@@ -49,9 +49,17 @@ Test on physical machine was successful.
 Added a kassert macro to help debug and communicate assumptions.
 Changed framebuffer to work before and after paging/GDT.
 Added assertions related to identity mapping for memory management.
-Next step will be to implement a placement allocator.
+Test on physical machine was successful.
+Setting an interrupt handler now changes the masks on the PICs.
+Implemented a placement allocator.
+Preliminary implemented of a manager for frames (physical pages).
+Test on physical machine was successful.
 
+2011-10-26
 
+Fixed interrupt mask bug.
+Refactored paging code.
+Starting work on heap allocator.
 
 Kernel Code
 Kernel Data

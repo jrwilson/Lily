@@ -37,6 +37,7 @@ kmain (multiboot_info_t* mbd,
 
   kassert (magic == MULTIBOOT_BOOTLOADER_MAGIC);
 
+  /* Extend memory to cover the GRUB data structures. */
   extend_identity ((unsigned int)mbd + sizeof (multiboot_info_t) - 1);
 
   if (mbd->flags & MULTIBOOT_INFO_MEMORY) {
@@ -68,26 +69,7 @@ kmain (multiboot_info_t* mbd,
   /* } */
 
   if (mbd->flags & MULTIBOOT_INFO_MEM_MAP) {
-    multiboot_memory_map_t* ptr = (multiboot_memory_map_t*)mbd->mmap_addr;
-    multiboot_memory_map_t* limit = (multiboot_memory_map_t*)(mbd->mmap_addr + mbd->mmap_length);
     extend_identity (mbd->mmap_addr + mbd->mmap_length - 1);
-    while (ptr < limit) {
-      kputuix (ptr->addr); kputs ("-"); kputuix (ptr->addr + ptr->len);
-      switch (ptr->type) {
-      case MULTIBOOT_MEMORY_AVAILABLE:
-	kputs (" AVAILABLE");
-	break;
-      case MULTIBOOT_MEMORY_RESERVED:
-	kputs (" RESERVED");
-	break;
-      default:
-	kputs (" UNKNOWN");
-	break;
-      }
-      kputs ("\n");
-      /* Move to the next descriptor. */
-      ptr = (multiboot_memory_map_t*) (((char*)&(ptr->addr)) + ptr->size);
-    }
   }
 
   /* if (mbd->flags & MULTIBOOT_INFO_DRIVE_INFO) { */
@@ -113,14 +95,22 @@ kmain (multiboot_info_t* mbd,
   /*   kputs ("MULTIBOOT_INFO_VIDEO_INFO\n"); */
   /* } */
 
-  kputs ("Stack start: "); kputuix ((unsigned int)&stack); kputs ("\n");
-  kputs ("Stack limit: "); kputuix ((unsigned int)&stack + 0x1000); kputs ("\n");
+  initialize_heap (mbd);
+
+  kmalloc (4064 - 15);
+  dump_heap ();
+  unsigned char* a = kmalloc_pa (4096);
+  kputp (a); kputs ("\n");
+  dump_heap ();
+
+  /* kputs ("Stack start: "); kputp (&stack); kputs ("\n"); */
+  /* kputs ("Stack limit: "); kputp (&stack + 0x1000); kputs ("\n"); */
 
   /* Unhandled interrupts. */
   /* asm volatile ("int $0x3"); */
   /* asm volatile ("int $0x4"); */
 
-  initialize_pit (0xFFFF);
+  /* initialize_pit (0xFFFF); */
 
   /* Wait for interrupts. */
   enable_interrupts ();
