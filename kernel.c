@@ -20,8 +20,6 @@
 #include "kassert.h"
 #include "multiboot.h"
 
-extern unsigned int stack;
-
 void
 kmain (multiboot_info_t* mbd,
        unsigned int magic)
@@ -97,14 +95,12 @@ kmain (multiboot_info_t* mbd,
 
   initialize_heap (mbd);
 
-  kmalloc (4064 - 15);
-  dump_heap ();
-  unsigned char* a = kmalloc_pa (4096);
-  kputp (a); kputs ("\n");
-  dump_heap ();
-
-  /* kputs ("Stack start: "); kputp (&stack); kputs ("\n"); */
-  /* kputs ("Stack limit: "); kputp (&stack + 0x1000); kputs ("\n"); */
+  unsigned int amount = 1;
+  while (1) {
+    kmalloc (amount);
+    dump_heap ();
+    amount *= 2;
+  }
 
   /* Unhandled interrupts. */
   /* asm volatile ("int $0x3"); */

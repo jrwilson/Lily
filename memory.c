@@ -37,6 +37,7 @@
 #define PAGE_DIRECTORY_ENTRY(addr)  (((addr) & 0xFFC00000) >> 22)
 #define PAGE_TABLE_ENTRY(addr) (((addr) & 0x3FF000) >> 12)
 #define PAGE_ALIGN(addr) ((addr) & 0xFFFFF000)
+#define PAGE_ADDRESS_OFFSET(addr) ((addr) & 0xFFF)
 #define IS_PAGE_ALIGNED(addr) (((addr) & 0xFFF) == 0)
 
 /* Macros for segmentation. */
@@ -205,6 +206,7 @@ static page_directory_t kernel_page_directory __attribute__ ((aligned (PAGE_SIZE
 static page_table_t low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
 static page_directory_t* current_page_directory = 0;
+static page_table_t* spare_page_table = 0;
 
 static gdt_entry_t gdt[SEGMENT_COUNT];
 static gdt_ptr_t gp;
@@ -225,6 +227,14 @@ initialize_page_table (page_table_t* ptr)
   for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
     ptr->entries[k] = 0;
   }
+}
+
+static page_table_t*
+allocate_page_table ()
+{
+  page_table_t* ptr = kmalloc_pa (sizeof (page_table_t));
+  initialize_page_table (ptr);
+  return ptr;
 }
 
 static void
@@ -274,18 +284,42 @@ insert_page_table (page_directory_t* ptr,
   ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] = pt;
 }
 
+static unsigned int
+logical_to_physical (page_directory_t* ptr,
+		     unsigned int logical_addr)
+{
+  kassert (ptr != 0);
+
+  page_table_t* pt = ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)];
+
+  if (pt != 0) {
+    return PAGE_ALIGN (pt->entries[PAGE_TABLE_ENTRY (logical_addr)]) | PAGE_ADDRESS_OFFSET (logical_addr);
+  }
+  else {
+    return 0;
+  }
+}
+
 static void
 insert_mapping (page_directory_t* ptr,
 		unsigned int logical_addr,
 		unsigned int physical_addr,
-		unsigned int flags)
+		unsigned int flags,
+		unsigned int page_directory_flags)
 {
   kassert (ptr != 0);
   kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
   kassert (IS_PAGE_ALIGNED (logical_addr));
   kassert (IS_PAGE_ALIGNED (physical_addr));
   kassert (PAGE_ALIGN (flags) == 0);
-  kassert (ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] != 0);
+
+  if (ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] == 0) {
+    /* We need a new page table.
+       We have pre-allocated one for this purpose. */
+    kassert (spare_page_table != 0);
+    insert_page_table (ptr, logical_addr, logical_to_physical (ptr, (unsigned int)spare_page_table), page_directory_flags, spare_page_table);
+    spare_page_table = 0;
+  }
 
   ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)]->entries[PAGE_TABLE_ENTRY (logical_addr)] = physical_addr | flags;
   if (ptr == current_page_directory) {
@@ -316,7 +350,7 @@ initialize_paging ()
 
   /* Identity map the physical addresses from 0 to the end of the kernel. */
   for (k = 0; k < identity_limit; k += PAGE_SIZE) {
-    insert_mapping (&kernel_page_directory, k, k, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (&kernel_page_directory, k, k, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
  
   /* Switch to the page directory. */
@@ -366,7 +400,7 @@ extend_identity (unsigned int addr)
 
   addr = PAGE_ALIGN (addr + PAGE_SIZE - 1);
   for (; identity_limit < addr; identity_limit += PAGE_SIZE) {
-    insert_mapping (&kernel_page_directory, identity_limit, identity_limit, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (&kernel_page_directory, identity_limit, identity_limit, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
 }
 
@@ -598,7 +632,7 @@ initialize_heap (multiboot_info_t* mbd)
   for (; (heap_limit - heap_base) < HEAP_INITIAL_SIZE; heap_limit += PAGE_SIZE) {
     /* Get the address of a physical frame. */
     addr = frame_manager_allocate ();
-    insert_mapping (&kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (&kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
 
   heap_first = (header_t*)heap_base;
@@ -621,6 +655,8 @@ initialize_heap (multiboot_info_t* mbd)
   /* kputs ("heap_limit: "); kputuix (heap_limit); kputs ("\n"); */
 
   heap_mode = HEAP;
+
+  spare_page_table = allocate_page_table ();
 }
 
 static void
@@ -677,29 +713,70 @@ split (header_t* ptr,
   }
 }
 
+static void
+expand_heap (unsigned int size)
+{
+  while (heap_last->size < size) {
+    /* Allocate a frame. */
+    unsigned int addr = frame_manager_allocate ();
+    /* Map it. */
+    insert_mapping (&kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    /* Update sizes and limits. */
+    heap_limit += PAGE_SIZE;
+    heap_last->size += PAGE_SIZE;
+
+    /* Replace the spare page table if necessary. */
+    if (spare_page_table == 0) {
+      spare_page_table = allocate_page_table ();
+    }
+  }
+}
+
+static header_t*
+find_header (header_t* start,
+	     unsigned int size)
+{
+  for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
+  return start;
+}
+
 void*
 kmalloc (unsigned int size)
 {
   kassert (heap_mode == HEAP);
 
-  header_t* ptr;
-  for (ptr = heap_first; ptr != 0 && !(ptr->available && ptr->size >= size); ptr = ptr->next) ;;
+  header_t* ptr = find_header (heap_first, size);
+  while (ptr == 0) {
+    expand_heap (size);
+    ptr = find_header (heap_last, size);
+  }
 
-  if (ptr != 0) {
-    /* Found something we can use. */
-    if ((ptr->size - size) > sizeof (header_t)) {
-      split (ptr, size);
+  /* Found something we can use. */
+  if ((ptr->size - size) > sizeof (header_t)) {
+    split (ptr, size);
+  }
+  /* Mark as used and return. */
+  ptr->available = 0;
+  return (ptr + 1);
+}
+
+static header_t*
+find_header_pa (header_t* start,
+		unsigned int size,
+		unsigned int* base,
+		unsigned int* limit)
+{
+  while (start != 0) {
+    if (start->available && start->size >= size) {
+      *base = PAGE_ALIGN ((unsigned int)start + sizeof (header_t) + PAGE_SIZE - 1);
+      *limit = (unsigned int)start + sizeof (header_t) + start->size;
+      if ((*limit - *base) >= size) {
+	break;
+      }
     }
-    /* Mark as used and return. */
-    ptr->available = 0;
-    return (ptr + 1);
+    start = start->next;
   }
-  else {
-    /* TODO:  Expand the heap. */
-    kassert (0);
-  }
-
-  return 0;
+  return start;
 }
 
 void*
@@ -710,72 +787,59 @@ kmalloc_pa (unsigned int size)
   unsigned int base;
   unsigned int limit;
 
-  header_t* ptr = heap_first;
-  while (ptr != 0) {
-    if (ptr->available && ptr->size >= size) {
-      base = PAGE_ALIGN ((unsigned int)ptr + sizeof (header_t) + PAGE_SIZE - 1);
-      limit = (unsigned int)ptr + sizeof (header_t) + ptr->size;
-      if ((limit - base) >= size) {
-	break;
-      }
-    }
-    ptr = ptr->next;
+  header_t* ptr = find_header_pa (heap_first, size, &base, &limit);
+  while (ptr == 0) {
+    expand_heap (size);
+    ptr = find_header_pa (heap_last, size, &base, &limit);
   }
 
-  if (ptr != 0) {
-    if (((unsigned int)ptr + sizeof (header_t)) != base) {
-      if ((base - sizeof (header_t)) > ((unsigned int)ptr + sizeof (header_t))) {
-	/* Split. */
-	split (ptr, ptr->size - sizeof (header_t) - (limit - base));
-	/* Change ptr to aligned block. */
-	ptr = ptr->next;
+  if (((unsigned int)ptr + sizeof (header_t)) != base) {
+    if ((base - sizeof (header_t)) > ((unsigned int)ptr + sizeof (header_t))) {
+      /* Split. */
+      split (ptr, ptr->size - sizeof (header_t) - (limit - base));
+      /* Change ptr to aligned block. */
+      ptr = ptr->next;
+    }
+    else {
+      /* Slide the header to align it with base. */
+      unsigned int amount = base - ((unsigned int)ptr + sizeof (header_t));
+      header_t* p = ptr->prev;
+      header_t* n = ptr->next;
+      unsigned int s = ptr->size;
+      header_t* old = ptr;
+      
+      ptr = (header_t*) ((unsigned int)ptr + amount);
+      ptr->available = 1;
+      ptr->magic = HEAP_MAGIC;
+      ptr->size = s - amount;
+      ptr->prev = p;
+      ptr->next = n;
+      
+      if (ptr->prev != 0) {
+	ptr->prev->next = ptr;
+	ptr->prev->size += amount;
       }
-      else {
-	/* Slide the header to align it with base. */
-	unsigned int amount = base - ((unsigned int)ptr + sizeof (header_t));
-	header_t* p = ptr->prev;
-	header_t* n = ptr->next;
-	unsigned int s = ptr->size;
-	header_t* old = ptr;
-
-	ptr = (header_t*) ((unsigned int)ptr + amount);
-	ptr->available = 1;
-	ptr->magic = HEAP_MAGIC;
-	ptr->size = s - amount;
-	ptr->prev = p;
-	ptr->next = n;
-
-	if (ptr->prev != 0) {
-	  ptr->prev->next = ptr;
-	  ptr->prev->size += amount;
-	}
-
-	if (ptr->next != 0) {
-	  ptr->next->prev = ptr;
-	}
-
-	if (heap_first == old) {
-	  heap_first = ptr;
-	}
-
-	if (heap_last == old) {
-	  heap_last = ptr;
-	}
+      
+      if (ptr->next != 0) {
+	ptr->next->prev = ptr;
+      }
+      
+      if (heap_first == old) {
+	heap_first = ptr;
+      }
+      
+      if (heap_last == old) {
+	heap_last = ptr;
       }
     }
-
-    if ((ptr->size - size) > sizeof (header_t)) {
-      split (ptr, size);
-    }
-    /* Mark as used and return. */
-    ptr->available = 0;
-    return (ptr + 1);
   }
-  else {
-    /* TODO:  Expand the heap. */
-    kassert (0);
+  
+  if ((ptr->size - size) > sizeof (header_t)) {
+    split (ptr, size);
   }
-  return 0;
+  /* Mark as used and return. */
+  ptr->available = 0;
+  return (ptr + 1);
 }
 
 
@@ -812,6 +876,4 @@ kfree (void* p)
   }
 }
 
-/* TODO:  Force allocation of page table. */
 /* TODO:  Reclaim identity mapped memory. */
-/* TODO:  Move and reclaim the stack. */
