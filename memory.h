@@ -21,6 +21,10 @@
 #define KERNEL_CODE_SEGMENT 0x08
 #define KERNEL_DATA_SEGMENT 0x10
 
+typedef struct page_directory page_directory_t;
+
+extern page_directory_t* kernel_page_directory;
+
 void
 initialize_paging ();
 
@@ -32,6 +36,16 @@ extend_identity (unsigned int addr);
 
 void
 install_page_fault_handler ();
+
+page_directory_t*
+allocate_page_directory ();
+
+void
+copy_page_directory (page_directory_t* dst,
+		     const page_directory_t* src);
+
+void
+switch_to_page_directory (page_directory_t* ptr);
 
 void
 initialize_heap (multiboot_info_t* mbd);

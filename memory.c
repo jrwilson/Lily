@@ -123,7 +123,6 @@ struct page_directory {
   page_table_t* entries_logical[PAGE_ENTRY_COUNT];
   unsigned int physical_address;
 };
-typedef struct page_directory page_directory_t;
 
 /* The heap progresses through three modes.
 
@@ -202,9 +201,10 @@ static unsigned int placement_limit;
 static unsigned int heap_base;
 static unsigned int heap_limit;
 
-static page_directory_t kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
+static page_directory_t kernel_page_directory_var __attribute__ ((aligned (PAGE_SIZE)));
 static page_table_t low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
+page_directory_t* kernel_page_directory = &kernel_page_directory_var;
 static page_directory_t* current_page_directory = 0;
 static page_table_t* spare_page_table = 0;
 
@@ -217,6 +217,22 @@ static unsigned int used_frames = 0;
 
 static header_t* heap_first;
 static header_t* heap_last;
+
+static unsigned int
+logical_to_physical (page_directory_t* ptr,
+		     unsigned int logical_addr)
+{
+  kassert (ptr != 0);
+
+  page_table_t* pt = ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)];
+
+  if (pt != 0) {
+    return PAGE_ALIGN (pt->entries[PAGE_TABLE_ENTRY (logical_addr)]) | PAGE_ADDRESS_OFFSET (logical_addr);
+  }
+  else {
+    return 0;
+  }
+}
 
 static void
 initialize_page_table (page_table_t* ptr)
@@ -253,7 +269,26 @@ initialize_page_directory (page_directory_t* ptr,
   ptr->physical_address = physical_address;
 }
 
-static void
+page_directory_t*
+allocate_page_directory ()
+{
+  page_directory_t* ptr = kmalloc_pa (sizeof (page_directory_t));
+  initialize_page_directory (ptr, logical_to_physical (kernel_page_directory, (unsigned int)ptr));
+  return ptr;
+}
+
+void
+copy_page_directory (page_directory_t* dst,
+		     const page_directory_t* src)
+{
+  unsigned int k;
+  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
+    dst->entries_physical[k] = src->entries_physical[k];
+    dst->entries_logical[k] = src->entries_logical[k];
+  }
+}
+
+void
 switch_to_page_directory (page_directory_t* ptr)
 {
   kassert (ptr != 0);
@@ -282,22 +317,6 @@ insert_page_table (page_directory_t* ptr,
   
   ptr->entries_physical[PAGE_DIRECTORY_ENTRY (logical_addr)] = physical_addr | flags;
   ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] = pt;
-}
-
-static unsigned int
-logical_to_physical (page_directory_t* ptr,
-		     unsigned int logical_addr)
-{
-  kassert (ptr != 0);
-
-  page_table_t* pt = ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)];
-
-  if (pt != 0) {
-    return PAGE_ALIGN (pt->entries[PAGE_TABLE_ENTRY (logical_addr)]) | PAGE_ADDRESS_OFFSET (logical_addr);
-  }
-  else {
-    return 0;
-  }
 }
 
 static void
@@ -339,22 +358,22 @@ initialize_paging ()
   unsigned int k;
 
   /* To compute the physical address of the page directory, we add 0x40000000 according to the GDT trick in loader.s. */
-  initialize_page_directory (&kernel_page_directory, (unsigned int)&kernel_page_directory + 0x40000000);
+  initialize_page_directory (kernel_page_directory, (unsigned int)kernel_page_directory + 0x40000000);
   initialize_page_table (&low_page_table);
 
  /* To compute the physical address of the page table, we add 0x40000000 according to the GDT trick in loader.s. */
   unsigned int low_page_table_paddr = (unsigned int)&low_page_table + 0x40000000;
   /* Low memory (4 megabytes) is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
-  insert_page_table (&kernel_page_directory, 0, low_page_table_paddr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, &low_page_table);
-  insert_page_table (&kernel_page_directory, KERNEL_OFFSET, low_page_table_paddr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, &low_page_table);
+  insert_page_table (kernel_page_directory, 0, low_page_table_paddr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, &low_page_table);
+  insert_page_table (kernel_page_directory, KERNEL_OFFSET, low_page_table_paddr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, &low_page_table);
 
   /* Identity map the physical addresses from 0 to the end of the kernel. */
   for (k = 0; k < identity_limit; k += PAGE_SIZE) {
-    insert_mapping (&kernel_page_directory, k, k, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, k, k, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
  
   /* Switch to the page directory. */
-  switch_to_page_directory (&kernel_page_directory);
+  switch_to_page_directory (kernel_page_directory);
 
   /* Enable paging. */
   __asm__ __volatile__ ("mov %%cr0, %%eax\n"
@@ -400,7 +419,7 @@ extend_identity (unsigned int addr)
 
   addr = PAGE_ALIGN (addr + PAGE_SIZE - 1);
   for (; identity_limit < addr; identity_limit += PAGE_SIZE) {
-    insert_mapping (&kernel_page_directory, identity_limit, identity_limit, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, identity_limit, identity_limit, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
 }
 
@@ -632,7 +651,7 @@ initialize_heap (multiboot_info_t* mbd)
   for (; (heap_limit - heap_base) < HEAP_INITIAL_SIZE; heap_limit += PAGE_SIZE) {
     /* Get the address of a physical frame. */
     addr = frame_manager_allocate ();
-    insert_mapping (&kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
   }
 
   heap_first = (header_t*)heap_base;
@@ -720,7 +739,7 @@ expand_heap (unsigned int size)
     /* Allocate a frame. */
     unsigned int addr = frame_manager_allocate ();
     /* Map it. */
-    insert_mapping (&kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
     /* Update sizes and limits. */
     heap_limit += PAGE_SIZE;
     heap_last->size += PAGE_SIZE;

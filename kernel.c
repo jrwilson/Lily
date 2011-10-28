@@ -109,23 +109,19 @@ kmain (multiboot_info_t* mbd,
 
   initialize_heap (mbd);
 
-  hash_map_t* hm = allocate_hash_map (hash_func, compare_func);
-  kassert (hash_map_size (hm) == 0);
-  hash_map_insert (hm, (void *)1, (void *)1);
-  hash_map_insert (hm, (void *)2, (void *)2);
-  hash_map_insert (hm, (void *)3, (void *)3);
-  hash_map_insert (hm, (void *)4, (void *)4);
-  hash_map_insert (hm, (void *)5, (void *)5);
-  hash_map_insert (hm, (void *)6, (void *)6);
-  hash_map_insert (hm, (void *)7, (void *)7);
-  hash_map_insert (hm, (void *)8, (void *)8);
-  hash_map_insert (hm, (void *)9, (void *)9);
-  hash_map_insert (hm, (void *)10, (void *)10);
-  hash_map_erase (hm, (void *)5);
-  kassert (hash_map_size (hm) == 9);
-  kassert (hash_map_find (hm, (void*)1) == (void*)1);
-  kassert (hash_map_find (hm, (void*)5) == (void*)0);
-  kassert (hash_map_find (hm, (void*)11) == (void*)0);
+  /* Create a new page directory for a task. */
+  page_directory_t* pd = allocate_page_directory ();
+
+  /* Copy in the kernel. */
+  /* TODO:  What happens if a new page table is allocated? */
+  copy_page_directory (pd, kernel_page_directory);
+
+  switch_to_page_directory (pd);
+
+  kputp (pd); kputs ("\n");
+  kputp (kernel_page_directory); kputs ("\n");
+
+
 
   /* Unhandled interrupts. */
   /* asm volatile ("int $0x3"); */

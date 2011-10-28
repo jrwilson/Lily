@@ -15,7 +15,7 @@
 */
 
 void
-kputs (char* string);
+kputs (const char* string);
 
 void
 kputucx (unsigned char n);

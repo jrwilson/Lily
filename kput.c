@@ -31,7 +31,7 @@ static unsigned int x_location = 0;
 static unsigned int y_location = 0;
 
 void
-kputs (char* string)
+kputs (const char* string)
 {
   /* Pointer to the text framebuffer. */
   unsigned short* videoram = (unsigned short*)VIDEORAM;
