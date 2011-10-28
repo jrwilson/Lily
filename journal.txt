@@ -66,6 +66,9 @@ Starting work on heap allocator.
 Finished heap allocator.
 Test on a physical machine was successful.
 
+2011-10-28
+
+Implemented a basic hash map.
 
 Kernel Code
 Kernel Data

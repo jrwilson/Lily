@@ -19,6 +19,20 @@
 #include "pit.h"
 #include "kassert.h"
 #include "multiboot.h"
+#include "hash_map.h"
+
+unsigned int
+hash_func (void* x)
+{
+  return (unsigned int)x;
+}
+
+int
+compare_func (void* x,
+	      void* y)
+{
+  return (unsigned int)x - (unsigned int)y;
+}
 
 void
 kmain (multiboot_info_t* mbd,
@@ -95,12 +109,23 @@ kmain (multiboot_info_t* mbd,
 
   initialize_heap (mbd);
 
-  unsigned int amount = 1;
-  while (1) {
-    kmalloc (amount);
-    dump_heap ();
-    amount *= 2;
-  }
+  hash_map_t* hm = allocate_hash_map (hash_func, compare_func);
+  kassert (hash_map_size (hm) == 0);
+  hash_map_insert (hm, (void *)1, (void *)1);
+  hash_map_insert (hm, (void *)2, (void *)2);
+  hash_map_insert (hm, (void *)3, (void *)3);
+  hash_map_insert (hm, (void *)4, (void *)4);
+  hash_map_insert (hm, (void *)5, (void *)5);
+  hash_map_insert (hm, (void *)6, (void *)6);
+  hash_map_insert (hm, (void *)7, (void *)7);
+  hash_map_insert (hm, (void *)8, (void *)8);
+  hash_map_insert (hm, (void *)9, (void *)9);
+  hash_map_insert (hm, (void *)10, (void *)10);
+  hash_map_erase (hm, (void *)5);
+  kassert (hash_map_size (hm) == 9);
+  kassert (hash_map_find (hm, (void*)1) == (void*)1);
+  kassert (hash_map_find (hm, (void*)5) == (void*)0);
+  kassert (hash_map_find (hm, (void*)11) == (void*)0);
 
   /* Unhandled interrupts. */
   /* asm volatile ("int $0x3"); */
