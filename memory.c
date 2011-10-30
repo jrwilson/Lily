@@ -18,17 +18,10 @@
 #include "kput.h"
 #include "halt.h"
 #include "kassert.h"
+#include "descriptor.h"
 
 /* Page is 4 kilobytes. */
 #define PAGE_SIZE 0x1000
-
-/* Flags for page table entries. */
-#define PAGE_USER_MODE (1 << 2)
-#define PAGE_KERNEL_MODE 0
-#define PAGE_WRITABLE (1 << 1)
-#define PAGE_READ_ONLY 0
-#define PAGE_PRESENT (1 << 0)
-#define PAGE_NOT_PRESENT
 
 /* Number of entries in a page table or directory. */
 #define PAGE_ENTRY_COUNT 1024
@@ -39,51 +32,6 @@
 #define PAGE_ALIGN(addr) ((addr) & 0xFFFFF000)
 #define PAGE_ADDRESS_OFFSET(addr) ((addr) & 0xFFF)
 #define IS_PAGE_ALIGNED(addr) (((addr) & 0xFFF) == 0)
-
-/* Macros for segmentation. */
-#define SEGMENT_COUNT 3
-
-/* Macros for the access byte of descriptors. */
-
-/* Is the segment present? */
-#define DESC_ACCESS_NOT_PRESENT (0 << 7)
-#define DESC_ACCESS_PRESENT (1 << 7)
-
-/* What is the segment's privilege level? */
-#define DESC_ACCESS_RING0 (0 << 5)
-#define DESC_ACCESS_RING1 (1 << 5)
-#define DESC_ACCESS_RING2 (2 << 5)
-#define DESC_ACCESS_RING3 (3 << 5)
-
-/* Does the segment describe memory or something else in the system? */
-#define DESC_ACCESS_SYSTEM (0 << 4)
-#define DESC_ACCESS_MEMORY (1 << 4)
-
-/* Is the segment data or code? */
-#define DESC_ACCESS_DATA (0 << 3)
-#define DESC_ACCESS_CODE (1 << 3)
-
-/* Does a data segment expand up or down ? */
-#define DESC_ACCESS_EXPAND_UP (0 << 2)
-#define DESC_ACCESS_EXPAND_DOWN (1 << 2)
-
-/* Does a code segment conform (i.e., can only execute code in segments with the same privilege level)? */
-#define DESC_ACCESS_NOT_CONFORMING (0 << 2)
-#define DESC_ACCESS_CONFORMING (1 << 2)
-
-/* Is a data segment writable or a code segment readable? */
-#define DESC_ACCESS_DATA_WRITABLE (1 << 1)
-#define DESC_ACCESS_CODE_READABLE (1 << 1)
-
-/* Macros for the granularity byte of descriptors. */
-
-/* Is the granularity in terms of bytes or kilobytes? */
-#define DESC_GRANULARITY_BYTE (0 << 7)
-#define DESC_GRANULARITY_KILOBYTE (1 << 7)
-
-/* 16-bit or 32-bit operands? */
-#define DESC_GRANULARITY_OP16 (0 << 6)
-#define DESC_GRANULARITY_OP32 (1 << 6)
 
 /* Macros for page faults. */
 #define PAGE_FAULT_INTERRUPT 14
@@ -112,17 +60,73 @@
 #define HEAP_INITIAL_SIZE 0x8000
 #define HEAP_MAGIC 0x7ACEDEAD
 
+struct page_table_entry {
+  unsigned int present : 1;
+  unsigned int writable : 1;
+  unsigned int user : 1;
+  unsigned int write_through : 1;
+  unsigned int cache_disabled : 1;
+  unsigned int accessed : 1;
+  unsigned int dirty : 1;
+  unsigned int zero : 1;
+  unsigned int global : 1;
+  unsigned int available : 3;
+  unsigned int frame : 20;
+};
+typedef struct page_table_entry page_table_entry_t;
+
 struct page_table {
-  unsigned int entries[PAGE_ENTRY_COUNT];
+  page_table_entry_t entries[PAGE_ENTRY_COUNT];
 };
 typedef struct page_table page_table_t;
 
+struct page_directory_entry {
+  unsigned int present : 1;
+  unsigned int writable : 1;
+  unsigned int user : 1;
+  unsigned int write_through : 1;
+  unsigned int cache_disabled : 1;
+  unsigned int accessed : 1;
+  unsigned int zero : 1;
+  unsigned int page_size : 1;
+  unsigned int ignored : 1;
+  unsigned int available : 3;
+  unsigned int frame : 20;
+};
+typedef struct page_directory_entry page_directory_entry_t;
+
 struct page_directory {
   /* Physical addresses.  This is first so we can page-align it. */
-  unsigned int entries_physical[PAGE_ENTRY_COUNT];
+  page_directory_entry_t entries_physical[PAGE_ENTRY_COUNT];
   page_table_t* entries_logical[PAGE_ENTRY_COUNT];
   unsigned int physical_address;
+  page_directory_t* next;
 };
+
+typedef enum {
+  NOT_GLOBAL = 0,
+  GLOBAL = 1,
+} global_t;
+
+typedef enum {
+  CACHED = 0,
+  NOT_CACHED = 1,
+} cached_t;
+
+typedef enum {
+  WRITE_BACK = 0,
+  WRITE_THROUGH = 1,
+} cache_mode_t;
+
+typedef enum {
+  SUPERVISOR = 0,
+  USER = 1,
+} page_privilege_t;
+
+typedef enum {
+  PAGE_SIZE_4K = 0,
+  PAGE_SIZE_4M = 1,
+} page_size_t;
 
 /* The heap progresses through three modes.
 
@@ -148,21 +152,10 @@ enum heap_mode {
 };
 typedef enum heap_mode heap_mode_t;
 
-struct gdt_entry
-{
-  unsigned short limit_low;
-  unsigned short base_low;
-  unsigned char base_middle;
-  unsigned char access;
-  unsigned char granularity;
-  unsigned char base_high;
-} __attribute__((packed));
-typedef struct gdt_entry gdt_entry_t;
-
 struct gdt_ptr
 {
   unsigned short limit;
-  gdt_entry_t* base;
+  descriptor_t* base;
 } __attribute__((packed));
 typedef struct gdt_ptr gdt_ptr_t;
 
@@ -205,10 +198,11 @@ static page_directory_t kernel_page_directory_var __attribute__ ((aligned (PAGE_
 static page_table_t low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
 page_directory_t* kernel_page_directory = &kernel_page_directory_var;
+static page_directory_t* page_directories = &kernel_page_directory_var;
 static page_directory_t* current_page_directory = 0;
 static page_table_t* spare_page_table = 0;
 
-static gdt_entry_t gdt[SEGMENT_COUNT];
+static descriptor_t gdt[DESCRIPTOR_COUNT];
 static gdt_ptr_t gp;
 
 static frame_set_item_t* frame_set = 0;
@@ -217,6 +211,19 @@ static unsigned int used_frames = 0;
 
 static header_t* heap_first;
 static header_t* heap_last;
+
+static void
+memset (void* ptr,
+	unsigned char value,
+	unsigned int size)
+{
+  unsigned char* c = ptr;
+  while (size != 0) {
+    *c = value;
+    ++c;
+    --size;
+  }
+}
 
 static unsigned int
 logical_to_physical (page_directory_t* ptr,
@@ -227,11 +234,59 @@ logical_to_physical (page_directory_t* ptr,
   page_table_t* pt = ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)];
 
   if (pt != 0) {
-    return PAGE_ALIGN (pt->entries[PAGE_TABLE_ENTRY (logical_addr)]) | PAGE_ADDRESS_OFFSET (logical_addr);
+    return FRAME_TO_ADDRESS (pt->entries[PAGE_TABLE_ENTRY (logical_addr)].frame) | PAGE_ADDRESS_OFFSET (logical_addr);
   }
   else {
     return 0;
   }
+}
+
+static page_table_entry_t
+make_page_table_entry (unsigned int frame,
+		       global_t global,
+		       cached_t cached,
+		       cache_mode_t cache_mode,
+		       page_privilege_t privilege,
+		       writable_t writable,
+		       present_t present)
+{
+  page_table_entry_t retval;
+  retval.frame = frame;
+  retval.available = 0;
+  retval.global = global;
+  retval.zero = 0;
+  retval.dirty = 0;
+  retval.accessed = 0;
+  retval.cache_disabled = cached;
+  retval.write_through = cache_mode;
+  retval.user = privilege;
+  retval.writable = writable;
+  retval.present = present;
+  return retval;
+}
+
+static page_directory_entry_t
+make_page_directory_entry (unsigned int frame,
+			   page_size_t page_size,
+			   cached_t cached,
+			   cache_mode_t cache_mode,
+			   page_privilege_t privilege,
+			   writable_t writable,
+			   present_t present)
+{
+  page_directory_entry_t retval;
+  retval.frame = frame;
+  retval.available = 0;
+  retval.ignored = 0;
+  retval.page_size = page_size;
+  retval.zero = 0;
+  retval.accessed = 0;
+  retval.cache_disabled = cached;
+  retval.write_through = cache_mode;
+  retval.user = privilege;
+  retval.writable = writable;
+  retval.present = present;
+  return retval;
 }
 
 static void
@@ -239,10 +294,7 @@ initialize_page_table (page_table_t* ptr)
 {
   kassert (ptr != 0);
   kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
-  unsigned int k;
-  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    ptr->entries[k] = 0;
-  }
+  memset (ptr, 0, sizeof (page_table_t));
 }
 
 static page_table_t*
@@ -261,11 +313,7 @@ initialize_page_directory (page_directory_t* ptr,
   kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
   kassert (IS_PAGE_ALIGNED ((unsigned int)physical_address));
 
-  unsigned int k;
-  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    ptr->entries_physical[k] = 0;
-    ptr->entries_logical[k] = 0;
-  }
+  memset (ptr, 0, sizeof (page_directory_t));
   ptr->physical_address = physical_address;
 }
 
@@ -273,19 +321,18 @@ page_directory_t*
 allocate_page_directory ()
 {
   page_directory_t* ptr = kmalloc_pa (sizeof (page_directory_t));
-  initialize_page_directory (ptr, logical_to_physical (kernel_page_directory, (unsigned int)ptr));
-  return ptr;
-}
-
-void
-copy_page_directory (page_directory_t* dst,
-		     const page_directory_t* src)
-{
+  /* Copy from the kernel. */
   unsigned int k;
   for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    dst->entries_physical[k] = src->entries_physical[k];
-    dst->entries_logical[k] = src->entries_logical[k];
+    ptr->entries_physical[k] = kernel_page_directory->entries_physical[k];
+    ptr->entries_logical[k] = kernel_page_directory->entries_logical[k];
   }
+  ptr->physical_address = logical_to_physical (kernel_page_directory, (unsigned int)ptr);
+  /* Add to the list. */
+  ptr->next = page_directories;
+  page_directories = ptr;
+
+  return ptr;
 }
 
 void
@@ -303,44 +350,48 @@ switch_to_page_directory (page_directory_t* ptr)
 static void
 insert_page_table (page_directory_t* ptr,
 		   unsigned int logical_addr,
-		   unsigned int physical_addr,
-		   unsigned int flags,
+		   page_directory_entry_t page_directory_entry,
 		   page_table_t* pt)
 {
   kassert (ptr != 0);
   kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
   kassert (IS_PAGE_ALIGNED (logical_addr));
-  kassert (IS_PAGE_ALIGNED (physical_addr));
-  kassert (PAGE_ALIGN (flags) == 0);
   kassert (ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] == 0);
   kassert (pt != 0);
   
-  ptr->entries_physical[PAGE_DIRECTORY_ENTRY (logical_addr)] = physical_addr | flags;
+  ptr->entries_physical[PAGE_DIRECTORY_ENTRY (logical_addr)] = page_directory_entry;
   ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] = pt;
+
+  if (ptr == kernel_page_directory) {
+    /* Map into all page directories. */
+    page_directory_t* p;
+    for (p = page_directories; p != 0; p = p->next) {
+      p->entries_physical[PAGE_DIRECTORY_ENTRY (logical_addr)] = page_directory_entry;
+      p->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] = pt;
+    }
+  }
 }
 
 static void
 insert_mapping (page_directory_t* ptr,
 		unsigned int logical_addr,
-		unsigned int physical_addr,
-		unsigned int flags,
-		unsigned int page_directory_flags)
+		page_table_entry_t page_table_entry,
+		page_directory_entry_t page_directory_entry)
 {
   kassert (ptr != 0);
   kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
   kassert (IS_PAGE_ALIGNED (logical_addr));
-  kassert (IS_PAGE_ALIGNED (physical_addr));
-  kassert (PAGE_ALIGN (flags) == 0);
 
   if (ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] == 0) {
     /* We need a new page table.
        We have pre-allocated one for this purpose. */
     kassert (spare_page_table != 0);
-    insert_page_table (ptr, logical_addr, logical_to_physical (ptr, (unsigned int)spare_page_table), page_directory_flags, spare_page_table);
+    page_directory_entry.frame = ADDRESS_TO_FRAME (logical_to_physical (ptr, (unsigned int)spare_page_table));
+    insert_page_table (ptr, logical_addr, page_directory_entry, spare_page_table);
     spare_page_table = 0;
   }
 
-  ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)]->entries[PAGE_TABLE_ENTRY (logical_addr)] = physical_addr | flags;
+  ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)]->entries[PAGE_TABLE_ENTRY (logical_addr)] = page_table_entry;
   if (ptr == current_page_directory) {
     /* Invalidate entry in TLB. */
     __asm__ __volatile__ ("invlpg %0\n" :: "m" (logical_addr));
@@ -353,7 +404,7 @@ initialize_paging ()
   heap_mode = IDENTITY;
   identity_base = ((unsigned int)&end_of_kernel_page_aligned) - KERNEL_OFFSET;
   identity_limit = identity_base;
-  kassert (identity_limit <= IDENTITY_LIMIT); 
+  kassert (identity_limit <= IDENTITY_LIMIT);
 
   unsigned int k;
 
@@ -364,12 +415,12 @@ initialize_paging ()
  /* To compute the physical address of the page table, we add 0x40000000 according to the GDT trick in loader.s. */
   unsigned int low_page_table_paddr = (unsigned int)&low_page_table + 0x40000000;
   /* Low memory (4 megabytes) is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
-  insert_page_table (kernel_page_directory, 0, low_page_table_paddr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, &low_page_table);
-  insert_page_table (kernel_page_directory, KERNEL_OFFSET, low_page_table_paddr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, &low_page_table);
+  insert_page_table (kernel_page_directory, 0, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
+  insert_page_table (kernel_page_directory, KERNEL_OFFSET, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
 
   /* Identity map the physical addresses from 0 to the end of the kernel. */
   for (k = 0; k < identity_limit; k += PAGE_SIZE) {
-    insert_mapping (kernel_page_directory, k, k, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, k, make_page_table_entry (ADDRESS_TO_FRAME (k), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
   }
  
   /* Switch to the page directory. */
@@ -381,34 +432,68 @@ initialize_paging ()
 			"mov %%eax, %%cr0\n" ::: "%eax");
 }
 
-static void
-gdt_set_gate (unsigned int descriptor_offset,
-	      unsigned int base,
-	      unsigned int limit,
-	      unsigned char access,
-	      unsigned char granularity)
-{
-  unsigned int num = descriptor_offset / sizeof (gdt_entry_t);
-  gdt[num].base_low = (base & 0xFFFF);
-  gdt[num].base_middle = (base >> 16) & 0xFF;
-  gdt[num].base_high = (base >> 24) & 0xFF;
+/* struct tss { */
+/*   unsigned int prev_tss;   // The previous TSS - if we used hardware task switching this would form a linked list. */
+/*   unsigned int esp0;       // The stack pointer to load when we change to kernel mode. */
+/*   unsigned int ss0;        // The stack segment to load when we change to kernel mode. */
+/*   unsigned int esp1;       // Unused... */
+/*   unsigned int ss1; */
+/*   unsigned int esp2; */
+/*   unsigned int ss2; */
+/*   unsigned int cr3; */
+/*   unsigned int eip; */
+/*   unsigned int eflags; */
+/*   unsigned int eax; */
+/*   unsigned int ecx; */
+/*   unsigned int edx; */
+/*   unsigned int ebx; */
+/*   unsigned int esp; */
+/*   unsigned int ebp; */
+/*   unsigned int esi; */
+/*   unsigned int edi; */
+/*   unsigned int es;         // The value to load into ES when we change to kernel mode. */
+/*   unsigned int cs;         // The value to load into CS when we change to kernel mode. */
+/*   unsigned int ss;         // The value to load into SS when we change to kernel mode. */
+/*   unsigned int ds;         // The value to load into DS when we change to kernel mode. */
+/*   unsigned int fs;         // The value to load into FS when we change to kernel mode. */
+/*   unsigned int gs;         // The value to load into GS when we change to kernel mode. */
+/*   unsigned int ldt;        // Unused... */
+/*   unsigned short trap; */
+/*   unsigned short iomap_base; */
+/* }; */
+/* typedef struct tss tss_t; */
 
-  gdt[num].limit_low = (limit & 0xFFFF);
-  gdt[num].granularity = (granularity & 0xF0) | ((limit >> 16) & 0x0F);
-  gdt[num].access = access;
-}
+/* tss_t tss; */
 
 void
 install_gdt ()
 {
-  gp.limit = (sizeof (gdt_entry_t) * SEGMENT_COUNT) - 1;
+  gp.limit = (sizeof (descriptor_t) * DESCRIPTOR_COUNT) - 1;
   gp.base = gdt;
 
-  gdt_set_gate (0, 0, 0, 0, 0);
-  gdt_set_gate (KERNEL_CODE_SEGMENT, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_CODE | DESC_ACCESS_NOT_CONFORMING | DESC_ACCESS_CODE_READABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
-  gdt_set_gate (KERNEL_DATA_SEGMENT, 0, 0xFFFFFFFF, (DESC_ACCESS_PRESENT | DESC_ACCESS_RING0 | DESC_ACCESS_MEMORY | DESC_ACCESS_DATA | DESC_ACCESS_EXPAND_UP | DESC_ACCESS_DATA_WRITABLE), (DESC_GRANULARITY_KILOBYTE | DESC_GRANULARITY_OP32));
+  gdt[0] = make_null_descriptor ();
+  gdt[KERNEL_CODE_SELECTOR / sizeof (descriptor_t)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, READABLE, NOT_CONFORMING, RING0, PRESENT, WIDTH_32, PAGE_GRANULARITY); 
+  gdt[KERNEL_DATA_SELECTOR / sizeof (descriptor_t)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, WRITABLE, EXPAND_UP, RING0, PRESENT, WIDTH_32, PAGE_GRANULARITY);
+  gdt[USER_CODE_SELECTOR / sizeof (descriptor_t)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, READABLE, NOT_CONFORMING, RING3, PRESENT, WIDTH_32, PAGE_GRANULARITY);
+  gdt[USER_DATA_SELECTOR / sizeof (descriptor_t)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, WRITABLE, EXPAND_UP, RING3, PRESENT, WIDTH_32, PAGE_GRANULARITY);
+
+  /* memset (&tss, 0, sizeof (tss_t)); */
+  /* tss.ss0 = KERNEL_DATA_SEGMENT; */
+  /* tss.esp0 = 0xDEADBEEF; /\* This needs to be fixed. *\/ */
+  /* tss.cs = KERNEL_CODE_SEGMENT | RING3; */
+  /* tss.ss = KERNEL_DATA_SEGMENT | RING3; */
+  /* tss.ds = KERNEL_DATA_SEGMENT | RING3; */
+  /* tss.es = KERNEL_DATA_SEGMENT | RING3; */
+  /* tss.fs = KERNEL_DATA_SEGMENT | RING3; */
+  /* tss.gs = KERNEL_DATA_SEGMENT | RING3; */
+
+  /* initialize_tss_descriptor (&gdt[TSS_SELECTOR / sizeof (descriptor_t)].tss, (unsigned int)&tss, (unsigned int)&tss + sizeof (tss_t) - 1, RING3, PRESENT, BYTE_GRANULARITY); */
 
   gdt_flush (&gp);
+
+  /* unsigned int sel = TSS_SELECTOR | RING3; */
+  /* __asm__ __volatile__ ("mov %0, %%eax\n" */
+			/* "ltr %%ax\n" : : "m"(sel) ); */
 }
 
 void
@@ -419,7 +504,7 @@ extend_identity (unsigned int addr)
 
   addr = PAGE_ALIGN (addr + PAGE_SIZE - 1);
   for (; identity_limit < addr; identity_limit += PAGE_SIZE) {
-    insert_mapping (kernel_page_directory, identity_limit, identity_limit, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, identity_limit, make_page_table_entry (ADDRESS_TO_FRAME (identity_limit), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
   }
 }
 
@@ -428,7 +513,7 @@ page_fault_handler (registers_t* regs)
 {
   kputs ("Page fault!!\n");
   unsigned int addr;
-  __asm__ __volatile__ ("mov %%cr2, %0\n" : "=r"(addr) :: );
+  __asm__ __volatile__ ("mov %%cr2, %0\n" : "=r"(addr));
 
   kputs ("Address: "); kputuix (addr); kputs ("\n");
   kputs ("Codes: ");
@@ -486,19 +571,6 @@ placement_alloc (unsigned int size)
   placement_limit += size;
   extend_identity (placement_limit - KERNEL_OFFSET - 1);
   return retval;
-}
-
-static void
-memset (void* ptr,
-	unsigned char value,
-	unsigned int size)
-{
-  unsigned char* c = ptr;
-  while (size != 0) {
-    *c = value;
-    ++c;
-    --size;
-  }
 }
 
 static frame_set_item_t*
@@ -576,10 +648,8 @@ frame_set_item_allocate (frame_set_item_t* ptr)
 }
 
 static void
-frame_manager_set (unsigned int addr)
+frame_manager_set (unsigned int frame)
 {
-  /* Compute the frame from the address. */
-  unsigned int frame = ADDRESS_TO_FRAME (addr);
   /* Find the item corresponding to frame. */
   frame_set_item_t* ptr;
   for (ptr = frame_set; ptr != 0 && !(frame >= ptr->begin && frame < ptr->end); ptr = ptr->next) ;;
@@ -595,7 +665,7 @@ frame_manager_allocate ()
   frame_set_item_t* ptr;
   for (ptr = frame_set; ptr != 0 && ptr->free_count == 0; ptr = ptr->next) ;;
   if (ptr != 0) {
-    return FRAME_TO_ADDRESS (frame_set_item_allocate (ptr));
+    return frame_set_item_allocate (ptr);
   }
 
   /* Out of memory. */
@@ -607,7 +677,7 @@ void
 initialize_heap (multiboot_info_t* mbd)
 {
   kassert (heap_mode == IDENTITY);
-  
+
   placement_base = identity_limit + KERNEL_OFFSET;
   placement_limit = placement_base;
   heap_mode = PLACEMENT;
@@ -639,9 +709,9 @@ initialize_heap (multiboot_info_t* mbd)
   }
 
   /* All of the frames (physical pages) up to identity_limit are in use. */
-  unsigned int addr;
-  for (addr = 0; addr < identity_limit; addr += PAGE_SIZE) {
-    frame_manager_set (addr);
+  unsigned int frame;
+  for (frame = 0; frame < ADDRESS_TO_FRAME (identity_limit); ++frame) {
+    frame_manager_set (frame);
   }
 
   heap_base = identity_limit + KERNEL_OFFSET;
@@ -649,9 +719,7 @@ initialize_heap (multiboot_info_t* mbd)
 
   /* Grow the heap to its initial size. */
   for (; (heap_limit - heap_base) < HEAP_INITIAL_SIZE; heap_limit += PAGE_SIZE) {
-    /* Get the address of a physical frame. */
-    addr = frame_manager_allocate ();
-    insert_mapping (kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
   }
 
   heap_first = (header_t*)heap_base;
@@ -736,10 +804,8 @@ static void
 expand_heap (unsigned int size)
 {
   while (heap_last->size < size) {
-    /* Allocate a frame. */
-    unsigned int addr = frame_manager_allocate ();
     /* Map it. */
-    insert_mapping (kernel_page_directory, heap_limit, addr, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT, PAGE_KERNEL_MODE | PAGE_WRITABLE | PAGE_PRESENT);
+    insert_mapping (kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
     /* Update sizes and limits. */
     heap_limit += PAGE_SIZE;
     heap_last->size += PAGE_SIZE;

@@ -18,8 +18,13 @@
 #include "multiboot.h"
 
 #define KERNEL_OFFSET 0xC0000000
-#define KERNEL_CODE_SEGMENT 0x08
-#define KERNEL_DATA_SEGMENT 0x10
+
+#define DESCRIPTOR_COUNT 6
+#define KERNEL_CODE_SELECTOR 0x08
+#define KERNEL_DATA_SELECTOR 0x10
+#define USER_CODE_SELECTOR 0x18
+#define USER_DATA_SELECTOR 0x20
+#define TSS_SELECTOR 0x28
 
 typedef struct page_directory page_directory_t;
 
@@ -39,10 +44,6 @@ install_page_fault_handler ();
 
 page_directory_t*
 allocate_page_directory ();
-
-void
-copy_page_directory (page_directory_t* dst,
-		     const page_directory_t* src);
 
 void
 switch_to_page_directory (page_directory_t* ptr);

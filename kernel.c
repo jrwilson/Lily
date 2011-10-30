@@ -21,6 +21,8 @@
 #include "multiboot.h"
 #include "hash_map.h"
 
+#include "descriptor.h"
+
 unsigned int
 hash_func (void* x)
 {
@@ -33,6 +35,9 @@ compare_func (void* x,
 {
   return (unsigned int)x - (unsigned int)y;
 }
+
+extern int stack_top;
+extern int bang_entry;
 
 void
 kmain (multiboot_info_t* mbd,
@@ -109,19 +114,43 @@ kmain (multiboot_info_t* mbd,
 
   initialize_heap (mbd);
 
-  /* Create a new page directory for a task. */
-  page_directory_t* pd = allocate_page_directory ();
+  /* /\* Create a new page directory for a task. *\/ */
+  /* page_directory_t* pd = allocate_page_directory (); */
 
-  /* Copy in the kernel. */
-  /* TODO:  What happens if a new page table is allocated? */
-  copy_page_directory (pd, kernel_page_directory);
+  /* unsigned int amount = 1; */
+  /* char flipflop = 0; */
+  
+  /* while (1) { */
+  /*   kmalloc (amount);  */
+  /*   /\* dump_heap (); *\/ */
+  /*   amount *= 2; */
+  /*   if (flipflop) { */
+  /*     switch_to_page_directory (pd); */
+  /*   } */
+  /*   else { */
+  /*     switch_to_page_directory (kernel_page_directory); */
+  /*   } */
+  /*   flipflop = ~flipflop; */
+  /* } */
 
-  switch_to_page_directory (pd);
+  kputs ("Stack Segment: "); kputuix (KERNEL_DATA_SELECTOR | RING0); kputs ("\n");
+  kputs ("Stack Pointer: "); kputp (&stack_top); kputs ("\n");
+  kputs ("Flags: (default)\n");
+  kputs ("Code Segment: "); kputuix (KERNEL_CODE_SELECTOR | RING0); kputs ("\n");
+  kputs ("Instruction Pointer: "); kputp (&bang_entry); kputs ("\n");
 
-  kputp (pd); kputs ("\n");
-  kputp (kernel_page_directory); kputs ("\n");
 
+  unsigned int stack_segment = KERNEL_DATA_SELECTOR | RING0;
+  unsigned int stack_pointer = (unsigned int)&stack_top;
+  unsigned int code_segment = KERNEL_CODE_SELECTOR | RING0;
+  unsigned int instruction_pointer = (unsigned int)&bang_entry;
 
+  __asm__ __volatile__ ("pushl %0\n"
+			"pushl %1\n"
+			"pushf\n"
+			"push %2\n"
+			"push %3\n"
+			"iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(instruction_pointer));
 
   /* Unhandled interrupts. */
   /* asm volatile ("int $0x3"); */

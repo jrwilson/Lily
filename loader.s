@@ -54,7 +54,7 @@ start:
 
 higherhalf:
 	;; Setup the stack in order to call kmain.
-	mov esp, stack + STACK_SIZE
+	mov esp, stack_top
 	;; Push the multiboot magic number.
 	push eax
 	;; Push the multiboot data structure.
@@ -92,7 +92,7 @@ gdt_flush:
 
 gdt_flush2:
 	ret
-
+	
 	;; The setup section will be identity mapped so the lgdt instruction in start can find trickgdt, gdt, etc.
 	;; The kernel will be compiled to exist at a logical address starting at 0xC0100000 which is 1M past 0xC0000000.
 	;; This allows the kernel to be mapped into all address spaces without squashing anything.
@@ -153,6 +153,6 @@ gdt_end:
 
 	;; Reserve space for the stack.
 	ALIGN 4
-	[global stack]
-stack:	
+	[global stack_top]
 	resb STACK_SIZE
+stack_top:	

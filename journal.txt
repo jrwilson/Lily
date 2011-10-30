@@ -69,6 +69,14 @@ Test on a physical machine was successful.
 2011-10-28
 
 Implemented a basic hash map.
+Kernel is mapped in all address spaces.
+
+2011-10-29
+
+
+We need two stacks:  one for the kernel and one for the users.
+Users can share the same stack.
+
 
 Kernel Code
 Kernel Data

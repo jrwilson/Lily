@@ -1,7 +1,8 @@
 #include "kput.h"
 #include "kassert.h"
 
-asm ("bang_entry:\n"
+asm (".global bang_entry\n"
+     "bang_entry:\n"
      "call driver");
 
 static void driver ()
