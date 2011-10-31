@@ -139,7 +139,7 @@ typedef enum {
 } expand_t;
 
 descriptor_t
-make_null_descriptor ();
+make_null_descriptor (void);
 
 code_segment_descriptor_t
 make_code_segment_descriptor (unsigned int base,

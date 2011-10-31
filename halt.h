@@ -15,7 +15,7 @@
 */
 
 void
-halt ();
+halt (void);
 
 #endif /* __halt_h__ */
 

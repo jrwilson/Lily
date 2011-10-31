@@ -27,6 +27,6 @@ void
 kputp (void* p);
 
 void
-clear_console ();
+clear_console (void);
 
 #endif /* __kput_h__ */

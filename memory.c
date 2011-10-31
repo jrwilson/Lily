@@ -60,6 +60,8 @@
 #define HEAP_INITIAL_SIZE 0x8000
 #define HEAP_MAGIC 0x7ACEDEAD
 
+#define USER_STACK_INITIAL_SIZE PAGE_SIZE
+
 struct page_table_entry {
   unsigned int present : 1;
   unsigned int writable : 1;
@@ -193,6 +195,7 @@ static unsigned int placement_base;
 static unsigned int placement_limit;
 static unsigned int heap_base;
 static unsigned int heap_limit;
+static unsigned int user_stack_base;
 
 static page_directory_t kernel_page_directory_var __attribute__ ((aligned (PAGE_SIZE)));
 static page_table_t low_page_table __attribute__ ((aligned (PAGE_SIZE)));
@@ -722,6 +725,7 @@ initialize_heap (multiboot_info_t* mbd)
     insert_mapping (kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
   }
 
+  /* Imprint the heap. */
   heap_first = (header_t*)heap_base;
   heap_last = heap_first;
 
@@ -731,6 +735,21 @@ initialize_heap (multiboot_info_t* mbd)
   heap_first->prev = 0;
   heap_first->next = 0;
 
+  /* Heap is now operational. */
+  heap_mode = HEAP;
+
+  /* Allocate a spare page table so we can always exand the kernel's address space. */
+  spare_page_table = allocate_page_table ();
+
+  /* Initialize the stack. */
+  user_stack_base = USER_STACK_LIMIT - USER_STACK_INITIAL_SIZE;
+
+  unsigned int stack_addr;
+  /* Use != due to wrap around. */
+  for (stack_addr = user_stack_base; stack_addr != USER_STACK_LIMIT; stack_addr += PAGE_SIZE) {
+    insert_mapping (kernel_page_directory, stack_addr, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, USER, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, USER, WRITABLE, PRESENT));
+  }
+  
   /* kputs ("Total frames: "); kputuix (total_frames); kputs ("\n"); */
   /* kputs ("Used frames: "); kputuix (used_frames); kputs ("\n"); */
 
@@ -740,10 +759,8 @@ initialize_heap (multiboot_info_t* mbd)
   /* kputs ("placement_limit: "); kputuix (placement_limit); kputs ("\n"); */
   /* kputs ("heap_base: "); kputuix (heap_base); kputs ("\n"); */
   /* kputs ("heap_limit: "); kputuix (heap_limit); kputs ("\n"); */
-
-  heap_mode = HEAP;
-
-  spare_page_table = allocate_page_table ();
+  /* kputs ("user_stack_base: "); kputuix (user_stack_base); kputs ("\n"); */
+  /* kputs ("user_stack_limit: "); kputuix (user_stack_limit); kputs ("\n"); */
 }
 
 static void
@@ -962,3 +979,4 @@ kfree (void* p)
 }
 
 /* TODO:  Reclaim identity mapped memory. */
+/* TODO:  Reclaim the stack. */

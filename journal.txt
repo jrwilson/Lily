@@ -95,6 +95,16 @@ Continuing this idea, suppose that every automaton provided the following tables
 We could then do composition based on name which creates a number of possibilities like type checking a composition.
 Based on this, I'm going to research if ELF symbol tables can support such features.
 
+2011-10-31
+
+Interrupts will only interact with the scheduler.
+They will not be allowed to allocate memory.
+Added a user stack to the kernel page directory.
+
+switching function
+pass parameter
+work on action table and parsing
+
 
 
 

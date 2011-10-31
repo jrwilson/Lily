@@ -155,4 +155,4 @@ gdt_end:
 	ALIGN 4
 	[global stack_top]
 	resb STACK_SIZE
-stack_top:	
+stack_top:

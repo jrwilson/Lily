@@ -16,37 +16,25 @@
 #include "kput.h"
 #include "memory.h"
 #include "interrupt.h"
-#include "pit.h"
 #include "kassert.h"
 #include "multiboot.h"
-#include "hash_map.h"
+#include "syscall.h"
+#include "automata.h"
+#include "scheduler.h"
 
-#include "descriptor.h"
+#include "pit.h"
 
-unsigned int
-hash_func (void* x)
-{
-  return (unsigned int)x;
-}
-
-int
-compare_func (void* x,
-	      void* y)
-{
-  return (unsigned int)x - (unsigned int)y;
-}
-
-extern int stack_top;
 extern int bang_entry;
 
 void
 kmain (multiboot_info_t* mbd,
        unsigned int magic)
 {
+  disable_interrupts ();
+
   clear_console ();
   kputs ("Lily\n");
 
-  disable_interrupts ();
   initialize_paging ();
   install_gdt ();
   install_idt ();
@@ -114,53 +102,20 @@ kmain (multiboot_info_t* mbd,
 
   initialize_heap (mbd);
 
-  /* /\* Create a new page directory for a task. *\/ */
-  /* page_directory_t* pd = allocate_page_directory (); */
+  initialize_syscalls ();
 
-  /* unsigned int amount = 1; */
-  /* char flipflop = 0; */
-  
-  /* while (1) { */
-  /*   kmalloc (amount);  */
-  /*   /\* dump_heap (); *\/ */
-  /*   amount *= 2; */
-  /*   if (flipflop) { */
-  /*     switch_to_page_directory (pd); */
-  /*   } */
-  /*   else { */
-  /*     switch_to_page_directory (kernel_page_directory); */
-  /*   } */
-  /*   flipflop = ~flipflop; */
-  /* } */
+  initialize_automata ();
 
-  kputs ("Stack Segment: "); kputuix (KERNEL_DATA_SELECTOR | RING0); kputs ("\n");
-  kputs ("Stack Pointer: "); kputp (&stack_top); kputs ("\n");
-  kputs ("Flags: (default)\n");
-  kputs ("Code Segment: "); kputuix (KERNEL_CODE_SELECTOR | RING0); kputs ("\n");
-  kputs ("Instruction Pointer: "); kputp (&bang_entry); kputs ("\n");
+  aid_t aid = create_automaton (RING0);
 
+  schedule_aid (aid, (unsigned int)&bang_entry, 0);
 
-  unsigned int stack_segment = KERNEL_DATA_SELECTOR | RING0;
-  unsigned int stack_pointer = (unsigned int)&stack_top;
-  unsigned int code_segment = KERNEL_CODE_SELECTOR | RING0;
-  unsigned int instruction_pointer = (unsigned int)&bang_entry;
-
-  __asm__ __volatile__ ("pushl %0\n"
-			"pushl %1\n"
-			"pushf\n"
-			"push %2\n"
-			"push %3\n"
-			"iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(instruction_pointer));
+  /* Start the scheduler.  Doesn't return. */
+  finish_action ();
 
   /* Unhandled interrupts. */
   /* asm volatile ("int $0x3"); */
   /* asm volatile ("int $0x4"); */
 
   /* initialize_pit (0xFFFF); */
-
-  /* Wait for interrupts. */
-  enable_interrupts ();
-  for (;;) {
-    __asm__ __volatile__ ("hlt");
-  }
 }

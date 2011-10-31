@@ -18,6 +18,7 @@
 #include "multiboot.h"
 
 #define KERNEL_OFFSET 0xC0000000
+#define USER_STACK_LIMIT 0x0
 
 #define DESCRIPTOR_COUNT 6
 #define KERNEL_CODE_SELECTOR 0x08
@@ -31,19 +32,19 @@ typedef struct page_directory page_directory_t;
 extern page_directory_t* kernel_page_directory;
 
 void
-initialize_paging ();
+initialize_paging (void);
 
 void
-install_gdt ();
+install_gdt (void);
 
 void
 extend_identity (unsigned int addr);
 
 void
-install_page_fault_handler ();
+install_page_fault_handler (void);
 
 page_directory_t*
-allocate_page_directory ();
+allocate_page_directory (void);
 
 void
 switch_to_page_directory (page_directory_t* ptr);
@@ -52,7 +53,7 @@ void
 initialize_heap (multiboot_info_t* mbd);
 
 void
-dump_heap ();
+dump_heap (void);
 
 void*
 kmalloc (unsigned int size);

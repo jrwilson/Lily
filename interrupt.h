@@ -15,6 +15,9 @@
   Justin R. Wilson
 */
 
+/* Operating system trap starts at 128. */
+#define TRAP_BASE 128
+
 struct registers
 {
   unsigned int ds;
@@ -27,16 +30,13 @@ typedef struct registers registers_t;
 typedef void (*interrupt_handler_t) (registers_t*);
 
 void
-install_idt ();
+install_idt (void);
 
 void
-enable_interrupts ();
+enable_interrupts (void);
 
 void
-disable_interrupts ();
-
-interrupt_handler_t
-get_interrupt_handler (unsigned int num);
+disable_interrupts (void);
 
 void
 set_interrupt_handler (unsigned int num,

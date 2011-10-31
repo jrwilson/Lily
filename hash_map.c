@@ -23,7 +23,7 @@ typedef struct hash_map_node hash_map_node_t;
 struct hash_map_node {
   hash_map_node_t* next;
   unsigned int hash;
-  void* key;
+  const void* key;
   void* value;
 };
 
@@ -37,7 +37,7 @@ struct hash_map {
 
 static hash_map_node_t*
 allocate_hash_map_node (unsigned int hash,
-			void* key,
+			const void* key,
 			void* value)
 {
   hash_map_node_t* ptr = kmalloc (sizeof (hash_map_node_t));
@@ -73,7 +73,7 @@ allocate_hash_map (hash_map_hash_func_t hash_func,
 }
 
 unsigned int
-hash_map_size (hash_map_t* ptr)
+hash_map_size (const hash_map_t* ptr)
 {
   kassert (ptr != 0);
   return ptr->size;
@@ -81,7 +81,7 @@ hash_map_size (hash_map_t* ptr)
 
 void
 hash_map_insert (hash_map_t* ptr,
-		 void* key,
+		 const void* key,
 		 void* value)
 {
   kassert (ptr != 0);
@@ -116,7 +116,7 @@ hash_map_insert (hash_map_t* ptr,
 
 void
 hash_map_erase (hash_map_t* ptr,
-		void* key)
+		const void* key)
 {
   kassert (ptr != 0);
 
@@ -133,9 +133,24 @@ hash_map_erase (hash_map_t* ptr,
   }
 }
 
+int
+hash_map_contains (hash_map_t* ptr,
+		   const void* key)
+{
+  kassert (ptr != 0);
+
+  unsigned int hash = ptr->hash_func (key);
+  unsigned int hash_idx = hash % ptr->capacity;
+
+  hash_map_node_t* n = ptr->hash[hash_idx];
+  for (; n != 0 && !(n->hash == hash && ptr->compare_func (n->key, key) == 0); n = n->next) ;;
+
+  return n != 0;
+}
+
 void*
 hash_map_find (hash_map_t* ptr,
-	       void* key)
+	       const void* key)
 {
   kassert (ptr != 0);
 
