@@ -73,9 +73,29 @@ Kernel is mapped in all address spaces.
 
 2011-10-29
 
+Refactored descriptors.
+I'm starting to think seriously about user-mode, automata, etc.
+One observation is that the system needs a total of two stacks: one for the kernel to use for interrupts and one for user automata.
+Since all context is stored in the state of the automaton, the same stack can be shared by all automata.
 
-We need two stacks:  one for the kernel and one for the users.
-Users can share the same stack.
+2011-10-30
+
+An automaton resembles a libary.
+The key question is how to dispatch into the automaton to execution actions.
+One way is to dispatch directly, i.e., set the instruction pointer to the beginning of the code for an action.
+The parameter associated with an action would be placed in registers.
+To make composition safe, we would need a table of some kind that describes the valid entry points.
+Another way is to dispatch indirectly by jumping to the same entry point but providing an action number in a register that the dispatching function could then translate into an appropriate offset.
+Again, we would need a table describing the valid action numbers.
+Direct dispatch is probably more efficient while indirect dispatch provides a level of indirection that makes composition easier.
+Continuing this idea, suppose that every automaton provided the following tables:
+1.  A table that translates from action number to entry point.
+2.  A table that translates from action name to action number.
+3.  A table that translates from action number to action name.
+We could then do composition based on name which creates a number of possibilities like type checking a composition.
+Based on this, I'm going to research if ELF symbol tables can support such features.
+
+
 
 
 Kernel Code
