@@ -84,8 +84,8 @@ schedule_aid (aid_t aid,
 }
 
 void
-schedule (unsigned int action_entry_point,
-	  unsigned int parameter)
+schedule_action (unsigned int action_entry_point,
+		 unsigned int parameter)
 {
   schedule_context (current, action_entry_point, parameter);
 }

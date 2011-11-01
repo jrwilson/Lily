@@ -27,8 +27,8 @@ schedule_aid (aid_t aid,
 	      unsigned int parameter);
 
 void
-schedule (unsigned int action_entry_point,
-	  unsigned int parameter);
+schedule_action (unsigned int action_entry_point,
+		 unsigned int parameter);
 
 void
 finish_action (void);

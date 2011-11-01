@@ -18,13 +18,13 @@
 #include "interrupt.h"
 #include "kassert.h"
 #include "multiboot.h"
-#include "syscall.h"
+#include "ksyscall.h"
 #include "automata.h"
 #include "scheduler.h"
 
 #include "pit.h"
 
-extern int bang_entry;
+extern int init_entry;
 
 void
 kmain (multiboot_info_t* mbd,
@@ -106,7 +106,7 @@ kmain (multiboot_info_t* mbd,
 
   aid_t aid = create_automaton (RING0);
 
-  schedule_aid (aid, (unsigned int)&bang_entry, 0);
+  schedule_aid (aid, (unsigned int)&init_entry, 0);
 
   /* Start the scheduler.  Doesn't return. */
   finish_action ();

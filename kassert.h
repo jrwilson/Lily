@@ -16,12 +16,8 @@
 
 #include "kput.h"
 #include "halt.h"
+#include "quote.h"
 
-#define quote_(expr) #expr
-#define quote(expr) quote_(expr)
 #define kassert(expr) do { if (!(expr)) { kputs ("Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr); halt (); } } while (0);
 
 #endif /* __kassert_h__ */
-
-
-

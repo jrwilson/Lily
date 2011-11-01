@@ -5,38 +5,27 @@
   
   Description
   -----------
-  Functions for system calls.
+  System calls for users.
 
-  Authors
-  -------
+  Authors:
   Justin R. Wilson
 */
 
 #include "syscall.h"
-#include "interrupt.h"
-#include "kassert.h"
-#include "scheduler.h"
 
-static void
-syscall_handler (registers_t* regs)
+void
+sys_finish ()
 {
-  syscall_t syscall = regs->eax;
-  switch (syscall) {
-  case SYSCALL_FINISH:
-    finish_action ();
-    break;
-  case SYSCALL_SCHEDULE:
-    schedule (regs->ebx, regs->ecx);
-    finish_action ();
-    break;
-  }
-
-  /* TODO:  Unknown syscall. */
-  kassert (0);
+  asm volatile ("mov %0, %%eax\n"
+		"int $0x80\n" : : "r"(SYSCALL_FINISH));
 }
 
 void
-initialize_syscalls ()
+sys_schedule (unsigned int action_entry_point,
+	      unsigned int parameter)
 {
-  set_interrupt_handler (TRAP_BASE + 0, syscall_handler);
+  asm volatile ("mov %0, %%eax\n"
+		"mov %1, %%ebx\n"
+		"mov %2, %%ecx\n"
+		"int $0x80\n" : : "r"(SYSCALL_SCHEDULE), "m"(action_entry_point), "m"(parameter));
 }

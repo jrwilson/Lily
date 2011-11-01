@@ -8,18 +8,19 @@
   
   Description
   -----------
-  Declarations for functions to manage system calls.
+  System calls for users.
 
   Authors:
   Justin R. Wilson
 */
 
-typedef enum {
-  SYSCALL_FINISH = 0,
-  SYSCALL_SCHEDULE = 1,
-} syscall_t;
+#include "syscall_def.h"
 
 void
-initialize_syscalls (void);
+sys_finish ();
+
+void
+sys_schedule (unsigned int action_entry_point,
+	      unsigned int parameter);
 
 #endif /* __syscall_h__ */

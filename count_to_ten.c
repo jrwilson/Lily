@@ -1,40 +1,59 @@
+#include "fifo_scheduler.h"
 #include "kput.h"
-#include "kassert.h"
-#include "syscall.h"
 
-asm (".global bang_entry\n"
-     "bang_entry:\n"
-     "push %eax\n"
-     "call driver");
-
-extern unsigned int bang_entry;
+static fifo_scheduler_t* scheduler = 0;
 static unsigned int counter = 0;
 
 static void
-driver (unsigned int parameter)
-{
-  /* Precondition. */
-  if (counter < 10) {
-    /* Effect. */
-    kputs ("counter = "); kputuix (counter); kputs ("\n");
-    ++counter;
-  }
+schedule ();
 
-  /* Precondition. */
-  if (counter < 10) {
-    /* Schedule. */
-    syscall_t syscall = SYSCALL_SCHEDULE;
-    unsigned int action_entry_point = (unsigned int)&bang_entry;
-    unsigned int parameter = 0;
-    asm volatile ("mov %0, %%eax\n"
-		  "mov %1, %%ebx\n"
-		  "mov %2, %%ecx\n"
-		  "int $0x80\n" : : "m"(syscall), "m"(action_entry_point), "m"(parameter));
+static int
+init_precondition ()
+{
+  return scheduler == 0;
+}
+
+static void
+init_effect ()
+{
+  kputs (__func__); kputs ("\n");
+  scheduler = allocate_fifo_scheduler ();
+}
+
+static void
+init_schedule () {
+  schedule ();
+}
+
+UP_INTERNAL (init);
+
+static int
+increment_precondition ()
+{
+  return counter < 10;
+}
+
+static void
+increment_effect ()
+{
+  kputs ("counter = "); kputuix (counter); kputs ("\n");
+  ++counter;
+}
+
+static void
+increment_schedule () {
+  schedule ();
+}
+
+UP_INTERNAL (increment);
+
+static void
+schedule ()
+{
+  if (init_precondition ()) {
+    SCHEDULER_ADD (scheduler, (unsigned int)&init_entry, 0);
   }
-  else {
-    /* Don't schedule. */
-    syscall_t syscall = SYSCALL_FINISH;
-    asm volatile ("mov %0, %%eax\n"
-		  "int $0x80\n" : : "m"(syscall));
+  if (increment_precondition ()) {
+    SCHEDULER_ADD (scheduler, (unsigned int)&increment_entry, 0);
   }
 }
