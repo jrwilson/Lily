@@ -118,13 +118,13 @@ switch_to_automaton (aid_t aid,
     break;
   }
 
-  __asm__ __volatile__ ("mov %0, %%eax\n"
-			"mov %%ax, %%ss\n"
-			"mov %1, %%eax\n"
-			"mov %%eax, %%esp\n"
-			"pushf\n"
-			"pushl %2\n"
-			"pushl %3\n"
-			"movl %4, %%eax\n"
-			"iret\n" :: "r"(stack_segment), "r"(USER_STACK_LIMIT), "m"(code_segment), "m"(action_entry_point), "m"(parameter) : "eax");
+  asm volatile ("mov %0, %%eax\n"
+		"mov %%ax, %%ss\n"
+		"mov %1, %%eax\n"
+		"mov %%eax, %%esp\n"
+		"pushf\n"
+		"pushl %2\n"
+		"pushl %3\n"
+		"movl %4, %%eax\n"
+		"iret\n" :: "r"(stack_segment), "r"(USER_STACK_LIMIT), "m"(code_segment), "m"(action_entry_point), "m"(parameter) : "eax");
 }

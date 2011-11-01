@@ -20,6 +20,6 @@ halt ()
 {
   disable_interrupts ();
   for (;;) {
-    __asm__ __volatile__ ("hlt");
+    asm volatile ("hlt");
   }
 }

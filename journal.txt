@@ -100,24 +100,41 @@ Based on this, I'm going to research if ELF symbol tables can support such featu
 Interrupts will only interact with the scheduler.
 They will not be allowed to allocate memory.
 Added a user stack to the kernel page directory.
+After looking into ELF, I think I will write a post-processor to create the necessary tables in an object file that can be linked with the executable.
+Implemented a simple automata set, FIFO scheduler, and system call interface.
+Simulating an automaton that counts to 10 and stops was successful on a physical machine.
+The next step will be to refactor the automaton to abstract the reusable parts.
+My checkpoints going forward are:
+1.  Refactor the count-to-ten automaton.
+    Goal:  Polish syscall interface and start user-mode scheduler.
+2.  Implement producer->consumer.
+    The value will be transferred by register.
+    Goal:  Composition.
+3.  Implement producer->consumer->console.
+    The value between consumer and console will be transferred by a buffer.
+    Goal:  Implement buffers.
 
-switching function
-pass parameter
-work on action table and parsing
+After this, the big goal is to implement the following composition:
 
++--------+
+|  Init  |
++--------+
+     ^
+     |
+     v
++--------+       +--------+
+|   VFS  |<----->| System |
++--------+       +--------+
+     ^
+     |
+     v
++--------+
+| Initrd |
++--------+
 
+The Init automaton will use the VFS and Initrd to load another another automaton (Init2?) that will bootstrap the rest of the system.
+The Initrd can contain hardware drivers, system services, user apps. etc.
+Later on, it will probably only contain the necessary drivers to read physical disks and file systems.
 
-
-Kernel Code
-Kernel Data
-Kernel Stack
-Grub Data (created by extending the identity map)
-Frame Bitsets
-
-Development Order
------------------
-Interrupts (fault handling)
-Heap
-System automaton
-Userspace
-File system
+Also, I plan to implement 16 IRQ automata, each with a single output.
+The associated interrupt just schedules the appropriate output.

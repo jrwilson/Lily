@@ -346,8 +346,8 @@ switch_to_page_directory (page_directory_t* ptr)
 
   /* Switch to the page directory. */
   current_page_directory = ptr;
-  __asm__ __volatile__ ("mov %0, %%eax\n"
-			"mov %%eax, %%cr3\n" :: "m" (ptr->physical_address) : "%eax");
+  asm volatile ("mov %0, %%eax\n"
+		"mov %%eax, %%cr3\n" :: "m" (ptr->physical_address) : "%eax");
 }
 
 static void
@@ -397,7 +397,7 @@ insert_mapping (page_directory_t* ptr,
   ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)]->entries[PAGE_TABLE_ENTRY (logical_addr)] = page_table_entry;
   if (ptr == current_page_directory) {
     /* Invalidate entry in TLB. */
-    __asm__ __volatile__ ("invlpg %0\n" :: "m" (logical_addr));
+    asm volatile ("invlpg %0\n" :: "m" (logical_addr));
   }
 }
 
@@ -430,9 +430,9 @@ initialize_paging ()
   switch_to_page_directory (kernel_page_directory);
 
   /* Enable paging. */
-  __asm__ __volatile__ ("mov %%cr0, %%eax\n"
-			"orl $0x80000000, %%eax\n"
-			"mov %%eax, %%cr0\n" ::: "%eax");
+  asm volatile ("mov %%cr0, %%eax\n"
+		"orl $0x80000000, %%eax\n"
+		"mov %%eax, %%cr0\n" ::: "%eax");
 }
 
 /* struct tss { */
@@ -495,8 +495,8 @@ install_gdt ()
   gdt_flush (&gp);
 
   /* unsigned int sel = TSS_SELECTOR | RING3; */
-  /* __asm__ __volatile__ ("mov %0, %%eax\n" */
-			/* "ltr %%ax\n" : : "m"(sel) ); */
+  /* asm volatile ("mov %0, %%eax\n" */
+  /* "ltr %%ax\n" : : "m"(sel) ); */
 }
 
 void
@@ -516,7 +516,7 @@ page_fault_handler (registers_t* regs)
 {
   kputs ("Page fault!!\n");
   unsigned int addr;
-  __asm__ __volatile__ ("mov %%cr2, %0\n" : "=r"(addr));
+  asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
 
   kputs ("Address: "); kputuix (addr); kputs ("\n");
   kputs ("Codes: ");

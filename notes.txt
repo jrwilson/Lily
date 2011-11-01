@@ -1,0 +1,10 @@
+Kernel Memory Layout
+--------------------
+Code
+Data
+Initial stack
+Identity mapped region (i.e., multiboot data).
+Data allocated with placement alloc (i.e., frame bitsets)
+Heap
+...
+Stack

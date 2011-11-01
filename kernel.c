@@ -30,8 +30,6 @@ void
 kmain (multiboot_info_t* mbd,
        unsigned int magic)
 {
-  disable_interrupts ();
-
   clear_console ();
   kputs ("Lily\n");
 
@@ -112,10 +110,4 @@ kmain (multiboot_info_t* mbd,
 
   /* Start the scheduler.  Doesn't return. */
   finish_action ();
-
-  /* Unhandled interrupts. */
-  /* asm volatile ("int $0x3"); */
-  /* asm volatile ("int $0x4"); */
-
-  /* initialize_pit (0xFFFF); */
 }

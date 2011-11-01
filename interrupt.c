@@ -291,13 +291,13 @@ trap_handler (registers_t regs)
 void
 enable_interrupts ()
 {
-  __asm__ __volatile__ ("sti");
+  asm volatile ("sti");
 }
 
 void
 disable_interrupts ()
 {
-  __asm__ __volatile__ ("cli");
+  asm volatile ("cli");
 }
 
 void

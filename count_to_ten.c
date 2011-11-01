@@ -2,11 +2,6 @@
 #include "kassert.h"
 #include "syscall.h"
 
-asm (".pushsection .action\n"
-     "alice: .long 0x1234\n"
-     "bob: .long 0x5678\n"
-     ".popsection\n");
-
 asm (".global bang_entry\n"
      "bang_entry:\n"
      "push %eax\n"
@@ -38,7 +33,6 @@ driver (unsigned int parameter)
   }
   else {
     /* Don't schedule. */
-    /* Schedule. */
     syscall_t syscall = SYSCALL_FINISH;
     asm volatile ("mov %0, %%eax\n"
 		  "int $0x80\n" : : "m"(syscall));

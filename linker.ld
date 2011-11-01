@@ -11,16 +11,6 @@ ENTRY (start)
 
 SECTIONS
 {
-	/* .action (INFO) : */
-	/* { */
-	/* 	*(.action) */
-	/* } */
-
-	.action :
-	{
-		*(.action)
-	}
-
 	/* Start at 1M. */
 	. = 0x00100000;
 
