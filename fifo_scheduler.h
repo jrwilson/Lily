@@ -30,7 +30,9 @@ fifo_scheduler_remove (fifo_scheduler_t*,
 		       unsigned int parameter);
 
 void
-fifo_scheduler_finish (fifo_scheduler_t*);
+fifo_scheduler_finish (fifo_scheduler_t*,
+		       int output_status,
+		       unsigned int output_value);
 
 #define SCHEDULER_ADD fifo_scheduler_add
 #define SCHEDULER_REMOVE fifo_scheduler_remove

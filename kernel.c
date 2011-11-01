@@ -22,9 +22,12 @@
 #include "automata.h"
 #include "scheduler.h"
 
-#include "pit.h"
+#include "hash_map.h"
 
-extern int init_entry;
+extern int producer_init_entry;
+extern int producer_produce_entry;
+extern int consumer_init_entry;
+extern int consumer_consume_entry;
 
 void
 kmain (multiboot_info_t* mbd,
@@ -104,10 +107,21 @@ kmain (multiboot_info_t* mbd,
 
   initialize_automata ();
 
-  aid_t aid = create_automaton (RING0);
+  aid_t producer = create (RING0);
+  set_action_type (producer, (unsigned int)&producer_init_entry, INTERNAL);
+  set_action_type (producer, (unsigned int)&producer_produce_entry, OUTPUT);
 
-  schedule_aid (aid, (unsigned int)&init_entry, 0);
+  aid_t consumer = create (RING0);
+  set_action_type (consumer, (unsigned int)&consumer_init_entry, INTERNAL);
+  set_action_type (consumer, (unsigned int)&consumer_consume_entry, INPUT);
+
+  bind (producer, (unsigned int)&producer_produce_entry, 0, consumer, (unsigned int)&consumer_consume_entry, 0);
+
+  initialize_scheduler ();
+
+  schedule_action (producer, (unsigned int)&producer_init_entry, 0);
+  schedule_action (consumer, (unsigned int)&consumer_init_entry, 0);
 
   /* Start the scheduler.  Doesn't return. */
-  finish_action ();
+  finish_action (0, 0);
 }

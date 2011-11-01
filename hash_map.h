@@ -35,11 +35,16 @@ hash_map_erase (hash_map_t* ptr,
 		const void* key);
 
 int
-hash_map_contains (hash_map_t* ptr,
+hash_map_contains (const hash_map_t* ptr,
 		   const void* key);
 
 void*
-hash_map_find (hash_map_t* ptr,
+hash_map_find (const hash_map_t* ptr,
 	       const void* key);
+
+void
+hash_map_dump (const hash_map_t* ptr,
+	       void (*key_func) (const void*),
+	       void (*value_func) (const void*));
 
 #endif /* __hash_map_h__ */

@@ -134,7 +134,7 @@ kputuix (unsigned int n)
 }
 
 void
-kputp (void* p)
+kputp (const void* p)
 {
   kputuix ((unsigned int)p);
 }

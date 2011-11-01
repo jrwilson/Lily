@@ -96,15 +96,17 @@ fifo_scheduler_remove (fifo_scheduler_t* ptr,
 }
 
 void
-fifo_scheduler_finish (fifo_scheduler_t* ptr)
+fifo_scheduler_finish (fifo_scheduler_t* ptr,
+		       int output_status,
+		       unsigned int output_value)
 {
   kassert (ptr != 0);
   if (ptr->ready != 0) {
     /* Schedule. */
-    sys_schedule (ptr->ready->action_entry_point, ptr->ready->parameter);
+    sys_schedule (ptr->ready->action_entry_point, ptr->ready->parameter, output_status, output_value);
   }
   else {
     /* Don't schedule. */
-    sys_finish ();
+    sys_finish (output_status, output_value);
   }
 }

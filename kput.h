@@ -24,7 +24,7 @@ void
 kputuix (unsigned int n);
 
 void
-kputp (void* p);
+kputp (const void* p);
 
 void
 clear_console (void);

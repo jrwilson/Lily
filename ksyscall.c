@@ -20,14 +20,21 @@
 static void
 syscall_handler (registers_t* regs)
 {
-  syscall_t syscall = regs->eax;
+  syscall_t syscall = EXTRACT_SYSCALL (regs->eax);
+  unsigned int action_entry_point = regs->ebx;
+  unsigned int parameter = regs->ecx;
+  int output_status = IS_OUTPUT_VALID (regs->eax);
+  unsigned int output_value = regs->edx;
+
   switch (syscall) {
   case SYSCALL_FINISH:
-    finish_action ();
+    finish_action (output_status, output_value);
     break;
   case SYSCALL_SCHEDULE:
-    schedule_action (regs->ebx, regs->ecx);
-    finish_action ();
+    {
+      schedule_action (get_current_aid (), action_entry_point, parameter);
+      finish_action (output_status, output_value);
+    }
     break;
   }
 

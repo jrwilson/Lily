@@ -97,8 +97,8 @@ hash_map_insert (hash_map_t* ptr,
       while (ptr->hash[idx] != 0) {
       	hash_map_node_t* n = ptr->hash[idx];
       	ptr->hash[idx] = n->next;
-      	n->next = new_hash[n->hash % ptr->capacity];
-      	new_hash[n->hash % ptr->capacity] = n;
+      	n->next = new_hash[n->hash % new_capacity];
+      	new_hash[n->hash % new_capacity] = n;
       }
     }
     kfree (ptr->hash);
@@ -134,7 +134,7 @@ hash_map_erase (hash_map_t* ptr,
 }
 
 int
-hash_map_contains (hash_map_t* ptr,
+hash_map_contains (const hash_map_t* ptr,
 		   const void* key)
 {
   kassert (ptr != 0);
@@ -142,14 +142,14 @@ hash_map_contains (hash_map_t* ptr,
   unsigned int hash = ptr->hash_func (key);
   unsigned int hash_idx = hash % ptr->capacity;
 
-  hash_map_node_t* n = ptr->hash[hash_idx];
-  for (; n != 0 && !(n->hash == hash && ptr->compare_func (n->key, key) == 0); n = n->next) ;;
+  hash_map_node_t* n;
+  for (n = ptr->hash[hash_idx]; n != 0 && !(n->hash == hash && ptr->compare_func (n->key, key) == 0); n = n->next) ;;
 
   return n != 0;
 }
 
 void*
-hash_map_find (hash_map_t* ptr,
+hash_map_find (const hash_map_t* ptr,
 	       const void* key)
 {
   kassert (ptr != 0);
@@ -164,5 +164,30 @@ hash_map_find (hash_map_t* ptr,
   }
   else {
     return 0;
+  }
+}
+
+void
+hash_map_dump (const hash_map_t* ptr,
+	       void (*key_func) (const void*),
+	       void (*value_func) (const void*))
+{
+  kassert (ptr != 0);
+
+  unsigned int k;
+  for (k = 0; k < ptr->capacity; ++k) {
+    kputs ("hash index = "); kputuix (k); kputs ("\n");
+    hash_map_node_t* n;
+    for (n = ptr->hash[k]; n != 0; n = n->next) {
+      kputs ("hash = "); kputuix (n->hash);
+      kputs (" hash_idx = "); kputuix (n->hash % ptr->capacity);
+      if (key_func) {
+	key_func (n->key);
+      }
+      if (value_func) {
+	value_func (n->value);
+      }
+      kputs ("\n");
+    }
   }
 }

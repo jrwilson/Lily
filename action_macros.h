@@ -17,21 +17,52 @@
 
 #include "quote.h"
 
+#define V_UP_INPUT(name) \
+extern unsigned int name##_entry; \
+ asm (".global " quote(name) "_entry\n" \
+      quote(name) "_entry:\n"	\
+      "push %edx\n" \
+      "call " quote(name) "_driver"); \
+void \
+ name##_driver (unsigned int value) \
+{ \
+  name##_effect (value);	\
+  name##_schedule (); \
+  SCHEDULER_FINISH (scheduler, 0, 0);		\
+}
+
+#define V_UP_OUTPUT(name) \
+extern unsigned int name##_entry; \
+ asm (".global " quote(name) "_entry\n" \
+      quote(name) "_entry:\n"	\
+      "call " quote(name) "_driver"); \
+void \
+name##_driver () \
+{ \
+  SCHEDULER_REMOVE (scheduler, (unsigned int)&name##_entry, 0); \
+  int status = name##_precondition (); \
+  unsigned int value = 0; \
+  if (status) { \
+    value = name##_effect ();	\
+  } \
+  name##_schedule (); \
+  SCHEDULER_FINISH (scheduler, status, value);	\
+}
+
 #define UP_INTERNAL(name) \
 extern unsigned int name##_entry; \
  asm (".global " quote(name) "_entry\n" \
       quote(name) "_entry:\n"	\
-      "push %eax\n" \
       "call " quote(name) "_driver"); \
 void \
-name##_driver (unsigned int parameter) \
+name##_driver () \
 { \
-  SCHEDULER_REMOVE (scheduler, (unsigned int)&name##_entry, parameter); \
+  SCHEDULER_REMOVE (scheduler, (unsigned int)&name##_entry, 0); \
   if (name##_precondition ()) { \
     name##_effect (); \
   } \
   name##_schedule (); \
-  SCHEDULER_FINISH (scheduler); \
+  SCHEDULER_FINISH (scheduler, 0, 0);		\
 }
 
 #endif /* __action_macros_h__ */

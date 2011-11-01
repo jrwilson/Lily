@@ -18,19 +18,22 @@
 
 typedef struct scheduler_context scheduler_context_t;
 
+void
+initialize_scheduler ();
+
 scheduler_context_t*
 allocate_scheduler_context (aid_t aid);
 
-void
-schedule_aid (aid_t aid,
-	      unsigned int action_entry_point,
-	      unsigned int parameter);
+aid_t
+get_current_aid (void);
 
 void
-schedule_action (unsigned int action_entry_point,
+schedule_action (aid_t aid,
+		 unsigned int action_entry_point,
 		 unsigned int parameter);
 
 void
-finish_action (void);
+finish_action (int output_status,
+	       unsigned int value);
 
 #endif /* __scheduler_h__ */

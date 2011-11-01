@@ -8,3 +8,17 @@ Data allocated with placement alloc (i.e., frame bitsets)
 Heap
 ...
 Stack
+
+Registers
+---------
+When trapping from automata to the kernel:
+EAX system call number
+EBX action entry point
+ECX parameter
+EDX output value
+
+When trapping from the kernel to automata:
+EAX (unused)
+EBX (unused)
+ECX parameter
+EDX input value

@@ -138,3 +138,10 @@ Later on, it will probably only contain the necessary drivers to read physical d
 
 Also, I plan to implement 16 IRQ automata, each with a single output.
 The associated interrupt just schedules the appropriate output.
+
+2011-11-01
+
+Polished the count_to_ten automaton by creating a user-mode scheduler and a macro for defining unparameterized internal actions.
+More macros will follow as I need them.
+Implemented producer and consumer.
+Test on a physical machine was successful.

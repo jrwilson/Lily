@@ -6,7 +6,25 @@ CFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=loader.o descriptor.o memory.o kernel.o kput.o interrupt.o isr.o io.o pit.o halt.o hash_map.o count_to_ten.o automata.o ksyscall.o scheduler.o syscall.o fifo_scheduler.o
+OBJECTS=loader.o \
+descriptor.o \
+memory.o \
+kernel.o \
+kput.o \
+interrupt.o \
+isr.o \
+io.o \
+halt.o \
+hash_map.o \
+automata.o \
+ksyscall.o \
+scheduler.o \
+syscall.o \
+fifo_scheduler.o \
+pit.o \
+count_to_ten.o \
+producer.o \
+consumer.o
 
 KERNEL=lily
 
