@@ -405,7 +405,7 @@ void
 initialize_paging ()
 {
   heap_mode = IDENTITY;
-  identity_base = ((unsigned int)&end_of_kernel_page_aligned) - KERNEL_OFFSET;
+  identity_base = ((unsigned int)&end_of_kernel_page_aligned) - KERNEL_VIRTUAL_BASE;
   identity_limit = identity_base;
   kassert (identity_limit <= IDENTITY_LIMIT);
 
@@ -419,7 +419,7 @@ initialize_paging ()
   unsigned int low_page_table_paddr = (unsigned int)&low_page_table + 0x40000000;
   /* Low memory (4 megabytes) is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
   insert_page_table (kernel_page_directory, 0, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
-  insert_page_table (kernel_page_directory, KERNEL_OFFSET, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
+  insert_page_table (kernel_page_directory, KERNEL_VIRTUAL_BASE, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
 
   /* Identity map the physical addresses from 0 to the end of the kernel. */
   for (k = 0; k < identity_limit; k += PAGE_SIZE) {
@@ -572,7 +572,7 @@ placement_alloc (unsigned int size)
 
   char* retval = (char*)placement_limit;
   placement_limit += size;
-  extend_identity (placement_limit - KERNEL_OFFSET - 1);
+  extend_identity (placement_limit - KERNEL_VIRTUAL_BASE - 1);
   return retval;
 }
 
@@ -681,7 +681,7 @@ initialize_heap (multiboot_info_t* mbd)
 {
   kassert (heap_mode == IDENTITY);
 
-  placement_base = identity_limit + KERNEL_OFFSET;
+  placement_base = identity_limit + KERNEL_VIRTUAL_BASE;
   placement_limit = placement_base;
   heap_mode = PLACEMENT;
 
@@ -717,7 +717,7 @@ initialize_heap (multiboot_info_t* mbd)
     frame_manager_set (frame);
   }
 
-  heap_base = identity_limit + KERNEL_OFFSET;
+  heap_base = identity_limit + KERNEL_VIRTUAL_BASE;
   heap_limit = heap_base;
 
   /* Grow the heap to its initial size. */

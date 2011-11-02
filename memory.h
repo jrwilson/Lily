@@ -17,7 +17,7 @@
 
 #include "multiboot.h"
 
-#define KERNEL_OFFSET 0xC0000000
+#define KERNEL_VIRTUAL_BASE 0xC0000000
 #define USER_STACK_LIMIT 0x0
 
 #define DESCRIPTOR_COUNT 6

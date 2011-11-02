@@ -24,7 +24,8 @@ fifo_scheduler.o \
 pit.o \
 count_to_ten.o \
 producer.o \
-consumer.o
+consumer.o \
+gdt_asm.o
 
 KERNEL=lily
 

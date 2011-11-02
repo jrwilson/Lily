@@ -36,6 +36,8 @@ kmain (multiboot_info_t* mbd,
   clear_console ();
   kputs ("Lily\n");
 
+  halt ();
+
   initialize_paging ();
   install_gdt ();
   install_idt ();

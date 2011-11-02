@@ -145,3 +145,25 @@ Polished the count_to_ten automaton by creating a user-mode scheduler and a macr
 More macros will follow as I need them.
 Implemented producer and consumer.
 Test on a physical machine was successful.
+
+2011-11-02
+
+To implement buffers, I need to refactor the frame allocation system and memory management.
+This led me to do some reading where I found the following design decisions:
+1.  Should the kernel be mapped in all address spaces?
+    Yes.  This makes transferring from user-to-kernel more efficient since the segments and TLB are preserved.  It also makes transferring data into the kernel easier.
+    No.  The kernel and user processes can have a big virtual address space.  The width of the kernel and processes can be different, e.g., 32-bit kernel and 64-bit processes.
+2.  Should the kernel be identity (or offset) mapped?  (The offset is to use virtual memory.)
+    Yes.  It makes dealing with hardware easier since there is no address translation.
+    No.  It makes dealing with software harder due to manual address translation.  It is also more efficient since segments don't need to be change when switch to/from the kernel.
+
+Based on this, I affirm my decision to map the kernel is all address spaces using virtual memory.
+
+
+
+Remove GDT trick
+Map page directories to themselves
+Improve frame allocation (contiguous is useful).
+
+
+

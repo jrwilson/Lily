@@ -2,7 +2,7 @@
 
 #include "memory.h"
 
-#define VIDEORAM (KERNEL_OFFSET + 0xB8000)
+#define VIDEORAM 0xB8000
 
 /* Width and height of the framebuffer. */
 #define WIDTH 80
