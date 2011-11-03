@@ -13,7 +13,7 @@
 
 #include "fifo_scheduler.h"
 #include "kassert.h"
-#include "memory.h"
+#include "mm.h"
 #include "syscall.h"
 
 typedef struct fifo_scheduler_entry fifo_scheduler_entry_t;

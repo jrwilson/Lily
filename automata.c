@@ -14,8 +14,9 @@
 #include "automata.h"
 #include "hash_map.h"
 #include "kassert.h"
-#include "memory.h"
+#include "mm.h"
 #include "scheduler.h"
+#include "gdt.h"
 
 typedef struct output_action output_action_t;
 struct output_action {

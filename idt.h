@@ -4,7 +4,7 @@
 /*
   File
   ----
-  interrupt.h
+  idt.h
   
   Description
   -----------
@@ -30,7 +30,7 @@ typedef struct registers registers_t;
 typedef void (*interrupt_handler_t) (registers_t*);
 
 void
-install_idt (void);
+initialize_idt (void);
 
 void
 enable_interrupts (void);

@@ -13,7 +13,7 @@
 */
 
 #include "hash_map.h"
-#include "memory.h"
+#include "mm.h"
 #include "kassert.h"
 
 #define HASH_LOAD_NUMERATOR 7

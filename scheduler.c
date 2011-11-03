@@ -14,8 +14,8 @@
 
 #include "scheduler.h"
 #include "kassert.h"
-#include "memory.h"
-#include "interrupt.h"
+#include "mm.h"
+#include "idt.h"
 
 typedef enum {
   SCHEDULED,

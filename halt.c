@@ -13,7 +13,7 @@
 */
 
 #include "halt.h"
-#include "interrupt.h"
+#include "idt.h"
 
 void
 halt ()

@@ -1,5 +1,5 @@
-#ifndef __memory_h__
-#define __memory_h__
+#ifndef __mm_h__
+#define __mm_h__
 
 /*
   File
@@ -8,7 +8,7 @@
   
   Description
   -----------
-  Declarations for functions to manage the physical memory.
+  Declarations for the memory manager.
 
   Authors:
   http://wiki.osdev.org/Higher_Half_With_GDT
@@ -17,25 +17,12 @@
 
 #include "multiboot.h"
 
-#define KERNEL_VIRTUAL_BASE 0xC0000000
 #define USER_STACK_LIMIT 0x0
-
-#define DESCRIPTOR_COUNT 6
-#define KERNEL_CODE_SELECTOR 0x08
-#define KERNEL_DATA_SELECTOR 0x10
-#define USER_CODE_SELECTOR 0x18
-#define USER_DATA_SELECTOR 0x20
-#define TSS_SELECTOR 0x28
 
 typedef struct page_directory page_directory_t;
 
-extern page_directory_t* kernel_page_directory;
-
 void
-initialize_paging (void);
-
-void
-install_gdt (void);
+initialize_identity_map (void);
 
 void
 extend_identity (unsigned int addr);
@@ -65,4 +52,4 @@ kmalloc_pa (unsigned int size);
 void
 kfree (void*);
 
-#endif /* __memory_h__ */
+#endif /* __mm_h__ */

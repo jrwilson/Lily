@@ -23,9 +23,11 @@ SECTIONS
 	/* Jump forward by 0xC0000000. */
 	. += 0xC0000000;
 
+
 	/* Place the program text after the previous segment but logically after 0xC000000. */
-	.text : AT(ADDR(.text) - 0xC0000000)
+	.text ALIGN (0x1000) : AT(ADDR(.text) - 0xC0000000)
 	{
+		kernel_begin = .;	
 		*(.text)
 	}
 
@@ -45,7 +47,7 @@ SECTIONS
 	.bss ALIGN (0x1000) : AT(ADDR(.bss) - 0xC0000000)
 	{
 		*(.bss)
+		kernel_end = .;
 	}
 
-	end_of_kernel_page_aligned = ALIGN (0x1000);
 }

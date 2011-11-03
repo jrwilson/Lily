@@ -14,15 +14,14 @@
 */
 
 #include "kput.h"
-#include "memory.h"
-#include "interrupt.h"
 #include "kassert.h"
 #include "multiboot.h"
+#include "gdt.h"
+#include "idt.h"
+#include "mm.h"
 #include "ksyscall.h"
 #include "automata.h"
 #include "scheduler.h"
-
-#include "hash_map.h"
 
 extern int producer_init_entry;
 extern int producer_produce_entry;
@@ -36,11 +35,12 @@ kmain (multiboot_info_t* mbd,
   clear_console ();
   kputs ("Lily\n");
 
-  halt ();
+  initialize_gdt ();
+  initialize_idt ();
+  initialize_identity_map ();
 
-  initialize_paging ();
-  install_gdt ();
-  install_idt ();
+  kassert (0);
+
   install_page_fault_handler ();
 
   kassert (magic == MULTIBOOT_BOOTLOADER_MAGIC);

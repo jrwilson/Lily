@@ -1,4 +1,18 @@
-%include "segments.s"
+	;; Authors
+	;;   Justin R. Wilson
+
+	[bits 32]
+
+	%include "selectors.s"
+
+	[section .text]
+
+	;; Export.
+	[global idt_flush]
+idt_flush:
+	mov eax, [esp+4]	; Get the pointer.
+	lidt [eax]
+	ret
 	
 %macro EXCEPTION_NOERRCODE 1
 	[global exception%1]
@@ -24,7 +38,7 @@ exception_common_stub:
 	;; Push the old data segment.
 	push eax
 	;; Load the kernel data segment.
-	mov ax, KERNEL_DATA_SEGMENT
+	mov ax, KERNEL_DATA_SELECTOR
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
@@ -94,7 +108,7 @@ irq_common_stub:
 	mov ax, ds
 	push eax
 	;; Load the kernel data segment.
-	mov ax, KERNEL_DATA_SEGMENT
+	mov ax, KERNEL_DATA_SELECTOR
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
@@ -148,7 +162,7 @@ trap_common_stub:
 	;; Push the old data segment.
 	push eax
 	;; Load the kernel data segment.
-	mov ax, KERNEL_DATA_SEGMENT
+	mov ax, KERNEL_DATA_SELECTOR
 	mov ds, ax
 	mov es, ax
 	mov fs, ax

@@ -13,7 +13,7 @@
 */
 
 #include "syscall.h"
-#include "interrupt.h"
+#include "idt.h"
 #include "kassert.h"
 #include "scheduler.h"
 

@@ -1,11 +1,11 @@
 /*
   File
   ----
-  memory.c
+  mm.c
   
   Description
   -----------
-  Functions for controlling the physical memory including segmentation, paging, etc.
+  Functions for the memory manager.
 
   Authors
   -------
@@ -13,12 +13,15 @@
   Justin R. Wilson
 */
 
-#include "memory.h"
-#include "interrupt.h"
+#include "mm.h"
+#include "idt.h"
 #include "kput.h"
 #include "halt.h"
 #include "kassert.h"
 #include "descriptor.h"
+
+/* Should agree with loader.s. */
+#define KERNEL_VIRTUAL_BASE 0xC0000000
 
 /* Page is 4 kilobytes. */
 #define PAGE_SIZE 0x1000
@@ -43,7 +46,7 @@
 #define PAGE_INSTRUCTION_ERROR (1 << 4)
 
 /* Can identity map up to 4 megabytes. */
-#define IDENTITY_LIMIT 0x400000
+#define IDENTITY_MAP_LIMIT 0x400000
 
 /* Convert physical addresses to frame numbers and vice versa. */
 #define ADDRESS_TO_FRAME(addr) ((addr) >> 12)
@@ -78,7 +81,7 @@ struct page_table_entry {
 typedef struct page_table_entry page_table_entry_t;
 
 struct page_table {
-  page_table_entry_t entries[PAGE_ENTRY_COUNT];
+  page_table_entry_t entry[PAGE_ENTRY_COUNT];
 };
 typedef struct page_table page_table_t;
 
@@ -98,8 +101,7 @@ struct page_directory_entry {
 typedef struct page_directory_entry page_directory_entry_t;
 
 struct page_directory {
-  /* Physical addresses.  This is first so we can page-align it. */
-  page_directory_entry_t entries_physical[PAGE_ENTRY_COUNT];
+  page_directory_entry_t entry[PAGE_ENTRY_COUNT];
   page_table_t* entries_logical[PAGE_ENTRY_COUNT];
   unsigned int physical_address;
   page_directory_t* next;
@@ -148,18 +150,12 @@ typedef enum {
    Memory allocated in HEAP mode can be reclaimed.
  */
 enum heap_mode {
+  NO_HEAP,
   IDENTITY,
   PLACEMENT,
   HEAP
 };
 typedef enum heap_mode heap_mode_t;
-
-struct gdt_ptr
-{
-  unsigned short limit;
-  descriptor_t* base;
-} __attribute__((packed));
-typedef struct gdt_ptr gdt_ptr_t;
 
 typedef struct frame_set_item frame_set_item_t;
 struct frame_set_item {
@@ -180,33 +176,26 @@ struct header {
   header_t* prev;
   header_t* next;
 };
-
-extern void
-gdt_flush (gdt_ptr_t*);
 	       
 /* Take the address of this symbol to find the end of the kernel rounded up to the next page. */
 extern unsigned int end_of_kernel_page_aligned; 
 
-static heap_mode_t heap_mode;
-/* The set [placement_base - KERNEL_OFFSET, placement_limit - KERNEL_OFFSET) is a subset of [identity_base, identity_limit). */
-static unsigned int identity_base;
-static unsigned int identity_limit;
+static heap_mode_t heap_mode = NO_HEAP;
+/* The set [placement_base - KERNEL_OFFSET, placement_limit - KERNEL_OFFSET) is a subset of [identity_begin, identity_end). */
+static unsigned int identity_begin;
+static unsigned int identity_end;
 static unsigned int placement_base;
 static unsigned int placement_limit;
 static unsigned int heap_base;
 static unsigned int heap_limit;
 static unsigned int user_stack_base;
 
-static page_directory_t kernel_page_directory_var __attribute__ ((aligned (PAGE_SIZE)));
+static page_directory_t kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
 static page_table_t low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
-page_directory_t* kernel_page_directory = &kernel_page_directory_var;
-static page_directory_t* page_directories = &kernel_page_directory_var;
+static page_directory_t* page_directories = &kernel_page_directory;
 static page_directory_t* current_page_directory = 0;
 static page_table_t* spare_page_table = 0;
-
-static descriptor_t gdt[DESCRIPTOR_COUNT];
-static gdt_ptr_t gp;
 
 static frame_set_item_t* frame_set = 0;
 static unsigned int total_frames = 0;
@@ -237,7 +226,7 @@ logical_to_physical (page_directory_t* ptr,
   page_table_t* pt = ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)];
 
   if (pt != 0) {
-    return FRAME_TO_ADDRESS (pt->entries[PAGE_TABLE_ENTRY (logical_addr)].frame) | PAGE_ADDRESS_OFFSET (logical_addr);
+    return FRAME_TO_ADDRESS (pt->entry[PAGE_TABLE_ENTRY (logical_addr)].frame) | PAGE_ADDRESS_OFFSET (logical_addr);
   }
   else {
     return 0;
@@ -308,17 +297,17 @@ allocate_page_table ()
   return ptr;
 }
 
-static void
-initialize_page_directory (page_directory_t* ptr,
-			   unsigned int physical_address)
-{
-  kassert (ptr != 0);
-  kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
-  kassert (IS_PAGE_ALIGNED ((unsigned int)physical_address));
+/* static void */
+/* initialize_page_directory (page_directory_t* ptr, */
+/* 			   unsigned int physical_address) */
+/* { */
+/*   kassert (ptr != 0); */
+/*   kassert (IS_PAGE_ALIGNED ((unsigned int)ptr)); */
+/*   kassert (IS_PAGE_ALIGNED ((unsigned int)physical_address)); */
 
-  memset (ptr, 0, sizeof (page_directory_t));
-  ptr->physical_address = physical_address;
-}
+/*   memset (ptr, 0, sizeof (page_directory_t)); */
+/*   ptr->physical_address = physical_address; */
+/* } */
 
 page_directory_t*
 allocate_page_directory ()
@@ -327,10 +316,10 @@ allocate_page_directory ()
   /* Copy from the kernel. */
   unsigned int k;
   for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    ptr->entries_physical[k] = kernel_page_directory->entries_physical[k];
-    ptr->entries_logical[k] = kernel_page_directory->entries_logical[k];
+    ptr->entry[k] = kernel_page_directory.entry[k];
+    ptr->entries_logical[k] = kernel_page_directory.entries_logical[k];
   }
-  ptr->physical_address = logical_to_physical (kernel_page_directory, (unsigned int)ptr);
+  ptr->physical_address = logical_to_physical (&kernel_page_directory, (unsigned int)ptr);
   /* Add to the list. */
   ptr->next = page_directories;
   page_directories = ptr;
@@ -362,14 +351,14 @@ insert_page_table (page_directory_t* ptr,
   kassert (ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] == 0);
   kassert (pt != 0);
   
-  ptr->entries_physical[PAGE_DIRECTORY_ENTRY (logical_addr)] = page_directory_entry;
+  ptr->entry[PAGE_DIRECTORY_ENTRY (logical_addr)] = page_directory_entry;
   ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] = pt;
 
-  if (ptr == kernel_page_directory) {
+  if (ptr == &kernel_page_directory) {
     /* Map into all page directories. */
     page_directory_t* p;
     for (p = page_directories; p != 0; p = p->next) {
-      p->entries_physical[PAGE_DIRECTORY_ENTRY (logical_addr)] = page_directory_entry;
+      p->entry[PAGE_DIRECTORY_ENTRY (logical_addr)] = page_directory_entry;
       p->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)] = pt;
     }
   }
@@ -394,45 +383,57 @@ insert_mapping (page_directory_t* ptr,
     spare_page_table = 0;
   }
 
-  ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)]->entries[PAGE_TABLE_ENTRY (logical_addr)] = page_table_entry;
+  ptr->entries_logical[PAGE_DIRECTORY_ENTRY (logical_addr)]->entry[PAGE_TABLE_ENTRY (logical_addr)] = page_table_entry;
   if (ptr == current_page_directory) {
     /* Invalidate entry in TLB. */
     asm volatile ("invlpg %0\n" :: "m" (logical_addr));
   }
 }
 
+extern int kernel_begin;
+extern int kernel_end;
+
 void
-initialize_paging ()
+initialize_identity_map ()
 {
-  heap_mode = IDENTITY;
-  identity_base = ((unsigned int)&end_of_kernel_page_aligned) - KERNEL_VIRTUAL_BASE;
-  identity_limit = identity_base;
-  kassert (identity_limit <= IDENTITY_LIMIT);
+  kassert (heap_mode == NO_HEAP);
 
+  /* Clear the page directory and page table. */
   unsigned int k;
-
-  /* To compute the physical address of the page directory, we add 0x40000000 according to the GDT trick in loader.s. */
-  initialize_page_directory (kernel_page_directory, (unsigned int)kernel_page_directory + 0x40000000);
-  initialize_page_table (&low_page_table);
-
- /* To compute the physical address of the page table, we add 0x40000000 according to the GDT trick in loader.s. */
-  unsigned int low_page_table_paddr = (unsigned int)&low_page_table + 0x40000000;
-  /* Low memory (4 megabytes) is mapped to the logical address ranges 0:0x3FFFFF and 0xC0000000:0xC03FFFFF. */
-  insert_page_table (kernel_page_directory, 0, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
-  insert_page_table (kernel_page_directory, KERNEL_VIRTUAL_BASE, make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), &low_page_table);
-
-  /* Identity map the physical addresses from 0 to the end of the kernel. */
-  for (k = 0; k < identity_limit; k += PAGE_SIZE) {
-    insert_mapping (kernel_page_directory, k, make_page_table_entry (ADDRESS_TO_FRAME (k), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
+  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
+    low_page_table.entry[k] = make_page_table_entry (0, 0, 0, 0, 0, 0, 0);
+    kernel_page_directory.entry[k] = make_page_directory_entry (0, 0, 0, 0, 0, 0, 0);
   }
- 
-  /* Switch to the page directory. */
-  switch_to_page_directory (kernel_page_directory);
 
-  /* Enable paging. */
-  asm volatile ("mov %%cr0, %%eax\n"
-		"orl $0x80000000, %%eax\n"
-		"mov %%eax, %%cr0\n" ::: "%eax");
+  /* Identity map the first 1M. */
+  unsigned int physical_addr;
+  for (physical_addr = 0; physical_addr < 0x100000; physical_addr += PAGE_SIZE) {
+    low_page_table.entry[PAGE_TABLE_ENTRY (physical_addr)] = make_page_table_entry (ADDRESS_TO_FRAME (physical_addr), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT);
+  }
+
+  /* Identity map the kernel. */
+  kassert (IS_PAGE_ALIGNED ((unsigned int)&kernel_begin));
+  kassert (((unsigned int)&kernel_end - KERNEL_VIRTUAL_BASE) <= IDENTITY_MAP_LIMIT);
+  for (physical_addr = (unsigned int)&kernel_begin - KERNEL_VIRTUAL_BASE; physical_addr < (unsigned int)&kernel_end - KERNEL_VIRTUAL_BASE; physical_addr += PAGE_SIZE) {
+    low_page_table.entry[PAGE_TABLE_ENTRY (physical_addr + KERNEL_VIRTUAL_BASE)] = make_page_table_entry (ADDRESS_TO_FRAME (physical_addr), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT);
+  }
+
+  unsigned int low_page_table_paddr = (unsigned int)&low_page_table - KERNEL_VIRTUAL_BASE;
+  unsigned int kernel_page_directory_paddr = (unsigned int)&kernel_page_directory - KERNEL_VIRTUAL_BASE;
+
+  /* Insert the page table. */
+  kernel_page_directory.entry[PAGE_DIRECTORY_ENTRY (0)] = make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT);
+  kernel_page_directory.entry[PAGE_DIRECTORY_ENTRY (KERNEL_VIRTUAL_BASE)] = make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT);
+  /* Map the page directory to itself. */
+  kernel_page_directory.entry[PAGE_DIRECTORY_ENTRY (0xFFFFFFFF)] = make_page_directory_entry (ADDRESS_TO_FRAME (kernel_page_directory_paddr), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT);
+
+  /* Change page directories. */
+  asm volatile ("mov %0, %%eax\n"
+		"mov %%eax, %%cr3\n" :: "m" (kernel_page_directory_paddr) : "%eax");
+
+  identity_begin = physical_addr;
+  identity_end = identity_begin;
+  heap_mode = IDENTITY;
 }
 
 /* struct tss { */
@@ -469,45 +470,14 @@ initialize_paging ()
 /* tss_t tss; */
 
 void
-install_gdt ()
-{
-  gp.limit = (sizeof (descriptor_t) * DESCRIPTOR_COUNT) - 1;
-  gp.base = gdt;
-
-  gdt[0] = make_null_descriptor ();
-  gdt[KERNEL_CODE_SELECTOR / sizeof (descriptor_t)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, READABLE, NOT_CONFORMING, RING0, PRESENT, WIDTH_32, PAGE_GRANULARITY); 
-  gdt[KERNEL_DATA_SELECTOR / sizeof (descriptor_t)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, WRITABLE, EXPAND_UP, RING0, PRESENT, WIDTH_32, PAGE_GRANULARITY);
-  gdt[USER_CODE_SELECTOR / sizeof (descriptor_t)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, READABLE, NOT_CONFORMING, RING3, PRESENT, WIDTH_32, PAGE_GRANULARITY);
-  gdt[USER_DATA_SELECTOR / sizeof (descriptor_t)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, WRITABLE, EXPAND_UP, RING3, PRESENT, WIDTH_32, PAGE_GRANULARITY);
-
-  /* memset (&tss, 0, sizeof (tss_t)); */
-  /* tss.ss0 = KERNEL_DATA_SEGMENT; */
-  /* tss.esp0 = 0xDEADBEEF; /\* This needs to be fixed. *\/ */
-  /* tss.cs = KERNEL_CODE_SEGMENT | RING3; */
-  /* tss.ss = KERNEL_DATA_SEGMENT | RING3; */
-  /* tss.ds = KERNEL_DATA_SEGMENT | RING3; */
-  /* tss.es = KERNEL_DATA_SEGMENT | RING3; */
-  /* tss.fs = KERNEL_DATA_SEGMENT | RING3; */
-  /* tss.gs = KERNEL_DATA_SEGMENT | RING3; */
-
-  /* initialize_tss_descriptor (&gdt[TSS_SELECTOR / sizeof (descriptor_t)].tss, (unsigned int)&tss, (unsigned int)&tss + sizeof (tss_t) - 1, RING3, PRESENT, BYTE_GRANULARITY); */
-
-  gdt_flush (&gp);
-
-  /* unsigned int sel = TSS_SELECTOR | RING3; */
-  /* asm volatile ("mov %0, %%eax\n" */
-  /* "ltr %%ax\n" : : "m"(sel) ); */
-}
-
-void
 extend_identity (unsigned int addr)
 {
   kassert (heap_mode == IDENTITY || heap_mode == PLACEMENT);
-  kassert (addr < IDENTITY_LIMIT);
+  kassert (addr < IDENTITY_MAP_LIMIT);
 
   addr = PAGE_ALIGN (addr + PAGE_SIZE - 1);
-  for (; identity_limit < addr; identity_limit += PAGE_SIZE) {
-    insert_mapping (kernel_page_directory, identity_limit, make_page_table_entry (ADDRESS_TO_FRAME (identity_limit), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
+  for (; identity_end < addr; identity_end += PAGE_SIZE) {
+    insert_mapping (&kernel_page_directory, identity_end, make_page_table_entry (ADDRESS_TO_FRAME (identity_end), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
   }
 }
 
@@ -681,7 +651,7 @@ initialize_heap (multiboot_info_t* mbd)
 {
   kassert (heap_mode == IDENTITY);
 
-  placement_base = identity_limit + KERNEL_VIRTUAL_BASE;
+  placement_base = identity_end + KERNEL_VIRTUAL_BASE;
   placement_limit = placement_base;
   heap_mode = PLACEMENT;
 
@@ -711,18 +681,18 @@ initialize_heap (multiboot_info_t* mbd)
     ptr = (multiboot_memory_map_t*) (((char*)&(ptr->addr)) + ptr->size);
   }
 
-  /* All of the frames (physical pages) up to identity_limit are in use. */
+  /* All of the frames (physical pages) up to identity_end are in use. */
   unsigned int frame;
-  for (frame = 0; frame < ADDRESS_TO_FRAME (identity_limit); ++frame) {
+  for (frame = 0; frame < ADDRESS_TO_FRAME (identity_end); ++frame) {
     frame_manager_set (frame);
   }
 
-  heap_base = identity_limit + KERNEL_VIRTUAL_BASE;
+  heap_base = identity_end + KERNEL_VIRTUAL_BASE;
   heap_limit = heap_base;
 
   /* Grow the heap to its initial size. */
   for (; (heap_limit - heap_base) < HEAP_INITIAL_SIZE; heap_limit += PAGE_SIZE) {
-    insert_mapping (kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
+    insert_mapping (&kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
   }
 
   /* Imprint the heap. */
@@ -747,14 +717,14 @@ initialize_heap (multiboot_info_t* mbd)
   unsigned int stack_addr;
   /* Use != due to wrap around. */
   for (stack_addr = user_stack_base; stack_addr != USER_STACK_LIMIT; stack_addr += PAGE_SIZE) {
-    insert_mapping (kernel_page_directory, stack_addr, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, USER, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, USER, WRITABLE, PRESENT));
+    insert_mapping (&kernel_page_directory, stack_addr, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, USER, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, USER, WRITABLE, PRESENT));
   }
   
   /* kputs ("Total frames: "); kputuix (total_frames); kputs ("\n"); */
   /* kputs ("Used frames: "); kputuix (used_frames); kputs ("\n"); */
 
-  /* kputs ("identity_base: "); kputuix (identity_base); kputs ("\n"); */
-  /* kputs ("identity_limit: "); kputuix (identity_limit); kputs ("\n"); */
+  /* kputs ("identity_begin: "); kputuix (identity_begin); kputs ("\n"); */
+  /* kputs ("identity_end: "); kputuix (identity_end); kputs ("\n"); */
   /* kputs ("placement_base: "); kputuix (placement_base); kputs ("\n"); */
   /* kputs ("placement_limit: "); kputuix (placement_limit); kputs ("\n"); */
   /* kputs ("heap_base: "); kputuix (heap_base); kputs ("\n"); */
@@ -822,7 +792,7 @@ expand_heap (unsigned int size)
 {
   while (heap_last->size < size) {
     /* Map it. */
-    insert_mapping (kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
+    insert_mapping (&kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT));
     /* Update sizes and limits. */
     heap_limit += PAGE_SIZE;
     heap_last->size += PAGE_SIZE;

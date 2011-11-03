@@ -13,13 +13,13 @@
   Justin R. Wilson
 */
 
-#include "interrupt.h"
-#include "memory.h"
+#include "idt.h"
 #include "kput.h"
 #include "io.h"
 #include "halt.h"
 #include "kassert.h"
 #include "descriptor.h"
+#include "gdt.h"
 
 #define INTERRUPT_COUNT 256
 
@@ -86,13 +86,13 @@
 struct idt_ptr
 {
   unsigned short limit;
-  descriptor_t* base;
+  unsigned int base;
 } __attribute__((packed));
 typedef struct idt_ptr idt_ptr_t;
 
-static descriptor_t idt[INTERRUPT_COUNT];
+static descriptor_t idt_entry[INTERRUPT_COUNT];
 static idt_ptr_t ip;
-static interrupt_handler_t interrupt_handlers[INTERRUPT_COUNT];
+static interrupt_handler_t interrupt_handler[INTERRUPT_COUNT];
 
 static unsigned char pic_master_mask = ~(1 << PIC_SLAVE_PIN);
 static unsigned char pic_slave_mask = 0xFF;
@@ -168,54 +168,54 @@ default_handler (registers_t* regs)
 }
 
 void
-install_idt ()
+initialize_idt ()
 {
   int k;
 
   for (k = 0; k < INTERRUPT_COUNT; ++k) {
     /* Do not use set_interrupt_handler because it changes the interrupt controller masks. */
-    interrupt_handlers[k] = default_handler;
+    interrupt_handler[k] = default_handler;
   }
 
   ip.limit = (sizeof (descriptor_t) * INTERRUPT_COUNT) - 1;
-  ip.base = idt;
+  ip.base = (unsigned int)idt_entry;
 
   for (k = 0; k < INTERRUPT_COUNT; ++k) {
-    idt[k].interrupt = make_interrupt_gate (0, 0, RING0, NOT_PRESENT);
+    idt_entry[k].interrupt = make_interrupt_gate (0, 0, RING0, NOT_PRESENT);
   }
 
-  idt[0].interrupt = make_interrupt_gate ((unsigned int)exception0, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[1].interrupt = make_interrupt_gate ((unsigned int)exception1, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[2].interrupt = make_interrupt_gate ((unsigned int)exception2, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[3].interrupt = make_interrupt_gate ((unsigned int)exception3, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[4].interrupt = make_interrupt_gate ((unsigned int)exception4, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[5].interrupt = make_interrupt_gate ((unsigned int)exception5, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[6].interrupt = make_interrupt_gate ((unsigned int)exception6, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[7].interrupt = make_interrupt_gate ((unsigned int)exception7, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[8].interrupt = make_interrupt_gate ((unsigned int)exception8, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[9].interrupt = make_interrupt_gate ((unsigned int)exception9, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[10].interrupt = make_interrupt_gate ((unsigned int)exception10, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[11].interrupt = make_interrupt_gate ((unsigned int)exception11, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[12].interrupt = make_interrupt_gate ((unsigned int)exception12, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[13].interrupt = make_interrupt_gate ((unsigned int)exception13, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[14].interrupt = make_interrupt_gate ((unsigned int)exception14, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[15].interrupt = make_interrupt_gate ((unsigned int)exception15, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[16].interrupt = make_interrupt_gate ((unsigned int)exception16, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[17].interrupt = make_interrupt_gate ((unsigned int)exception17, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[18].interrupt = make_interrupt_gate ((unsigned int)exception18, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[19].interrupt = make_interrupt_gate ((unsigned int)exception19, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[20].interrupt = make_interrupt_gate ((unsigned int)exception20, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[21].interrupt = make_interrupt_gate ((unsigned int)exception21, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[22].interrupt = make_interrupt_gate ((unsigned int)exception22, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[23].interrupt = make_interrupt_gate ((unsigned int)exception23, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[24].interrupt = make_interrupt_gate ((unsigned int)exception24, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[25].interrupt = make_interrupt_gate ((unsigned int)exception25, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[26].interrupt = make_interrupt_gate ((unsigned int)exception26, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[27].interrupt = make_interrupt_gate ((unsigned int)exception27, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[28].interrupt = make_interrupt_gate ((unsigned int)exception28, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[29].interrupt = make_interrupt_gate ((unsigned int)exception29, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[30].interrupt = make_interrupt_gate ((unsigned int)exception30, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[31].interrupt = make_interrupt_gate ((unsigned int)exception31, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[0].interrupt = make_interrupt_gate ((unsigned int)exception0, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[1].interrupt = make_interrupt_gate ((unsigned int)exception1, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[2].interrupt = make_interrupt_gate ((unsigned int)exception2, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[3].interrupt = make_interrupt_gate ((unsigned int)exception3, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[4].interrupt = make_interrupt_gate ((unsigned int)exception4, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[5].interrupt = make_interrupt_gate ((unsigned int)exception5, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[6].interrupt = make_interrupt_gate ((unsigned int)exception6, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[7].interrupt = make_interrupt_gate ((unsigned int)exception7, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[8].interrupt = make_interrupt_gate ((unsigned int)exception8, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[9].interrupt = make_interrupt_gate ((unsigned int)exception9, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[10].interrupt = make_interrupt_gate ((unsigned int)exception10, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[11].interrupt = make_interrupt_gate ((unsigned int)exception11, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[12].interrupt = make_interrupt_gate ((unsigned int)exception12, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[13].interrupt = make_interrupt_gate ((unsigned int)exception13, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[14].interrupt = make_interrupt_gate ((unsigned int)exception14, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[15].interrupt = make_interrupt_gate ((unsigned int)exception15, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[16].interrupt = make_interrupt_gate ((unsigned int)exception16, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[17].interrupt = make_interrupt_gate ((unsigned int)exception17, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[18].interrupt = make_interrupt_gate ((unsigned int)exception18, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[19].interrupt = make_interrupt_gate ((unsigned int)exception19, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[20].interrupt = make_interrupt_gate ((unsigned int)exception20, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[21].interrupt = make_interrupt_gate ((unsigned int)exception21, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[22].interrupt = make_interrupt_gate ((unsigned int)exception22, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[23].interrupt = make_interrupt_gate ((unsigned int)exception23, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[24].interrupt = make_interrupt_gate ((unsigned int)exception24, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[25].interrupt = make_interrupt_gate ((unsigned int)exception25, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[26].interrupt = make_interrupt_gate ((unsigned int)exception26, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[27].interrupt = make_interrupt_gate ((unsigned int)exception27, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[28].interrupt = make_interrupt_gate ((unsigned int)exception28, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[29].interrupt = make_interrupt_gate ((unsigned int)exception29, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[30].interrupt = make_interrupt_gate ((unsigned int)exception30, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[31].interrupt = make_interrupt_gate ((unsigned int)exception31, KERNEL_CODE_SELECTOR, RING0, PRESENT);
 
   /* Remap IRQ 0-15 to ISR 32-47. */
   outb (PIC_MASTER_LOW, PIC_ICW1_LOW | PIC_ICW1_NEED_ICW4);
@@ -230,24 +230,24 @@ install_idt ()
   outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask);
   outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask);
 
-  idt[PIC_MASTER_BASE + 0].interrupt = make_interrupt_gate ((unsigned int)irq0, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 1].interrupt = make_interrupt_gate ((unsigned int)irq1, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 2].interrupt = make_interrupt_gate ((unsigned int)irq2, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 3].interrupt = make_interrupt_gate ((unsigned int)irq3, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 4].interrupt = make_interrupt_gate ((unsigned int)irq4, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 5].interrupt = make_interrupt_gate ((unsigned int)irq5, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 6].interrupt = make_interrupt_gate ((unsigned int)irq6, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_MASTER_BASE + 7].interrupt = make_interrupt_gate ((unsigned int)irq7, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 0].interrupt = make_interrupt_gate ((unsigned int)irq8, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 1].interrupt = make_interrupt_gate ((unsigned int)irq9, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 2].interrupt = make_interrupt_gate ((unsigned int)irq10, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 3].interrupt = make_interrupt_gate ((unsigned int)irq11, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 4].interrupt = make_interrupt_gate ((unsigned int)irq12, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 5].interrupt = make_interrupt_gate ((unsigned int)irq13, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 6].interrupt = make_interrupt_gate ((unsigned int)irq14, KERNEL_CODE_SELECTOR, RING0, PRESENT);
-  idt[PIC_SLAVE_BASE + 7].interrupt = make_interrupt_gate ((unsigned int)irq15, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 0].interrupt = make_interrupt_gate ((unsigned int)irq0, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 1].interrupt = make_interrupt_gate ((unsigned int)irq1, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 2].interrupt = make_interrupt_gate ((unsigned int)irq2, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 3].interrupt = make_interrupt_gate ((unsigned int)irq3, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 4].interrupt = make_interrupt_gate ((unsigned int)irq4, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 5].interrupt = make_interrupt_gate ((unsigned int)irq5, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 6].interrupt = make_interrupt_gate ((unsigned int)irq6, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_MASTER_BASE + 7].interrupt = make_interrupt_gate ((unsigned int)irq7, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 0].interrupt = make_interrupt_gate ((unsigned int)irq8, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 1].interrupt = make_interrupt_gate ((unsigned int)irq9, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 2].interrupt = make_interrupt_gate ((unsigned int)irq10, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 3].interrupt = make_interrupt_gate ((unsigned int)irq11, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 4].interrupt = make_interrupt_gate ((unsigned int)irq12, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 5].interrupt = make_interrupt_gate ((unsigned int)irq13, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 6].interrupt = make_interrupt_gate ((unsigned int)irq14, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[PIC_SLAVE_BASE + 7].interrupt = make_interrupt_gate ((unsigned int)irq15, KERNEL_CODE_SELECTOR, RING0, PRESENT);
 
-  idt[TRAP_BASE + 0].interrupt = make_interrupt_gate ((unsigned int)trap0, KERNEL_CODE_SELECTOR, RING0, PRESENT);
+  idt_entry[TRAP_BASE + 0].interrupt = make_interrupt_gate ((unsigned int)trap0, KERNEL_CODE_SELECTOR, RING0, PRESENT);
 
   idt_flush (&ip);
 }
@@ -255,8 +255,8 @@ install_idt ()
 void
 exception_handler (registers_t regs)
 {
-  if (interrupt_handlers[regs.number]) {
-    interrupt_handlers[regs.number] (&regs);
+  if (interrupt_handler[regs.number]) {
+    interrupt_handler[regs.number] (&regs);
   }
   else {
     default_handler (&regs);
@@ -268,7 +268,7 @@ irq_handler (registers_t regs)
 {
   /* STABLE:  interrupt_handlers[regs.number] != 0.
      This is established in install_idt and maintained by get_interrupt_handler and set_interrupt_handler. */
-  interrupt_handlers[regs.number] (&regs);
+  interrupt_handler[regs.number] (&regs);
 
   /* Send end-of-interrupt. */
   if (PIC_SLAVE_BASE <= regs.number && regs.number < PIC_SLAVE_LIMIT) {
@@ -280,8 +280,8 @@ irq_handler (registers_t regs)
 void
 trap_handler (registers_t regs)
 {
-  if (interrupt_handlers[regs.number]) {
-    interrupt_handlers[regs.number] (&regs);
+  if (interrupt_handler[regs.number]) {
+    interrupt_handler[regs.number] (&regs);
   }
   else {
     default_handler (&regs);
@@ -305,10 +305,10 @@ set_interrupt_handler (unsigned int num,
 		       interrupt_handler_t handler)
 {
   kassert (num < INTERRUPT_COUNT);
-  kassert (interrupt_handlers[num] == default_handler);
+  kassert (interrupt_handler[num] == default_handler);
   kassert (handler != 0);
 
-  interrupt_handlers[num] = handler;
+  interrupt_handler[num] = handler;
   
   /* Change the masks on the interrupt controllers. */
   if (PIC_MASTER_BASE <= num && num < PIC_MASTER_LIMIT) {

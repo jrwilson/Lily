@@ -4,7 +4,7 @@
 
 	[bits 32]
 
-	;; Starting virtual address of the kernel.
+	;; Starting virtual address of the kernel.  Should agree with mm.c.
 	KERNEL_VIRTUAL_BASE equ 0xC0000000
 	;; The size of the stack.
 	STACK_SIZE equ 0x1000

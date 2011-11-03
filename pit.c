@@ -16,7 +16,7 @@
 
 #include "pit.h"
 #include "io.h"
-#include "interrupt.h"
+#include "idt.h"
 #include "kput.h"
 
 #define PIT_CHANNEL0 0x40
