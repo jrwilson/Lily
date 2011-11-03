@@ -28,7 +28,7 @@ extern void
 gdt_flush (gdt_ptr_t*);
 
 void
-initialize_gdt (void)
+gdt_initialize (void)
 {
   gp.limit = (sizeof (descriptor_t) * DESCRIPTOR_COUNT) - 1;
   gp.base = (unsigned int)gdt_entry;

@@ -8,25 +8,30 @@ LD=ld
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
 kernel.o \
+io.o \
+kput.o \
+halt.o \
 descriptor.o \
 gdt_asm.o \
 gdt.o \
 idt_asm.o \
 idt.o \
-mm.o \
-kput.o \
-io.o \
-halt.o \
-hash_map.o \
-automata.o \
-ksyscall.o \
-scheduler.o \
-syscall.o \
-fifo_scheduler.o \
-pit.o \
-count_to_ten.o \
-producer.o \
-consumer.o
+frame_manager.o \
+vm_manager.o
+
+
+
+# mm.o \
+# hash_map.o \
+# automata.o \
+# ksyscall.o \
+# scheduler.o \
+# syscall.o \
+# fifo_scheduler.o \
+# pit.o \
+# count_to_ten.o \
+# producer.o \
+# consumer.o
 
 
 KERNEL=lily

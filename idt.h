@@ -30,7 +30,7 @@ typedef struct registers registers_t;
 typedef void (*interrupt_handler_t) (registers_t*);
 
 void
-initialize_idt (void);
+idt_initialize (void);
 
 void
 enable_interrupts (void);

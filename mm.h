@@ -22,22 +22,7 @@
 typedef struct page_directory page_directory_t;
 
 void
-initialize_identity_map (void);
-
-void
-extend_identity (unsigned int addr);
-
-void
-install_page_fault_handler (void);
-
-page_directory_t*
-allocate_page_directory (void);
-
-void
-switch_to_page_directory (page_directory_t* ptr);
-
-void
-initialize_heap (multiboot_info_t* mbd);
+initialize_memory_manager (const multiboot_info_t* mbd);
 
 void
 dump_heap (void);

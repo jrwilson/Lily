@@ -157,7 +157,29 @@ This led me to do some reading where I found the following design decisions:
     Yes.  It makes dealing with hardware easier since there is no address translation.
     No.  It makes dealing with software harder due to manual address translation.  It is also more efficient since segments don't need to be change when switch to/from the kernel.
 
-Based on this, I affirm my decision to map the kernel is all address spaces using virtual memory.
+Based on this, I affirm my decision to map the kernel in all address spaces using virtual memory.
+
+Today, I removed the GDT trick and enabled paging on boot.
+I'm currently refactoring the memory manager.
+
+2011-11-03
+
+Linux uses the buddy algorithm to allocate frames.
+It defines three zones: DMA, NORMAL, and HIGH.
+The HIGH zone is not important.
+The DMA zone includes memory below 16M for doing DMA with ISA devices.
+The NORMAL zone includes memory above 16M.
+The Linux kernel does not use virtual memory, thus, allocations must be contiguous in physical memory.
+Consequently, the buddy system is the write choice for Linux because it allocates and coalesces contiguous memory efficiently.
+
+Since Lily uses virtual memory in the kernel, physical allocations do not need to be contiguous except for DMA.
+Thus, I will retain the DMA and NORMAL zones of Linux and use the buddy algorithm for DMA.
+The NORMAL zone will use a simpler algorithm until there is a good reason to use something more complex.
+The algorithm will use an array where each element corresponds to a frame.
+A frame is either USED or FREE.
+All of the FREE frames form a singly linked list that can be used to allocate or free a frame in O(1) time.
+I believe this may be called a stack allocator but I'm not for certain.
+
 
 
 

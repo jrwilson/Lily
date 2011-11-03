@@ -168,7 +168,7 @@ default_handler (registers_t* regs)
 }
 
 void
-initialize_idt ()
+idt_initialize ()
 {
   int k;
 

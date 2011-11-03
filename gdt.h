@@ -23,6 +23,6 @@
 #define USER_DATA_SELECTOR 0x20
 
 void
-initialize_gdt (void);
+gdt_initialize (void);
 
 #endif /* __gdt_h__ */
