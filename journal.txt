@@ -180,12 +180,58 @@ A frame is either USED or FREE.
 All of the FREE frames form a singly linked list that can be used to allocate or free a frame in O(1) time.
 I believe this may be called a stack allocator but I'm not for certain.
 
+When the kernel boots, it maps the first 4M of memory and engages virtual memory.
+(The GDT trick is gone.)
+It then initializes the global descriptor table (GDT) and interrupt descriptor table (IDT).
+It then initializes the frame manager which allocates physical memory.
+The frame manager allocates a data structure for each frame and this might exceed the 4M limit on machines with a lot of memory.
+(The allocation routine checks for this.)
+The frame manager reserves frames below 16M for DMA but will cut into this when no normal frames are free.
+To be useful, this either requires a contiguous memory allocator like the buddy algorithm.
+Once the frame manager is initialize, the virtual memory manager is initialized.
+The virtual memory manager uses a new page directory and page table.
+The virtual memory manager uses the frame manager to expand the logical address space of the kernel.
+Various allocators can be built using this feature of the virtual memory manager.
+
+I did use a neat trick where page descriptors are mapped to themselves.
+All of the page tables for a memory space appear at 0xFFC00000 with the last one being the page directory.
+The memory layout from bottom to top is:
+
+0x00000000-0x00100000 Low memory for I/O
+ 
+0xC0000000-0xC0100000 Low memory for I/O (Set by KERNEL_VIRTUAL_BASE et. al)
+0xC0100000-?	      Hole from setup
+		      Kernel code, data, stack
+		      Hole from GRUB data structures
+		      Frame manager data structures
+		      Heap
+	  ...
+0xFFC00000-0xFFFFFFFF Page tables and page directory
+
+The kernel code and data contains a stack which I plan to relocate at 0xFFC00000.
+The frame for the stack in the kernel can be reclaimed once moved.
+
+I had originally plan to have all automata share a stack.
+However, this creates a potential security problem if the stack isn't scrubbed between uses.
+Thus, the two choices are:
+1.  Give every automaton a private stack.
+    The cost in memory is proportional to the number of automata.
+    The cost in time is loading a different stack for every action.
+2.  Share a common stack.
+    The cost in memory is constant.
+    The cost in time is scrubbing the stack for every action.
+
+Given the nature of I/O automata, I feel like most stacks will be small but this is a good question to study empirically.
+In order for the second choice to be better, a processor must be able to clear the stack faster than caching.
+Actually, this brings up an interesting point since an automaton will always write to the cache before reading it.
+An automaton will only suffer a cache miss on a stack if enough data has been moved to evict the stack pages from the cache.
+
+Automata do have an interesting property in that the stack is alway assumed to be empty when an action is executed.
+Since the stack is a scratchpad, it is safe to steal frames used for a stack.
+One could possibly use a watermark to reclaim unused frames.
+    
 
 
-
-Remove GDT trick
-Map page directories to themselves
-Improve frame allocation (contiguous is useful).
 
 
 
