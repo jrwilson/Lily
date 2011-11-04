@@ -20,7 +20,14 @@
 
 typedef enum {
   SYSCALL_FINISH = 0,
-  SYSCALL_SCHEDULE = 1,
+  SYSCALL_SCHEDULE,
+  SYSCALL_GET_PAGE_SIZE,
+  SYSCALL_ALLOCATE,
 } syscall_t;
+
+typedef enum {
+  SYSERROR_SUCCESS = 0,
+  SYSERROR_REQUESTED_SIZE_NOT_ALIGNED,
+} syserror_t;
 
 #endif /* __syscall_defh__ */

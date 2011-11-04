@@ -69,6 +69,9 @@ static unsigned int placement_end;
 /* Linked list of zone allocators. */
 static zone_item_t* zone_head = 0;
 
+extern void
+clear_frame (unsigned int frame);
+
 static void
 extend_identity_map (unsigned int addr)
 {
@@ -185,7 +188,7 @@ frame_manager_initialize (const multiboot_info_t* mbd)
   /* The loader has mapped physical memory from 0x00000000-0x00400000 has been mapped to the logical addresses 0x00000000-0x00400000 and 0xC0000000-0xC0400000. */
 
   /* One past the last byte in identity map. */
-  identity_end = PAGE_ALIGN ((unsigned int)&kernel_end - KERNEL_VIRTUAL_BASE + PAGE_SIZE - 1);
+  identity_end = PAGE_ALIGN_UP ((unsigned int)&kernel_end - KERNEL_VIRTUAL_BASE);
 
   /* Extend memory to cover the GRUB data structures. */
   extend_identity_map ((unsigned int)mbd + sizeof (multiboot_info_t));
@@ -246,8 +249,7 @@ frame_manager_initialize (const multiboot_info_t* mbd)
   /* } */
 
   /* Align the end of the identity map. */
-  identity_end = PAGE_ALIGN (identity_end + PAGE_SIZE - 1);
-  /* TODO:  Memory from [identity_begin, identity_end) can be reclaimed after the multiboot data structures are processed. */
+  identity_end = PAGE_ALIGN_UP (identity_end);
 
   /* Marker for a placement allocator. */
   placement_end = identity_end + KERNEL_VIRTUAL_BASE;
@@ -290,9 +292,6 @@ frame_manager_initialize (const multiboot_info_t* mbd)
     /* Move to the next descriptor. */
     ptr = (multiboot_memory_map_t*) (((char*)&(ptr->addr)) + ptr->size);
   }
-
-  /* The logical address space can be expanded starting from placement_end. */
-  placement_end = PAGE_ALIGN (placement_end + PAGE_SIZE - 1);
 }
 
 unsigned int
@@ -305,6 +304,18 @@ unsigned int
 frame_manager_physical_end (void)
 {
   return placement_end - KERNEL_VIRTUAL_BASE;
+}
+
+void*
+frame_manager_logical_begin (void)
+{
+  return (void*) (identity_end + KERNEL_VIRTUAL_BASE);
+}
+
+void*
+frame_manager_logical_end (void)
+{
+  return (void*) placement_end;
 }
 
 void
@@ -340,6 +351,8 @@ frame_manager_allocate ()
   }
   
   /* Out of physical memory. */
-  kassert (0);
+  kputs ("Out of physical memory\n");
+  halt ();
+  
   return 0;
 }

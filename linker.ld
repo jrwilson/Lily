@@ -27,19 +27,17 @@ SECTIONS
 	/* Place the program text after the previous segment but logically after 0xC000000. */
 	.text ALIGN (0x1000) : AT(ADDR(.text) - 0xC0000000)
 	{
-		kernel_begin = .;	
+		kernel_begin = .;
+		text_begin = .;
 		*(.text)
-	}
-
-	/* Place read-only data on page boundary physically after the previous segment but logically after 0xC0000000. */
-	.rodata ALIGN (0x1000) : AT(ADDR(.rodata) - 0xC0000000)
-	{
-		*(.rodata)
+		text_end = .;
 	}
 
 	/* Place the initialized data on page boundary physically after the previous segment but logically after 0xC0000000. */
 	.data ALIGN (0x1000) : AT(ADDR(.data) - 0xC0000000)
 	{
+		data_begin = .;
+		*(.rodata)
 		*(.data)
 	}
 
@@ -47,6 +45,8 @@ SECTIONS
 	.bss ALIGN (0x1000) : AT(ADDR(.bss) - 0xC0000000)
 	{
 		*(.bss)
+		*(COMMON)
+		data_end = .;
 		kernel_end = .;
 	}
 

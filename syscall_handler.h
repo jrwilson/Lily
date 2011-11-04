@@ -1,10 +1,10 @@
-#ifndef __ksyscall_h__
-#define __ksyscall_h__
+#ifndef __syscall_handler_h__
+#define __syscall_handler_h__
 
 /*
   File
   ----
-  ksyscall.h
+  syscall_handler.h
   
   Description
   -----------
@@ -17,6 +17,6 @@
 #include "syscall_def.h"
 
 void
-initialize_syscalls (void);
+syscall_handler_initialize (void);
 
-#endif /* __ksyscall_h__ */
+#endif /* __syscall_handler_h__ */

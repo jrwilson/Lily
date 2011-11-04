@@ -26,4 +26,10 @@ sys_schedule (unsigned int action_entry_point,
 	      int output_status,
 	      unsigned int output_value);
 
+unsigned int
+sys_get_page_size (void);
+
+void*
+sys_allocate (unsigned int size);
+
 #endif /* __syscall_h__ */

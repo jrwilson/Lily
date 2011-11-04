@@ -14,23 +14,23 @@
   Justin R. Wilson
 */
 
-#include "automata.h"
+#include "system_automaton.h"
 
 typedef struct scheduler_context scheduler_context_t;
 
 void
-initialize_scheduler ();
+scheduler_initialize (automaton_t* automaton);
 
-scheduler_context_t*
-allocate_scheduler_context (aid_t aid);
+/* scheduler_context_t* */
+/* allocate_scheduler_context (aid_t aid); */
 
-aid_t
-get_current_aid (void);
+automaton_t*
+scheduler_get_current_automaton (void);
 
-void
-schedule_action (aid_t aid,
-		 unsigned int action_entry_point,
-		 unsigned int parameter);
+/* void */
+/* schedule_action (aid_t aid, */
+/* 		 unsigned int action_entry_point, */
+/* 		 unsigned int parameter); */
 
 void
 finish_action (int output_status,

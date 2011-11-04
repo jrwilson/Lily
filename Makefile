@@ -17,16 +17,15 @@ gdt.o \
 idt_asm.o \
 idt.o \
 frame_manager.o \
-vm_manager.o
+vm_manager.o \
+syscall_handler.o \
+scheduler.o \
+system_automaton.o \
+syscall.o \
+malloc.o \
+string.o
 
-
-
-# mm.o \
 # hash_map.o \
-# automata.o \
-# ksyscall.o \
-# scheduler.o \
-# syscall.o \
 # fifo_scheduler.o \
 # pit.o \
 # count_to_ten.o \

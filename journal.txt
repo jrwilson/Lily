@@ -230,8 +230,6 @@ Automata do have an interesting property in that the stack is alway assumed to b
 Since the stack is a scratchpad, it is safe to steal frames used for a stack.
 One could possibly use a watermark to reclaim unused frames.
     
+2011-11-04
 
-
-
-
-
+Make code read-only.

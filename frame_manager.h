@@ -25,6 +25,12 @@ frame_manager_physical_begin (void);
 unsigned int
 frame_manager_physical_end (void);
 
+void*
+frame_manager_logical_begin (void);
+
+void*
+frame_manager_logical_end (void);
+
 void
 frame_manager_mark_as_used (unsigned int frame);
 

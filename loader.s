@@ -84,7 +84,7 @@ loop2:
 	[section .text]
 highhalf:	
 	;; Setup the stack in order to call kmain.
-	mov esp, stack_top
+	mov esp, stack_end
 	;; Push the multiboot magic number.
 	mov eax, [boot_eax]
 	push eax
@@ -99,5 +99,8 @@ highhalf:
 	[section .bss]
 	;; Reserve space for the stack.
 	ALIGN 4
+	[global stack_begin]
+stack_begin:	
 	resb STACK_SIZE
-stack_top:
+	[global stack_end]
+stack_end:	
