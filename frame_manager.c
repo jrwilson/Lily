@@ -38,19 +38,16 @@ typedef struct zone_item zone_item_t;
 struct zone_item {
   zone_type_t zone_type;
   allocator_type_t allocator_type;
+  unsigned int frame_begin;
+  unsigned int frame_end;
+  unsigned int free_count;
   zone_item_t* next;
 };
 
 #define STACK_ALLOCATOR_EOL 0x7FFFFFFF
 
 typedef struct stack_allocator {
-  /* From zone item. */
-  zone_type_t zone_type;
-  allocator_type_t allocator_type;
-  zone_item_t* next;
-  /* */
-  unsigned int frame_begin;
-  unsigned int frame_end;
+  zone_item_t zone_item;
   int free_head;
   /*
     Entry stores the next entry on the free list or the reference count.
@@ -95,10 +92,11 @@ allocate_stack_allocator (unsigned int first,
 {
   unsigned int size = ADDRESS_TO_FRAME (last + 1 - first);
   stack_allocator_t* ptr = placement_alloc (sizeof (stack_allocator_t) + size * sizeof (int));
-  ptr->allocator_type = STACK_ALLOCATOR;
-  ptr->next = 0;
-  ptr->frame_begin = ADDRESS_TO_FRAME (first);
-  ptr->frame_end = ptr->frame_begin + size;
+  ptr->zone_item.allocator_type = STACK_ALLOCATOR;
+  ptr->zone_item.frame_begin = ADDRESS_TO_FRAME (first);
+  ptr->zone_item.frame_end = ptr->zone_item.frame_begin + size;
+  ptr->zone_item.free_count = size;
+  ptr->zone_item.next = 0;
   ptr->free_head = 0;
   int k;
   for (k = 0; k < (int)size; ++k) {
@@ -109,31 +107,28 @@ allocate_stack_allocator (unsigned int first,
   return (zone_item_t*)ptr;
 }
 
-static int
+static void
 stack_allocator_mark_as_used (zone_item_t* p,
 			      unsigned int frame)
 {
   kassert (p != 0);
   kassert (p->allocator_type == STACK_ALLOCATOR);
+  kassert (frame >= p->frame_begin && frame < p->frame_end);
+
   stack_allocator_t* ptr = (stack_allocator_t*)p;
 
-  if (frame >= ptr->frame_begin && frame < ptr->frame_end) {
-    int frame_idx = frame - ptr->frame_begin;
-    /* Should be free. */
-    kassert (ptr->entry[frame_idx] >= 0 && ptr->entry[frame_idx] != STACK_ALLOCATOR_EOL);
-    /* Find the one that points to it. */
-    int idx;
-    for (idx = ptr->free_head; idx != STACK_ALLOCATOR_EOL && ptr->entry[idx] != frame_idx; idx = ptr->entry[idx]) ;;
-    kassert (idx != STACK_ALLOCATOR_EOL && ptr->entry[idx] == frame_idx);
-    /* Update the pointers. */
-    ptr->entry[idx] = ptr->entry[frame_idx];
-    ptr->entry[frame_idx] = -1;
+  int frame_idx = frame - p->frame_begin;
+  /* Should be free. */
+  kassert (ptr->entry[frame_idx] >= 0 && ptr->entry[frame_idx] != STACK_ALLOCATOR_EOL);
+  /* Find the one that points to it. */
+  int idx;
+  for (idx = ptr->free_head; idx != STACK_ALLOCATOR_EOL && ptr->entry[idx] != frame_idx; idx = ptr->entry[idx]) ;;
+  kassert (idx != STACK_ALLOCATOR_EOL && ptr->entry[idx] == frame_idx);
+  /* Update the pointers. */
+  ptr->entry[idx] = ptr->entry[frame_idx];
+  ptr->entry[frame_idx] = -1;
 
-    return 0;
-  }
-  else {
-    return -1;
-  }
+  --p->free_count;
 }
 
 static unsigned int
@@ -141,18 +136,53 @@ stack_allocator_allocate (zone_item_t* p)
 {
   kassert (p != 0);
   kassert (p->allocator_type == STACK_ALLOCATOR);
+  kassert (p->free_count != 0);
   stack_allocator_t* ptr = (stack_allocator_t*)p;
+  kassert (ptr->free_head != STACK_ALLOCATOR_EOL);
 
-  if (ptr->free_head != STACK_ALLOCATOR_EOL) {
-    unsigned int idx = ptr->free_head;
-    ptr->free_head = ptr->entry[idx];
-    ptr->entry[idx] = -1;
-    return idx + ptr->frame_begin;
-  }
-  else {
-    return 0;
+  unsigned int idx = ptr->free_head;
+  ptr->free_head = ptr->entry[idx];
+  ptr->entry[idx] = -1;
+  --p->free_count;
+  return idx + p->frame_begin;
+}
+
+static void
+stack_allocator_incref (zone_item_t* p,
+			unsigned int frame)
+{
+  kassert (p != 0);
+  kassert (p->allocator_type == STACK_ALLOCATOR);
+  kassert (frame >= p->frame_begin && frame < p->frame_end);
+  stack_allocator_t* ptr = (stack_allocator_t*)p;
+  unsigned int idx = frame - p->frame_begin;
+  /* Frame is allocated. */
+  kassert (ptr->entry[idx] < 0);
+  /* "Increment" the reference count. */
+  --ptr->entry[idx];
+}
+
+static void
+stack_allocator_decref (zone_item_t* p,
+			unsigned int frame)
+{
+  kassert (p != 0);
+  kassert (p->allocator_type == STACK_ALLOCATOR);
+  kassert (frame >= p->frame_begin && frame < p->frame_end);
+  stack_allocator_t* ptr = (stack_allocator_t*)p;
+  unsigned int idx = frame - p->frame_begin;
+  /* Frame is allocated. */
+  kassert (ptr->entry[idx] < 0);
+  /* "Decrement" the reference count. */
+  ++ptr->entry[idx];
+  /* Free the frame. */
+  if (ptr->entry[idx]) {
+    ptr->entry[idx] = ptr->free_head;
+    ptr->free_head = idx;
+    ++p->free_count;
   }
 }
+
 
 static void
 allocate_dma_zone (unsigned int first,
@@ -318,41 +348,76 @@ frame_manager_logical_end (void)
   return (void*) placement_end;
 }
 
+static zone_item_t*
+find_allocator (unsigned int frame)
+{
+  zone_item_t* ptr;
+  /* Find the allocator. */
+  for (ptr = zone_head; ptr != 0 && !(frame >= ptr->frame_begin && frame < ptr->frame_end) ; ptr = ptr->next) ;;
+
+  /* No allocator for frame. */
+  kassert (ptr != 0);
+
+  return ptr;
+}
+
 void
 frame_manager_mark_as_used (unsigned int frame)
 {
-  zone_item_t* ptr;
-  for (ptr = zone_head; ptr != 0; ptr = ptr->next) {
-    switch (ptr->allocator_type) {
-    case STACK_ALLOCATOR:
-      if (stack_allocator_mark_as_used (ptr, frame) == 0) {
-	return;
-      }
-      break;
-    }
+  zone_item_t* ptr = find_allocator (frame);
+
+  /* Dispatch. */
+  switch (ptr->allocator_type) {
+  case STACK_ALLOCATOR:
+    stack_allocator_mark_as_used (ptr, frame);
+    break;
   }
 }
 
 unsigned int
 frame_manager_allocate ()
 {
-  unsigned int retval = 0;
-
   zone_item_t* ptr;
-  for (ptr = zone_head; ptr != 0; ptr = ptr->next) {
-    switch (ptr->allocator_type) {
-    case STACK_ALLOCATOR:
-      retval = stack_allocator_allocate (ptr);
-      if (retval != 0) {
-	return retval;
-      }
-      break;
-    }
+  /* Find an allocator with a free frame. */
+  for (ptr = zone_head; ptr != 0 && ptr->free_count == 0 ; ptr = ptr->next) ;;
+
+  /* Out of frames. */
+  kassert (ptr != 0);
+
+  /* Dispatch. */
+  switch (ptr->allocator_type) {
+  case STACK_ALLOCATOR:
+    return stack_allocator_allocate (ptr);
+    break;
   }
-  
-  /* Out of physical memory. */
-  kputs ("Out of physical memory\n");
-  halt ();
-  
-  return 0;
+
+  /* Not reached. */
+  kassert (0);
+  return -1;
+}
+
+void
+frame_mananger_incref (unsigned int frame)
+{
+  zone_item_t* ptr = find_allocator (frame);
+
+  /* Dispatch. */
+  switch (ptr->allocator_type) {
+  case STACK_ALLOCATOR:
+    stack_allocator_incref (ptr, frame);
+    break;
+  }
+}
+
+void
+frame_manager_decref (unsigned int frame)
+{
+  zone_item_t* ptr = find_allocator (frame);
+
+  /* Dispatch. */
+  switch (ptr->allocator_type) {
+  case STACK_ALLOCATOR:
+    stack_allocator_decref (ptr, frame);
+    break;
+  }
 }
