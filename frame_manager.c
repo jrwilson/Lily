@@ -44,17 +44,19 @@ struct zone_item {
   zone_item_t* next;
 };
 
-#define STACK_ALLOCATOR_EOL 0x7FFFFFFF
+/* A frame can be shared 32767 times. */
+typedef short int frame_entry_t;
+#define STACK_ALLOCATOR_EOL 0x7FFF
 
 typedef struct stack_allocator {
   zone_item_t zone_item;
-  int free_head;
+  frame_entry_t free_head;
   /*
     Entry stores the next entry on the free list or the reference count.
     Next has the range [0, size - 1].  0x7FFFFFFF marks the end of the free list.
     Reference count is the additive inverse of the reference count.
   */
-  int entry[];
+  frame_entry_t entry[];
 } stack_allocator_t;
 
 /* Marks the end of the kernel upon loading. */
@@ -355,9 +357,6 @@ find_allocator (unsigned int frame)
   /* Find the allocator. */
   for (ptr = zone_head; ptr != 0 && !(frame >= ptr->frame_begin && frame < ptr->frame_end) ; ptr = ptr->next) ;;
 
-  /* No allocator for frame. */
-  kassert (ptr != 0);
-
   return ptr;
 }
 
@@ -366,11 +365,13 @@ frame_manager_mark_as_used (unsigned int frame)
 {
   zone_item_t* ptr = find_allocator (frame);
 
-  /* Dispatch. */
-  switch (ptr->allocator_type) {
-  case STACK_ALLOCATOR:
-    stack_allocator_mark_as_used (ptr, frame);
-    break;
+  if (ptr != 0) {
+    /* Dispatch. */
+    switch (ptr->allocator_type) {
+    case STACK_ALLOCATOR:
+      stack_allocator_mark_as_used (ptr, frame);
+      break;
+    }
   }
 }
 
@@ -401,6 +402,9 @@ frame_mananger_incref (unsigned int frame)
 {
   zone_item_t* ptr = find_allocator (frame);
 
+  /* No allocator for frame. */
+  kassert (ptr != 0);
+
   /* Dispatch. */
   switch (ptr->allocator_type) {
   case STACK_ALLOCATOR:
@@ -413,6 +417,9 @@ void
 frame_manager_decref (unsigned int frame)
 {
   zone_item_t* ptr = find_allocator (frame);
+
+  /* No allocator for frame. */
+  kassert (ptr != 0);
 
   /* Dispatch. */
   switch (ptr->allocator_type) {

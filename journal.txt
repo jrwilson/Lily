@@ -232,4 +232,19 @@ One could possibly use a watermark to reclaim unused frames.
     
 2011-11-04
 
+Started overhauling the memory subsystems.
+
+2011-11-05
+
+The frame manager ignores memory below 1M, reserves memory below 16M for DMA, and places all other memory in a normal zone.
+Running the code on a machine with 4G+ is undefined.
+The stack allocator keeps a 15-bit reference count so a frame can be shared 32,767 times.
+I think this is reasonable as I expect the number of automata in a system to be in the hundreds.
+
+
+
+
+
+
+
 Make code read-only.
