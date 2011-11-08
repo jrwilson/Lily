@@ -25,10 +25,10 @@ sys_finish (int output_status,
 }
 
 void
-sys_schedule (unsigned int action_entry_point,
-	      unsigned int parameter,
+sys_schedule (void* action_entry_point,
+	      parameter_t parameter,
 	      int output_status,
-	      unsigned int output_value)
+	      value_t output_value)
 {
   asm volatile ("mov %0, %%eax\n"
 		"mov %1, %%ebx\n"
@@ -37,10 +37,10 @@ sys_schedule (unsigned int action_entry_point,
 		"int $0x80\n" : : "r"(output_status ? SYSCALL_SCHEDULE | OUTPUT_VALID_MASK : SYSCALL_SCHEDULE), "m"(action_entry_point), "m"(parameter), "m"(output_value) : "eax", "ebx", "ecx", "edx");
 }
 
-unsigned int
+size_t
 sys_get_page_size (void)
 {
-  unsigned int retval;
+  size_t retval;
   asm volatile ("mov %2, %%eax\n"
 		"int $0x80\n"
 		"mov %%eax, %0\n"
@@ -50,7 +50,7 @@ sys_get_page_size (void)
 }
 
 void*
-sys_allocate (unsigned int size)
+sys_allocate (size_t size)
 {
   void* ptr;
   asm volatile ("mov %2, %%eax\n"

@@ -19,16 +19,7 @@
 #include "scheduler.h"
 #include "frame_manager.h"
 #include "vm_manager.h"
-#include "idt.h"
-#include "string.h"
-
-/* Macros for page faults. */
-#define PAGE_FAULT_INTERRUPT 14
-#define PAGE_PROTECTION_ERROR (1 << 0)
-#define PAGE_WRITE_ERROR (1 << 1)
-#define PAGE_USER_ERROR (1 << 2)
-#define PAGE_RESERVED_ERROR (1 << 3)
-#define PAGE_INSTRUCTION_ERROR (1 << 4)
+#include "fifo_scheduler.h"
 
 typedef struct {
   /* aid_t aid; */
@@ -46,9 +37,182 @@ extern int stack_begin;
 extern int stack_end;
 
 static automaton_t* system_automaton = 0;
+static list_allocator_t* system_allocator = 0;
 
-/* The set of bindings. */
-static hash_map_t* bindings = 0;
+static fifo_scheduler_t* scheduler = 0;
+static unsigned int counter = 0;
+
+static void
+schedule ();
+
+static int
+init_precondition ()
+{
+  return scheduler == 0;
+}
+
+static void
+init_effect ()
+{
+  kputs (__func__); kputs ("\n");
+  scheduler = fifo_scheduler_allocate (system_allocator);
+}
+
+static void
+init_schedule () {
+  schedule ();
+}
+
+UP_INTERNAL (init);
+
+static int
+increment_precondition ()
+{
+  return counter < 10;
+}
+
+static void
+increment_effect ()
+{
+  kputs ("counter = "); kputx32 (counter); kputs ("\n");
+  ++counter;
+}
+
+static void
+increment_schedule () {
+  schedule ();
+}
+
+UP_INTERNAL (increment);
+
+static void
+schedule ()
+{
+  if (init_precondition ()) {
+    SCHEDULER_ADD (scheduler, &init_entry, 0);
+  }
+  if (increment_precondition ()) {
+    SCHEDULER_ADD (scheduler, &increment_entry, 0);
+  }
+}
+
+void
+system_automaton_initialize (void* placement_begin,
+			     void* placement_end)
+{
+  kassert (system_automaton == 0);
+
+  /* For bootstrapping, pretend that an automaton is running. */
+
+  /* Create a simple memory map. */
+  vm_area_t text;
+  vm_area_initialize (&text,
+		      VM_AREA_TEXT,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)&text_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)&text_end),
+		      SUPERVISOR,
+		      NOT_WRITABLE);
+  vm_area_t data;
+  vm_area_initialize (&data,
+		      VM_AREA_DATA,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)&data_end),
+		      SUPERVISOR,
+		      WRITABLE);
+  vm_area_t placement;
+  vm_area_initialize (&placement,
+		      VM_AREA_DATA,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)placement_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)placement_end),
+		      SUPERVISOR,
+		      WRITABLE);
+  text.prev = 0;
+  text.next = &data;
+  data.prev = &text;
+  data.next = &placement;
+  placement.prev = &data;
+  placement.next = 0;
+
+  /* Initialize an automaton. */
+  automaton_t fake_automaton;
+  automaton_initialize (&fake_automaton, RING0, vm_manager_page_directory_physical_address (), &stack_end, vm_manager_page_directory_logical_address (), SUPERVISOR);
+  fake_automaton.memory_map_begin = &text;
+  fake_automaton.memory_map_end = &placement;
+
+  /* Use it as the system automaton. */
+  system_automaton = &fake_automaton;
+
+  /* Initialize the scheduler so it thinks the system automaton is executing. */
+  scheduler_initialize (&fake_automaton);
+
+  /* Now, we can start allocating. */
+
+  /* Allocate the allocator. */
+  system_allocator = list_allocator_allocate ();
+  kassert (system_allocator != 0);
+
+  /* Allocate the real system automaton.
+     The system automaton's ceiling is the start of the paging data structures. */
+  automaton_t* sys_automaton = automaton_allocate (RING0, vm_manager_page_directory_physical_address (), &stack_end, vm_manager_page_directory_logical_address (), SUPERVISOR);
+
+  /* Create a memory map for the system automatom. */
+  vm_area_t* ptr;
+  for (ptr = &text; ptr != 0; ptr = ptr->next) {
+    kassert (automaton_insert_vm_area (sys_automaton, ptr) == 0);
+  }
+
+  /* Add the actions. */
+  automaton_set_action_type (sys_automaton, &init_entry, INTERNAL);
+  automaton_set_action_type (sys_automaton, &increment_entry, INTERNAL);
+
+  /* Set the system automaton. */
+  system_automaton = sys_automaton;
+
+  /* Go! */
+  schedule_action (system_automaton, &init_entry, 0);
+
+  /* Start the scheduler.  Doesn't return. */
+  finish_action (0, 0);
+
+  kassert (0);
+}
+
+automaton_t*
+system_automaton_get_instance (void)
+{
+  kassert (system_automaton != 0);
+  return system_automaton;
+}
+
+list_allocator_t*
+system_automaton_get_allocator (void)
+{
+  kassert (system_allocator != 0);
+  return system_allocator;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* /\* The set of bindings. *\/ */
+/* static hash_map_t* bindings = 0; */
 
 /* /\* The hash map of bindings uses the output action as the key. *\/ */
 /* static unsigned int */
@@ -75,187 +239,8 @@ static hash_map_t* bindings = 0;
 /*   } */
 /* } */
 
-static void
-page_fault_handler (registers_t* regs)
-{
-  /* Get the faulting address. */
-  void* addr;
-  asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-  addr = (void*)PAGE_ALIGN_DOWN ((size_t)addr);
 
-  automaton_t* automaton;
 
-  if (addr < (void*)KERNEL_VIRTUAL_BASE) {
-    /* Get the current automaton. */  
-    automaton = scheduler_get_current_automaton ();
-  }
-  else {
-    automaton = system_automaton_get_instance ();
-  }
-
-  /* Find the address in the memory map. */
-  vm_area_t* ptr;
-  for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
-    if (addr >= ptr->begin && addr < ptr->end) {
-      break;
-    }
-  }
-
-  if (ptr != 0) {
-    if (regs->error & PAGE_PROTECTION_ERROR) {
-      /* Protection error. */
-      kassert (0);
-    }
-    else {
-      /* Not present. */
-      if (regs->error & PAGE_INSTRUCTION_ERROR) {
-  	/* Instruction. */
-  	kassert (0);
-      }
-      else {
-  	/* Data. */
-  	/* Back the request with a frame. */
-  	vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, ptr->writable, PRESENT);
-  	/* Clear. */
-  	memset (addr, 0xFF, PAGE_SIZE);
-  	return;
-      }
-    }
-  }
-  else {
-    /* TODO:  Accessed memory not in their map. Segmentation fault. */
-    kassert (0);
-  }
-
-  /* kputs ("Page fault!!\n"); */
-  
-  /* kputs ("Address: "); kputp (addr); kputs ("\n"); */
-  /* kputs ("Codes: "); */
-  /* if (regs->error & PAGE_PROTECTION_ERROR) { */
-  /*   kputs ("PROTECTION "); */
-  /* } */
-  /* else { */
-  /*   kputs ("NOT_PRESENT "); */
-  /* } */
-
-  /* if (regs->error & PAGE_WRITE_ERROR) { */
-  /*   kputs ("WRITE "); */
-  /* } */
-  /* else { */
-  /*   kputs ("READ "); */
-  /* } */
-
-  /* if (regs->error & PAGE_USER_ERROR) { */
-  /*   kputs ("USER "); */
-  /* } */
-  /* else { */
-  /*   kputs ("SUPERVISOR "); */
-  /* } */
-
-  /* if (regs->error & PAGE_RESERVED_ERROR) { */
-  /*   kputs ("RESERVED "); */
-  /* } */
-
-  /* if (regs->error & PAGE_INSTRUCTION_ERROR) { */
-  /*   kputs ("INSTRUCTION "); */
-  /* } */
-  /* else { */
-  /*   kputs ("DATA "); */
-  /* } */
-  /* kputs ("\n"); */
-  
-  /* kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n"); */
-  /* kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n"); */
-  
-  /* kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n"); */
-  /* kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n"); */
-  
-  /* kputs ("Halting"); */
-  /* halt (); */
-}
-
-void
-system_automaton_initialize (void* placement_begin,
-			     void* placement_end)
-{
-  kassert (bindings == 0);
-
-  set_interrupt_handler (PAGE_FAULT_INTERRUPT, page_fault_handler);
-
-  /* For bootstrapping, pretend that an automaton is running. */
-
-  /* Create a simple memory map. */
-
-  /* Text. */
-  vm_area_t text;
-  vm_area_initialize (&text,
-		      VM_AREA_TEXT,
-		      (void*)PAGE_ALIGN_DOWN ((size_t)&text_begin),
-		      (void*)PAGE_ALIGN_UP ((size_t)&text_end),
-		      SUPERVISOR,
-		      NOT_WRITABLE);
-
-  /* Data. */
-  vm_area_t data;
-  vm_area_initialize (&data,
-		      VM_AREA_DATA,
-		      (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin),
-		      (void*)PAGE_ALIGN_UP ((size_t)&data_end),
-		      SUPERVISOR,
-		      WRITABLE);
-
-  /* Placement data. */
-  vm_area_t placement;
-  vm_area_initialize (&placement,
-		      VM_AREA_DATA,
-		      (void*)PAGE_ALIGN_DOWN ((size_t)placement_begin),
-		      (void*)PAGE_ALIGN_UP ((size_t)placement_end),
-		      SUPERVISOR,
-		      WRITABLE);
-  text.prev = 0;
-  text.next = &data;
-  data.prev = &text;
-  data.next = &placement;
-  placement.prev = &data;
-  placement.next = 0;
-
-  /* For bootstrapping, pretend that an automaton is running. */
-  automaton_t fake_automaton;
-  fake_automaton.privilege = RING0;
-  fake_automaton.actions = 0;
-  fake_automaton.scheduler_context = 0;
-  fake_automaton.page_directory = vm_manager_page_directory_physical_address ();
-  fake_automaton.stack_pointer = &stack_end;
-  fake_automaton.memory_map_begin = &text;
-  fake_automaton.memory_map_end = &placement;
-  fake_automaton.memory_ceiling = vm_manager_page_directory_logical_address ();
-
-  system_automaton = &fake_automaton;
-
-  /* Initialize the scheduler so it thinks the system automaton is executing. */
-  scheduler_initialize (&fake_automaton);
-
-  /* The system automaton's ceiling is the start of the paging data structures. */
-  automaton_t* sys_automaton = automaton_allocate (RING0, vm_manager_page_directory_physical_address (), &stack_end, vm_manager_page_directory_logical_address ());
-
-  /* Form the system automaton's memory map. */
-  vm_area_t* ptr;
-  for (ptr = &text; ptr != 0; ptr = ptr->next) {
-    kassert (automaton_insert_vm_area (sys_automaton, ptr) == 0);
-  }
-  
-  system_automaton = sys_automaton;
-
-  kassert (0);
-}
-
-automaton_t*
-system_automaton_get_instance (void)
-{
-  kassert (system_automaton != 0);
-
-  return system_automaton;
-}
 
 /* #include "mm.h" */
 /* #include "automata.h" */
@@ -283,153 +268,6 @@ system_automaton_get_instance (void)
 
   /* /\* Start the scheduler.  Doesn't return. *\/ */
   /* finish_action (0, 0); */
-
-
-/* static unsigned int */
-/* action_entry_point_hash_func (const void* x) */
-/* { */
-/*   return (unsigned int)x; */
-/* } */
-
-/* static int */
-/* action_entry_point_compare_func (const void* x, */
-/* 				 const void* y) */
-/* { */
-/*   return x - y; */
-/* } */
-
-/* static automaton_t* */
-/* allocate_automaton (privilege_t privilege, */
-/* 		    void* scheduler_context) */
-/* { */
-/*   automaton_t* ptr = kmalloc (sizeof (automaton_t)); */
-/*   ptr->privilege = privilege; */
-/*   ptr->actions = allocate_hash_map (action_entry_point_hash_func, action_entry_point_compare_func); */
-/*   ptr->scheduler_context = scheduler_context; */
-/*   return ptr; */
-/* } */
-
-/* static void */
-/* automaton_set_action_type (automaton_t* ptr, */
-/* 			   unsigned int action_entry_point, */
-/* 			   action_type_t action_type) */
-/* { */
-/*   kassert (ptr != 0); */
-/*   kassert (!hash_map_contains (ptr->actions, (const void*)action_entry_point)); */
-/*   hash_map_insert (ptr->actions, (const void*)action_entry_point, (void *)action_type); */
-/* } */
-
-/* static action_type_t */
-/* automaton_get_action_type (automaton_t* ptr, */
-/* 			   unsigned int action_entry_point) */
-/* { */
-/*   kassert (ptr != 0); */
-/*   if (hash_map_contains (ptr->actions, (const void*)action_entry_point)) { */
-/*     action_type_t retval = (action_type_t)hash_map_find (ptr->actions, (const void*)action_entry_point); */
-/*     return retval; */
-/*   } */
-/*   else { */
-/*     return NO_ACTION; */
-/*   } */
-/* } */
-
-/* aid_t */
-/* create (privilege_t privilege) */
-/* { */
-/*   kassert (automata != 0); */
-/*   /\* Make sure that an aid is available.  We'll probably run out of memory before this happens ;) *\/ */
-/*   kassert (hash_map_size (automata) !=  2147483648U); */
-
-/*   while (hash_map_contains (automata, (const void*)next_aid)) { */
-/*     ++next_aid; */
-/*     if (next_aid < 0) { */
-/*       next_aid = 0; */
-/*     } */
-/*   } */
-
-/*   hash_map_insert (automata, (const void*)next_aid, allocate_automaton (privilege, allocate_scheduler_context (next_aid))); */
-
-/*   return next_aid; */
-/* } */
-
-/* void* */
-/* get_scheduler_context (aid_t aid) */
-/* { */
-/*   kassert (automata != 0); */
-/*   automaton_t* ptr = hash_map_find (automata, (const void*)aid); */
-
-/*   if (ptr != 0) { */
-/*     return ptr->scheduler_context; */
-/*   } */
-/*   else { */
-/*     return 0; */
-/*   }   */
-/* } */
-
-/* void */
-/* set_action_type (aid_t aid, */
-/* 		 unsigned int action_entry_point, */
-/* 		 action_type_t action_type) */
-/* { */
-/*   kassert (automata != 0); */
-/*   automaton_t* ptr = hash_map_find (automata, (const void*)aid); */
-/*   kassert (ptr != 0); */
-/*   automaton_set_action_type (ptr, action_entry_point, action_type); */
-/* } */
-
-/* action_type_t */
-/* get_action_type (aid_t aid, */
-/* 		 unsigned int action_entry_point) */
-/* { */
-/*   kassert (automata != 0); */
-/*   automaton_t* ptr = hash_map_find (automata, (const void*)aid); */
-/*   kassert (ptr != 0); */
-/*   return automaton_get_action_type (ptr, action_entry_point); */
-/* } */
-
-/* void */
-/* switch_to_automaton (aid_t aid, */
-/* 		     unsigned int action_entry_point, */
-/* 		     unsigned int parameter, */
-/* 		     unsigned int input_value) */
-/* { */
-/*   kassert (automata != 0); */
-/*   automaton_t* ptr = hash_map_find (automata, (const void*)aid); */
-/*   kassert (ptr != 0); */
-
-/*   unsigned int stack_segment; */
-/*   unsigned int code_segment; */
-
-/*   switch (ptr->privilege) { */
-/*   case RING0: */
-/*     stack_segment = KERNEL_DATA_SELECTOR | RING0; */
-/*     code_segment = KERNEL_CODE_SELECTOR | RING0; */
-/*     break; */
-/*   case RING1: */
-/*   case RING2: */
-/*     /\* These rings are not supported. *\/ */
-/*     kassert (0); */
-/*     break; */
-/*   case RING3: */
-/*     /\* Not supported yet. *\/ */
-/*     kassert (0); */
-/*     break; */
-/*   } */
-
-/*   asm volatile ("mov %0, %%eax\n" */
-/* 		"mov %%ax, %%ss\n" */
-/* 		"mov %1, %%eax\n" */
-/* 		"mov %%eax, %%esp\n" */
-/* 		"pushf\n" */
-/* 		"pop %%eax\n" */
-/* 		"or $0x200, %%eax\n" /\* Enable interupts on return. *\/ */
-/* 		"push %%eax\n" */
-/* 		"pushl %2\n" */
-/* 		"pushl %3\n" */
-/* 		"movl %4, %%ecx\n" */
-/* 		"movl %5, %%edx\n" */
-/* 		"iret\n" :: "r"(stack_segment), "r"(USER_STACK_LIMIT), "m"(code_segment), "m"(action_entry_point), "m"(parameter), "m"(input_value)); */
-/* } */
 
 /* static output_action_t* */
 /* allocate_output_action (aid_t aid, */
@@ -495,27 +333,6 @@ system_automaton_get_instance (void)
 /*   output_action.parameter = output_parameter; */
 /*   return hash_map_find (bindings, &output_action); */
 /* } */
-
-
-
-
-
-
-/* void */
-/* initialize_automata (void); */
-
-/* /\* These functions are for manually creating automata and bindings. */
-/*    They do not check for errors. */
-/*    You have been warned. */
-/* *\/ */
-
-/* aid_t */
-/* create (privilege_t privilege); */
-
-/* void */
-/* set_action_type (aid_t aid, */
-/* 		 unsigned int action_entry_point, */
-/* 		 action_type_t action_type); */
 
 /* void */
 /* bind (aid_t output_aid, */

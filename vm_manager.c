@@ -114,8 +114,8 @@ initialize_page_directory (page_directory_t* ptr,
   ptr->entry[PAGE_ENTRY_COUNT - 1] = make_page_directory_entry (ADDRESS_TO_FRAME (physical_address), PRESENT);
 }
 
-static void
-switch_to_page_directory (size_t physical_addr)
+void
+vm_manager_switch_to_directory (size_t physical_addr)
 {
   kassert (IS_PAGE_ALIGNED (physical_addr));
 
@@ -182,7 +182,7 @@ vm_manager_initialize (void* placement_begin,
     frame_manager_mark_as_used (frame);
   }
 
-  switch_to_page_directory (kernel_page_directory_paddr);
+  vm_manager_switch_to_directory (kernel_page_directory_paddr);
 }
 
 page_directory_t*

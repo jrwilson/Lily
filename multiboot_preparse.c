@@ -17,23 +17,23 @@
 #include "kassert.h"
 
 static void
-multiboot_new_begin (unsigned int* multiboot_begin,
-		     unsigned int new_begin)
+multiboot_new_begin (size_t* multiboot_begin,
+		     size_t new_begin)
 {
   *multiboot_begin = (new_begin < *multiboot_begin) ? new_begin : *multiboot_begin;
 }
 
 static void
-multiboot_new_end (unsigned int* multiboot_end,
-		   unsigned int new_end)
+multiboot_new_end (size_t* multiboot_end,
+		   size_t new_end)
 {
   *multiboot_end = (new_end > *multiboot_end) ? new_end : *multiboot_end;
 }
 
 int
 multiboot_preparse_memory_map (const multiboot_info_t* multiboot_info,
-			       void* multiboot_begin,
-			       void* multiboot_end)
+			       size_t* multiboot_begin,
+			       size_t* multiboot_end)
 {
   kassert (multiboot_info != 0);
   kassert (multiboot_begin != 0);

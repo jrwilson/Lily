@@ -1,20 +1,22 @@
 /*
   File
   ----
-  malloc.c
+  list_allocator.c
   
   Description
   -----------
-  Memory allocator.
+  Memory allocator using a doubly-linked list.
 
   Authors:
   Justin R. Wilson
 */
 
-#include "malloc.h"
+#include "list_allocator.h"
+#include "syscall.h"
+
 /* This will need to be removed later. */
 #include "kassert.h"
-#include "syscall.h"
+#include "vm_manager.h"
 
 #define MAGIC 0x7ACEDEAD
 
@@ -27,9 +29,30 @@ struct header {
   header_t* next;
 };
 
-static size_t page_size = 0;
-static header_t* first_header = 0;
-static header_t* last_header = 0;
+struct list_allocator {
+  size_t page_size;
+  header_t* first_header;
+  header_t* last_header;
+};
+
+list_allocator_t*
+list_allocator_allocate (void)
+{
+  size_t page_size = sys_get_page_size ();
+  size_t request_size = ALIGN_UP (sizeof (list_allocator_t) + sizeof (header_t), page_size);
+  list_allocator_t* ptr = sys_allocate (request_size);
+  if (ptr != 0) {
+    ptr->first_header = (header_t*)((char*)ptr + sizeof (list_allocator_t));
+    ptr->last_header = ptr->first_header;
+    ptr->first_header->available = 1;
+    ptr->first_header->magic = MAGIC;
+    ptr->first_header->size = request_size - sizeof (list_allocator_t) - sizeof (header_t);
+    ptr->first_header->prev = 0;
+    ptr->first_header->next = 0;
+  }
+
+  return ptr;
+}
 
 static header_t*
 find_header (header_t* start,
@@ -40,9 +63,11 @@ find_header (header_t* start,
 }
 
 static void
-split (header_t* ptr,
-       size_t size)
+split_header (list_allocator_t* la,
+	      header_t* ptr,
+	      size_t size)
 {
+  kassert (la != 0);
   kassert (ptr != 0);
   kassert (ptr->available);
   kassert (ptr->size > sizeof (header_t) + size);
@@ -62,8 +87,8 @@ split (header_t* ptr,
     n->next->prev = n;
   }
   
-  if (ptr == last_header) {
-    last_header = n;
+  if (ptr == la->last_header) {
+    la->last_header = n;
   }
 }
 
@@ -84,29 +109,22 @@ dump_heap_int (header_t* ptr)
 }
 
 static void
-dump_heap ()
+list_allocator_dump (list_allocator_t* la)
 {
-  kputs ("first = "); kputp (first_header); kputs (" last = "); kputp (last_header); kputs ("\n");
+  kputs ("first = "); kputp (la->first_header); kputs (" last = "); kputp (la->last_header); kputs ("\n");
   kputs ("Node       Magic      Size       Prev       Next\n");
-  dump_heap_int (first_header);
+  dump_heap_int (la->first_header);
 }
 
 void*
-malloc (size_t size)
+list_allocator_alloc (list_allocator_t* la,
+		      size_t size)
 {
-  if (page_size == 0) {
-    /* Initialize. */
-    page_size = sys_get_page_size ();
-    first_header = sys_allocate (page_size);
-    last_header = first_header;
-    first_header->available = 1;
-    first_header->magic = MAGIC;
-    first_header->size = page_size - sizeof (header_t);
-    first_header->prev = 0;
-    first_header->next = 0;
-  }
+  kassert (la != 0);
 
-  header_t* ptr = find_header (first_header, size);
+  header_t* ptr = find_header (la->first_header, size);
+
+  /* Acquire more memory. */
   if (ptr == 0) {
     /* TODO */
     kassert (0);
@@ -114,7 +132,7 @@ malloc (size_t size)
 
   /* Found something we can use. */
   if ((ptr->size - size) > sizeof (header_t)) {
-    split (ptr, size);
+    split_header (la, ptr, size);
   }
   /* Mark as used and return. */
   ptr->available = 0;
@@ -122,42 +140,39 @@ malloc (size_t size)
 }
 
 void
-free (void* p)
+list_allocator_free (list_allocator_t* la,
+		     void* p)
 {
+  kassert (la != 0);
   header_t* ptr = p;
   --ptr;
-  if (p != 0 &&
-      ptr >= first_header &&
-      ptr <= last_header &&
-      ptr->magic == MAGIC &&
-      ptr->available == 0) {
+  kassert (ptr >= la->first_header);
+  kassert (ptr <= la->last_header);
+  kassert (ptr->magic == MAGIC);
+  kassert (ptr->available == 0);
 
-    ptr->available = 1;
-    
-    /* Merge with next. */
-    if (ptr->next != 0 && ptr->next->available && ptr->next == (header_t*)((char*)ptr + sizeof (header_t) + ptr->size)) {
-      ptr->size += sizeof (header_t) + ptr->next->size;
-      if (ptr->next == last_header) {
-    	last_header = ptr;
-      }
-      ptr->next = ptr->next->next;
-      ptr->next->prev = ptr;
+  ptr->available = 1;
+  
+  /* Merge with next. */
+  if (ptr->next != 0 && ptr->next->available && ptr->next == (header_t*)((char*)ptr + sizeof (header_t) + ptr->size)) {
+    ptr->size += sizeof (header_t) + ptr->next->size;
+    if (ptr->next == la->last_header) {
+      la->last_header = ptr;
     }
-    
-    /* Merge with prev. */
-    if (ptr->prev != 0 && ptr->prev->available && ptr == (header_t*)((char*)ptr->prev + sizeof (header_t) + ptr->prev->size)) {
-      ptr->prev->size += sizeof (header_t) + ptr->size;
-      ptr->prev->next = ptr->next;
-      ptr->next->prev = ptr->prev;
-      if (ptr == last_header) {
-    	last_header = ptr->prev;
-      }
+    ptr->next = ptr->next->next;
+    ptr->next->prev = ptr;
+  }
+  
+  /* Merge with prev. */
+  if (ptr->prev != 0 && ptr->prev->available && ptr == (header_t*)((char*)ptr->prev + sizeof (header_t) + ptr->prev->size)) {
+    ptr->prev->size += sizeof (header_t) + ptr->size;
+    ptr->prev->next = ptr->next;
+    ptr->next->prev = ptr->prev;
+    if (ptr == la->last_header) {
+      la->last_header = ptr->prev;
     }
   }
 }
-
-
-
 
 /* static void */
 /* expand_heap (unsigned int size) */

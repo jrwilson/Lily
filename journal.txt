@@ -247,6 +247,10 @@ Tried to isolate multiboot parsing to a few modules.
 Decided to simplify the frame manager by eliminating zones.
 If the need arises, the interface for the frame manager can be expanded and the implmentation changed accordingly.
 
+2011-11-08
+
+Preliminary implementation of memory maps for automata.
+Preliminary implementation of a memory allocator.
 
 
 

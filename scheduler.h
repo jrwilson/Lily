@@ -26,11 +26,12 @@ automaton_t*
 scheduler_get_current_automaton (void);
 
 void
-schedule_action (unsigned int action_entry_point,
-		 unsigned int parameter);
+schedule_action (automaton_t* automaton,
+		 void* action_entry_point,
+		 parameter_t parameter);
 
 void
 finish_action (int output_status,
-	       unsigned int value);
+	       value_t value);
 
 #endif /* __scheduler_h__ */

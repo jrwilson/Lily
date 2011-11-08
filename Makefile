@@ -27,11 +27,12 @@ vm_area.o \
 automaton.o \
 system_automaton.o \
 syscall.o \
-malloc.o \
-string.o
+list_allocator.o \
+string.o \
+fifo_scheduler.o \
+hash_map.o \
+page_fault_handler.o
 
-# hash_map.o \
-# fifo_scheduler.o \
 # pit.o \
 # count_to_ten.o \
 # producer.o \

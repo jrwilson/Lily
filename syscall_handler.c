@@ -28,18 +28,18 @@ syscall_handler (registers_t* regs)
   case SYSCALL_FINISH:
     {
       int output_status = IS_OUTPUT_VALID (regs->eax);
-      uint32_t output_value = regs->edx;
+      value_t output_value = regs->edx;
       finish_action (output_status, output_value);
       return;
     }
     break;
   case SYSCALL_SCHEDULE:
     {
-      uint32_t action_entry_point = regs->ebx;
-      uint32_t parameter = regs->ecx;
+      void* action_entry_point = (void*)regs->ebx;
+      parameter_t parameter = regs->ecx;
       int output_status = IS_OUTPUT_VALID (regs->eax);
-      uint32_t output_value = regs->edx;
-      schedule_action (action_entry_point, parameter);
+      value_t output_value = regs->edx;
+      schedule_action (scheduler_get_current_automaton (), action_entry_point, parameter);
       finish_action (output_status, output_value);
       return;
     }

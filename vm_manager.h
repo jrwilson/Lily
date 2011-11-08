@@ -22,8 +22,11 @@
 /* Should agree with loader.s. */
 #define KERNEL_VIRTUAL_BASE 0xC0000000
 
-#define PAGE_ALIGN_DOWN(addr) ((addr) & 0xFFFFF000)
-#define PAGE_ALIGN_UP(addr) (PAGE_ALIGN_DOWN((addr) + PAGE_SIZE - 1))
+#define ALIGN_DOWN(addr, radix) ((addr) & ~((radix) - 1))
+#define ALIGN_UP(addr, radix) (ALIGN_DOWN((addr) + (radix) - 1, (radix)))
+
+#define PAGE_ALIGN_DOWN(addr) (ALIGN_DOWN((addr), PAGE_SIZE))
+#define PAGE_ALIGN_UP(addr) (ALIGN_UP((addr), PAGE_SIZE))
 #define IS_PAGE_ALIGNED(addr) (((addr) & 0xFFF) == 0)
 
 /* Convert physical addresses to frame numbers and vice versa. */
@@ -99,5 +102,8 @@ vm_manager_map (void* logical_addr,
 		page_privilege_t privilege,
 		writable_t writable,
 		present_t present);
+
+void
+vm_manager_switch_to_directory (size_t physical_addr);
 
 #endif /* __vm_manager_h__ */

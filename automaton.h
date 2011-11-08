@@ -19,6 +19,13 @@
 #include "syscall_def.h"
 #include "vm_area.h"
 
+typedef enum {
+  NO_ACTION,
+  INPUT,
+  OUTPUT,
+  INTERNAL
+} action_type_t;
+
 typedef struct scheduler_context scheduler_context_t;
 
 typedef struct {
@@ -35,8 +42,11 @@ typedef struct {
   /* Memory map. */
   vm_area_t* memory_map_begin;
   vm_area_t* memory_map_end;
-  /* Can't map into this area. */
+  /* Can map between [floor, ceiling). */
+  void* memory_floor;
   void* memory_ceiling;
+  /* Default privilege for new VM_AREA_DATA. */
+  page_privilege_t page_privilege;
 } automaton_t;
 
 void
@@ -44,13 +54,15 @@ automaton_initialize (automaton_t* ptr,
 		      privilege_t privilege,
 		      size_t page_directory,
 		      void* stack_pointer,
-		      void* memory_ceiling);
+		      void* memory_ceiling,
+		      page_privilege_t page_privilege);
 
 automaton_t*
 automaton_allocate (privilege_t privilege,
 		    size_t page_directory,
 		    void* stack_pointer,
-		    void* memory_ceiling) __attribute__((warn_unused_result));
+		    void* memory_ceiling,
+		    page_privilege_t page_privilege) __attribute__((warn_unused_result));
 
 int
 automaton_insert_vm_area (automaton_t* ptr,
@@ -60,6 +72,21 @@ void*
 automaton_alloc (automaton_t* automaton,
 		 size_t size,
 		 syserror_t* error) __attribute__((warn_unused_result));
+
+void
+automaton_set_action_type (automaton_t* ptr,
+			   void* action_entry_point,
+			   action_type_t action_type);
+
+action_type_t
+automaton_get_action_type (automaton_t* automaton,
+			   void* action_entry_point);
+
+void
+automaton_execute (automaton_t* ptr,
+		   void* action_entry_point,
+		   parameter_t parameter,
+		   value_t input_value);
 
 #endif /* __automaton_h__ */
 

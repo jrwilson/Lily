@@ -13,26 +13,27 @@
 
 #include "fifo_scheduler.h"
 #include "kassert.h"
-#include "mm.h"
 #include "syscall.h"
 
 typedef struct fifo_scheduler_entry fifo_scheduler_entry_t;
 
 struct fifo_scheduler_entry {
   fifo_scheduler_entry_t* next;
-  unsigned int action_entry_point;
-  unsigned int parameter;
+  void* action_entry_point;
+  parameter_t parameter;
 };
 
 struct fifo_scheduler {
+  list_allocator_t* list_allocator;
   fifo_scheduler_entry_t* ready;
   fifo_scheduler_entry_t* free;
 };
 
 fifo_scheduler_t*
-allocate_fifo_scheduler ()
+fifo_scheduler_allocate (list_allocator_t* list_allocator)
 {
-  fifo_scheduler_t* ptr = kmalloc (sizeof (fifo_scheduler_t));
+  fifo_scheduler_t* ptr = list_allocator_alloc (list_allocator, sizeof (fifo_scheduler_t));
+  ptr->list_allocator = list_allocator;
   ptr->ready = 0;
   ptr->free = 0;
   return ptr;
@@ -40,8 +41,8 @@ allocate_fifo_scheduler ()
 
 static fifo_scheduler_entry_t*
 allocate_scheduler_entry (fifo_scheduler_t* ptr,
-			  unsigned int action_entry_point,
-			  unsigned int parameter)
+			  void* action_entry_point,
+			  parameter_t parameter)
 {
   fifo_scheduler_entry_t* p;
   if (ptr->free != 0) {
@@ -49,7 +50,7 @@ allocate_scheduler_entry (fifo_scheduler_t* ptr,
     ptr->free = p->next;
   }
   else {
-    p = kmalloc (sizeof (fifo_scheduler_entry_t));
+    p = list_allocator_alloc (ptr->list_allocator, sizeof (fifo_scheduler_entry_t));
   }
   p->next = 0;
   p->action_entry_point = action_entry_point;
@@ -59,8 +60,8 @@ allocate_scheduler_entry (fifo_scheduler_t* ptr,
 
 void
 fifo_scheduler_add (fifo_scheduler_t* ptr,
-		    unsigned int action_entry_point,
-		    unsigned int parameter)
+		    void* action_entry_point,
+		    parameter_t parameter)
 {
   kassert (ptr != 0);
   fifo_scheduler_entry_t** p;
@@ -80,8 +81,8 @@ free_scheduler_entry (fifo_scheduler_t* ptr,
 
 void
 fifo_scheduler_remove (fifo_scheduler_t* ptr,
-		       unsigned int action_entry_point,
-		       unsigned int parameter)
+		       void* action_entry_point,
+		       parameter_t parameter)
 {
   /* Easier to write action macros if this is conditional. */
   if (ptr != 0) {
@@ -98,7 +99,7 @@ fifo_scheduler_remove (fifo_scheduler_t* ptr,
 void
 fifo_scheduler_finish (fifo_scheduler_t* ptr,
 		       int output_status,
-		       unsigned int output_value)
+		       value_t output_value)
 {
   kassert (ptr != 0);
   if (ptr->ready != 0) {

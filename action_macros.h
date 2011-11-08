@@ -24,7 +24,7 @@ extern unsigned int name##_entry; \
       "push %edx\n" \
       "call " quote(name) "_driver"); \
 void \
- name##_driver (unsigned int value) \
+ name##_driver (value_t value) \
 { \
   name##_effect (value);	\
   name##_schedule (); \
@@ -39,9 +39,9 @@ extern unsigned int name##_entry; \
 void \
 name##_driver () \
 { \
-  SCHEDULER_REMOVE (scheduler, (unsigned int)&name##_entry, 0); \
+  SCHEDULER_REMOVE (scheduler, &name##_entry, 0); \
   int status = name##_precondition (); \
-  unsigned int value = 0; \
+  value_t value = 0;	       \
   if (status) { \
     value = name##_effect ();	\
   } \
@@ -57,7 +57,7 @@ extern unsigned int name##_entry; \
 void \
 name##_driver () \
 { \
-  SCHEDULER_REMOVE (scheduler, (unsigned int)&name##_entry, 0); \
+  SCHEDULER_REMOVE (scheduler, &name##_entry, 0); \
   if (name##_precondition ()) { \
     name##_effect (); \
   } \

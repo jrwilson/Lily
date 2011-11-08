@@ -16,6 +16,7 @@
 #include "kassert.h"
 #include "idt.h"
 #include "malloc.h"
+#include "system_automaton.h"
 
 typedef enum {
   SCHEDULED,
@@ -24,42 +25,41 @@ typedef enum {
 
 struct scheduler_context {
   automaton_t* automaton;
-  unsigned int action_entry_point;
-  unsigned int parameter;
+  void* action_entry_point;
+  parameter_t parameter;
   status_t status;
   scheduler_context_t* prev;
   scheduler_context_t* next;
 };
 
-/* typedef struct { */
-/*   action_type_t action_type; */
-/*   aid_t aid; */
-/*   unsigned int action_entry_point; */
-/*   unsigned int parameter; */
-/*   input_action_t* input; */
-/*   unsigned int output_value; */
-/* } execution_context_t; */
+typedef struct {
+  action_type_t action_type;
+  automaton_t* automaton;
+  void* action_entry_point;
+  parameter_t parameter;
+  input_action_t* input;
+  value_t output_value;
+} execution_context_t;
 
-static automaton_t* current_automaton = 0;
-/* static scheduler_context_t* head = 0; */
-/* static scheduler_context_t* tail = 0; */
-/* /\* TODO:  Need one per core. *\/ */
-/* static execution_context_t exec_context; */
+static scheduler_context_t* head = 0;
+static scheduler_context_t* tail = 0;
+/* TODO:  Need one per core. */
+static execution_context_t exec_context;
 
 void
 scheduler_initialize (automaton_t* automaton)
 {
-  kassert (current_automaton == 0);
   kassert (automaton != 0);
 
-  current_automaton = automaton;
+  exec_context.action_type = NO_ACTION;
+  exec_context.automaton = automaton;
 }
 
 scheduler_context_t*
 scheduler_allocate_context (automaton_t* automaton)
 {
   kassert (automaton != 0);
-  scheduler_context_t* ptr = malloc (sizeof (scheduler_context_t));
+  scheduler_context_t* ptr = list_allocator_alloc (system_automaton_get_allocator (), sizeof (scheduler_context_t));
   ptr->automaton = automaton;
   ptr->action_entry_point = 0;
   ptr->parameter = 0;
@@ -72,100 +72,101 @@ scheduler_allocate_context (automaton_t* automaton)
 automaton_t*
 scheduler_get_current_automaton (void)
 {
-  kassert (current_automaton != 0);
-  return current_automaton;
+  kassert (exec_context.automaton != 0);
+  return exec_context.automaton;
 }
 
 void
-schedule_action (unsigned int action_entry_point,
-		 unsigned int parameter)
+schedule_action (automaton_t* automaton,
+		 void* action_entry_point,
+		 parameter_t parameter)
 {
-/*   kassert (0); */
-  /* scheduler_context_t* ptr = get_scheduler_context (aid); */
-  /* kassert (ptr != 0); */
+  kassert (automaton != 0);
+  scheduler_context_t* ptr = automaton->scheduler_context;
+  kassert (ptr != 0);
 
-  /* ptr->action_entry_point = action_entry_point; */
-  /* ptr->parameter = parameter; */
+  ptr->action_entry_point = action_entry_point;
+  ptr->parameter = parameter;
 
-  /* if (ptr->status == NOT_SCHEDULED) { */
-  /*   ptr->status = SCHEDULED; */
-  /*   if (tail != 0) { */
-  /*     /\* Queue was not empty. *\/ */
-  /*     tail->next = ptr; */
-  /*     ptr->prev = tail->next; */
-  /*     tail = ptr; */
-  /*   } */
-  /*   else { */
-  /*     /\* Queue was empty. *\/ */
-  /*     head = ptr; */
-  /*     tail = ptr; */
-  /*   } */
-  /* } */
+  if (ptr->status == NOT_SCHEDULED) {
+    ptr->status = SCHEDULED;
+    if (tail != 0) {
+      /* Queue was not empty. */
+      tail->next = ptr;
+      ptr->prev = tail->next;
+      tail = ptr;
+    }
+    else {
+      /* Queue was empty. */
+      head = ptr;
+      tail = ptr;
+    }
+  }
 }
 
 static void
 switch_to_next_action ()
 {
-  kassert (0);
-  /* if (head != 0) { */
-  /*   /\* Load the execution context. *\/ */
-  /*   exec_context.aid = head->aid; */
-  /*   exec_context.action_entry_point = head->action_entry_point; */
-  /*   exec_context.parameter = head->parameter; */
+  if (head != 0) {
+    /* Load the execution context. */
+    exec_context.automaton = head->automaton;
+    exec_context.action_entry_point = head->action_entry_point;
+    exec_context.parameter = head->parameter;
 
-  /*   /\* Update the queue. *\/ */
-  /*   if (head != tail) { */
-  /*     scheduler_context_t* tmp = head; */
-  /*     head = tmp->next; */
-  /*     head->prev = 0; */
-  /*     tmp->status = NOT_SCHEDULED; */
-  /*     tmp->next = 0; */
-  /*     kassert (tmp->prev == 0); */
-  /*   } */
-  /*   else { */
-  /*     scheduler_context_t* tmp = head; */
-  /*     head = 0; */
-  /*     tail = 0; */
-  /*     tmp->status = NOT_SCHEDULED; */
-  /*     kassert (tmp->prev == 0); */
-  /*     kassert (tmp->next == 0); */
-  /*   } */
+    /* Update the queue. */
+    if (head != tail) {
+      scheduler_context_t* tmp = head;
+      head = tmp->next;
+      head->prev = 0;
+      tmp->status = NOT_SCHEDULED;
+      tmp->next = 0;
+      kassert (tmp->prev == 0);
+    }
+    else {
+      scheduler_context_t* tmp = head;
+      head = 0;
+      tail = 0;
+      tmp->status = NOT_SCHEDULED;
+      kassert (tmp->prev == 0);
+      kassert (tmp->next == 0);
+    }
 
-  /*   /\* Get the type to make sure its a local action. *\/ */
-  /*   exec_context.action_type = get_action_type (exec_context.aid, exec_context.action_entry_point); */
-  /*   switch (exec_context.action_type) { */
-  /*   case OUTPUT: */
-  /*     /\* Get the inputs that are composed with the output. *\/ */
-  /*     exec_context.input = get_bound_inputs (exec_context.aid, exec_context.action_entry_point, exec_context.parameter); */
-  /*     /\* Fall through. *\/ */
-  /*   case INTERNAL: */
-  /*     /\* Execute.  (This does not return). *\/ */
-  /*     switch_to_automaton (exec_context.aid, exec_context.action_entry_point, exec_context.parameter, 0); */
-  /*     break; */
-  /*   case INPUT: */
-  /*   case NO_ACTION: */
-  /*     /\* TODO:  Kill the automaton for scheduling a bad action. *\/ */
-  /*     kputs ("Bad schedule\n"); */
-  /*     /\* Recur to get the next. *\/ */
-  /*     switch_to_next_action (); */
-  /*     break; */
-  /*   } */
-  /* } */
-  /* else { */
-  /*   /\* Out of actions.  Halt. *\/ */
-  /*   exec_context.action_type = NO_ACTION; */
-  /*   enable_interrupts (); */
-  /*   asm volatile ("hlt"); */
-  /* } */
+    /* Get the type to make sure its a local action. */
+    exec_context.action_type = automaton_get_action_type (exec_context.automaton, exec_context.action_entry_point);
+    switch (exec_context.action_type) {
+    case OUTPUT:
+      kassert (0);
+      /* Get the inputs that are composed with the output. */
+      //exec_context.input = get_bound_inputs (exec_context.aid, exec_context.action_entry_point, exec_context.parameter);
+      /* Fall through. */
+    case INTERNAL:
+      /* Execute.  (This does not return). */
+      automaton_execute (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, 0);
+      break;
+    case INPUT:
+    case NO_ACTION:
+      /* TODO:  Kill the automaton for scheduling a bad action. */
+      kassert (0);
+      /* Recur to get the next. */
+      switch_to_next_action ();
+      break;
+    }
+  }
+  else {
+    /* Out of actions.  Halt. */
+    exec_context.action_type = NO_ACTION;
+    enable_interrupts ();
+    asm volatile ("hlt");
+  }
 }
 
 void
 finish_action (int output_status,
-	       unsigned int output_value)
+	       value_t output_value)
 {
-  kassert (0);
-  /* switch (exec_context.action_type) { */
-  /* case INPUT: */
+  switch (exec_context.action_type) {
+  case INPUT:
+    kassert (0);
   /*   /\* Move to the next input. *\/ */
   /*   exec_context.input = exec_context.input->next; */
   /*   if (exec_context.input != 0) { */
@@ -176,8 +177,9 @@ finish_action (int output_status,
   /*     /\* Execute.  (This does not return). *\/ */
   /*     switch_to_automaton (exec_context.aid, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value); */
   /*   } */
-  /*   break; */
-  /* case OUTPUT: */
+    break;
+  case OUTPUT:
+    kassert (0);
   /*   if (output_status && exec_context.input != 0) { */
   /*     /\* The output executed and there are inputs. *\/ */
   /*     exec_context.output_value = output_value; */
@@ -190,10 +192,10 @@ finish_action (int output_status,
   /*     switch_to_automaton (exec_context.aid, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value); */
   /*   } */
   /*   break; */
-  /* case INTERNAL: */
-  /* case NO_ACTION: */
-  /*   break; */
-  /* } */
+  case INTERNAL:
+  case NO_ACTION:
+    break;
+  }
 
-  /* switch_to_next_action (); */
+  switch_to_next_action ();
 }

@@ -14,15 +14,19 @@
   Justin R. Wilson
 */
 
+#include "types.h"
+#include "list_allocator.h"
+
 typedef struct hash_map hash_map_t;
-typedef unsigned int (*hash_map_hash_func_t) (const void*);
+typedef size_t (*hash_map_hash_func_t) (const void*);
 typedef int (*hash_map_compare_func_t) (const void*, const void*);
 
 hash_map_t*
-allocate_hash_map (hash_map_hash_func_t hash_func,
+hash_map_allocate (list_allocator_t* la,
+		   hash_map_hash_func_t hash_func,
 		   hash_map_compare_func_t compare_func);
 
-unsigned int
+size_t
 hash_map_size (const hash_map_t* ptr);
 
 void

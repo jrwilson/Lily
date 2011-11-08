@@ -14,25 +14,27 @@
   Justin R. Wilson
 */
 
+#include "list_allocator.h"
+
 typedef struct fifo_scheduler fifo_scheduler_t;
 
 fifo_scheduler_t*
-allocate_fifo_scheduler (void);
+fifo_scheduler_allocate (list_allocator_t* list_allocator);
 
 void
 fifo_scheduler_add (fifo_scheduler_t*,
-		    unsigned int action_entry_point,
-		    unsigned int parameter);
+		    void* action_entry_point,
+		    parameter_t parameter);
 
 void
 fifo_scheduler_remove (fifo_scheduler_t*,
-		       unsigned int action_entry_point,
-		       unsigned int parameter);
+		       void* action_entry_point,
+		       parameter_t parameter);
 
 void
 fifo_scheduler_finish (fifo_scheduler_t*,
 		       int output_status,
-		       unsigned int output_value);
+		       value_t output_value);
 
 #define SCHEDULER_ADD fifo_scheduler_add
 #define SCHEDULER_REMOVE fifo_scheduler_remove

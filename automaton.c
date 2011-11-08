@@ -15,35 +15,56 @@
 #include "malloc.h"
 #include "kassert.h"
 #include "scheduler.h"
+#include "system_automaton.h"
+#include "gdt.h"
 
 void
 automaton_initialize (automaton_t* ptr,
 		      privilege_t privilege,
 		      size_t page_directory,
 		      void* stack_pointer,
-		      void* memory_ceiling)
+		      void* memory_ceiling,
+		      page_privilege_t page_privilege)
 {
   kassert (ptr != 0);
 
   ptr->privilege = privilege;
   ptr->actions = 0;
-  ptr->scheduler_context = scheduler_allocate_context (ptr);
+  ptr->scheduler_context = 0;
   ptr->page_directory = page_directory;
   ptr->stack_pointer = stack_pointer;
   ptr->memory_map_begin = 0;
   ptr->memory_map_end = 0;
-  ptr->memory_ceiling = memory_ceiling;
+  ptr->memory_ceiling = (void*)PAGE_ALIGN_DOWN ((size_t)memory_ceiling);
+  ptr->page_privilege = page_privilege;
+}
+
+static size_t
+action_entry_point_hash_func (const void* x)
+{
+  return (size_t)x;
+}
+
+static int
+action_entry_point_compare_func (const void* x,
+				 const void* y)
+{
+  return x - y;
 }
 
 automaton_t*
 automaton_allocate (privilege_t privilege,
 		    size_t page_directory,
 		    void* stack_pointer,
-		    void* memory_ceiling)
+		    void* memory_ceiling,
+		    page_privilege_t page_privilege)
 {
-  automaton_t* ptr = malloc (sizeof (automaton_t));
+  automaton_t* ptr = list_allocator_alloc (system_automaton_get_allocator (), sizeof (automaton_t));
   kassert (ptr != 0);
-  automaton_initialize (ptr, privilege, page_directory, stack_pointer, memory_ceiling);
+  automaton_initialize (ptr, privilege, page_directory, stack_pointer, memory_ceiling, page_privilege);
+  ptr->actions = hash_map_allocate (system_automaton_get_allocator (), action_entry_point_hash_func, action_entry_point_compare_func);
+  ptr->scheduler_context = scheduler_allocate_context (ptr);
+
   return ptr;
 }
 
@@ -106,10 +127,10 @@ automaton_insert_vm_area (automaton_t* automaton,
   vm_area_t* ptr = vm_area_allocate (area->type, area->begin, area->end, area->page_privilege, area->writable);
   ptr->next = *nptr;
   *nptr = ptr;
-
   ptr->prev = *pptr;
   *pptr = ptr;
 
+  /* Merge. */
   merge (automaton, ptr);
   merge (automaton, ptr->prev);
 
@@ -124,37 +145,121 @@ automaton_alloc (automaton_t* automaton,
   kassert (automaton != 0);
   
   if (IS_PAGE_ALIGNED (size)) {
-    /* Okay.  Let's look for a data area that we can extend. */
-    void* end;
-    vm_area_t** ptr;
-    for (ptr = &automaton->memory_map_begin; (*ptr) != 0; ptr = &(*ptr)->next) {
-      end = (*ptr)->end;
-      if ((*ptr)->type == VM_AREA_DATA) {
-  	/* Start with the ceiling of the automaton. */
-  	void* ceiling = automaton->memory_ceiling;
-  	if ((*ptr)->next != 0) {
-  	  /* Ceiling drops so we don't interfere with next area. */
-  	  ceiling = (*ptr)->next->begin;
-  	}
-	
-  	if (size <= (size_t)(ceiling - (*ptr)->end)) {
-  	  /* We can extend. */
-  	  void* retval = (*ptr)->end;
-  	  (*ptr)->end += size;
-  	  return retval;
-  	}
+
+    vm_area_t* ptr;
+    for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
+      /* Start with the floor and ceiling of the automaton. */
+      void* ceiling = automaton->memory_ceiling;
+      if (ptr->next != 0) {
+	/* Ceiling drops so we don't interfere with next area. */
+	ceiling = ptr->next->begin;
+      }
+
+      if (size <= (size_t)(ceiling - ptr->end)) {
+	void* retval = ptr->end;
+	if (ptr->type == VM_AREA_DATA) {
+	  /* Extend a data area. */
+	  ptr->end += size;
+	  /* Try to merge with the next area. */
+	  merge (automaton, ptr);
+	}
+	else {
+	  /* Insert after the current area. */
+	  vm_area_t* area = vm_area_allocate (VM_AREA_DATA, retval, retval + size, automaton->page_privilege, WRITABLE);
+	  kassert (area != 0);
+
+	  area->next = ptr->next;
+	  ptr->next = area;
+
+	  if (area->next != 0) {
+	    area->prev = area->next->prev;
+	    area->next->prev = area;
+	  }
+	  else {
+	    area->prev = automaton->memory_map_end;
+	    automaton->memory_map_end = area;
+	  }
+	  /* Try to merge with the next area. */
+	  merge (automaton, area);
+	}
+	*error = SYSERROR_SUCCESS;
+	return retval;
       }
     }
-    
-    if (*ptr == 0) {
-      /* TODO:  Automaton doesn't end with a data area.  Try to create a new area. */
-      kassert (0);
-    }
-    
-    kassert (0);
+
+    *error = SYSERROR_OUT_OF_MEMORY;
+    return 0;
   }
   else {
     *error = SYSERROR_REQUESTED_SIZE_NOT_ALIGNED;
     return 0;
   }
 }
+
+void
+automaton_set_action_type (automaton_t* ptr,
+			   void* action_entry_point,
+			   action_type_t action_type)
+{
+  kassert (ptr != 0);
+  kassert (!hash_map_contains (ptr->actions, action_entry_point));
+  hash_map_insert (ptr->actions, action_entry_point, (void *)action_type);
+}
+
+action_type_t
+automaton_get_action_type (automaton_t* ptr,
+			   void* action_entry_point)
+{
+  kassert (ptr != 0);
+  if (hash_map_contains (ptr->actions, (const void*)action_entry_point)) {
+    action_type_t retval = (action_type_t)hash_map_find (ptr->actions, (const void*)action_entry_point);
+    return retval;
+  }
+  else {
+    return NO_ACTION;
+  }
+}
+
+void
+automaton_execute (automaton_t* ptr,
+		   void* action_entry_point,
+		   parameter_t parameter,
+		   value_t input_value)
+{
+  kassert (ptr != 0);
+  
+  unsigned int stack_segment;
+  unsigned int code_segment;
+  
+  switch (ptr->privilege) {
+  case RING0:
+    stack_segment = KERNEL_DATA_SELECTOR | RING0;
+    code_segment = KERNEL_CODE_SELECTOR | RING0;
+    break;
+  case RING1:
+  case RING2:
+    /* These rings are not supported. */
+    kassert (0);
+    break;
+  case RING3:
+    /* Not supported yet. */
+    kassert (0);
+    break;
+  }
+
+  vm_manager_switch_to_directory (ptr->page_directory);
+  asm volatile ("mov %0, %%eax\n"
+		"mov %%ax, %%ss\n"
+		"mov %1, %%eax\n"
+		"mov %%eax, %%esp\n"
+		"pushf\n"
+		"pop %%eax\n"
+		"or $0x200, %%eax\n" /* Enable interupts on return. */
+		"push %%eax\n"
+		"pushl %2\n"
+		"pushl %3\n"
+		"movl %4, %%ecx\n"
+		"movl %5, %%edx\n"
+		"iret\n" :: "r"(stack_segment), "r"(ptr->stack_pointer), "m"(code_segment), "m"(action_entry_point), "m"(parameter), "m"(input_value));
+}
+

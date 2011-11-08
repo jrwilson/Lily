@@ -15,21 +15,22 @@
 */
 
 #include "syscall_def.h"
+#include "types.h"
 
 void
 sys_finish (int output_status,
-	    unsigned int output_value);
+	    value_t output_value);
 
 void
-sys_schedule (unsigned int action_entry_point,
-	      unsigned int parameter,
+sys_schedule (void* action_entry_point,
+	      parameter_t parameter,
 	      int output_status,
-	      unsigned int output_value);
+	      value_t output_value);
 
-unsigned int
+size_t
 sys_get_page_size (void);
 
 void*
-sys_allocate (unsigned int size);
+sys_allocate (size_t);
 
 #endif /* __syscall_h__ */

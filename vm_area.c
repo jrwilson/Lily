@@ -15,6 +15,7 @@
 #include "vm_area.h"
 #include "kassert.h"
 #include "malloc.h"
+#include "system_automaton.h"
 
 void
 vm_area_initialize (vm_area_t* ptr,
@@ -45,7 +46,7 @@ vm_area_allocate (vm_area_type_t type,
 		  page_privilege_t page_privilege,
 		  writable_t writable)
 {
-  vm_area_t* ptr = malloc (sizeof (vm_area_t));
+  vm_area_t* ptr = list_allocator_alloc (system_automaton_get_allocator (), sizeof (vm_area_t));
   kassert (ptr != 0);
   vm_area_initialize (ptr, type, begin, end, page_privilege, writable);
   return ptr;
@@ -55,5 +56,5 @@ void
 vm_area_free (vm_area_t* ptr)
 {
   kassert (ptr != 0);
-  free (ptr);
+  list_allocator_free (system_automaton_get_allocator (), ptr);
 }

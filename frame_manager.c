@@ -59,8 +59,8 @@ typedef int16_t frame_entry_t;
 typedef struct stack_allocator stack_allocator_t;
 struct stack_allocator {
   stack_allocator_t* next;
-  uint32_t begin;
-  uint32_t end;
+  frame_t begin;
+  frame_t end;
   frame_entry_t free_head;
   frame_entry_t entry[];
 };
@@ -69,12 +69,12 @@ static placement_allocator_t* placement_allocator = 0;
 static stack_allocator_t* stack_allocators = 0;
 
 static stack_allocator_t*
-stack_allocator_allocate (uint32_t begin,
-			  uint32_t end)
+stack_allocator_allocate (frame_t begin,
+			  frame_t end)
 {
   kassert (begin < end);
 
-  uint32_t size = end - begin;
+  frame_entry_t size = end - begin;
   stack_allocator_t* ptr = placement_allocator_alloc (placement_allocator, sizeof (stack_allocator_t) + size * sizeof (frame_entry_t));
   kassert (ptr != 0);
   ptr->next = 0;
@@ -82,7 +82,7 @@ stack_allocator_allocate (uint32_t begin,
   ptr->end = end;
   ptr->free_head = 0;
   frame_entry_t k;
-  for (k = 0; k < (frame_entry_t)size; ++k) {
+  for (k = 0; k < size; ++k) {
     ptr->entry[k] = k + 1;
   }
   ptr->entry[size - 1] = STACK_ALLOCATOR_EOL;

@@ -16,10 +16,11 @@
 */
 
 #include "multiboot.h"
+#include "types.h"
 
 int
 multiboot_preparse_memory_map (const multiboot_info_t* multiboot_info,
-			       void* multiboot_begin,
-			       void* multiboot_end);
+			       size_t* multiboot_begin,
+			       size_t* multiboot_end);
 
 #endif /* __multiboot_preparse_h__ */
