@@ -76,11 +76,10 @@ scheduler_get_current_automaton (void)
   return current_automaton;
 }
 
-/* void */
-/* schedule_action (aid_t aid, */
-/* 		 unsigned int action_entry_point, */
-/* 		 unsigned int parameter) */
-/* { */
+void
+schedule_action (unsigned int action_entry_point,
+		 unsigned int parameter)
+{
 /*   kassert (0); */
   /* scheduler_context_t* ptr = get_scheduler_context (aid); */
   /* kassert (ptr != 0); */
@@ -102,7 +101,7 @@ scheduler_get_current_automaton (void)
   /*     tail = ptr; */
   /*   } */
   /* } */
-/* } */
+}
 
 static void
 switch_to_next_action ()

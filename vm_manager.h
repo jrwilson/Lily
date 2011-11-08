@@ -83,7 +83,8 @@ typedef struct {
 } page_directory_entry_t;
 
 void
-vm_manager_initialize (void);
+vm_manager_initialize (void* placement_begin,
+		       void* placement_end);
 
 void*
 vm_manager_page_directory_logical_address (void);

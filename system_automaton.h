@@ -35,7 +35,8 @@ struct input_action {
 
 /* Does not return. */
 void
-system_automaton_initialize (void);
+system_automaton_initialize (void* placement_begin,
+			     void* placement_end);
 
 void*
 automaton_allocate (automaton_t* automaton,

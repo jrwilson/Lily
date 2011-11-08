@@ -241,7 +241,11 @@ Running the code on a machine with 4G+ is undefined.
 The stack allocator keeps a 15-bit reference count so a frame can be shared 32,767 times.
 I think this is reasonable as I expect the number of automata in a system to be in the hundreds.
 
+2011-11-07
 
+Tried to isolate multiboot parsing to a few modules.
+Decided to simplify the frame manager by eliminating zones.
+If the need arises, the interface for the frame manager can be expanded and the implmentation changed accordingly.
 
 
 

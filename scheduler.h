@@ -27,10 +27,9 @@ scheduler_initialize (automaton_t* automaton);
 automaton_t*
 scheduler_get_current_automaton (void);
 
-/* void */
-/* schedule_action (aid_t aid, */
-/* 		 unsigned int action_entry_point, */
-/* 		 unsigned int parameter); */
+void
+schedule_action (unsigned int action_entry_point,
+		 unsigned int parameter);
 
 void
 finish_action (int output_status,

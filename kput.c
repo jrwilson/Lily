@@ -108,7 +108,7 @@ kputucx (unsigned char n)
 }
 
 void
-kputuix (unsigned int n)
+kputx32 (uint32_t n)
 {
   char buf[11];
   buf[10] = 0;
@@ -134,9 +134,62 @@ kputuix (unsigned int n)
 }
 
 void
+kputx64 (uint64_t n)
+{
+  char buf[19];
+  buf[18] = 0;
+  buf[17] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[16] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[15] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[14] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[13] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[12] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[11] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[10] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[9] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[8] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[7] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[6] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[5] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[4] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[3] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[2] = to_hex (n & 0xF);
+  n >>= 4;
+  buf[1] = 'x';
+  buf[0] = '0';
+  kputs (buf);
+}
+
+void
 kputp (const void* p)
 {
-  kputuix ((unsigned int)p);
+#ifdef ARCH8
+  kputx8 ((uint32_t)p);
+#endif
+#ifdef ARCH16
+  kputx16 ((uint32_t)p);
+#endif
+#ifdef ARCH32
+  kputx32 ((uint32_t)p);
+#endif
+#ifdef ARCH64
+  kputx64 ((uint32_t)p);
+#endif
 }
 
 void

@@ -156,13 +156,13 @@ static void
 default_handler (registers_t* regs)
 {
   kputs ("Unhandled interrupt!\n");
-  kputs ("Interrupt: "); kputuix (regs->number); kputs (" Code: " ); kputuix (regs->error); kputs ("\n");
+  kputs ("Interrupt: "); kputx32 (regs->number); kputs (" Code: " ); kputx32 (regs->error); kputs ("\n");
   
-  kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n");
-  kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n");
+  kputs ("CS: "); kputx32 (regs->cs); kputs (" EIP: "); kputx32 (regs->eip); kputs (" EFLAGS: "); kputx32 (regs->eflags); kputs ("\n");
+  kputs ("SS: "); kputx32 (regs->ss); kputs (" ESP: "); kputx32 (regs->useresp); kputs (" DS:"); kputx32 (regs->ds); kputs ("\n");
   
-  kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n");
-  kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n");
+  kputs ("EAX: "); kputx32 (regs->eax); kputs (" EBX: "); kputx32 (regs->ebx); kputs (" ECX: "); kputx32 (regs->ecx); kputs (" EDX: "); kputx32 (regs->edx); kputs ("\n");
+  kputs ("ESP: "); kputx32 (regs->esp); kputs (" EBP: "); kputx32 (regs->ebp); kputs (" ESI: "); kputx32 (regs->esi); kputs (" EDI: "); kputx32 (regs->edi); kputs ("\n");
 
   halt ();
 }
@@ -301,10 +301,9 @@ disable_interrupts ()
 }
 
 void
-set_interrupt_handler (unsigned int num,
+set_interrupt_handler (uint8_t num,
 		       interrupt_handler_t handler)
 {
-  kassert (num < INTERRUPT_COUNT);
   kassert (interrupt_handler[num] == default_handler);
   kassert (handler != 0);
 

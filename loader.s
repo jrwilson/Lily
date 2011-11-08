@@ -6,6 +6,7 @@
 
 	;; Starting virtual address of the kernel.  Should agree with mm.c.
 	KERNEL_VIRTUAL_BASE equ 0xC0000000
+	
 	;; The size of the stack.
 	STACK_SIZE equ 0x1000
 	
@@ -46,6 +47,9 @@ page_directory:
 page_table:
 	times 1024 dd 0
 
+	;; The end of the logical address space.  (4M for every page table)
+	LOGICAL_END equ (KERNEL_VIRTUAL_BASE + 0x400000)
+	
 	;; Export the start symbol so the linker can find it.
 	[global start]
 start:
@@ -91,7 +95,10 @@ highhalf:
 	;; Push the multiboot data structure.
 	mov ebx, [boot_ebx]
 	push ebx
-
+	;; Push the logical end of the address space.
+	mov ecx, LOGICAL_END
+	push ecx
+		
 	;; Import the kmain symbol.
 	[extern kmain]
 	call kmain

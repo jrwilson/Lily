@@ -28,21 +28,19 @@ syscall_handler (registers_t* regs)
   case SYSCALL_FINISH:
     {
       int output_status = IS_OUTPUT_VALID (regs->eax);
-      unsigned int output_value = regs->edx;
-      kassert (0);
-      //finish_action (output_status, output_value);
+      uint32_t output_value = regs->edx;
+      finish_action (output_status, output_value);
       return;
     }
     break;
   case SYSCALL_SCHEDULE:
     {
-      unsigned int action_entry_point = regs->ebx;
-      unsigned int parameter = regs->ecx;
+      uint32_t action_entry_point = regs->ebx;
+      uint32_t parameter = regs->ecx;
       int output_status = IS_OUTPUT_VALID (regs->eax);
-      unsigned int output_value = regs->edx;
-      kassert (0);
-      /* schedule_action (get_current_aid (), action_entry_point, parameter); */
-      /* finish_action (output_status, output_value); */
+      uint32_t output_value = regs->edx;
+      schedule_action (action_entry_point, parameter);
+      finish_action (output_status, output_value);
       return;
     }
     break;
@@ -55,11 +53,11 @@ syscall_handler (registers_t* regs)
     break;
   case SYSCALL_ALLOCATE:
     {
-      int size = regs->ebx;
+      uint32_t size = regs->ebx;
       syserror_t error = SYSERROR_SUCCESS;
       void* ptr = automaton_allocate (scheduler_get_current_automaton (), size, &error);
       regs->eax = error;
-      regs->ebx = (unsigned int)ptr;
+      regs->ebx = (uint32_t)ptr;
       return;
     }
     break;

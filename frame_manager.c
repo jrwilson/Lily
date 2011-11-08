@@ -16,110 +16,91 @@
 #include "kassert.h"
 #include "kput.h"
 
-/* Can identity map up to 4 megabytes. */
-#define IDENTITY_MAP_LIMIT 0x400000
+/* Don't mess with memory below 1M or above 4G. */
+#define MEMORY_LOWER_LIMIT 0x00100000
+#define MEMORY_UPPER_LIMIT 0xFFFFFFFF
 
-/* Don't mess with memory below 1M. */
-#define MEMORY_LOWER_LIMIT 0x100000
+/*
+  The frame manager was designed under the following requirements and assumptions:
+  1.  All frames can be shared.
+  2.  The physical location of a frame doesn't matter.
 
-/* Memory below this limit will be reserved for DMA. */
-#define MEMORY_DMA_LIMIT 0x1000000
+  Sharing frames implies reference counting.
 
-typedef enum {
-  NORMAL_ZONE,
-  DMA_ZONE,
-} zone_type_t;
+  The assumption that all frames can be shared is somewhat naive as only frames containing code and buffers can be shared.
+  Thus, an optimization is to assume that only a fixed fraction of frames are shared.
 
-typedef enum {
-  STACK_ALLOCATOR
-} allocator_type_t;
+  Assuming that the physical location of a frame will probably break down once we start doing DMA.
+  However, this should only require expanding the interface and changing the implementation as opposed to redesigning the interface.
+ */
 
-typedef struct zone_item zone_item_t;
-struct zone_item {
-  zone_type_t zone_type;
-  allocator_type_t allocator_type;
-  unsigned int frame_begin;
-  unsigned int frame_end;
-  unsigned int free_count;
-  zone_item_t* next;
+/*
+  A frame entry stores the next entry on the free list or the reference count.
+  Next has the range [0, size - 1].
+  STACK_ALLOCATOR_EOL marks the end of the list.
+  Reference count is the additive inverse of the reference count.
+
+  The goal is to support 4GB of memory.
+  4GB / PAGE_SIZE = 1,048,576 frames.
+  The two choices are to use 1 table with 31-bit indexing or multiple tables with 15-bit indexing.
+  The space required to hold the table entries is:
+  1,048,576 frames * 4 bytes/frame = 4MB
+  1,048,576 frames * 2 bytes/frame = 2MB
+  The non-entry overhead is negligible, i.e., propotional to the number of regions multiplied by sizeof (stack_allocator_t).
+
+  With 31-bit entries, a frame can be shared 2,147,483,647 times.
+  With 15-bit entries, a frame can be shared 32,767 times.
+
+  Share a page 32,767 times seems reasonable so I will use the more space-efficient 15-bit entries.
+*/
+typedef int16_t frame_entry_t;
+#define STACK_ALLOCATOR_EOL -32768
+#define MAX_REGION_SIZE 0x07FFF000
+
+typedef struct stack_allocator stack_allocator_t;
+struct stack_allocator {
+  stack_allocator_t* next;
+  uint32_t begin;
+  uint32_t end;
+  frame_entry_t free_head;
+  frame_entry_t entry[];
 };
 
-/* A frame can be shared 32767 times. */
-typedef short int frame_entry_t;
-#define STACK_ALLOCATOR_EOL 0x7FFF
+static placement_allocator_t* placement_allocator = 0;
+static stack_allocator_t* stack_allocators = 0;
 
-typedef struct stack_allocator {
-  zone_item_t zone_item;
-  frame_entry_t free_head;
-  /*
-    Entry stores the next entry on the free list or the reference count.
-    Next has the range [0, size - 1].  0x7FFFFFFF marks the end of the free list.
-    Reference count is the additive inverse of the reference count.
-  */
-  frame_entry_t entry[];
-} stack_allocator_t;
-
-/* Marks the end of the kernel upon loading. */
-extern int kernel_end;
-
-static unsigned int identity_end;
-static unsigned int placement_end;
-
-/* Linked list of zone allocators. */
-static zone_item_t* zone_head = 0;
-
-extern void
-clear_frame (unsigned int frame);
-
-static void
-extend_identity_map (unsigned int addr)
+static stack_allocator_t*
+stack_allocator_allocate (uint32_t begin,
+			  uint32_t end)
 {
-  kassert (addr <= IDENTITY_MAP_LIMIT);
-  kassert (identity_end <= IDENTITY_MAP_LIMIT);
-  identity_end = ((identity_end) > addr) ? (identity_end) : addr;
-}
+  kassert (begin < end);
 
-static void*
-placement_alloc (unsigned int size)
-{
-  char* retval = (char*)placement_end;
-  placement_end += size;
-  kassert (placement_end <= KERNEL_VIRTUAL_BASE + IDENTITY_MAP_LIMIT);
-  return retval;
-}
-
-static zone_item_t*
-allocate_stack_allocator (unsigned int first,
-			  unsigned int last)
-{
-  unsigned int size = ADDRESS_TO_FRAME (last + 1 - first);
-  stack_allocator_t* ptr = placement_alloc (sizeof (stack_allocator_t) + size * sizeof (int));
-  ptr->zone_item.allocator_type = STACK_ALLOCATOR;
-  ptr->zone_item.frame_begin = ADDRESS_TO_FRAME (first);
-  ptr->zone_item.frame_end = ptr->zone_item.frame_begin + size;
-  ptr->zone_item.free_count = size;
-  ptr->zone_item.next = 0;
+  uint32_t size = end - begin;
+  stack_allocator_t* ptr = placement_allocator_alloc (placement_allocator, sizeof (stack_allocator_t) + size * sizeof (frame_entry_t));
+  kassert (ptr != 0);
+  ptr->next = 0;
+  ptr->begin = begin;
+  ptr->end = end;
   ptr->free_head = 0;
-  int k;
-  for (k = 0; k < (int)size; ++k) {
+  frame_entry_t k;
+  for (k = 0; k < (frame_entry_t)size; ++k) {
     ptr->entry[k] = k + 1;
   }
   ptr->entry[size - 1] = STACK_ALLOCATOR_EOL;
 
-  return (zone_item_t*)ptr;
+  return ptr;
 }
 
 static void
-stack_allocator_mark_as_used (zone_item_t* p,
-			      unsigned int frame)
+stack_allocator_mark_as_used (stack_allocator_t* ptr,
+			      uint32_t frame)
 {
-  kassert (p != 0);
-  kassert (p->allocator_type == STACK_ALLOCATOR);
-  kassert (frame >= p->frame_begin && frame < p->frame_end);
+  kassert (ptr != 0);
+  kassert (frame >= ptr->begin && frame < ptr->end);
 
-  stack_allocator_t* ptr = (stack_allocator_t*)p;
+  kputx32 (frame); kputs (" ");
 
-  int frame_idx = frame - p->frame_begin;
+  frame_entry_t frame_idx = frame - ptr->begin;
   /* Should be free. */
   kassert (ptr->entry[frame_idx] >= 0 && ptr->entry[frame_idx] != STACK_ALLOCATOR_EOL);
   /* Find the one that points to it. */
@@ -129,35 +110,27 @@ stack_allocator_mark_as_used (zone_item_t* p,
   /* Update the pointers. */
   ptr->entry[idx] = ptr->entry[frame_idx];
   ptr->entry[frame_idx] = -1;
-
-  --p->free_count;
 }
 
-static unsigned int
-stack_allocator_allocate (zone_item_t* p)
+static uint32_t
+stack_allocator_alloc (stack_allocator_t* ptr)
 {
-  kassert (p != 0);
-  kassert (p->allocator_type == STACK_ALLOCATOR);
-  kassert (p->free_count != 0);
-  stack_allocator_t* ptr = (stack_allocator_t*)p;
+  kassert (ptr != 0);
   kassert (ptr->free_head != STACK_ALLOCATOR_EOL);
 
-  unsigned int idx = ptr->free_head;
+  frame_entry_t idx = ptr->free_head;
   ptr->free_head = ptr->entry[idx];
   ptr->entry[idx] = -1;
-  --p->free_count;
-  return idx + p->frame_begin;
+  return ptr->begin + idx;
 }
 
 static void
-stack_allocator_incref (zone_item_t* p,
-			unsigned int frame)
+stack_allocator_incref (stack_allocator_t* ptr,
+			uint32_t frame)
 {
-  kassert (p != 0);
-  kassert (p->allocator_type == STACK_ALLOCATOR);
-  kassert (frame >= p->frame_begin && frame < p->frame_end);
-  stack_allocator_t* ptr = (stack_allocator_t*)p;
-  unsigned int idx = frame - p->frame_begin;
+  kassert (ptr != 0);
+  kassert (frame >= ptr->begin && frame < ptr->end);
+  frame_entry_t idx = frame - ptr->begin;
   /* Frame is allocated. */
   kassert (ptr->entry[idx] < 0);
   /* "Increment" the reference count. */
@@ -165,14 +138,12 @@ stack_allocator_incref (zone_item_t* p,
 }
 
 static void
-stack_allocator_decref (zone_item_t* p,
-			unsigned int frame)
+stack_allocator_decref (stack_allocator_t* ptr,
+			uint32_t frame)
 {
-  kassert (p != 0);
-  kassert (p->allocator_type == STACK_ALLOCATOR);
-  kassert (frame >= p->frame_begin && frame < p->frame_end);
-  stack_allocator_t* ptr = (stack_allocator_t*)p;
-  unsigned int idx = frame - p->frame_begin;
+  kassert (ptr != 0);
+  kassert (frame >= ptr->begin && frame < ptr->end);
+  frame_entry_t idx = frame - ptr->begin;
   /* Frame is allocated. */
   kassert (ptr->entry[idx] < 0);
   /* "Decrement" the reference count. */
@@ -181,250 +152,99 @@ stack_allocator_decref (zone_item_t* p,
   if (ptr->entry[idx]) {
     ptr->entry[idx] = ptr->free_head;
     ptr->free_head = idx;
-    ++p->free_count;
   }
-}
-
-
-static void
-allocate_dma_zone (unsigned int first,
-		   unsigned int last)
-{
-  /* DMA zone need a contiguous allocator like the buddy algorithm.
-     For now, just use a stack allocator.
-     TODO:  Implement buddy allocator. */
-  zone_item_t* ptr = allocate_stack_allocator (first, last);
-  ptr->zone_type = DMA_ZONE;
-  /* DMA zones are added to the back of the list. */
-  zone_item_t** p = &zone_head;
-  for (; *p != 0 && (*p)->zone_type != DMA_ZONE; p = &(*p)->next) ;;
-  ptr->next = *p;
-  *p = ptr;
-}
-
-static void
-allocate_normal_zone (unsigned int first,
-		      unsigned int last)
-{
-  /* Normal zones use the stack allocator. */
-  zone_item_t* ptr = allocate_stack_allocator (first, last); 
-  ptr->zone_type = NORMAL_ZONE;
-  /* Normal zones are added to the front of the list. */
-  ptr->next = zone_head;
-  zone_head = ptr;
 }
 
 void
-frame_manager_initialize (const multiboot_info_t* mbd)
+frame_manager_initialize (placement_allocator_t* p_a)
 {
-  /* The loader has mapped physical memory from 0x00000000-0x00400000 has been mapped to the logical addresses 0x00000000-0x00400000 and 0xC0000000-0xC0400000. */
+  kassert (placement_allocator == 0);
+  kassert (p_a != 0);
+  placement_allocator = p_a;
+}
 
-  /* One past the last byte in identity map. */
-  identity_end = PAGE_ALIGN_UP ((unsigned int)&kernel_end - KERNEL_VIRTUAL_BASE);
+void
+frame_manager_add (placement_allocator_t* p_a,
+		   uint64_t first,
+		   uint64_t last)
+{
+  kassert (p_a == placement_allocator);
+  kassert (first <= last);
 
-  /* Extend memory to cover the GRUB data structures. */
-  extend_identity_map ((unsigned int)mbd + sizeof (multiboot_info_t));
+  /* Intersect [first, last] with [MEMORY_LOWER_LIMIT, MEMORY_UPPER_LIMIT]. */
+  first = (first > MEMORY_LOWER_LIMIT) ? first : MEMORY_LOWER_LIMIT;
+  last = (last < MEMORY_UPPER_LIMIT) ? last : MEMORY_UPPER_LIMIT;
 
-  if (mbd->flags & MULTIBOOT_INFO_MEMORY) {
-    kputs ("mem_lower: "); kputuix (mbd->mem_lower); kputs ("\n");
-    kputs ("mem_upper: "); kputuix (mbd->mem_upper); kputs ("\n");
-  }
+  /* Align to frame boundaries. */
+  first = PAGE_ALIGN_UP (first);
+  last = PAGE_ALIGN_DOWN (last + 1) - 1;
 
-  if (mbd->flags & MULTIBOOT_INFO_BOOTDEV) {
-    kputs ("boot_device: "); kputuix (mbd->boot_device); kputs ("\n");
-  }
-
-  if (mbd->flags & MULTIBOOT_INFO_CMDLINE) {
-    char* cmdline = (char*)mbd->cmdline;
-    extend_identity_map ((unsigned int)cmdline + 1);
-    for (; *cmdline != 0; ++cmdline) {
-      extend_identity_map ((unsigned int)cmdline + 1);
+  if (first < last) {
+    uint64_t size = last - first + 1;
+    while (size != 0) {
+      uint64_t sz = (size >= MAX_REGION_SIZE) ? MAX_REGION_SIZE : size;
+      stack_allocator_t* stack_allocator = stack_allocator_allocate (ADDRESS_TO_FRAME (first), ADDRESS_TO_FRAME (first + sz));
+      stack_allocator->next = stack_allocators;
+      stack_allocators = stack_allocator;
+      size -= sz;
+      first += sz;
     }
-    kputs ("cmdline: "); kputs ((char *)mbd->cmdline); kputs ("\n");
-  }
-
-  /* if (mbd->flags & MULTIBOOT_INFO_MODS) { */
-  /*   kputs ("MULTIBOOT_INFO_MODS\n"); */
-  /* } */
-  /* if (mbd->flags & MULTIBOOT_INFO_AOUT_SYMS) { */
-  /*   kputs ("MULTIBOOT_INFO_INFO_AOUT_SYMS\n"); */
-  /* } */
-  /* if (mbd->flags & MULTIBOOT_INFO_ELF_SHDR) { */
-  /*   kputs ("MULTIBOOT_INFO_ELF_SHDR\n"); */
-  /* } */
-
-  if (mbd->flags & MULTIBOOT_INFO_MEM_MAP) {
-    extend_identity_map (mbd->mmap_addr + mbd->mmap_length);
-  }
-
-  /* if (mbd->flags & MULTIBOOT_INFO_DRIVE_INFO) { */
-  /*   kputs ("MULTIBOOT_INFO_DRIVE_INFO\n"); */
-  /* } */
-  /* if (mbd->flags & MULTIBOOT_INFO_CONFIG_TABLE) { */
-  /*   kputs ("MULTIBOOT_INFO_CONFIG_TABLE\n"); */
-  /* } */
-
-  if (mbd->flags & MULTIBOOT_INFO_BOOT_LOADER_NAME) {
-    char* name = (char*)mbd->boot_loader_name;
-    extend_identity_map ((unsigned int)name + 1);
-    for (; *name != 0; ++name) {
-      extend_identity_map ((unsigned int)name + 1);
-    }
-    kputs ("boot_loader_name: "); kputs ((char *)mbd->boot_loader_name); kputs ("\n");
-  }
-
-  /* if (mbd->flags & MULTIBOOT_INFO_APM_TABLE) { */
-  /*   kputs ("MULTIBOOT_INFO_APM_TABLE\n"); */
-  /* } */
-  /* if (mbd->flags & MULTIBOOT_INFO_VIDEO_INFO) { */
-  /*   kputs ("MULTIBOOT_INFO_VIDEO_INFO\n"); */
-  /* } */
-
-  /* Align the end of the identity map. */
-  identity_end = PAGE_ALIGN_UP (identity_end);
-
-  /* Marker for a placement allocator. */
-  placement_end = identity_end + KERNEL_VIRTUAL_BASE;
-
-  /* Parse the multiboot data structure. */
-  multiboot_memory_map_t* ptr = (multiboot_memory_map_t*)mbd->mmap_addr;
-  multiboot_memory_map_t* limit = (multiboot_memory_map_t*)(mbd->mmap_addr + mbd->mmap_length);
-  while (ptr < limit) {
-    unsigned int first = ptr->addr;
-    unsigned int last = ptr->addr + ptr->len - 1;
-    kputuix (first); kputs ("-"); kputuix (last);
-    switch (ptr->type) {
-    case MULTIBOOT_MEMORY_AVAILABLE:
-      kputs (" AVAILABLE\n");
-      /* Don't mess with memory below a certain limit. */
-      if (last > MEMORY_LOWER_LIMIT) {
-  	if (first < MEMORY_LOWER_LIMIT) {
-  	  first = MEMORY_LOWER_LIMIT;
-  	}
-  	/* Split memory that straddles the DMA limit. */
-  	if (first < MEMORY_DMA_LIMIT && last >= MEMORY_DMA_LIMIT) {
-  	  allocate_dma_zone (first, MEMORY_DMA_LIMIT - 1);
-  	  allocate_normal_zone (MEMORY_DMA_LIMIT, last);
-  	}
-  	else if (last < MEMORY_DMA_LIMIT) {
-  	  allocate_dma_zone (first, last);
-  	}
-  	else {
-  	  allocate_normal_zone (first, last);
-  	}
-      }
-      break;
-    case MULTIBOOT_MEMORY_RESERVED:
-      kputs (" RESERVED\n");
-      break;
-    default:
-      kputs (" UNKNOWN\n");
-      break;
-    }
-    /* Move to the next descriptor. */
-    ptr = (multiboot_memory_map_t*) (((char*)&(ptr->addr)) + ptr->size);
   }
 }
 
-unsigned int
-frame_manager_physical_begin (void)
+static stack_allocator_t*
+find_allocator (uint32_t frame)
 {
-  return identity_end;
-}
-
-unsigned int
-frame_manager_physical_end (void)
-{
-  return placement_end - KERNEL_VIRTUAL_BASE;
-}
-
-void*
-frame_manager_logical_begin (void)
-{
-  return (void*) (identity_end + KERNEL_VIRTUAL_BASE);
-}
-
-void*
-frame_manager_logical_end (void)
-{
-  return (void*) placement_end;
-}
-
-static zone_item_t*
-find_allocator (unsigned int frame)
-{
-  zone_item_t* ptr;
+  stack_allocator_t* ptr;
   /* Find the allocator. */
-  for (ptr = zone_head; ptr != 0 && !(frame >= ptr->frame_begin && frame < ptr->frame_end) ; ptr = ptr->next) ;;
+  for (ptr = stack_allocators; ptr != 0 && !(frame >= ptr->begin && frame < ptr->end) ; ptr = ptr->next) ;;
 
   return ptr;
 }
 
 void
-frame_manager_mark_as_used (unsigned int frame)
+frame_manager_mark_as_used (uint32_t frame)
 {
-  zone_item_t* ptr = find_allocator (frame);
+  stack_allocator_t* ptr = find_allocator (frame);
 
   if (ptr != 0) {
-    /* Dispatch. */
-    switch (ptr->allocator_type) {
-    case STACK_ALLOCATOR:
-      stack_allocator_mark_as_used (ptr, frame);
-      break;
-    }
+    stack_allocator_mark_as_used (ptr, frame);
   }
 }
 
-unsigned int
-frame_manager_allocate ()
+uint32_t
+frame_manager_alloc ()
 {
-  zone_item_t* ptr;
+  stack_allocator_t* ptr;
   /* Find an allocator with a free frame. */
-  for (ptr = zone_head; ptr != 0 && ptr->free_count == 0 ; ptr = ptr->next) ;;
+  for (ptr = stack_allocators; ptr != 0 && ptr->free_head == STACK_ALLOCATOR_EOL; ptr = ptr->next) ;;
 
   /* Out of frames. */
   kassert (ptr != 0);
 
-  /* Dispatch. */
-  switch (ptr->allocator_type) {
-  case STACK_ALLOCATOR:
-    return stack_allocator_allocate (ptr);
-    break;
-  }
-
-  /* Not reached. */
-  kassert (0);
-  return -1;
+  uint32_t retval = stack_allocator_alloc (ptr);
+  kputs ("frame_manager allocating "); kputx32 (retval); kputs ("\n");
+  return retval;
 }
 
 void
-frame_mananger_incref (unsigned int frame)
+frame_manager_incref (uint32_t frame)
 {
-  zone_item_t* ptr = find_allocator (frame);
+  stack_allocator_t* ptr = find_allocator (frame);
 
   /* No allocator for frame. */
   kassert (ptr != 0);
 
-  /* Dispatch. */
-  switch (ptr->allocator_type) {
-  case STACK_ALLOCATOR:
-    stack_allocator_incref (ptr, frame);
-    break;
-  }
+  stack_allocator_incref (ptr, frame);
 }
 
 void
-frame_manager_decref (unsigned int frame)
+frame_manager_decref (uint32_t frame)
 {
-  zone_item_t* ptr = find_allocator (frame);
+  stack_allocator_t* ptr = find_allocator (frame);
 
   /* No allocator for frame. */
   kassert (ptr != 0);
 
-  /* Dispatch. */
-  switch (ptr->allocator_type) {
-  case STACK_ALLOCATOR:
-    stack_allocator_decref (ptr, frame);
-    break;
-  }
+  stack_allocator_decref (ptr, frame);
 }

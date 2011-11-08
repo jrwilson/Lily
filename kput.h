@@ -14,14 +14,22 @@
   Justin R. Wilson
 */
 
+#include "types.h"
+
 void
 kputs (const char* string);
 
 void
-kputucx (unsigned char n);
+kputx8 (uint8_t);
 
 void
-kputuix (unsigned int n);
+kputx16 (uint16_t);
+
+void
+kputx32 (uint32_t);
+
+void
+kputx64 (uint64_t);
 
 void
 kputp (const void* p);

@@ -27,7 +27,6 @@ SECTIONS
 	/* Place the program text after the previous segment but logically after 0xC000000. */
 	.text ALIGN (0x1000) : AT(ADDR(.text) - 0xC0000000)
 	{
-		kernel_begin = .;
 		text_begin = .;
 		*(.text)
 		text_end = .;
@@ -47,7 +46,6 @@ SECTIONS
 		*(.bss)
 		*(COMMON)
 		data_end = .;
-		kernel_end = .;
 	}
 
 }

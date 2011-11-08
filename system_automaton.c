@@ -160,9 +160,9 @@ page_fault_handler (registers_t* regs)
       else {
 	/* Data. */
 	/* Back the request with a frame. */
-	vm_manager_map (addr, frame_manager_allocate (), ptr->page_privilege, ptr->writable, PRESENT);
+	vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, ptr->writable, PRESENT);
 	/* Clear. */
-	memset (addr, 0, PAGE_SIZE);
+	memset (addr, 0xFF, PAGE_SIZE);
 	return;
       }
     }
@@ -220,8 +220,11 @@ page_fault_handler (registers_t* regs)
 }
 
 void
-system_automaton_initialize (void)
+system_automaton_initialize (void* placement_begin,
+			     void* placement_end)
 {
+  kputs (__func__); kputs ("\n");
+
   /* kassert (next_aid == 0); */
   kassert (automata == 0);
   kassert (bindings == 0);
@@ -242,10 +245,18 @@ system_automaton_initialize (void)
   /* Data. */
   memory_map[1].type = VM_AREA_DATA;
   memory_map[1].begin = (void*)PAGE_ALIGN_DOWN (&data_begin);
-  memory_map[1].end = (void*)PAGE_ALIGN_UP (frame_manager_logical_end ());
-  memory_map[0].page_privilege = SUPERVISOR;
-  memory_map[0].writable = WRITABLE;
-  memory_map[1].next = 0;
+  memory_map[1].end = (void*)PAGE_ALIGN_UP (&data_end);
+  memory_map[1].page_privilege = SUPERVISOR;
+  memory_map[1].writable = WRITABLE;
+  memory_map[1].next = &memory_map[2];
+  /* Placement data. */
+  memory_map[2].type = VM_AREA_DATA;
+  memory_map[2].begin = (void*)PAGE_ALIGN_DOWN (placement_begin);
+  memory_map[2].end = (void*)PAGE_ALIGN_UP (placement_end);
+  memory_map[2].page_privilege = SUPERVISOR;
+  memory_map[2].writable = WRITABLE;
+  memory_map[2].next = 0;
+
 
   /* For bootstrapping, pretend that an automaton is running. */
   automaton_t fake_automaton;
@@ -265,14 +276,14 @@ system_automaton_initialize (void)
 
   unsigned int* a = malloc (sizeof (unsigned int));
   *a = 0x12345678;
-  kputuix (*a); kputs ("\n");
+  kputx32 (*a); kputs ("\n");
 
   kassert (0);
 }
 
 void*
 automaton_allocate (automaton_t* automaton,
-		    unsigned int size,
+		    size_t size,
 		    syserror_t* error)
 {
   kassert (automaton != 0);
@@ -291,7 +302,7 @@ automaton_allocate (automaton_t* automaton,
 	  ceiling = (*ptr)->next->begin;
 	}
 
-	if (size <= (unsigned int)(ceiling - (*ptr)->end)) {
+	if (size <= (size_t)(ceiling - (*ptr)->end)) {
 	  /* We can extend. */
 	  void* retval = (*ptr)->end;
 	  (*ptr)->end += size;

@@ -16,7 +16,10 @@ gdt_asm.o \
 gdt.o \
 idt_asm.o \
 idt.o \
+multiboot_preparse.o \
+placement_allocator.o \
 frame_manager.o \
+multiboot_parse.o \
 vm_manager.o \
 syscall_handler.o \
 scheduler.o \
