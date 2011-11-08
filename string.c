@@ -16,12 +16,12 @@
 void
 memset (void* ptr,
 	unsigned char value,
-	unsigned int size)
+	size_t size)
 {
   unsigned char* p = ptr;
   while (size > 0) {
     *p = value;
-    --p;
+    ++p;
     --size;
   }
 }

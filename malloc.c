@@ -20,8 +20,8 @@
 
 typedef struct header header_t;
 struct header {
-  unsigned int available : 1;
-  unsigned int magic : 31;
+  uint32_t available : 1;
+  uint32_t magic : 31;
   size_t size; /* Does not include header. */
   header_t* prev;
   header_t* next;
@@ -94,41 +94,17 @@ dump_heap ()
 void*
 malloc (size_t size)
 {
-  kputs (__func__); kputs ("\n");
-
   if (page_size == 0) {
     /* Initialize. */
     page_size = sys_get_page_size ();
-    kputs ("page_size = "); kputx32 (page_size); kputs ("\n");
     first_header = sys_allocate (page_size);
-    kputs ("first_header = "); kputp (first_header); kputs ("\n");
     last_header = first_header;
-    kputs ("last_header = "); kputp (last_header); kputs ("\n");
     first_header->available = 1;
-    kputs ("available = "); kputx32 (first_header->available); kputs ("\n");
     first_header->magic = MAGIC;
-    kputs ("magic = "); kputx32 (first_header->magic); kputs ("\n");
     first_header->size = page_size - sizeof (header_t);
-    kputs ("size = "); kputx32 (first_header->size); kputs ("\n");
     first_header->prev = 0;
-    kputs ("prev = "); kputp (first_header->prev); kputs ("\n");
     first_header->next = 0;
-    kputs ("next = "); kputp (first_header->next); kputs ("\n");
   }
-
-  kputs ("page_size = "); kputx32 (page_size); kputs ("\n");
-  kputs ("first_header = "); kputp (first_header); kputs ("\n");
-  kputs ("last_header = "); kputp (last_header); kputs ("\n");
-  kputs ("available = "); kputx32 (first_header->available); kputs ("\n");
-  kputs ("magic = "); kputx32 (first_header->magic); kputs ("\n");
-  kputs ("size = "); kputx32 (first_header->size); kputs ("\n");
-  kputs ("prev = "); kputp (first_header->prev); kputs ("\n");
-  kputs ("next = "); kputp (first_header->next); kputs ("\n");
-
-  dump_heap ();
-  kassert (0);
-
-  kputs ("size = "); kputx32 (size); kputs ("\n");
 
   header_t* ptr = find_header (first_header, size);
   if (ptr == 0) {
@@ -146,9 +122,38 @@ malloc (size_t size)
 }
 
 void
-free (void* ptr)
+free (void* p)
 {
-  kassert (0);
+  header_t* ptr = p;
+  --ptr;
+  if (p != 0 &&
+      ptr >= first_header &&
+      ptr <= last_header &&
+      ptr->magic == MAGIC &&
+      ptr->available == 0) {
+
+    ptr->available = 1;
+    
+    /* Merge with next. */
+    if (ptr->next != 0 && ptr->next->available && ptr->next == (header_t*)((char*)ptr + sizeof (header_t) + ptr->size)) {
+      ptr->size += sizeof (header_t) + ptr->next->size;
+      if (ptr->next == last_header) {
+    	last_header = ptr;
+      }
+      ptr->next = ptr->next->next;
+      ptr->next->prev = ptr;
+    }
+    
+    /* Merge with prev. */
+    if (ptr->prev != 0 && ptr->prev->available && ptr == (header_t*)((char*)ptr->prev + sizeof (header_t) + ptr->prev->size)) {
+      ptr->prev->size += sizeof (header_t) + ptr->size;
+      ptr->prev->next = ptr->next;
+      ptr->next->prev = ptr->prev;
+      if (ptr == last_header) {
+    	last_header = ptr->prev;
+      }
+    }
+  }
 }
 
 
@@ -251,40 +256,3 @@ free (void* ptr)
 /*   ptr->available = 0; */
 /*   return (ptr + 1); */
 /* } */
-
-
-/* void */
-/* kfree (void* p) */
-/* { */
-/*   header_t* ptr = p; */
-/*   --ptr; */
-/*   kassert ((unsigned int)ptr >= heap_base); */
-/*   kassert ((unsigned int)ptr < heap_limit); */
-/*   kassert (ptr->magic == HEAP_MAGIC); */
-/*   kassert (ptr->available == 0); */
-
-/*   ptr->available = 1; */
-
-/*   /\* Merge with next. *\/ */
-/*   if (ptr->next != 0 && ptr->next->available) { */
-/*     ptr->size += sizeof (header_t) + ptr->next->size; */
-/*     if (ptr->next == heap_last) { */
-/*       heap_last = ptr; */
-/*     } */
-/*     ptr->next = ptr->next->next; */
-/*     ptr->next->prev = ptr; */
-/*   } */
-
-/*   /\* Merge with prev. *\/ */
-/*   if (ptr->prev != 0 && ptr->prev->available) { */
-/*     ptr->prev->size += sizeof (header_t) + ptr->size; */
-/*     ptr->prev->next = ptr->next; */
-/*     ptr->next->prev = ptr->prev; */
-/*     if (ptr == heap_last) { */
-/*       heap_last = ptr->prev; */
-/*     } */
-/*   } */
-/* } */
-
-/* /\* TODO:  Reclaim identity mapped memory. *\/ */
-/* /\* TODO:  Reclaim the stack. *\/ */

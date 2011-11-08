@@ -23,6 +23,8 @@ multiboot_parse.o \
 vm_manager.o \
 syscall_handler.o \
 scheduler.o \
+vm_area.o \
+automaton.o \
 system_automaton.o \
 syscall.o \
 malloc.o \

@@ -26,13 +26,20 @@
 #include "syscall_handler.h"
 #include "system_automaton.h"
 
+extern int text_begin;
+extern int text_end;
+
+extern int data_begin;
+extern int data_end;
+
+
 /* logical_end denotes the end of the logical address space as setup by loader.s.
    The multiboot data structures use physical addresses.
    loader.s identity maps up to (logical_address - KERNEL_VIRTUAL_BASE) so they can be read without manual translation.
  */
 void
 kmain (void* logical_end,
-       const multiboot_info_t* multiboot_info,
+       multiboot_info_t* multiboot_info,
        uint32_t multiboot_bootloader_magic)
 {
   disable_interrupts ();
@@ -50,15 +57,15 @@ kmain (void* logical_end,
 
   /* First, find the area of memory used for multiboot data structures. */
   kassert (multiboot_bootloader_magic == MULTIBOOT_BOOTLOADER_MAGIC);
-  uint32_t multiboot_begin = (uint32_t)multiboot_info;
-  uint32_t multiboot_end = multiboot_begin + sizeof (multiboot_info_t);
+  void* multiboot_begin = multiboot_info;
+  void* multiboot_end = multiboot_begin + sizeof (multiboot_info_t);
 
   /* If you are interested in a multiboot data structure, add code to adjust multiboot_begin and multiboot_end here. */
   kassert (multiboot_preparse_memory_map (multiboot_info, &multiboot_begin, &multiboot_end) == 0);
 
   /* Adjust the limits to fall on page boundaries and convert them to logical addresses. */
-  multiboot_begin = PAGE_ALIGN_DOWN (multiboot_begin) + KERNEL_VIRTUAL_BASE;
-  multiboot_end = PAGE_ALIGN_UP (multiboot_end) + KERNEL_VIRTUAL_BASE;
+  multiboot_begin = (void*)PAGE_ALIGN_DOWN ((size_t)multiboot_begin) + KERNEL_VIRTUAL_BASE;
+  multiboot_end = (void*)PAGE_ALIGN_UP ((size_t)multiboot_end) + KERNEL_VIRTUAL_BASE;
 
   /* The logical beginning and end of the data allocated by the placement allocator. */
   void* placement_begin;
@@ -79,6 +86,10 @@ kmain (void* logical_end,
 
   /* Initialize the virtual memory manager. */
   vm_manager_initialize (placement_begin, placement_end);
+
+  kputs ("text "); kputp (&text_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)&text_end)); kputs ("\n");
+  kputs ("data "); kputp (&data_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)&data_end)); kputs ("\n");
+  kputs ("plac "); kputp (placement_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)placement_end)); kputs ("\n");
 
   /* Initialize the system call handler. */
   syscall_handler_initialize ();

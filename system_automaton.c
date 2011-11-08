@@ -30,42 +30,6 @@
 #define PAGE_RESERVED_ERROR (1 << 3)
 #define PAGE_INSTRUCTION_ERROR (1 << 4)
 
-/* I stole vm_area from Linux. */
-typedef enum {
-  VM_AREA_TEXT,
-  VM_AREA_DATA,
-  VM_AREA_STACK,
-  VM_AREA_BUFFER,
-} vm_area_type_t;
-
-/* These need to be sorted by address. */
-typedef struct vm_area vm_area_t;
-struct vm_area {
-  vm_area_type_t type;
-  void* begin;
-  void* end;
-  page_privilege_t page_privilege;
-  writable_t writable;
-  vm_area_t* next;
-};
-
-struct automaton {
-  /* Automata execute at a certain privilege level. */
-  privilege_t privilege;
-  /* Table of action descriptors for guiding execution, checking bindings, etc. */
-  hash_map_t* actions;
-  /* The scheduler uses this object. */
-  void* scheduler_context;
-  /* Physical address of the page directory. */
-  unsigned int page_directory;
-  /* Stack pointer (constant). */
-  void* stack_pointer;
-  /* Memory map. */
-  vm_area_t* memory_map;
-  /* Can't map into this area. */
-  void* memory_ceiling;
-};
-
 typedef struct {
   /* aid_t aid; */
   unsigned int action_entry_point;
@@ -81,26 +45,10 @@ extern int data_end;
 extern int stack_begin;
 extern int stack_end;
 
-/* /\* The next aid to test when creating a new automaton. *\/ */
-/* static aid_t next_aid = 0; */
-/* The set of automata. */
-static hash_map_t* automata = 0;
+static automaton_t* system_automaton = 0;
+
 /* The set of bindings. */
 static hash_map_t* bindings = 0;
-
-/* /\* The hash map of automata uses the aid as the key. *\/ */
-/* static unsigned int */
-/* aid_hash_func (const void* x) */
-/* { */
-/*   return (unsigned int)x; */
-/* } */
-
-/* static int */
-/* aid_compare_func (const void* x, */
-/* 		  const void* y) */
-/* { */
-/*   return x - y; */
-/* } */
 
 /* /\* The hash map of bindings uses the output action as the key. *\/ */
 /* static unsigned int */
@@ -130,17 +78,24 @@ static hash_map_t* bindings = 0;
 static void
 page_fault_handler (registers_t* regs)
 {
-  /* Get the current automaton. */
-  automaton_t* automaton = scheduler_get_current_automaton ();
-
   /* Get the faulting address. */
   void* addr;
   asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-  addr = (void*)PAGE_ALIGN_DOWN (addr);
+  addr = (void*)PAGE_ALIGN_DOWN ((size_t)addr);
+
+  automaton_t* automaton;
+
+  if (addr < (void*)KERNEL_VIRTUAL_BASE) {
+    /* Get the current automaton. */  
+    automaton = scheduler_get_current_automaton ();
+  }
+  else {
+    automaton = system_automaton_get_instance ();
+  }
 
   /* Find the address in the memory map. */
   vm_area_t* ptr;
-  for (ptr = automaton->memory_map; ptr != 0; ptr = ptr->next) {
+  for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
     if (addr >= ptr->begin && addr < ptr->end) {
       break;
     }
@@ -154,16 +109,16 @@ page_fault_handler (registers_t* regs)
     else {
       /* Not present. */
       if (regs->error & PAGE_INSTRUCTION_ERROR) {
-	/* Instruction. */
-	kassert (0);
+  	/* Instruction. */
+  	kassert (0);
       }
       else {
-	/* Data. */
-	/* Back the request with a frame. */
-	vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, ptr->writable, PRESENT);
-	/* Clear. */
-	memset (addr, 0xFF, PAGE_SIZE);
-	return;
+  	/* Data. */
+  	/* Back the request with a frame. */
+  	vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, ptr->writable, PRESENT);
+  	/* Clear. */
+  	memset (addr, 0xFF, PAGE_SIZE);
+  	return;
       }
     }
   }
@@ -223,10 +178,6 @@ void
 system_automaton_initialize (void* placement_begin,
 			     void* placement_end)
 {
-  kputs (__func__); kputs ("\n");
-
-  /* kassert (next_aid == 0); */
-  kassert (automata == 0);
   kassert (bindings == 0);
 
   set_interrupt_handler (PAGE_FAULT_INTERRUPT, page_fault_handler);
@@ -234,29 +185,39 @@ system_automaton_initialize (void* placement_begin,
   /* For bootstrapping, pretend that an automaton is running. */
 
   /* Create a simple memory map. */
-  vm_area_t memory_map[3];
-  /* Text. */
-  memory_map[0].type = VM_AREA_TEXT;
-  memory_map[0].begin = (void*)PAGE_ALIGN_DOWN (&text_begin);
-  memory_map[0].end = (void*)PAGE_ALIGN_UP (&text_end);
-  memory_map[0].page_privilege = SUPERVISOR;
-  memory_map[0].writable = NOT_WRITABLE;
-  memory_map[0].next = &memory_map[1];
-  /* Data. */
-  memory_map[1].type = VM_AREA_DATA;
-  memory_map[1].begin = (void*)PAGE_ALIGN_DOWN (&data_begin);
-  memory_map[1].end = (void*)PAGE_ALIGN_UP (&data_end);
-  memory_map[1].page_privilege = SUPERVISOR;
-  memory_map[1].writable = WRITABLE;
-  memory_map[1].next = &memory_map[2];
-  /* Placement data. */
-  memory_map[2].type = VM_AREA_DATA;
-  memory_map[2].begin = (void*)PAGE_ALIGN_DOWN (placement_begin);
-  memory_map[2].end = (void*)PAGE_ALIGN_UP (placement_end);
-  memory_map[2].page_privilege = SUPERVISOR;
-  memory_map[2].writable = WRITABLE;
-  memory_map[2].next = 0;
 
+  /* Text. */
+  vm_area_t text;
+  vm_area_initialize (&text,
+		      VM_AREA_TEXT,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)&text_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)&text_end),
+		      SUPERVISOR,
+		      NOT_WRITABLE);
+
+  /* Data. */
+  vm_area_t data;
+  vm_area_initialize (&data,
+		      VM_AREA_DATA,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)&data_end),
+		      SUPERVISOR,
+		      WRITABLE);
+
+  /* Placement data. */
+  vm_area_t placement;
+  vm_area_initialize (&placement,
+		      VM_AREA_DATA,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)placement_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)placement_end),
+		      SUPERVISOR,
+		      WRITABLE);
+  text.prev = 0;
+  text.next = &data;
+  data.prev = &text;
+  data.next = &placement;
+  placement.prev = &data;
+  placement.next = 0;
 
   /* For bootstrapping, pretend that an automaton is running. */
   automaton_t fake_automaton;
@@ -265,63 +226,35 @@ system_automaton_initialize (void* placement_begin,
   fake_automaton.scheduler_context = 0;
   fake_automaton.page_directory = vm_manager_page_directory_physical_address ();
   fake_automaton.stack_pointer = &stack_end;
-  fake_automaton.memory_map = &memory_map[0];
+  fake_automaton.memory_map_begin = &text;
+  fake_automaton.memory_map_end = &placement;
   fake_automaton.memory_ceiling = vm_manager_page_directory_logical_address ();
+
+  system_automaton = &fake_automaton;
 
   /* Initialize the scheduler so it thinks the system automaton is executing. */
   scheduler_initialize (&fake_automaton);
 
-  /* automata = allocate_hash_map (aid_hash_func, aid_compare_func); */
-  /* bindings = allocate_hash_map (output_action_hash_func, output_action_compare_func); */
+  /* The system automaton's ceiling is the start of the paging data structures. */
+  automaton_t* sys_automaton = automaton_allocate (RING0, vm_manager_page_directory_physical_address (), &stack_end, vm_manager_page_directory_logical_address ());
 
-  unsigned int* a = malloc (sizeof (unsigned int));
-  *a = 0x12345678;
-  kputx32 (*a); kputs ("\n");
+  /* Form the system automaton's memory map. */
+  vm_area_t* ptr;
+  for (ptr = &text; ptr != 0; ptr = ptr->next) {
+    kassert (automaton_insert_vm_area (sys_automaton, ptr) == 0);
+  }
+  
+  system_automaton = sys_automaton;
 
   kassert (0);
 }
 
-void*
-automaton_allocate (automaton_t* automaton,
-		    size_t size,
-		    syserror_t* error)
+automaton_t*
+system_automaton_get_instance (void)
 {
-  kassert (automaton != 0);
+  kassert (system_automaton != 0);
 
-  if (IS_PAGE_ALIGNED (size)) {
-    /* Okay.  Let's look for a data area that we can extend. */
-    void* end;
-    vm_area_t** ptr;
-    for (ptr = &automaton->memory_map; (*ptr) != 0; ptr = &(*ptr)->next) {
-      end = (*ptr)->end;
-      if ((*ptr)->type == VM_AREA_DATA) {
-	/* Start with the ceiling of the automaton. */
-	void* ceiling = automaton->memory_ceiling;
-	if ((*ptr)->next != 0) {
-	  /* Ceiling drops so we don't interfere with next area. */
-	  ceiling = (*ptr)->next->begin;
-	}
-
-	if (size <= (size_t)(ceiling - (*ptr)->end)) {
-	  /* We can extend. */
-	  void* retval = (*ptr)->end;
-	  (*ptr)->end += size;
-	  return retval;
-	}
-      }
-    }
-
-    if (*ptr == 0) {
-      /* TODO:  Automaton doesn't end with a data area.  Try to create a new area. */
-      kassert (0);
-    }
-
-    kassert (0);
-  }
-  else {
-    *error = SYSERROR_REQUESTED_SIZE_NOT_ALIGNED;
-    return 0;
-  }
+  return system_automaton;
 }
 
 /* #include "mm.h" */

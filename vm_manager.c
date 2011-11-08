@@ -16,15 +16,15 @@
 #include "frame_manager.h"
 #include "idt.h"
 
-/* Number of entries in a page table or directory. */
-#define PAGE_ENTRY_COUNT 1024
-
 /* Everything must fit into 4MB initialy. */
 #define INITIAL_LOGICAL_LIMIT (KERNEL_VIRTUAL_BASE + 0x400000)
 
+/* Number of entries in a page table or directory. */
+#define PAGE_ENTRY_COUNT 1024
+
 /* Macros for address manipulation. */
-#define PAGE_DIRECTORY_ENTRY(addr)  (((unsigned int)(addr) & 0xFFC00000) >> 22)
-#define PAGE_TABLE_ENTRY(addr) (((unsigned int)(addr) & 0x3FF000) >> 12)
+#define PAGE_DIRECTORY_ENTRY(addr)  (((size_t)(addr) & 0xFFC00000) >> 22)
+#define PAGE_TABLE_ENTRY(addr) (((size_t)(addr) & 0x3FF000) >> 12)
 #define PAGE_ADDRESS_OFFSET(addr) ((addr) & 0xFFF)
 
 typedef struct {
@@ -45,7 +45,7 @@ static page_directory_t kernel_page_directory __attribute__ ((aligned (PAGE_SIZE
 static page_table_t low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
 static page_table_entry_t
-make_page_table_entry (unsigned int frame,
+make_page_table_entry (frame_t frame,
 		       page_privilege_t privilege,
 		       writable_t writable,
 		       present_t present)
@@ -66,7 +66,7 @@ make_page_table_entry (unsigned int frame,
 }
 
 static page_directory_entry_t
-make_page_directory_entry (unsigned int frame,
+make_page_directory_entry (frame_t frame,
 			   present_t present)
 {
   page_directory_entry_t retval;
@@ -88,7 +88,7 @@ static void
 initialize_page_table (page_table_t* ptr)
 {
   kassert (ptr != 0);
-  kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
+  kassert (IS_PAGE_ALIGNED ((size_t)ptr));
 
   unsigned int k;
   for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
@@ -98,11 +98,11 @@ initialize_page_table (page_table_t* ptr)
 
 static void
 initialize_page_directory (page_directory_t* ptr,
-			   unsigned int physical_address)
+			   size_t physical_address)
 {
   kassert (ptr != 0);
-  kassert (IS_PAGE_ALIGNED ((unsigned int)ptr));
-  kassert (IS_PAGE_ALIGNED ((unsigned int)physical_address));
+  kassert (IS_PAGE_ALIGNED ((size_t)ptr));
+  kassert (IS_PAGE_ALIGNED ((size_t)physical_address));
 
   /* Clear the page directory and page table. */
   unsigned int k;
@@ -115,7 +115,7 @@ initialize_page_directory (page_directory_t* ptr,
 }
 
 static void
-switch_to_page_directory (unsigned int physical_addr)
+switch_to_page_directory (size_t physical_addr)
 {
   kassert (IS_PAGE_ALIGNED (physical_addr));
 
@@ -128,8 +128,8 @@ void
 vm_manager_initialize (void* placement_begin,
 		       void* placement_end)
 {
-  uint32_t low_page_table_paddr = (uint32_t)&low_page_table - KERNEL_VIRTUAL_BASE;
-  uint32_t kernel_page_directory_paddr = (uint32_t)&kernel_page_directory - KERNEL_VIRTUAL_BASE;
+  size_t low_page_table_paddr = (size_t)&low_page_table - KERNEL_VIRTUAL_BASE;
+  size_t kernel_page_directory_paddr = (size_t)&kernel_page_directory - KERNEL_VIRTUAL_BASE;
 
   /* Clear the page directory and page table. */
   initialize_page_table (&low_page_table);
@@ -147,37 +147,37 @@ vm_manager_initialize (void* placement_begin,
   end = (void*)0x100000;
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
-    uint32_t frame = ADDRESS_TO_FRAME ((uint32_t)begin);
+    frame_t frame = ADDRESS_TO_FRAME ((size_t)begin);
     low_page_table.entry[PAGE_TABLE_ENTRY (begin)] = make_page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
     frame_manager_mark_as_used (frame);
   }
 
   /* Map the kernel text. */
-  begin = (void*)PAGE_ALIGN_DOWN ((uint32_t)&text_begin);
-  end = (void*)PAGE_ALIGN_UP ((uint32_t)&text_end);
+  begin = (void*)PAGE_ALIGN_DOWN ((size_t)&text_begin);
+  end = (void*)PAGE_ALIGN_UP ((size_t)&text_end);
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
-    uint32_t frame = ADDRESS_TO_FRAME ((uint32_t)begin - KERNEL_VIRTUAL_BASE);
+    frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
     low_page_table.entry[PAGE_TABLE_ENTRY (begin)] = make_page_table_entry (frame, SUPERVISOR, NOT_WRITABLE, PRESENT);
     frame_manager_mark_as_used (frame);
   }
 
   /* Map the kernel data. */
-  begin = (void*)PAGE_ALIGN_DOWN ((uint32_t)&data_begin);
-  end = (void*)PAGE_ALIGN_UP ((uint32_t)&data_end);
+  begin = (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin);
+  end = (void*)PAGE_ALIGN_UP ((size_t)&data_end);
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
-    uint32_t frame = ADDRESS_TO_FRAME ((uint32_t)begin - KERNEL_VIRTUAL_BASE);
+    frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
     low_page_table.entry[PAGE_TABLE_ENTRY (begin)] = make_page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
     frame_manager_mark_as_used (frame);
   }
 
   /* Map the memory allocated by placement. */
-  begin = (void*)PAGE_ALIGN_DOWN ((uint32_t)placement_begin);
-  end = (void*)PAGE_ALIGN_UP ((uint32_t)placement_end);
+  begin = (void*)PAGE_ALIGN_DOWN ((size_t)placement_begin);
+  end = (void*)PAGE_ALIGN_UP ((size_t)placement_end);
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
-    uint32_t frame = ADDRESS_TO_FRAME ((uint32_t)begin - KERNEL_VIRTUAL_BASE);
+    frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
     low_page_table.entry[PAGE_TABLE_ENTRY (begin)] = make_page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
     frame_manager_mark_as_used (frame);
   }
@@ -213,13 +213,11 @@ vm_manager_page_directory_logical_address (void)
 
 void
 vm_manager_map (void* logical_addr,
-		uint32_t frame,
+		frame_t frame,
 		page_privilege_t privilege,
 		writable_t writable,
 		present_t present)
 {
-  kputs ("Mapping "); kputp (logical_addr); kputs (" to "); kputx32 (frame); kputs ("\n");
-
   page_directory_t* page_directory = get_page_directory ();
   page_table_t* page_table = get_page_table (logical_addr);
 
@@ -260,8 +258,6 @@ vm_manager_map (void* logical_addr,
 
   page_table->entry[PAGE_TABLE_ENTRY (logical_addr)] = make_page_table_entry (frame, privilege, writable, present);
 
-  switch_to_page_directory (FRAME_TO_ADDRESS (page_directory->entry[PAGE_ENTRY_COUNT - 1].frame));
-
-  /* /\* Flush the TLB. *\/ */
-  /* asm volatile ("invlpg %0\n" :: "m" (logical_addr)); */
+  /* Flush the TLB. */
+  asm volatile ("invlpg %0\n" :: "m" (logical_addr));
 }

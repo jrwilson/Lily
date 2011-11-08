@@ -15,14 +15,15 @@
 */
 
 #include "descriptor.h"
+#include "frame_manager.h"
 
 #define PAGE_SIZE 0x1000
 
 /* Should agree with loader.s. */
 #define KERNEL_VIRTUAL_BASE 0xC0000000
 
-#define PAGE_ALIGN_DOWN(addr) ((unsigned int)(addr) & 0xFFFFF000)
-#define PAGE_ALIGN_UP(addr) (PAGE_ALIGN_DOWN(((unsigned int)(addr) + PAGE_SIZE - 1)))
+#define PAGE_ALIGN_DOWN(addr) ((addr) & 0xFFFFF000)
+#define PAGE_ALIGN_UP(addr) (PAGE_ALIGN_DOWN((addr) + PAGE_SIZE - 1))
 #define IS_PAGE_ALIGNED(addr) (((addr) & 0xFFF) == 0)
 
 /* Convert physical addresses to frame numbers and vice versa. */
@@ -94,7 +95,7 @@ vm_manager_page_directory_physical_address (void);
 
 void
 vm_manager_map (void* logical_addr,
-		unsigned int frame,
+		frame_t frame,
 		page_privilege_t privilege,
 		writable_t writable,
 		present_t present);

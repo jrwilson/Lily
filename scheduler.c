@@ -15,20 +15,21 @@
 #include "scheduler.h"
 #include "kassert.h"
 #include "idt.h"
+#include "malloc.h"
 
-/* typedef enum { */
-/*   SCHEDULED, */
-/*   NOT_SCHEDULED */
-/* } status_t; */
+typedef enum {
+  SCHEDULED,
+  NOT_SCHEDULED
+} status_t;
 
-/* struct scheduler_context { */
-/*   aid_t aid; */
-/*   unsigned int action_entry_point; */
-/*   unsigned int parameter; */
-/*   status_t status; */
-/*   scheduler_context_t* prev; */
-/*   scheduler_context_t* next; */
-/* }; */
+struct scheduler_context {
+  automaton_t* automaton;
+  unsigned int action_entry_point;
+  unsigned int parameter;
+  status_t status;
+  scheduler_context_t* prev;
+  scheduler_context_t* next;
+};
 
 /* typedef struct { */
 /*   action_type_t action_type; */
@@ -54,20 +55,19 @@ scheduler_initialize (automaton_t* automaton)
   current_automaton = automaton;
 }
 
-
-/* scheduler_context_t* */
-/* allocate_scheduler_context (aid_t aid) */
-/* { */
-/*   kassert (0); */
-  /* scheduler_context_t* ptr = kmalloc (sizeof (scheduler_context_t)); */
-  /* ptr->aid = aid; */
-  /* ptr->action_entry_point = 0; */
-  /* ptr->parameter = 0; */
-  /* ptr->status = NOT_SCHEDULED; */
-  /* ptr->prev = 0; */
-  /* ptr->next = 0; */
-  /* return ptr; */
-/* } */
+scheduler_context_t*
+scheduler_allocate_context (automaton_t* automaton)
+{
+  kassert (automaton != 0);
+  scheduler_context_t* ptr = malloc (sizeof (scheduler_context_t));
+  ptr->automaton = automaton;
+  ptr->action_entry_point = 0;
+  ptr->parameter = 0;
+  ptr->status = NOT_SCHEDULED;
+  ptr->prev = 0;
+  ptr->next = 0;
+  return ptr;
+}
 
 automaton_t*
 scheduler_get_current_automaton (void)

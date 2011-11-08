@@ -94,7 +94,7 @@ to_hex (unsigned int n)
 }
 
 void
-kputucx (unsigned char n)
+kputx8 (unsigned char n)
 {
   char buf[5];
   buf[4] = 0;

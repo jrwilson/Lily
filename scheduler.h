@@ -14,15 +14,13 @@
   Justin R. Wilson
 */
 
-#include "system_automaton.h"
-
-typedef struct scheduler_context scheduler_context_t;
+#include "automaton.h"
 
 void
 scheduler_initialize (automaton_t* automaton);
 
-/* scheduler_context_t* */
-/* allocate_scheduler_context (aid_t aid); */
+scheduler_context_t*
+scheduler_allocate_context (automaton_t* automaton);
 
 automaton_t*
 scheduler_get_current_automaton (void);

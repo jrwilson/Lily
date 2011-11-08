@@ -28,7 +28,7 @@ placement_allocator_initialize (placement_allocator_t* ptr,
 
 void*
 placement_allocator_alloc (placement_allocator_t* ptr,
-			   uint32_t size)
+			   size_t size)
 {
   kassert (ptr != 0);
   

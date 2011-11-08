@@ -14,7 +14,6 @@
 #include "frame_manager.h"
 #include "vm_manager.h"
 #include "kassert.h"
-#include "kput.h"
 
 /* Don't mess with memory below 1M or above 4G. */
 #define MEMORY_LOWER_LIMIT 0x00100000
@@ -97,8 +96,6 @@ stack_allocator_mark_as_used (stack_allocator_t* ptr,
 {
   kassert (ptr != 0);
   kassert (frame >= ptr->begin && frame < ptr->end);
-
-  kputx32 (frame); kputs (" ");
 
   frame_entry_t frame_idx = frame - ptr->begin;
   /* Should be free. */
@@ -222,9 +219,7 @@ frame_manager_alloc ()
   /* Out of frames. */
   kassert (ptr != 0);
 
-  uint32_t retval = stack_allocator_alloc (ptr);
-  kputs ("frame_manager allocating "); kputx32 (retval); kputs ("\n");
-  return retval;
+  return stack_allocator_alloc (ptr);
 }
 
 void

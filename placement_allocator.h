@@ -29,7 +29,7 @@ placement_allocator_initialize (placement_allocator_t* placement_allocator,
 
 void*
 placement_allocator_alloc (placement_allocator_t* placement_allocator,
-			   uint32_t size);
+			   size_t size) __attribute__((warn_unused_result));
 
 void*
 placement_allocator_get_marker (placement_allocator_t* placement_allocator);

@@ -19,7 +19,7 @@
 
 int
 multiboot_preparse_memory_map (const multiboot_info_t* multiboot_info,
-			       unsigned int* multiboot_begin,
-			       unsigned int* multiboot_end);
+			       void* multiboot_begin,
+			       void* multiboot_end);
 
 #endif /* __multiboot_preparse_h__ */

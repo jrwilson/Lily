@@ -53,9 +53,9 @@ syscall_handler (registers_t* regs)
     break;
   case SYSCALL_ALLOCATE:
     {
-      uint32_t size = regs->ebx;
+      size_t size = regs->ebx;
       syserror_t error = SYSERROR_SUCCESS;
-      void* ptr = automaton_allocate (scheduler_get_current_automaton (), size, &error);
+      void* ptr = automaton_alloc (scheduler_get_current_automaton (), size, &error);
       regs->eax = error;
       regs->ebx = (uint32_t)ptr;
       return;

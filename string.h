@@ -14,10 +14,12 @@
   Justin R. Wilson
 */
 
+#include "types.h"
+
 void
 memset (void* ptr,
 	unsigned char value,
-	unsigned int size);
+	size_t size);
 
 #endif /* __string_h__ */
 

@@ -18,6 +18,8 @@
 #include "placement_allocator.h"
 #include "types.h"
 
+typedef uint32_t frame_t;
+
 void
 frame_manager_initialize (placement_allocator_t*);
 
@@ -28,18 +30,18 @@ frame_manager_add (placement_allocator_t*,
 
 /* This function allows a frame to be marked as used when initializing virtual memory. */
 void
-frame_manager_mark_as_used (uint32_t frame);
+frame_manager_mark_as_used (frame_t frame);
 
 /* Allocate a frame. */
-uint32_t
+frame_t
 frame_manager_alloc () __attribute__((warn_unused_result));
 
 /* Increment the reference count for a frame. */
 void
-frame_manager_incref (uint32_t frame);
+frame_manager_incref (frame_t frame);
 
 /* Decrement the reference count for a frame. */
 void
-frame_manager_decref (uint32_t frame);
+frame_manager_decref (frame_t frame);
 
 #endif /* __frame_manager_h__ */
