@@ -20,79 +20,172 @@
 #include "frame_manager.h"
 #include "vm_manager.h"
 #include "fifo_scheduler.h"
+#include "binding_manager.h"
 
-typedef struct {
-  /* aid_t aid; */
-  unsigned int action_entry_point;
-  unsigned int parameter;
-} output_action_t;
+/* Size of the stack used for "system" automata.
+   Must be large enough for functions and interrupts. */
+#define SYSTEM_STACK_SIZE 0x1000
+
+/* Locations to use for data segments of system automata. */
+#define SYSTEM_DATA_BEGIN 0X00100000
+#define SYSTEM_DATA_END   0X00101000
 
 /* Markers for the kernel. */
 extern int text_begin;
 extern int text_end;
 extern int data_begin;
 extern int data_end;
-/* Stack is in data section. */
-extern int stack_begin;
-extern int stack_end;
+
+extern int initrd_init;
 
 static automaton_t* system_automaton = 0;
 static list_allocator_t* system_allocator = 0;
-
 static fifo_scheduler_t* scheduler = 0;
 static unsigned int counter = 0;
 
 static void
 schedule ();
 
+UP_INTERNAL (system_automaton_first);
+UV_P_OUTPUT (system_automaton_init, automaton_t*);
+UP_INTERNAL (system_automaton_increment);
+
 static int
-init_precondition ()
+system_automaton_first_precondition ()
 {
   return scheduler == 0;
 }
 
 static void
-init_effect ()
+system_automaton_first_effect ()
 {
-  kputs (__func__); kputs ("\n");
+  /* Allocate a scheduler. */
   scheduler = fifo_scheduler_allocate (system_allocator);
+
+  binding_manager_initialize (system_allocator);
+
+  /* Create the initrd automaton. */
+
+  /* First, create a new page directory. */
+
+  /* Reserve some logical address space for the page directory. */
+  page_directory_t* page_directory = automaton_reserve (system_automaton, PAGE_SIZE);
+  kassert (page_directory != 0);
+  /* Allocate a frame. */
+  frame_t frame = frame_manager_alloc ();
+  /* Map the page directory. */
+  vm_manager_map (page_directory, frame, SUPERVISOR, WRITABLE);
+  /* Initialize the page directory with a copy of the current page directory. */
+  page_directory_initialize_with_current (page_directory, FRAME_TO_ADDRESS (frame));
+  /* Unmap. */
+  vm_manager_unmap (page_directory);
+  /* Unreserve. */
+  automaton_unreserve (system_automaton, page_directory);
+
+  /* Switch to the new page directory. */
+  vm_manager_switch_to_directory (FRAME_TO_ADDRESS (frame));
+  
+  /* Second, create the automaton. */
+  automaton_t* initrd = automaton_allocate (system_allocator,
+					    RING0,
+					    FRAME_TO_ADDRESS (frame),
+					    (void*)KERNEL_VIRTUAL_BASE,
+					    (void*)KERNEL_VIRTUAL_BASE,
+					    SUPERVISOR);
+
+  /* Third, create the automaton's memory map. */
+  {
+    /* Add a data area. */
+    vm_area_t data;
+    vm_area_initialize (&data,
+			VM_AREA_DATA,
+			(void*)SYSTEM_DATA_BEGIN,
+			(void*)SYSTEM_DATA_END,
+			SUPERVISOR,
+			WRITABLE);
+    kassert (automaton_insert_vm_area (initrd, &data) == 0);
+
+    /* Add a stack area. */
+    vm_area_t stack;
+    vm_area_initialize (&stack,
+			VM_AREA_STACK,
+			(void*)PAGE_ALIGN_DOWN ((size_t)initrd->stack_pointer - SYSTEM_STACK_SIZE),
+			(void*)PAGE_ALIGN_DOWN ((size_t)initrd->stack_pointer),
+			SUPERVISOR,
+			WRITABLE);
+    kassert (automaton_insert_vm_area (initrd, &stack) == 0);
+    /* Back with physical pages.  See comment in system_automaton_initialize (). */
+    void* ptr;
+    for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
+      vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
+    }
+  }
+
+  /* Fourth, add the actions. */
+  automaton_set_action_type (initrd, &initrd_init, INPUT);
+
+  /* Fifth, bind. */
+  binding_manager_bind (system_automaton, &system_automaton_init, (parameter_t)initrd,
+  			initrd, &initrd_init, 0);
+
+  /* Sixth, initialize the new automaton. */
+  SCHEDULER_ADD (scheduler, &system_automaton_init, (parameter_t)initrd);
+
+  /* Create the VFS automaton. */
+
+  /* Create the init automaton. */
+
+  kputs (__func__); kputs ("\n");
 }
 
 static void
-init_schedule () {
+system_automaton_first_schedule () {
   schedule ();
 }
 
-UP_INTERNAL (init);
+static int
+system_automaton_init_precondition (automaton_t* automaton)
+{
+  return 1;
+}
+
+static void
+system_automaton_init_effect (automaton_t* automaton)
+{
+  kputs (__func__); kputs (" "); kputp (automaton); kputs ("\n");
+}
+
+static void
+system_automaton_init_schedule (automaton_t* automaton) {
+  schedule ();
+}
 
 static int
-increment_precondition ()
+system_automaton_increment_precondition ()
 {
   return counter < 10;
 }
 
 static void
-increment_effect ()
+system_automaton_increment_effect ()
 {
-  kputs ("counter = "); kputx32 (counter); kputs ("\n");
+  kputs (__func__); kputs (" counter = "); kputx32 (counter); kputs ("\n");
   ++counter;
 }
 
 static void
-increment_schedule () {
+system_automaton_increment_schedule () {
   schedule ();
 }
-
-UP_INTERNAL (increment);
 
 static void
 schedule ()
 {
-  if (init_precondition ()) {
-    SCHEDULER_ADD (scheduler, &init_entry, 0);
+  if (system_automaton_first_precondition ()) {
+    SCHEDULER_ADD (scheduler, &system_automaton_first, 0);
   }
-  if (increment_precondition ()) {
-    SCHEDULER_ADD (scheduler, &increment_entry, 0);
+  if (system_automaton_increment_precondition ()) {
+    SCHEDULER_ADD (scheduler, &system_automaton_increment, 0);
   }
 }
 
@@ -135,7 +228,7 @@ system_automaton_initialize (void* placement_begin,
 
   /* Initialize an automaton. */
   automaton_t fake_automaton;
-  automaton_initialize (&fake_automaton, RING0, vm_manager_page_directory_physical_address (), &stack_end, vm_manager_page_directory_logical_address (), SUPERVISOR);
+  automaton_initialize (&fake_automaton, RING0, vm_manager_page_directory_physical_address (), 0, vm_manager_page_directory_logical_address (), SUPERVISOR);
   fake_automaton.memory_map_begin = &text;
   fake_automaton.memory_map_end = &placement;
 
@@ -152,24 +245,53 @@ system_automaton_initialize (void* placement_begin,
   kassert (system_allocator != 0);
 
   /* Allocate the real system automaton.
-     The system automaton's ceiling is the start of the paging data structures. */
-  automaton_t* sys_automaton = automaton_allocate (RING0, vm_manager_page_directory_physical_address (), &stack_end, vm_manager_page_directory_logical_address (), SUPERVISOR);
+     The system automaton's ceiling is the start of the paging data structures.
+     This is also used as the stack pointer. */
+  automaton_t* sys_automaton = automaton_allocate (system_allocator, RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
+  
+  {
+    /* Create a memory map for the system automatom. */
+    vm_area_t* ptr;
+    for (ptr = &text; ptr != 0; ptr = ptr->next) {
+      kassert (automaton_insert_vm_area (sys_automaton, ptr) == 0);
+    }
+  }
+  {
+    /* Add a stack. */
+    vm_area_t stack;
+    vm_area_initialize (&stack,
+			VM_AREA_STACK,
+			(void*)PAGE_ALIGN_DOWN ((size_t)vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE),
+			(void*)PAGE_ALIGN_DOWN ((size_t)vm_manager_page_directory_logical_address ()),
+			SUPERVISOR,
+			WRITABLE);
+    kassert (automaton_insert_vm_area (sys_automaton, &stack) == 0);
+    /* When call finish_action below, we will switch to the new stack.
+       If we don't back the stack with physical pages, the first stack operation will triple fault.
+       The scenario that we must avoid is:
+       1.  Stack operation (recall that exceptions/interrupts use the stack).
+       2.  No stack so page fault (exception).
+       3.  Page fault will try to use the stack, same result.
+       4.  Triple fault.  Game over.
 
-  /* Create a memory map for the system automatom. */
-  vm_area_t* ptr;
-  for (ptr = &text; ptr != 0; ptr = ptr->next) {
-    kassert (automaton_insert_vm_area (sys_automaton, ptr) == 0);
+       So, we need to back the stack with physical pages.
+    */
+    void* ptr;
+    for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
+      vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
+    }
   }
 
   /* Add the actions. */
-  automaton_set_action_type (sys_automaton, &init_entry, INTERNAL);
-  automaton_set_action_type (sys_automaton, &increment_entry, INTERNAL);
+  automaton_set_action_type (sys_automaton, &system_automaton_first, INTERNAL);
+  automaton_set_action_type (sys_automaton, &system_automaton_init, OUTPUT);
+  automaton_set_action_type (sys_automaton, &system_automaton_increment, INTERNAL);
 
   /* Set the system automaton. */
   system_automaton = sys_automaton;
 
   /* Go! */
-  schedule_action (system_automaton, &init_entry, 0);
+  schedule_action (system_automaton, &system_automaton_first, 0);
 
   /* Start the scheduler.  Doesn't return. */
   finish_action (0, 0);
@@ -183,181 +305,3 @@ system_automaton_get_instance (void)
   kassert (system_automaton != 0);
   return system_automaton;
 }
-
-list_allocator_t*
-system_automaton_get_allocator (void)
-{
-  kassert (system_allocator != 0);
-  return system_allocator;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* /\* The set of bindings. *\/ */
-/* static hash_map_t* bindings = 0; */
-
-/* /\* The hash map of bindings uses the output action as the key. *\/ */
-/* static unsigned int */
-/* output_action_hash_func (const void* x) */
-/* { */
-/*   const output_action_t* ptr = x; */
-/*   return ptr->aid ^ ptr->action_entry_point ^ ptr->parameter; */
-/* } */
-
-/* static int */
-/* output_action_compare_func (const void* x, */
-/* 			    const void* y) */
-/* { */
-/*   const output_action_t* p1 = x; */
-/*   const output_action_t* p2 = y; */
-/*   if (p1->aid != p2->aid) { */
-/*     return p1->aid - p2->aid; */
-/*   } */
-/*   else if (p1->action_entry_point != p2->action_entry_point) { */
-/*     return p1->action_entry_point - p2->action_entry_point; */
-/*   } */
-/*   else { */
-/*     return p1->parameter - p2->parameter; */
-/*   } */
-/* } */
-
-
-
-
-/* #include "mm.h" */
-/* #include "automata.h" */
-/* #include "scheduler.h" */
-
-/* extern int producer_init_entry; */
-/* extern int producer_produce_entry; */
-/* extern int consumer_init_entry; */
-/* extern int consumer_consume_entry; */
-
-  /* aid_t producer = create (RING0); */
-  /* set_action_type (producer, (unsigned int)&producer_init_entry, INTERNAL); */
-  /* set_action_type (producer, (unsigned int)&producer_produce_entry, OUTPUT); */
-
-  /* aid_t consumer = create (RING0); */
-  /* set_action_type (consumer, (unsigned int)&consumer_init_entry, INTERNAL); */
-  /* set_action_type (consumer, (unsigned int)&consumer_consume_entry, INPUT); */
-
-  /* bind (producer, (unsigned int)&producer_produce_entry, 0, consumer, (unsigned int)&consumer_consume_entry, 0); */
-
-  /* initialize_scheduler (); */
-
-  /* schedule_action (producer, (unsigned int)&producer_init_entry, 0); */
-  /* schedule_action (consumer, (unsigned int)&consumer_init_entry, 0); */
-
-  /* /\* Start the scheduler.  Doesn't return. *\/ */
-  /* finish_action (0, 0); */
-
-/* static output_action_t* */
-/* allocate_output_action (aid_t aid, */
-/* 			unsigned int action_entry_point, */
-/* 			unsigned int parameter) */
-/* { */
-/*   output_action_t* ptr = kmalloc (sizeof (output_action_t)); */
-/*   ptr->aid = aid; */
-/*   ptr->action_entry_point = action_entry_point; */
-/*   ptr->parameter = parameter; */
-/*   return ptr; */
-/* } */
-
-/* static input_action_t* */
-/* allocate_input_action (aid_t aid, */
-/* 		       unsigned int action_entry_point, */
-/* 		       unsigned int parameter) */
-/* { */
-/*   input_action_t* ptr = kmalloc (sizeof (input_action_t)); */
-/*   ptr->aid = aid; */
-/*   ptr->action_entry_point = action_entry_point; */
-/*   ptr->parameter = parameter; */
-/*   ptr->next = 0; */
-/*   return ptr; */
-/* } */
-
-/* void */
-/* bind (aid_t output_aid, */
-/*       unsigned int output_action_entry_point, */
-/*       unsigned int output_parameter, */
-/*       aid_t input_aid, */
-/*       unsigned int input_action_entry_point, */
-/*       unsigned int input_parameter) */
-/* { */
-/*   kassert (bindings != 0); */
-/*   /\* TODO:  All of the bind checks. *\/ */
-
-/*   output_action_t output_action; */
-/*   output_action.aid = output_aid; */
-/*   output_action.action_entry_point = output_action_entry_point; */
-/*   output_action.parameter = output_parameter; */
-
-/*   if (!hash_map_contains (bindings, &output_action)) { */
-/*     hash_map_insert (bindings, allocate_output_action (output_aid, output_action_entry_point, output_parameter), 0); */
-/*   } */
-
-/*   input_action_t* input_action = allocate_input_action (input_aid, input_action_entry_point, input_parameter); */
-/*   input_action->next = hash_map_find (bindings, &output_action); */
-/*   hash_map_erase (bindings, &output_action); */
-/*   hash_map_insert (bindings, &output_action, input_action); */
-/* } */
-
-/* input_action_t* */
-/* get_bound_inputs (aid_t output_aid, */
-/* 		  unsigned int output_action_entry_point, */
-/* 		  unsigned int output_parameter) */
-/* { */
-/*   kassert (bindings != 0); */
-
-/*   output_action_t output_action; */
-/*   output_action.aid = output_aid; */
-/*   output_action.action_entry_point = output_action_entry_point; */
-/*   output_action.parameter = output_parameter; */
-/*   return hash_map_find (bindings, &output_action); */
-/* } */
-
-/* void */
-/* bind (aid_t output_aid, */
-/*       unsigned int output_action_entry_point, */
-/*       unsigned int output_parameter, */
-/*       aid_t input_aid, */
-/*       unsigned int input_action_entry_point, */
-/*       unsigned int input_parameter); */
-
-/* /\* These functions allow the scheduler to query the set of automata and bindings. *\/ */
-
-/* void* */
-/* get_scheduler_context (aid_t aid); */
-
-/* action_type_t */
-/* get_action_type (aid_t aid, */
-/* 		 unsigned int action_entry_point); */
-
-/* void */
-/* switch_to_automaton (aid_t aid, */
-/* 		     unsigned int action_entry_point, */
-/* 		     unsigned int parameter, */
-/* 		     unsigned int input_value); */
-
-/* input_action_t* */
-/* get_bound_inputs (aid_t output_aid, */
-/* 		  unsigned int output_action_entry_point, */
-/* 		  unsigned int output_parameter); */

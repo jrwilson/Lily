@@ -28,6 +28,7 @@ automaton_initialize (automaton_t* ptr,
 {
   kassert (ptr != 0);
 
+  ptr->list_allocator = 0;
   ptr->privilege = privilege;
   ptr->actions = 0;
   ptr->scheduler_context = 0;
@@ -53,17 +54,20 @@ action_entry_point_compare_func (const void* x,
 }
 
 automaton_t*
-automaton_allocate (privilege_t privilege,
+automaton_allocate (list_allocator_t* list_allocator,
+		    privilege_t privilege,
 		    size_t page_directory,
 		    void* stack_pointer,
 		    void* memory_ceiling,
 		    page_privilege_t page_privilege)
 {
-  automaton_t* ptr = list_allocator_alloc (system_automaton_get_allocator (), sizeof (automaton_t));
+  kassert (list_allocator != 0);
+  automaton_t* ptr = list_allocator_alloc (list_allocator, sizeof (automaton_t));
   kassert (ptr != 0);
   automaton_initialize (ptr, privilege, page_directory, stack_pointer, memory_ceiling, page_privilege);
-  ptr->actions = hash_map_allocate (system_automaton_get_allocator (), action_entry_point_hash_func, action_entry_point_compare_func);
-  ptr->scheduler_context = scheduler_allocate_context (ptr);
+  ptr->list_allocator = list_allocator;
+  ptr->actions = hash_map_allocate (list_allocator, action_entry_point_hash_func, action_entry_point_compare_func);
+  ptr->scheduler_context = scheduler_allocate_context (list_allocator, ptr);
 
   return ptr;
 }
@@ -93,7 +97,7 @@ merge (automaton_t* automaton,
       else {
 	automaton->memory_map_end = area;	
       }
-      vm_area_free (next);
+      vm_area_free (automaton->list_allocator, next);
     }
   }
 }
@@ -124,7 +128,7 @@ automaton_insert_vm_area (automaton_t* automaton,
   }
 
   /* Insert. */
-  vm_area_t* ptr = vm_area_allocate (area->type, area->begin, area->end, area->page_privilege, area->writable);
+  vm_area_t* ptr = vm_area_allocate (automaton->list_allocator, area->type, area->begin, area->end, area->page_privilege, area->writable);
   ptr->next = *nptr;
   *nptr = ptr;
   ptr->prev = *pptr;
@@ -137,6 +141,7 @@ automaton_insert_vm_area (automaton_t* automaton,
   return 0;
 }
 
+/* Create or expand a data area for the requested size. */
 void*
 automaton_alloc (automaton_t* automaton,
 		 size_t size,
@@ -165,7 +170,7 @@ automaton_alloc (automaton_t* automaton,
 	}
 	else {
 	  /* Insert after the current area. */
-	  vm_area_t* area = vm_area_allocate (VM_AREA_DATA, retval, retval + size, automaton->page_privilege, WRITABLE);
+	  vm_area_t* area = vm_area_allocate (automaton->list_allocator, VM_AREA_DATA, retval, retval + size, automaton->page_privilege, WRITABLE);
 	  kassert (area != 0);
 
 	  area->next = ptr->next;
@@ -194,6 +199,77 @@ automaton_alloc (automaton_t* automaton,
     *error = SYSERROR_REQUESTED_SIZE_NOT_ALIGNED;
     return 0;
   }
+}
+
+/* Reserve a region of memory. */
+void*
+automaton_reserve (automaton_t* automaton,
+		   size_t size)
+{
+  kassert (automaton != 0);
+  kassert (IS_PAGE_ALIGNED (size));
+
+  vm_area_t* ptr;
+  for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
+    /* Start with the floor and ceiling of the automaton. */
+    void* ceiling = automaton->memory_ceiling;
+    if (ptr->next != 0) {
+      /* Ceiling drops so we don't interfere with next area. */
+      ceiling = ptr->next->begin;
+    }
+    
+    if (size <= (size_t)(ceiling - ptr->end)) {
+      void* retval = ptr->end;
+      /* Insert after the current area. */
+      vm_area_t* area = vm_area_allocate (automaton->list_allocator, VM_AREA_RESERVED, retval, retval + size, automaton->page_privilege, WRITABLE);
+      kassert (area != 0);
+      
+      area->next = ptr->next;
+      ptr->next = area;
+      
+      if (area->next != 0) {
+	area->prev = area->next->prev;
+	area->next->prev = area;
+      }
+      else {
+	area->prev = automaton->memory_map_end;
+	automaton->memory_map_end = area;
+      }
+
+      return retval;
+    }
+  }
+  
+  return 0;
+}
+
+void
+automaton_unreserve (automaton_t* automaton,
+		     void* logical_addr)
+{
+  kassert (automaton != 0);
+  kassert (logical_addr != 0);
+  kassert (IS_PAGE_ALIGNED ((size_t)logical_addr));
+
+  vm_area_t** nptr;
+  vm_area_t** pptr;
+  for (nptr = &automaton->memory_map_begin; (*nptr) != 0 && (*nptr)->begin != logical_addr; nptr = &(*nptr)->next) ;;
+
+  kassert (*nptr != 0);
+  kassert ((*nptr)->type == VM_AREA_RESERVED);
+
+  vm_area_t* temp = *nptr;
+  if (temp->next != 0) {
+    pptr = &temp->next->prev;
+  }
+  else {
+    pptr = &automaton->memory_map_end;
+  }
+
+  *nptr = temp->next;
+  *pptr = temp->prev;
+
+  vm_area_free (automaton->list_allocator, temp);
 }
 
 void
@@ -260,6 +336,6 @@ automaton_execute (automaton_t* ptr,
 		"pushl %3\n"
 		"movl %4, %%ecx\n"
 		"movl %5, %%edx\n"
-		"iret\n" :: "r"(stack_segment), "r"(ptr->stack_pointer), "m"(code_segment), "m"(action_entry_point), "m"(parameter), "m"(input_value));
+		"iret\n" :: "m"(stack_segment), "m"(ptr->stack_pointer), "m"(code_segment), "m"(action_entry_point), "m"(parameter), "m"(input_value));
 }
 

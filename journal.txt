@@ -251,8 +251,17 @@ If the need arises, the interface for the frame manager can be expanded and the 
 
 Preliminary implementation of memory maps for automata.
 Preliminary implementation of a memory allocator.
+Test of the system automaton acting as a counter was successful on a physical machine.
+
+2011-11-09
+
+The allocator used by the system automaton is passed to the various modules that need it.
+The first goal of the day is to give the system automaton (and every other automaton) a stack.
+I wrote previously on the rationale behind each automaton receiving a private stack versus and shared global stack.
+Basically, I believe that the cost of giving each automaton a stack is less that the cost of scrubbing the stack between each action.
+The setrlimit/getrlimit calls can be used to manipulate the stack in Linux.
 
 
 
-
-Make code read-only.
+Take out page scrub in page_handler.
+Use traps instread of interrupts.

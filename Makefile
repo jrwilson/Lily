@@ -25,13 +25,15 @@ syscall_handler.o \
 scheduler.o \
 vm_area.o \
 automaton.o \
+binding_manager.o \
 system_automaton.o \
 syscall.o \
 list_allocator.o \
 string.o \
 fifo_scheduler.o \
 hash_map.o \
-page_fault_handler.o
+page_fault_handler.o \
+initrd_automaton.o
 
 # pit.o \
 # count_to_ten.o \

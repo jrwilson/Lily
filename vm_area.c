@@ -40,21 +40,25 @@ vm_area_initialize (vm_area_t* ptr,
 }
 
 vm_area_t*
-vm_area_allocate (vm_area_type_t type,
+vm_area_allocate (list_allocator_t* list_allocator,
+		  vm_area_type_t type,
 		  void* begin,
 		  void* end,
 		  page_privilege_t page_privilege,
 		  writable_t writable)
 {
-  vm_area_t* ptr = list_allocator_alloc (system_automaton_get_allocator (), sizeof (vm_area_t));
+  kassert (list_allocator != 0);
+  vm_area_t* ptr = list_allocator_alloc (list_allocator, sizeof (vm_area_t));
   kassert (ptr != 0);
   vm_area_initialize (ptr, type, begin, end, page_privilege, writable);
   return ptr;
 }
 
 void
-vm_area_free (vm_area_t* ptr)
+vm_area_free (list_allocator_t* list_allocator,
+	      vm_area_t* ptr)
 {
+  kassert (list_allocator != 0);
   kassert (ptr != 0);
-  list_allocator_free (system_automaton_get_allocator (), ptr);
+  list_allocator_free (list_allocator, ptr);
 }

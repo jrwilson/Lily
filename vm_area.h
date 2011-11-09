@@ -16,12 +16,13 @@
 */
 
 #include "vm_manager.h"
+#include "list_allocator.h"
 
 typedef enum {
   VM_AREA_TEXT,
   VM_AREA_DATA,
   VM_AREA_STACK,
-  VM_AREA_BUFFER,
+  VM_AREA_RESERVED,
 } vm_area_type_t;
 
 typedef struct vm_area vm_area_t;
@@ -44,13 +45,15 @@ vm_area_initialize (vm_area_t* ptr,
 		    writable_t writable);
 
 vm_area_t*
-vm_area_allocate (vm_area_type_t type,
+vm_area_allocate (list_allocator_t* list_allocator,
+		  vm_area_type_t type,
 		  void* begin,
 		  void* end,
 		  page_privilege_t page_privilege,
 		  writable_t writable) __attribute__((warn_unused_result));
 
 void
-vm_area_free (vm_area_t* ptr);
+vm_area_free (list_allocator_t* list_allocator,
+	      vm_area_t* ptr);
 
 #endif /* __vm_area_h__ */

@@ -17,6 +17,7 @@
 #include "idt.h"
 #include "malloc.h"
 #include "system_automaton.h"
+#include "binding_manager.h"
 
 typedef enum {
   SCHEDULED,
@@ -56,10 +57,12 @@ scheduler_initialize (automaton_t* automaton)
 }
 
 scheduler_context_t*
-scheduler_allocate_context (automaton_t* automaton)
+scheduler_allocate_context (list_allocator_t* list_allocator,
+			    automaton_t* automaton)
 {
+  kassert (list_allocator != 0);
   kassert (automaton != 0);
-  scheduler_context_t* ptr = list_allocator_alloc (system_automaton_get_allocator (), sizeof (scheduler_context_t));
+  scheduler_context_t* ptr = list_allocator_alloc (list_allocator, sizeof (scheduler_context_t));
   ptr->automaton = automaton;
   ptr->action_entry_point = 0;
   ptr->parameter = 0;
@@ -135,9 +138,8 @@ switch_to_next_action ()
     exec_context.action_type = automaton_get_action_type (exec_context.automaton, exec_context.action_entry_point);
     switch (exec_context.action_type) {
     case OUTPUT:
-      kassert (0);
       /* Get the inputs that are composed with the output. */
-      //exec_context.input = get_bound_inputs (exec_context.aid, exec_context.action_entry_point, exec_context.parameter);
+      exec_context.input = binding_manager_get_bound_inputs (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter);
       /* Fall through. */
     case INTERNAL:
       /* Execute.  (This does not return). */
@@ -166,32 +168,30 @@ finish_action (int output_status,
 {
   switch (exec_context.action_type) {
   case INPUT:
-    kassert (0);
-  /*   /\* Move to the next input. *\/ */
-  /*   exec_context.input = exec_context.input->next; */
-  /*   if (exec_context.input != 0) { */
-  /*     /\* Load the execution context. *\/ */
-  /*     exec_context.aid = exec_context.input->aid; */
-  /*     exec_context.action_entry_point = exec_context.input->action_entry_point; */
-  /*     exec_context.parameter = exec_context.input->parameter; */
-  /*     /\* Execute.  (This does not return). *\/ */
-  /*     switch_to_automaton (exec_context.aid, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value); */
-  /*   } */
+    /* Move to the next input. */
+    exec_context.input = exec_context.input->next;
+    if (exec_context.input != 0) {
+      /* Load the execution context. */
+      exec_context.automaton = exec_context.input->automaton;
+      exec_context.action_entry_point = exec_context.input->action_entry_point;
+      exec_context.parameter = exec_context.input->parameter;
+      /* Execute.  (This does not return). */
+      automaton_execute (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+    }
     break;
   case OUTPUT:
-    kassert (0);
-  /*   if (output_status && exec_context.input != 0) { */
-  /*     /\* The output executed and there are inputs. *\/ */
-  /*     exec_context.output_value = output_value; */
-  /*     /\* Load the execution context. *\/ */
-  /*     exec_context.action_type = INPUT; */
-  /*     exec_context.aid = exec_context.input->aid; */
-  /*     exec_context.action_entry_point = exec_context.input->action_entry_point; */
-  /*     exec_context.parameter = exec_context.input->parameter; */
-  /*     /\* Execute.  (This does not return). *\/ */
-  /*     switch_to_automaton (exec_context.aid, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value); */
-  /*   } */
-  /*   break; */
+    if (output_status && exec_context.input != 0) {
+      /* The output executed and there are inputs. */
+      exec_context.output_value = output_value;
+      /* Load the execution context. */
+      exec_context.action_type = INPUT;
+      exec_context.automaton = exec_context.input->automaton;
+      exec_context.action_entry_point = exec_context.input->action_entry_point;
+      exec_context.parameter = exec_context.input->parameter;
+      /* Execute.  (This does not return). */
+      automaton_execute (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+    }
+    break;
   case INTERNAL:
   case NO_ACTION:
     break;

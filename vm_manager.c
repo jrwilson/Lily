@@ -19,21 +19,10 @@
 /* Everything must fit into 4MB initialy. */
 #define INITIAL_LOGICAL_LIMIT (KERNEL_VIRTUAL_BASE + 0x400000)
 
-/* Number of entries in a page table or directory. */
-#define PAGE_ENTRY_COUNT 1024
-
 /* Macros for address manipulation. */
 #define PAGE_DIRECTORY_ENTRY(addr)  (((size_t)(addr) & 0xFFC00000) >> 22)
 #define PAGE_TABLE_ENTRY(addr) (((size_t)(addr) & 0x3FF000) >> 12)
 #define PAGE_ADDRESS_OFFSET(addr) ((addr) & 0xFFF)
-
-typedef struct {
-  page_table_entry_t entry[PAGE_ENTRY_COUNT];
-} page_table_t;
-
-typedef struct {
-  page_directory_entry_t entry[PAGE_ENTRY_COUNT];
-} page_directory_t;
 
 /* Marks the beginning and end of the kernel upon loading. */
 extern int text_begin;
@@ -85,20 +74,20 @@ make_page_directory_entry (frame_t frame,
 }
 
 static void
-initialize_page_table (page_table_t* ptr)
+page_table_clear (page_table_t* ptr)
 {
   kassert (ptr != 0);
   kassert (IS_PAGE_ALIGNED ((size_t)ptr));
 
   unsigned int k;
   for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    ptr->entry[k] = make_page_table_entry (0, 0, 0, 0);
+    ptr->entry[k] = make_page_table_entry (0, 0, 0, NOT_PRESENT);
   }
 }
 
 static void
-initialize_page_directory (page_directory_t* ptr,
-			   size_t physical_address)
+page_directory_clear (page_directory_t* ptr,
+		      size_t physical_address)
 {
   kassert (ptr != 0);
   kassert (IS_PAGE_ALIGNED ((size_t)ptr));
@@ -106,7 +95,7 @@ initialize_page_directory (page_directory_t* ptr,
 
   /* Clear the page directory and page table. */
   unsigned int k;
-  for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
+  for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
     ptr->entry[k] = make_page_directory_entry (0, NOT_PRESENT);
   }
 
@@ -132,8 +121,8 @@ vm_manager_initialize (void* placement_begin,
   size_t kernel_page_directory_paddr = (size_t)&kernel_page_directory - KERNEL_VIRTUAL_BASE;
 
   /* Clear the page directory and page table. */
-  initialize_page_table (&low_page_table);
-  initialize_page_directory (&kernel_page_directory, kernel_page_directory_paddr);
+  page_table_clear (&low_page_table);
+  page_directory_clear (&kernel_page_directory, kernel_page_directory_paddr);
 
   /* Insert the page table. */
   kernel_page_directory.entry[PAGE_DIRECTORY_ENTRY(0)] = make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PRESENT);
@@ -215,8 +204,7 @@ void
 vm_manager_map (void* logical_addr,
 		frame_t frame,
 		page_privilege_t privilege,
-		writable_t writable,
-		present_t present)
+		writable_t writable)
 {
   page_directory_t* page_directory = get_page_directory ();
   page_table_t* page_table = get_page_table (logical_addr);
@@ -230,7 +218,7 @@ vm_manager_map (void* logical_addr,
       /* Flush the TLB. */
       asm volatile ("invlpg %0\n" :: "m" (page_table));
       /* Initialize the page table. */
-      initialize_page_table (page_table);
+      page_table_clear (page_table);
     }
     else {
       /* Using a non-kernel page directory but we need a kernel page table. */
@@ -243,7 +231,7 @@ vm_manager_map (void* logical_addr,
 	/* Flush the TLB. */
 	asm volatile ("invlpg %0\n" :: "m" (page_table));
 	/* Initialize the page table. */
-	initialize_page_table (page_table);
+	page_table_clear (page_table);
       }
       else {
 	/* The page table is present in the kernel. */
@@ -256,8 +244,45 @@ vm_manager_map (void* logical_addr,
     }
   }
 
-  page_table->entry[PAGE_TABLE_ENTRY (logical_addr)] = make_page_table_entry (frame, privilege, writable, present);
+  page_table->entry[PAGE_TABLE_ENTRY (logical_addr)] = make_page_table_entry (frame, privilege, writable, PRESENT);
 
   /* Flush the TLB. */
   asm volatile ("invlpg %0\n" :: "m" (logical_addr));
+}
+
+void
+vm_manager_unmap (void* logical_addr)
+{
+  page_directory_t* page_directory = get_page_directory ();
+  page_table_t* page_table = get_page_table (logical_addr);
+
+  if (page_directory->entry[PAGE_DIRECTORY_ENTRY(logical_addr)].present) {
+    page_table->entry[PAGE_TABLE_ENTRY (logical_addr)] = make_page_table_entry (0, 0, 0, NOT_PRESENT);
+    /* Flush the TLB. */
+    asm volatile ("invlpg %0\n" :: "m" (logical_addr));
+  }
+}
+
+void
+page_directory_initialize_with_current (page_directory_t* ptr,
+					size_t physical_address)
+{
+  kassert (ptr != 0);
+  kassert (IS_PAGE_ALIGNED ((size_t)ptr));
+  kassert (IS_PAGE_ALIGNED ((size_t)physical_address));
+
+  page_directory_t* current = get_page_directory ();
+
+  unsigned int k;
+  for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
+    /* Copy. */
+    ptr->entry[k] = current->entry[k];
+    /* Increment the reference count. */
+    if (ptr->entry[k].present) {
+      frame_manager_incref (ptr->entry[k].frame);
+    }
+  }
+
+  /* Map the page directory to itself. */
+  ptr->entry[PAGE_ENTRY_COUNT - 1] = make_page_directory_entry (ADDRESS_TO_FRAME (physical_address), PRESENT);
 }

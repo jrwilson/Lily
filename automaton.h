@@ -29,6 +29,8 @@ typedef enum {
 typedef struct scheduler_context scheduler_context_t;
 
 typedef struct {
+  /* Allocator for data structures. */
+  list_allocator_t* list_allocator;
   /* Automata execute at a certain privilege level. */
   privilege_t privilege;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
@@ -58,7 +60,8 @@ automaton_initialize (automaton_t* ptr,
 		      page_privilege_t page_privilege);
 
 automaton_t*
-automaton_allocate (privilege_t privilege,
+automaton_allocate (list_allocator_t* list_allocator,
+		    privilege_t privilege,
 		    size_t page_directory,
 		    void* stack_pointer,
 		    void* memory_ceiling,
@@ -72,6 +75,14 @@ void*
 automaton_alloc (automaton_t* automaton,
 		 size_t size,
 		 syserror_t* error) __attribute__((warn_unused_result));
+
+void*
+automaton_reserve (automaton_t* automaton,
+		   size_t size);
+
+void
+automaton_unreserve (automaton_t* automaton,
+		     void* ptr);
 
 void
 automaton_set_action_type (automaton_t* ptr,
@@ -89,4 +100,3 @@ automaton_execute (automaton_t* ptr,
 		   value_t input_value);
 
 #endif /* __automaton_h__ */
-

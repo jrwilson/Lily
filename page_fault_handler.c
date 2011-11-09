@@ -54,25 +54,33 @@ page_fault_handler (registers_t* regs)
   }
 
   if (ptr != 0) {
-    if (regs->error & PAGE_PROTECTION_ERROR) {
-      /* Protection error. */
+    switch (ptr->type) {
+    case VM_AREA_TEXT:
+      /* TODO. */
       kassert (0);
+      break;
+    case VM_AREA_DATA:
+      /* Fault should come from not being present. */
+      kassert ((regs->error & PAGE_PROTECTION_ERROR) == 0);
+      /* Fault should come from data. */
+      kassert ((regs->error & PAGE_INSTRUCTION_ERROR) == 0);
+      /* Back the request with a frame. */
+      vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, ptr->writable);
+      /* Clear the frame. */
+      /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
+      memset (addr, 0x00, PAGE_SIZE);
+      return;
+      break;
+    case VM_AREA_STACK:
+      /* TODO. */
+      kassert (0);
+      break;
+    case VM_AREA_RESERVED:
+      /* There is a bug in the kernel.  A reserved memory area was not backed. */
+      kassert (0);
+      break;
     }
-    else {
-      /* Not present. */
-      if (regs->error & PAGE_INSTRUCTION_ERROR) {
-  	/* Instruction. */
-  	kassert (0);
-      }
-      else {
-  	/* Data. */
-  	/* Back the request with a frame. */
-  	vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, ptr->writable, PRESENT);
-  	/* Clear. */
-  	memset (addr, 0xFF, PAGE_SIZE);
-  	return;
-      }
-    }
+
   }
   else {
     /* TODO:  Accessed memory not in their map. Segmentation fault. */

@@ -33,6 +33,9 @@
 #define ADDRESS_TO_FRAME(addr) ((addr) >> 12)
 #define FRAME_TO_ADDRESS(addr) ((addr) << 12)
 
+/* Number of entries in a page table or directory. */
+#define PAGE_ENTRY_COUNT 1024
+
 typedef enum {
   NOT_GLOBAL = 0,
   GLOBAL = 1,
@@ -73,6 +76,10 @@ typedef struct {
 } page_table_entry_t;
 
 typedef struct {
+  page_table_entry_t entry[PAGE_ENTRY_COUNT];
+} page_table_t;
+
+typedef struct {
   unsigned int present : 1;
   unsigned int writable : 1;
   unsigned int user : 1;
@@ -85,6 +92,10 @@ typedef struct {
   unsigned int available : 3;
   unsigned int frame : 20;
 } page_directory_entry_t;
+
+typedef struct {
+  page_directory_entry_t entry[PAGE_ENTRY_COUNT];
+} page_directory_t;
 
 void
 vm_manager_initialize (void* placement_begin,
@@ -100,10 +111,16 @@ void
 vm_manager_map (void* logical_addr,
 		frame_t frame,
 		page_privilege_t privilege,
-		writable_t writable,
-		present_t present);
+		writable_t writable);
+
+void
+vm_manager_unmap (void* logical_addr);
 
 void
 vm_manager_switch_to_directory (size_t physical_addr);
+
+void
+page_directory_initialize_with_current (page_directory_t* page_directory,
+					size_t physical_addr);
 
 #endif /* __vm_manager_h__ */

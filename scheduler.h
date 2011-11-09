@@ -20,7 +20,8 @@ void
 scheduler_initialize (automaton_t* automaton);
 
 scheduler_context_t*
-scheduler_allocate_context (automaton_t* automaton);
+scheduler_allocate_context (list_allocator_t* list_allocator,
+			    automaton_t* automaton);
 
 automaton_t*
 scheduler_get_current_automaton (void);
