@@ -34,6 +34,8 @@ struct scheduler_context {
 };
 
 typedef struct {
+  void* switch_stack;
+  size_t switch_stack_size;
   action_type_t action_type;
   automaton_t* automaton;
   void* action_entry_point;
@@ -54,6 +56,18 @@ scheduler_initialize (automaton_t* automaton)
 
   exec_context.action_type = NO_ACTION;
   exec_context.automaton = automaton;
+}
+
+void
+scheduler_set_switch_stack (void* switch_stack,
+			    size_t switch_stack_size)
+{
+  kassert (switch_stack != 0);
+  kassert (switch_stack >= (void*)KERNEL_VIRTUAL_BASE);
+  kassert (switch_stack_size > 0);
+
+  exec_context.switch_stack = switch_stack;
+  exec_context.switch_stack_size = switch_stack_size;
 }
 
 scheduler_context_t*
@@ -143,7 +157,7 @@ switch_to_next_action ()
       /* Fall through. */
     case INTERNAL:
       /* Execute.  (This does not return). */
-      automaton_execute (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, 0);
+      automaton_execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, 0);
       break;
     case INPUT:
     case NO_ACTION:
@@ -176,7 +190,7 @@ finish_action (int output_status,
       exec_context.action_entry_point = exec_context.input->action_entry_point;
       exec_context.parameter = exec_context.input->parameter;
       /* Execute.  (This does not return). */
-      automaton_execute (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+      automaton_execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
     }
     break;
   case OUTPUT:
@@ -189,7 +203,7 @@ finish_action (int output_status,
       exec_context.action_entry_point = exec_context.input->action_entry_point;
       exec_context.parameter = exec_context.input->parameter;
       /* Execute.  (This does not return). */
-      automaton_execute (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+      automaton_execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
     }
     break;
   case INTERNAL:

@@ -31,8 +31,9 @@ typedef struct scheduler_context scheduler_context_t;
 typedef struct {
   /* Allocator for data structures. */
   list_allocator_t* list_allocator;
-  /* Automata execute at a certain privilege level. */
-  privilege_t privilege;
+  /* Segments including privilege. */
+  uint32_t code_segment;
+  uint32_t stack_segment;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
   hash_map_t* actions;
   /* The scheduler uses this object. */
@@ -94,7 +95,9 @@ automaton_get_action_type (automaton_t* automaton,
 			   void* action_entry_point);
 
 void
-automaton_execute (automaton_t* ptr,
+automaton_execute (void* switch_stack,
+		   size_t switch_stack_size,
+		   automaton_t* ptr,
 		   void* action_entry_point,
 		   parameter_t parameter,
 		   value_t input_value);

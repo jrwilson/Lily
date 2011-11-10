@@ -18,6 +18,9 @@
 #include "system_automaton.h"
 #include "gdt.h"
 
+/* Alignment of stack for switch. */
+#define STACK_ALIGN 16
+
 void
 automaton_initialize (automaton_t* ptr,
 		      privilege_t privilege,
@@ -29,7 +32,21 @@ automaton_initialize (automaton_t* ptr,
   kassert (ptr != 0);
 
   ptr->list_allocator = 0;
-  ptr->privilege = privilege;
+  switch (privilege) {
+  case RING0:
+    ptr->code_segment = KERNEL_CODE_SELECTOR | RING0;
+    ptr->stack_segment = KERNEL_DATA_SELECTOR | RING0;
+    break;
+  case RING1:
+  case RING2:
+    /* These rings are not supported. */
+    kassert (0);
+    break;
+  case RING3:
+    /* Not supported yet. */
+    kassert (0);
+    break;
+  }
   ptr->actions = 0;
   ptr->scheduler_context = 0;
   ptr->page_directory = page_directory;
@@ -297,45 +314,63 @@ automaton_get_action_type (automaton_t* ptr,
 }
 
 void
-automaton_execute (automaton_t* ptr,
+automaton_execute (void* switch_stack,
+		   size_t switch_stack_size,
+		   automaton_t* ptr,
 		   void* action_entry_point,
 		   parameter_t parameter,
 		   value_t input_value)
 {
-  kassert (ptr != 0);
-  
-  unsigned int stack_segment;
-  unsigned int code_segment;
-  
-  switch (ptr->privilege) {
-  case RING0:
-    stack_segment = KERNEL_DATA_SELECTOR | RING0;
-    code_segment = KERNEL_CODE_SELECTOR | RING0;
-    break;
-  case RING1:
-  case RING2:
-    /* These rings are not supported. */
-    kassert (0);
-    break;
-  case RING3:
-    /* Not supported yet. */
-    kassert (0);
-    break;
+  uint32_t* stack_begin;
+  uint32_t* stack_end;
+  uint32_t* new_stack_begin;
+  size_t stack_size;
+  size_t idx;
+
+  /* Move the stack into an area mapped in all address spaces so that switching page directories doesn't cause a triple fault. */
+
+  /* Determine the beginning of the stack. */
+  asm volatile ("mov %%esp, %0\n" : "=m"(stack_begin));
+  /* Determine the end of the stack. */
+  stack_end = &input_value;
+  ++stack_end;
+  /* Compute the beginning of the new stack. */
+  stack_size = stack_end - stack_begin;
+  /* Use a bigger switch stack. */
+  kassert (stack_size * sizeof (uint32_t) < switch_stack_size);
+  new_stack_begin = (uint32_t*)ALIGN_DOWN ((size_t)switch_stack + switch_stack_size - stack_size * sizeof (uint32_t), STACK_ALIGN);
+  /* Copy. */
+  for (idx = 0; idx < stack_size; ++idx) {
+    new_stack_begin[idx] = stack_begin[idx];
   }
 
+  /* Update the base and stack pointers. */
+  asm volatile ("add %0, %%esp\n"
+		"add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
+
+  /* Switch page directories. */
   vm_manager_switch_to_directory (ptr->page_directory);
+
+  /* Load the new stack segment.
+     Load the new stack pointer.
+     Enable interrupts on return.
+     Load the new code segment.
+     Load the new instruction pointer.
+     Load the parameter.
+     Load the value for input actions.
+  */
   asm volatile ("mov %0, %%eax\n"
 		"mov %%ax, %%ss\n"
 		"mov %1, %%eax\n"
 		"mov %%eax, %%esp\n"
 		"pushf\n"
 		"pop %%eax\n"
-		"or $0x200, %%eax\n" /* Enable interupts on return. */
+		"or $0x200, %%eax\n"
 		"push %%eax\n"
 		"pushl %2\n"
 		"pushl %3\n"
 		"movl %4, %%ecx\n"
 		"movl %5, %%edx\n"
-		"iret\n" :: "m"(stack_segment), "m"(ptr->stack_pointer), "m"(code_segment), "m"(action_entry_point), "m"(parameter), "m"(input_value));
+		"iret\n" :: "m"(ptr->stack_segment), "m"(ptr->stack_pointer), "m"(ptr->code_segment), "m"(action_entry_point), "m"(parameter), "m"(input_value));
 }
 

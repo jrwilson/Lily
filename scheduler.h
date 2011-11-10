@@ -19,6 +19,10 @@
 void
 scheduler_initialize (automaton_t* automaton);
 
+void
+scheduler_set_switch_stack (void* switch_stack,
+			    size_t switch_stack_size);
+
 scheduler_context_t*
 scheduler_allocate_context (list_allocator_t* list_allocator,
 			    automaton_t* automaton);

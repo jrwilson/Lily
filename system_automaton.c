@@ -26,6 +26,8 @@
    Must be large enough for functions and interrupts. */
 #define SYSTEM_STACK_SIZE 0x1000
 
+#define SWITCH_STACK_SIZE 256
+
 /* Locations to use for data segments of system automata. */
 #define SYSTEM_DATA_BEGIN 0X00100000
 #define SYSTEM_DATA_END   0X00101000
@@ -243,6 +245,11 @@ system_automaton_initialize (void* placement_begin,
   /* Allocate the allocator. */
   system_allocator = list_allocator_allocate ();
   kassert (system_allocator != 0);
+
+  /* Allocate and set the switch stack for the scheduler. */
+  void* switch_stack = list_allocator_alloc (system_allocator, SWITCH_STACK_SIZE);
+  kassert (switch_stack != 0);
+  scheduler_set_switch_stack (switch_stack, SWITCH_STACK_SIZE);
 
   /* Allocate the real system automaton.
      The system automaton's ceiling is the start of the paging data structures.

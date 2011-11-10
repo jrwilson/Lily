@@ -9,6 +9,8 @@
 	
 	;; The size of the stack.
 	STACK_SIZE equ 0x1000
+	;; The alignment of the stack.
+	STACK_ALIGN equ 16
 	
 	[section .setup]
 
@@ -105,7 +107,7 @@ highhalf:
 
 	[section .bss]
 	;; Reserve space for the stack.
-	ALIGN 4
+	ALIGN STACK_ALIGN
 	[global stack_begin]
 stack_begin:	
 	resb STACK_SIZE
