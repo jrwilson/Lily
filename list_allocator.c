@@ -40,7 +40,7 @@ list_allocator_allocate (void)
 {
   size_t page_size = sys_get_page_size ();
   size_t request_size = ALIGN_UP (sizeof (list_allocator_t) + sizeof (header_t), page_size);
-  list_allocator_t* ptr = sys_allocate (request_size);
+  list_allocator_t* ptr = static_cast<list_allocator_t*> (sys_allocate (request_size));
   if (ptr != 0) {
     ptr->first_header = (header_t*)((char*)ptr + sizeof (list_allocator_t));
     ptr->last_header = ptr->first_header;
@@ -144,7 +144,7 @@ list_allocator_free (list_allocator_t* la,
 		     void* p)
 {
   kassert (la != 0);
-  header_t* ptr = p;
+  header_t* ptr = static_cast<header_t*> (p);
   --ptr;
   kassert (ptr >= la->first_header);
   kassert (ptr <= la->last_header);

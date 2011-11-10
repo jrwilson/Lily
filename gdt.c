@@ -24,7 +24,7 @@ typedef struct gdt_ptr gdt_ptr_t;
 static descriptor_t gdt_entry[DESCRIPTOR_COUNT];
 static gdt_ptr_t gp;
 
-extern void
+extern "C" void
 gdt_flush (gdt_ptr_t*);
 
 void

@@ -17,9 +17,9 @@
 #include "types.h"
 
 typedef struct {
-  void* begin;
-  void* end;
-  void* marker;
+  uint8_t* begin;
+  uint8_t* end;
+  uint8_t* marker;
 } placement_allocator_t;
 
 void

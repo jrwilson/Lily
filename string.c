@@ -18,7 +18,7 @@ memset (void* ptr,
 	unsigned char value,
 	size_t size)
 {
-  unsigned char* p = ptr;
+  unsigned char* p = static_cast<unsigned char*> (ptr);
   while (size > 0) {
     *p = value;
     ++p;

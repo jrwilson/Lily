@@ -76,7 +76,7 @@ scheduler_allocate_context (list_allocator_t* list_allocator,
 {
   kassert (list_allocator != 0);
   kassert (automaton != 0);
-  scheduler_context_t* ptr = list_allocator_alloc (list_allocator, sizeof (scheduler_context_t));
+  scheduler_context_t* ptr = static_cast<scheduler_context_t*> (list_allocator_alloc (list_allocator, sizeof (scheduler_context_t)));
   ptr->automaton = automaton;
   ptr->action_entry_point = 0;
   ptr->parameter = 0;

@@ -20,7 +20,7 @@
 #include "vm_area.h"
 
 typedef enum {
-  NO_ACTION,
+  NO_ACTION = 0,
   INPUT,
   OUTPUT,
   INTERNAL
@@ -47,7 +47,7 @@ typedef struct {
   vm_area_t* memory_map_end;
   /* Can map between [floor, ceiling). */
   void* memory_floor;
-  void* memory_ceiling;
+  uint8_t* memory_ceiling;
   /* Default privilege for new VM_AREA_DATA. */
   page_privilege_t page_privilege;
 } automaton_t;

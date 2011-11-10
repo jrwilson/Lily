@@ -28,7 +28,7 @@ static hash_map_t* bindings = 0;
 static size_t
 output_action_hash_func (const void* x)
 {
-  const output_action_t* ptr = x;
+  const output_action_t* ptr = static_cast<const output_action_t*> (x);
   return (size_t)ptr->automaton ^ (size_t)ptr->action_entry_point ^ ptr->parameter;
 }
 
@@ -36,13 +36,13 @@ static int
 output_action_compare_func (const void* x,
 			    const void* y)
 {
-  const output_action_t* p1 = x;
-  const output_action_t* p2 = y;
+  const output_action_t* p1 = static_cast<const output_action_t*> (x);
+  const output_action_t* p2 = static_cast<const output_action_t*> (y);
   if (p1->automaton != p2->automaton) {
     return p1->automaton - p2->automaton;
   }
   else if (p1->action_entry_point != p2->action_entry_point) {
-    return p1->action_entry_point - p2->action_entry_point;
+    return static_cast<uint8_t*> (p1->action_entry_point) - static_cast<uint8_t*> (p2->action_entry_point);
   }
   else {
     return p1->parameter - p2->parameter;
@@ -65,7 +65,7 @@ allocate_output_action (automaton_t* automaton,
 			void* action_entry_point,
 			parameter_t parameter)
 {
-  output_action_t* ptr = list_allocator_alloc (list_allocator, sizeof (output_action_t));
+  output_action_t* ptr = static_cast<output_action_t*> (list_allocator_alloc (list_allocator, sizeof (output_action_t)));
   kassert (ptr != 0);
   ptr->automaton = automaton;
   ptr->action_entry_point = action_entry_point;
@@ -78,7 +78,7 @@ allocate_input_action (automaton_t* automaton,
 		       void* action_entry_point,
 		       parameter_t parameter)
 {
-  input_action_t* ptr = list_allocator_alloc (list_allocator, sizeof (input_action_t));
+  input_action_t* ptr = static_cast<input_action_t*> (list_allocator_alloc (list_allocator, sizeof (input_action_t)));
   kassert (ptr != 0);
   ptr->automaton = automaton;
   ptr->action_entry_point = action_entry_point;
@@ -116,7 +116,7 @@ binding_manager_bind (automaton_t* output_automaton,
   }
 
   input_action_t* input_action = allocate_input_action (input_automaton, input_action_entry_point, input_parameter);
-  input_action->next = hash_map_find (bindings, output_action);
+  input_action->next = static_cast<input_action_t*> (hash_map_find (bindings, output_action));
   hash_map_erase (bindings, output_action);
   hash_map_insert (bindings, output_action, input_action);
 }
@@ -132,5 +132,5 @@ binding_manager_get_bound_inputs (automaton_t* output_automaton,
   output_action.automaton = output_automaton;
   output_action.action_entry_point = output_action_entry_point;
   output_action.parameter = output_parameter;
-  return hash_map_find (bindings, &output_action);
+  return static_cast<input_action_t*> (hash_map_find (bindings, &output_action));
 }

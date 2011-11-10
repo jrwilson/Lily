@@ -22,7 +22,7 @@
 static void
 syscall_handler (registers_t* regs)
 {
-  syscall_t syscall = EXTRACT_SYSCALL (regs->eax);
+  syscall_t syscall = static_cast<syscall_t> (EXTRACT_SYSCALL (regs->eax));
 
   switch (syscall) {
   case SYSCALL_FINISH:

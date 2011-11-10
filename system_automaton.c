@@ -35,6 +35,8 @@
 /* Markers for the kernel. */
 extern int text_begin;
 extern int text_end;
+extern int rodata_begin;
+extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
@@ -71,7 +73,7 @@ system_automaton_first_effect ()
   /* First, create a new page directory. */
 
   /* Reserve some logical address space for the page directory. */
-  page_directory_t* page_directory = automaton_reserve (system_automaton, PAGE_SIZE);
+  page_directory_t* page_directory = static_cast<page_directory_t*> (automaton_reserve (system_automaton, PAGE_SIZE));
   kassert (page_directory != 0);
   /* Allocate a frame. */
   frame_t frame = frame_manager_alloc ();
@@ -103,8 +105,7 @@ system_automaton_first_effect ()
 			VM_AREA_DATA,
 			(void*)SYSTEM_DATA_BEGIN,
 			(void*)SYSTEM_DATA_END,
-			SUPERVISOR,
-			WRITABLE);
+			SUPERVISOR);
     kassert (automaton_insert_vm_area (initrd, &data) == 0);
 
     /* Add a stack area. */
@@ -113,11 +114,10 @@ system_automaton_first_effect ()
 			VM_AREA_STACK,
 			(void*)PAGE_ALIGN_DOWN ((size_t)initrd->stack_pointer - SYSTEM_STACK_SIZE),
 			(void*)PAGE_ALIGN_DOWN ((size_t)initrd->stack_pointer),
-			SUPERVISOR,
-			WRITABLE);
+			SUPERVISOR);
     kassert (automaton_insert_vm_area (initrd, &stack) == 0);
     /* Back with physical pages.  See comment in system_automaton_initialize (). */
-    void* ptr;
+    uint8_t* ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
       vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
     }
@@ -205,25 +205,30 @@ system_automaton_initialize (void* placement_begin,
 		      VM_AREA_TEXT,
 		      (void*)PAGE_ALIGN_DOWN ((size_t)&text_begin),
 		      (void*)PAGE_ALIGN_UP ((size_t)&text_end),
-		      SUPERVISOR,
-		      NOT_WRITABLE);
+		      SUPERVISOR);
+  vm_area_t rodata;
+  vm_area_initialize (&rodata,
+		      VM_AREA_DATA,
+		      (void*)PAGE_ALIGN_DOWN ((size_t)&rodata_begin),
+		      (void*)PAGE_ALIGN_UP ((size_t)&rodata_end),
+		      SUPERVISOR);
   vm_area_t data;
   vm_area_initialize (&data,
 		      VM_AREA_DATA,
 		      (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin),
 		      (void*)PAGE_ALIGN_UP ((size_t)&data_end),
-		      SUPERVISOR,
-		      WRITABLE);
+		      SUPERVISOR);
   vm_area_t placement;
   vm_area_initialize (&placement,
 		      VM_AREA_DATA,
 		      (void*)PAGE_ALIGN_DOWN ((size_t)placement_begin),
 		      (void*)PAGE_ALIGN_UP ((size_t)placement_end),
-		      SUPERVISOR,
-		      WRITABLE);
+		      SUPERVISOR);
   text.prev = 0;
-  text.next = &data;
-  data.prev = &text;
+  text.next = &rodata;
+  rodata.prev = &text;
+  rodata.next = &data;
+  data.prev = &rodata;
   data.next = &placement;
   placement.prev = &data;
   placement.next = 0;
@@ -270,8 +275,7 @@ system_automaton_initialize (void* placement_begin,
 			VM_AREA_STACK,
 			(void*)PAGE_ALIGN_DOWN ((size_t)vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE),
 			(void*)PAGE_ALIGN_DOWN ((size_t)vm_manager_page_directory_logical_address ()),
-			SUPERVISOR,
-			WRITABLE);
+			SUPERVISOR);
     kassert (automaton_insert_vm_area (sys_automaton, &stack) == 0);
     /* When call finish_action below, we will switch to the new stack.
        If we don't back the stack with physical pages, the first stack operation will triple fault.
@@ -283,7 +287,7 @@ system_automaton_initialize (void* placement_begin,
 
        So, we need to back the stack with physical pages.
     */
-    void* ptr;
+    uint8_t* ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
       vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
     }

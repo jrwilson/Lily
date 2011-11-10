@@ -53,7 +53,7 @@ automaton_initialize (automaton_t* ptr,
   ptr->stack_pointer = stack_pointer;
   ptr->memory_map_begin = 0;
   ptr->memory_map_end = 0;
-  ptr->memory_ceiling = (void*)PAGE_ALIGN_DOWN ((size_t)memory_ceiling);
+  ptr->memory_ceiling = reinterpret_cast<uint8_t*> (PAGE_ALIGN_DOWN ((size_t)memory_ceiling));
   ptr->page_privilege = page_privilege;
 }
 
@@ -67,7 +67,7 @@ static int
 action_entry_point_compare_func (const void* x,
 				 const void* y)
 {
-  return x - y;
+  return static_cast<const uint8_t*> (x) - static_cast<const uint8_t*> (y);
 }
 
 automaton_t*
@@ -79,7 +79,7 @@ automaton_allocate (list_allocator_t* list_allocator,
 		    page_privilege_t page_privilege)
 {
   kassert (list_allocator != 0);
-  automaton_t* ptr = list_allocator_alloc (list_allocator, sizeof (automaton_t));
+  automaton_t* ptr = static_cast<automaton_t*> (list_allocator_alloc (list_allocator, sizeof (automaton_t)));
   kassert (ptr != 0);
   automaton_initialize (ptr, privilege, page_directory, stack_pointer, memory_ceiling, page_privilege);
   ptr->list_allocator = list_allocator;
@@ -102,8 +102,7 @@ merge (automaton_t* automaton,
 	area->type == VM_AREA_DATA &&
 	next->type == VM_AREA_DATA &&
 	area->end == next->begin &&
-	area->page_privilege == next->page_privilege &&
-	area->writable == next->writable) {
+	area->page_privilege == next->page_privilege) {
       /* Merge. */
       area->end = next->end;
       /* Remove. */
@@ -145,7 +144,7 @@ automaton_insert_vm_area (automaton_t* automaton,
   }
 
   /* Insert. */
-  vm_area_t* ptr = vm_area_allocate (automaton->list_allocator, area->type, area->begin, area->end, area->page_privilege, area->writable);
+  vm_area_t* ptr = vm_area_allocate (automaton->list_allocator, area->type, area->begin, area->end, area->page_privilege);
   ptr->next = *nptr;
   *nptr = ptr;
   ptr->prev = *pptr;
@@ -171,14 +170,14 @@ automaton_alloc (automaton_t* automaton,
     vm_area_t* ptr;
     for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
       /* Start with the floor and ceiling of the automaton. */
-      void* ceiling = automaton->memory_ceiling;
+      uint8_t* ceiling = automaton->memory_ceiling;
       if (ptr->next != 0) {
 	/* Ceiling drops so we don't interfere with next area. */
 	ceiling = ptr->next->begin;
       }
 
       if (size <= (size_t)(ceiling - ptr->end)) {
-	void* retval = ptr->end;
+	uint8_t* retval = ptr->end;
 	if (ptr->type == VM_AREA_DATA) {
 	  /* Extend a data area. */
 	  ptr->end += size;
@@ -187,7 +186,7 @@ automaton_alloc (automaton_t* automaton,
 	}
 	else {
 	  /* Insert after the current area. */
-	  vm_area_t* area = vm_area_allocate (automaton->list_allocator, VM_AREA_DATA, retval, retval + size, automaton->page_privilege, WRITABLE);
+	  vm_area_t* area = vm_area_allocate (automaton->list_allocator, VM_AREA_DATA, retval, retval + size, automaton->page_privilege);
 	  kassert (area != 0);
 
 	  area->next = ptr->next;
@@ -229,16 +228,16 @@ automaton_reserve (automaton_t* automaton,
   vm_area_t* ptr;
   for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
     /* Start with the floor and ceiling of the automaton. */
-    void* ceiling = automaton->memory_ceiling;
+    uint8_t* ceiling = automaton->memory_ceiling;
     if (ptr->next != 0) {
       /* Ceiling drops so we don't interfere with next area. */
       ceiling = ptr->next->begin;
     }
     
     if (size <= (size_t)(ceiling - ptr->end)) {
-      void* retval = ptr->end;
+      uint8_t* retval = ptr->end;
       /* Insert after the current area. */
-      vm_area_t* area = vm_area_allocate (automaton->list_allocator, VM_AREA_RESERVED, retval, retval + size, automaton->page_privilege, WRITABLE);
+      vm_area_t* area = vm_area_allocate (automaton->list_allocator, VM_AREA_RESERVED, retval, retval + size, automaton->page_privilege);
       kassert (area != 0);
       
       area->next = ptr->next;
@@ -305,7 +304,9 @@ automaton_get_action_type (automaton_t* ptr,
 {
   kassert (ptr != 0);
   if (hash_map_contains (ptr->actions, (const void*)action_entry_point)) {
-    action_type_t retval = (action_type_t)hash_map_find (ptr->actions, (const void*)action_entry_point);
+    void* x = hash_map_find (ptr->actions, (const void*)action_entry_point);
+    action_type_t* p = reinterpret_cast<action_type_t*> (&x);
+    action_type_t retval = *p;
     return retval;
   }
   else {

@@ -1,8 +1,8 @@
 AS=nasm
 AFLAGS=-f elf
-CC=gcc
+CC=g++
 # Add -Werror at some point
-CFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs
+CFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.

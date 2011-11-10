@@ -22,7 +22,7 @@
   extern int name;		\
   static void name##_effect (void); \
   static void name##_schedule (void);		\
-void \
+extern "C" void \
  name##_driver () \
 { \
   name##_effect ();	\
@@ -38,7 +38,7 @@ void \
   extern int name;		\
   static void name##_effect (parameter_type); \
   static void name##_schedule (parameter_type);		\
-void \
+extern "C" void \
  name##_driver (parameter_t parameter) \
 { \
   name##_effect ((parameter_type)parameter);		\
@@ -55,7 +55,7 @@ void \
   extern int name; \
   static void name##_effect (value_type); \
   static void name##_schedule (void);		\
-void \
+extern "C" void \
  name##_driver (value_t value) \
 { \
   name##_effect ((value_type)value);		\
@@ -72,7 +72,7 @@ void \
   extern int name; \
   static void name##_effect (value_type, parameter_type);	\
   static void name##_schedule (parameter_type);		\
-void \
+extern "C" void \
  name##_driver (value_t value, parameter_t parameter)			\
 { \
   name##_effect ((value_type)value, (parameter_type)parameter);	\
@@ -91,7 +91,7 @@ void \
   static int name##_precondition (void); \
   static void name##_effect (void); \
   static void name##_schedule (void);		\
-void \
+extern "C" void \
 name##_driver () \
 { \
   SCHEDULER_REMOVE (scheduler, &name, 0); \
@@ -112,7 +112,7 @@ name##_driver () \
   static int name##_precondition (parameter_type); \
   static void name##_effect (parameter_type); \
   static void name##_schedule (parameter_type);		\
-void \
+extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
   SCHEDULER_REMOVE (scheduler, &name, parameter); \
@@ -134,7 +134,7 @@ name##_driver (parameter_t parameter) \
   static int name##_precondition (void); \
   static value_type name##_effect (void); \
   static void name##_schedule (void); \
-void \
+extern "C" void \
 name##_driver () \
 { \
   SCHEDULER_REMOVE (scheduler, &name, 0); \
@@ -156,7 +156,7 @@ name##_driver () \
   static int name##_precondition (parameter_type); \
   static value_type name##_effect (parameter_type); \
   static void name##_schedule (parameter_type); \
-void \
+extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
   SCHEDULER_REMOVE (scheduler, &name, parameter); \
@@ -178,7 +178,7 @@ name##_driver (parameter_t parameter) \
   static int name##_precondition (void); \
   static void name##_effect (void); \
   static void name##_schedule (void); \
-void \
+extern "C" void \
 name##_driver () \
 { \
   SCHEDULER_REMOVE (scheduler, &name, 0); \
@@ -197,7 +197,7 @@ asm (".global " quote(name) "\n"		\
   static int name##_precondition (parameter_type); \
   static void name##_effect (parameter_type); \
   static void name##_schedule (parameter_type); \
-void \
+extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
   SCHEDULER_REMOVE (scheduler, &name, parameter); \

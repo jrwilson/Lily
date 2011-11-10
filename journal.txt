@@ -256,12 +256,24 @@ Test of the system automaton acting as a counter was successful on a physical ma
 2011-11-09
 
 The allocator used by the system automaton is passed to the various modules that need it.
-The first goal of the day is to give the system automaton (and every other automaton) a stack.
+The goal of the day is to give the system automaton (and every other automaton) a stack and their own address space.
 I wrote previously on the rationale behind each automaton receiving a private stack versus and shared global stack.
 Basically, I believe that the cost of giving each automaton a stack is less that the cost of scrubbing the stack between each action.
 The setrlimit/getrlimit calls can be used to manipulate the stack in Linux.
 
+2011-11-10
 
+Can switch between two automata in different address spaces.
+Ran into the same bug twice whose symptom is a triple fault.
+The problem was that the stack did not exist or was not valid when switch paging directories.
+The solution I adopted is to have a small, dedicated piece of memory in the kernel to use when switching page directories.
+I call it a switching stack.
+To execute an action in an automaton, I first copy the stack to the switching stack, change to the switch stack, change page directories, etc.
+Since the switching stack exists in all address spaces, switching to a different page directory doesn't result in a bad stack.
+
+For my productivity, I believe I'm going to switch to C++.
+Basically, I'm tired of writing the same code and algorithms for lists but refuse to make a generic non-type safe implementation.
+Thus, C++ seems like the way to go.
 
 Take out page scrub in page_handler.
 Use traps instread of interrupts.

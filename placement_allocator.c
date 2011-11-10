@@ -21,9 +21,9 @@ placement_allocator_initialize (placement_allocator_t* ptr,
 {
   kassert (ptr != 0);
   kassert (begin <= end);
-  ptr->begin = begin;
-  ptr->end = end;
-  ptr->marker = begin;
+  ptr->begin = static_cast<uint8_t*> (begin);
+  ptr->end = static_cast<uint8_t*> (end);
+  ptr->marker = ptr->begin;
 }
 
 void*
@@ -32,7 +32,7 @@ placement_allocator_alloc (placement_allocator_t* ptr,
 {
   kassert (ptr != 0);
   
-  if (size > 0 && size <= (uint32_t)(ptr->end - ptr->marker)) {
+  if (size > 0 && size <= (ptr->end - ptr->marker)) {
     void* retval = ptr->marker;
     ptr->marker += size;
     return retval;

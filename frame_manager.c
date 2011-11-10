@@ -75,7 +75,7 @@ stack_allocator_allocate (frame_t begin,
   kassert (begin < end);
 
   frame_entry_t size = end - begin;
-  stack_allocator_t* ptr = placement_allocator_alloc (placement_allocator, sizeof (stack_allocator_t) + size * sizeof (frame_entry_t));
+  stack_allocator_t* ptr = static_cast<stack_allocator_t*> (placement_allocator_alloc (placement_allocator, sizeof (stack_allocator_t) + size * sizeof (frame_entry_t)));
   kassert (ptr != 0);
   ptr->next = 0;
   ptr->begin = begin;

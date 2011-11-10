@@ -30,15 +30,19 @@
 extern int text_begin;
 extern int text_end;
 
+extern int rodata_begin;
+extern int rodata_end;
+
+extern int ctor_begin;
+
 extern int data_begin;
 extern int data_end;
-
 
 /* logical_end denotes the end of the logical address space as setup by loader.s.
    The multiboot data structures use physical addresses.
    loader.s identity maps up to (logical_address - KERNEL_VIRTUAL_BASE) so they can be read without manual translation.
  */
-void
+extern "C" void
 kmain (void* logical_end,
        multiboot_info_t* multiboot_info,
        uint32_t multiboot_bootloader_magic)
@@ -91,6 +95,7 @@ kmain (void* logical_end,
   vm_manager_initialize (placement_begin, placement_end);
 
   kputs ("text "); kputp (&text_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)&text_end)); kputs ("\n");
+  kputs ("rodata "); kputp (&rodata_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)&rodata_end)); kputs ("\n");
   kputs ("data "); kputp (&data_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)&data_end)); kputs ("\n");
   kputs ("plac "); kputp (placement_begin); kputs ("-"); kputp ((void*)PAGE_ALIGN_UP ((size_t)placement_end)); kputs ("\n");
 

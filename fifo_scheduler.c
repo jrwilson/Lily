@@ -32,7 +32,7 @@ struct fifo_scheduler {
 fifo_scheduler_t*
 fifo_scheduler_allocate (list_allocator_t* list_allocator)
 {
-  fifo_scheduler_t* ptr = list_allocator_alloc (list_allocator, sizeof (fifo_scheduler_t));
+  fifo_scheduler_t* ptr = static_cast<fifo_scheduler_t*> (list_allocator_alloc (list_allocator, sizeof (fifo_scheduler_t)));
   ptr->list_allocator = list_allocator;
   ptr->ready = 0;
   ptr->free = 0;
@@ -50,7 +50,7 @@ allocate_scheduler_entry (fifo_scheduler_t* ptr,
     ptr->free = p->next;
   }
   else {
-    p = list_allocator_alloc (ptr->list_allocator, sizeof (fifo_scheduler_entry_t));
+    p = static_cast<fifo_scheduler_entry_t*> (list_allocator_alloc (ptr->list_allocator, sizeof (fifo_scheduler_entry_t)));
   }
   p->next = 0;
   p->action_entry_point = action_entry_point;

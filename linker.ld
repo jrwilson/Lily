@@ -29,23 +29,45 @@ SECTIONS
 	{
 		text_begin = .;
 		*(.text)
+		*(.gnu.linkonce.t*)
 		text_end = .;
+	}
+
+	/* Place the readonly data on page boundary physically after the previous segment but logically after 0xC0000000. */
+	.rodata ALIGN (0x1000) : AT(ADDR(.rodata) - 0xC0000000)
+	{
+		rodata_begin = .;
+		ctors_begin = .;
+		*(.ctor*)
+		ctors_end = .;
+		dtors_begin = .;
+		*(.dtor*)
+		dtors_end = .;
+		*(.rodata*)
+		*(.gnu.linkonce.r*)
+		rodata_end = .;
 	}
 
 	/* Place the initialized data on page boundary physically after the previous segment but logically after 0xC0000000. */
 	.data ALIGN (0x1000) : AT(ADDR(.data) - 0xC0000000)
 	{
 		data_begin = .;
-		*(.rodata)
 		*(.data)
+		*(.gnu.linkonce.d*)
 	}
 
 	/* Place the uninitialized data on a page boundary physically after the previous segment but logically after 0xC0000000. */
 	.bss ALIGN (0x1000) : AT(ADDR(.bss) - 0xC0000000)
 	{
-		*(.bss)
 		*(COMMON)
+		*(.bss)
+		*(.gnu.linkonce.b*)
 		data_end = .;
 	}
 
+	/DISCARD/ :
+	{
+		*(.comment)
+		*(.eh_frame) /* Exception handling frames. */
+	}
 }

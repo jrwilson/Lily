@@ -27,6 +27,8 @@
 /* Marks the beginning and end of the kernel upon loading. */
 extern int text_begin;
 extern int text_end;
+extern int rodata_begin;
+extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
@@ -81,7 +83,7 @@ page_table_clear (page_table_t* ptr)
 
   unsigned int k;
   for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-    ptr->entry[k] = make_page_table_entry (0, 0, 0, NOT_PRESENT);
+    ptr->entry[k] = make_page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
   }
 }
 
@@ -128,12 +130,12 @@ vm_manager_initialize (void* placement_begin,
   kernel_page_directory.entry[PAGE_DIRECTORY_ENTRY(0)] = make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PRESENT);
   kernel_page_directory.entry[PAGE_DIRECTORY_ENTRY (KERNEL_VIRTUAL_BASE)] = make_page_directory_entry (ADDRESS_TO_FRAME (low_page_table_paddr), PRESENT);
 
-  void* begin;
-  void* end;
+  uint8_t* begin;
+  uint8_t* end;
 
   /* Identity map the first 1MB. */
   begin = 0;
-  end = (void*)0x100000;
+  end = reinterpret_cast<uint8_t*> (0x100000);
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
     frame_t frame = ADDRESS_TO_FRAME ((size_t)begin);
@@ -142,8 +144,8 @@ vm_manager_initialize (void* placement_begin,
   }
 
   /* Map the kernel text. */
-  begin = (void*)PAGE_ALIGN_DOWN ((size_t)&text_begin);
-  end = (void*)PAGE_ALIGN_UP ((size_t)&text_end);
+  begin = reinterpret_cast<uint8_t*> (PAGE_ALIGN_DOWN ((size_t)&text_begin));
+  end = reinterpret_cast<uint8_t*> (PAGE_ALIGN_UP ((size_t)&text_end));
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
     frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
@@ -151,9 +153,19 @@ vm_manager_initialize (void* placement_begin,
     frame_manager_mark_as_used (frame);
   }
 
+  /* Map the kernel read-only data. */
+  begin = reinterpret_cast<uint8_t*> (PAGE_ALIGN_DOWN ((size_t)&rodata_begin));
+  end = reinterpret_cast<uint8_t*> (PAGE_ALIGN_UP ((size_t)&rodata_end));
+  kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
+  for (; begin < end; begin += PAGE_SIZE) {
+    frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
+    low_page_table.entry[PAGE_TABLE_ENTRY (begin)] = make_page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
+    frame_manager_mark_as_used (frame);
+  }
+
   /* Map the kernel data. */
-  begin = (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin);
-  end = (void*)PAGE_ALIGN_UP ((size_t)&data_end);
+  begin = reinterpret_cast<uint8_t*> (PAGE_ALIGN_DOWN ((size_t)&data_begin));
+  end = reinterpret_cast<uint8_t*> (PAGE_ALIGN_UP ((size_t)&data_end));
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
     frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
@@ -162,8 +174,8 @@ vm_manager_initialize (void* placement_begin,
   }
 
   /* Map the memory allocated by placement. */
-  begin = (void*)PAGE_ALIGN_DOWN ((size_t)placement_begin);
-  end = (void*)PAGE_ALIGN_UP ((size_t)placement_end);
+  begin = reinterpret_cast<uint8_t*> (PAGE_ALIGN_DOWN ((size_t)placement_begin));
+  end = reinterpret_cast<uint8_t*> (PAGE_ALIGN_UP ((size_t)placement_end));
   kassert (end < (void*)INITIAL_LOGICAL_LIMIT);
   for (; begin < end; begin += PAGE_SIZE) {
     frame_t frame = ADDRESS_TO_FRAME ((size_t)begin - KERNEL_VIRTUAL_BASE);
@@ -257,7 +269,7 @@ vm_manager_unmap (void* logical_addr)
   page_table_t* page_table = get_page_table (logical_addr);
 
   if (page_directory->entry[PAGE_DIRECTORY_ENTRY(logical_addr)].present) {
-    page_table->entry[PAGE_TABLE_ENTRY (logical_addr)] = make_page_table_entry (0, 0, 0, NOT_PRESENT);
+    page_table->entry[PAGE_TABLE_ENTRY (logical_addr)] = make_page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
     /* Flush the TLB. */
     asm volatile ("invlpg %0\n" :: "m" (logical_addr));
   }
