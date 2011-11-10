@@ -1,8 +1,8 @@
 AS=nasm
 AFLAGS=-f elf
-CC=g++
+CXX=g++
 # Add -Werror at some point
-CFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector
+CXXFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
@@ -52,8 +52,8 @@ $(KERNEL) : $(OBJECTS)
 %.o : %.s
 	$(AS) $(AFLAGS) -o $@ $<
 
-%.o : %.c
-	$(CC) -g -o $@ -c $< $(CFLAGS)
+%.o : %.cpp
+	$(CXX) -g -o $@ -c $< $(CXXFLAGS)
 
 .PHONY : clean
 clean :
