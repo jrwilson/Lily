@@ -16,13 +16,13 @@
 
 void
 placement_allocator_initialize (placement_allocator_t* ptr,
-				void* begin,
-				void* end)
+				logical_address begin,
+				logical_address end)
 {
   kassert (ptr != 0);
   kassert (begin <= end);
-  ptr->begin = static_cast<uint8_t*> (begin);
-  ptr->end = static_cast<uint8_t*> (end);
+  ptr->begin = begin;
+  ptr->end = end;
   ptr->marker = ptr->begin;
 }
 
@@ -32,8 +32,8 @@ placement_allocator_alloc (placement_allocator_t* ptr,
 {
   kassert (ptr != 0);
   
-  if (size > 0 && size <= (ptr->end - ptr->marker)) {
-    void* retval = ptr->marker;
+  if (size > 0 && static_cast<ptrdiff_t> (size) <= (ptr->end - ptr->marker)) {
+    void* retval = ptr->marker.value ();
     ptr->marker += size;
     return retval;
   }
@@ -42,10 +42,10 @@ placement_allocator_alloc (placement_allocator_t* ptr,
   }
 }
 
-void*
+logical_address
 placement_allocator_get_marker (placement_allocator_t* ptr)
 {
   kassert (ptr != 0);
 
-  return ptr->marker;
+  return logical_address (ptr->marker);
 }

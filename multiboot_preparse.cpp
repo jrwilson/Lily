@@ -15,29 +15,28 @@
 
 #include "multiboot_preparse.hpp"
 #include "kassert.hpp"
+#include "algorithm.hpp"
 
 static void
-multiboot_new_begin (size_t* multiboot_begin,
+multiboot_new_begin (physical_address& multiboot_begin,
 		     size_t new_begin)
 {
-  *multiboot_begin = (new_begin < *multiboot_begin) ? new_begin : *multiboot_begin;
+  multiboot_begin = min (multiboot_begin, physical_address (new_begin));
 }
 
 static void
-multiboot_new_end (size_t* multiboot_end,
+multiboot_new_end (physical_address& multiboot_end,
 		   size_t new_end)
 {
-  *multiboot_end = (new_end > *multiboot_end) ? new_end : *multiboot_end;
+  multiboot_end = max (multiboot_end, physical_address (new_end));
 }
 
 int
 multiboot_preparse_memory_map (const multiboot_info_t* multiboot_info,
-			       size_t* multiboot_begin,
-			       size_t* multiboot_end)
+			       physical_address& multiboot_begin,
+			       physical_address& multiboot_end)
 {
   kassert (multiboot_info != 0);
-  kassert (multiboot_begin != 0);
-  kassert (multiboot_end != 0);
 
   if (multiboot_info->flags & MULTIBOOT_INFO_MEM_MAP) {
     multiboot_new_begin (multiboot_begin, multiboot_info->mmap_addr);

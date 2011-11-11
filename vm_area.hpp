@@ -29,8 +29,8 @@ typedef enum {
 typedef struct vm_area vm_area_t;
 struct vm_area {
   vm_area_type_t type;
-  uint8_t* begin;
-  uint8_t* end;
+  logical_address begin;
+  logical_address end;
   page_privilege_t page_privilege;
   vm_area_t* prev;
   vm_area_t* next;
@@ -39,15 +39,15 @@ struct vm_area {
 void
 vm_area_initialize (vm_area_t* ptr,
 		    vm_area_type_t type,
-		    void* begin,
-		    void* end,
+		    logical_address begin,
+		    logical_address end,
 		    page_privilege_t page_privilege);
 
 vm_area_t*
 vm_area_allocate (list_allocator_t* list_allocator,
 		  vm_area_type_t type,
-		  void* begin,
-		  void* end,
+		  logical_address begin,
+		  logical_address end,
 		  page_privilege_t page_privilege) __attribute__((warn_unused_result));
 
 void

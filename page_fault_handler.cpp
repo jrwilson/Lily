@@ -28,11 +28,13 @@ page_fault_handler (registers_t* regs)
   /* Get the faulting address. */
   void* addr;
   asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-  addr = (void*)PAGE_ALIGN_DOWN ((size_t)addr);
+
+  logical_address address (addr);
+  address.align_down (PAGE_SIZE);
 
   automaton_interface* automaton;
 
-  if (addr < (void*)KERNEL_VIRTUAL_BASE) {
+  if (address < KERNEL_VIRTUAL_BASE) {
     /* Get the current automaton. */  
     automaton = scheduler_get_current_automaton ();
   }
@@ -40,7 +42,7 @@ page_fault_handler (registers_t* regs)
     automaton = system_automaton_get_instance ();
   }
 
-  automaton->page_fault (addr, regs->error);
+  automaton->page_fault (address, regs->error);
   
   /* kputs ("Page fault!!\n"); */
   

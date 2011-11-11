@@ -39,7 +39,7 @@ list_allocator_t*
 list_allocator_allocate (void)
 {
   size_t page_size = sys_get_page_size ();
-  size_t request_size = ALIGN_UP (sizeof (list_allocator_t) + sizeof (header_t), page_size);
+  size_t request_size = physical_address (sizeof (list_allocator_t) + sizeof (header_t)).align_up (page_size).value ();
   list_allocator_t* ptr = static_cast<list_allocator_t*> (sys_allocate (request_size));
   if (ptr != 0) {
     ptr->first_header = (header_t*)((char*)ptr + sizeof (list_allocator_t));

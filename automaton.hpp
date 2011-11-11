@@ -31,16 +31,15 @@ private:
   hash_map_t* actions_;
   /* The scheduler uses this object. */
   scheduler_context_t* scheduler_context_;
-  /* Physical address of the page directory. */
-  size_t page_directory_;
+  physical_address page_directory_;
   /* Stack pointer (constant). */
-  void* stack_pointer_;
+  logical_address stack_pointer_;
   /* Memory map. */
   vm_area_t* memory_map_begin_;
   vm_area_t* memory_map_end_;
   /* Can map between [floor, ceiling). */
   void* memory_floor_;
-  uint8_t* memory_ceiling_;
+  logical_address memory_ceiling_;
   /* Default privilege for new VM_AREA_DATA. */
   page_privilege_t page_privilege_;
 
@@ -50,34 +49,34 @@ private:
 public:
   automaton (list_allocator_t* list_allocator,
 	     privilege_t privilege,
-	     size_t page_directory,
-	     void* stack_pointer,
-	     void* memory_ceiling,
+	     physical_address page_directory,
+	     logical_address stack_pointer,
+	     logical_address memory_ceiling,
 	     page_privilege_t page_privilege);
 
   inline scheduler_context_t* get_scheduler_context (void) const {
     return scheduler_context_;
   }
 
-  inline void* get_stack_pointer (void) const {
+  inline logical_address get_stack_pointer (void) const {
     return stack_pointer_;
   }
   
   int
   insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result));
   
-  void*
+  logical_address
   alloc (size_t size,
 	 syserror_t* error) __attribute__((warn_unused_result));
   
-  void*
+  logical_address
   reserve (size_t size);
   
   void
-  unreserve (void* ptr);
+  unreserve (logical_address);
 
   void
-  page_fault (void* address,
+  page_fault (logical_address address,
 	      uint32_t error);
 
   void
@@ -88,7 +87,7 @@ public:
   get_action_type (void* action_entry_point);
   
   void
-  execute (void* switch_stack,
+  execute (logical_address switch_stack,
 	   size_t switch_stack_size,
 	   void* action_entry_point,
 	   parameter_t parameter,

@@ -14,10 +14,7 @@
 #include "frame_manager.hpp"
 #include "vm_manager.hpp"
 #include "kassert.hpp"
-
-/* Don't mess with memory below 1M or above 4G. */
-#define MEMORY_LOWER_LIMIT 0x00100000
-#define MEMORY_UPPER_LIMIT 0xFFFFFFFF
+#include "algorithm.hpp"
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -54,13 +51,13 @@
 */
 typedef int16_t frame_entry_t;
 #define STACK_ALLOCATOR_EOL -32768
-#define MAX_REGION_SIZE 0x07FFF000
+const size_t MAX_REGION_SIZE = 0x07FFF000;
 
 typedef struct stack_allocator stack_allocator_t;
 struct stack_allocator {
   stack_allocator_t* next;
-  frame_t begin;
-  frame_t end;
+  frame begin;
+  frame end;
   frame_entry_t free_head;
   frame_entry_t entry[];
 };
@@ -68,9 +65,17 @@ struct stack_allocator {
 static placement_allocator_t* placement_allocator = 0;
 static stack_allocator_t* stack_allocators = 0;
 
+frame::frame (const page_directory_entry_t& entry) :
+  f_ (entry.frame_)
+{ }
+
+frame::frame (const page_table_entry_t& entry) :
+  f_ (entry.frame_)
+{ }
+
 static stack_allocator_t*
-stack_allocator_allocate (frame_t begin,
-			  frame_t end)
+stack_allocator_allocate (frame begin,
+			  frame end)
 {
   kassert (begin < end);
 
@@ -92,7 +97,7 @@ stack_allocator_allocate (frame_t begin,
 
 static void
 stack_allocator_mark_as_used (stack_allocator_t* ptr,
-			      uint32_t frame)
+			      frame frame)
 {
   kassert (ptr != 0);
   kassert (frame >= ptr->begin && frame < ptr->end);
@@ -109,7 +114,7 @@ stack_allocator_mark_as_used (stack_allocator_t* ptr,
   ptr->entry[frame_idx] = -1;
 }
 
-static uint32_t
+static frame
 stack_allocator_alloc (stack_allocator_t* ptr)
 {
   kassert (ptr != 0);
@@ -118,12 +123,14 @@ stack_allocator_alloc (stack_allocator_t* ptr)
   frame_entry_t idx = ptr->free_head;
   ptr->free_head = ptr->entry[idx];
   ptr->entry[idx] = -1;
-  return ptr->begin + idx;
+  frame retval (ptr->begin);
+  retval += idx;
+  return retval;
 }
 
 static void
 stack_allocator_incref (stack_allocator_t* ptr,
-			uint32_t frame)
+			frame frame)
 {
   kassert (ptr != 0);
   kassert (frame >= ptr->begin && frame < ptr->end);
@@ -136,7 +143,7 @@ stack_allocator_incref (stack_allocator_t* ptr,
 
 static void
 stack_allocator_decref (stack_allocator_t* ptr,
-			uint32_t frame)
+			frame frame)
 {
   kassert (ptr != 0);
   kassert (frame >= ptr->begin && frame < ptr->end);
@@ -162,35 +169,32 @@ frame_manager_initialize (placement_allocator_t* p_a)
 
 void
 frame_manager_add (placement_allocator_t* p_a,
-		   uint64_t first,
-		   uint64_t last)
+		   physical_address begin,
+		   physical_address end)
 {
   kassert (p_a == placement_allocator);
-  kassert (first <= last);
-
-  /* Intersect [first, last] with [MEMORY_LOWER_LIMIT, MEMORY_UPPER_LIMIT]. */
-  first = (first > MEMORY_LOWER_LIMIT) ? first : MEMORY_LOWER_LIMIT;
-  last = (last < MEMORY_UPPER_LIMIT) ? last : MEMORY_UPPER_LIMIT;
+  kassert (begin >= USABLE_MEMORY_BEGIN);
+  kassert (end <= USABLE_MEMORY_END);
 
   /* Align to frame boundaries. */
-  first = PAGE_ALIGN_UP (first);
-  last = PAGE_ALIGN_DOWN (last + 1) - 1;
+  begin.align_up (PAGE_SIZE);
+  end.align_down (PAGE_SIZE);
 
-  if (first < last) {
-    uint64_t size = last - first + 1;
+  if (begin < end) {
+    size_t size = end - begin;
     while (size != 0) {
-      uint64_t sz = (size >= MAX_REGION_SIZE) ? MAX_REGION_SIZE : size;
-      stack_allocator_t* stack_allocator = stack_allocator_allocate (ADDRESS_TO_FRAME (first), ADDRESS_TO_FRAME (first + sz));
+      size_t sz = min (MAX_REGION_SIZE, size);
+      stack_allocator_t* stack_allocator = stack_allocator_allocate (frame (begin), frame (begin + sz));
       stack_allocator->next = stack_allocators;
       stack_allocators = stack_allocator;
       size -= sz;
-      first += sz;
+      begin += sz;
     }
   }
 }
 
 static stack_allocator_t*
-find_allocator (uint32_t frame)
+find_allocator (frame frame)
 {
   stack_allocator_t* ptr;
   /* Find the allocator. */
@@ -200,7 +204,7 @@ find_allocator (uint32_t frame)
 }
 
 void
-frame_manager_mark_as_used (uint32_t frame)
+frame_manager_mark_as_used (frame frame)
 {
   stack_allocator_t* ptr = find_allocator (frame);
 
@@ -209,7 +213,7 @@ frame_manager_mark_as_used (uint32_t frame)
   }
 }
 
-uint32_t
+frame
 frame_manager_alloc ()
 {
   stack_allocator_t* ptr;
@@ -223,7 +227,7 @@ frame_manager_alloc ()
 }
 
 void
-frame_manager_incref (uint32_t frame)
+frame_manager_incref (frame frame)
 {
   stack_allocator_t* ptr = find_allocator (frame);
 
@@ -234,7 +238,7 @@ frame_manager_incref (uint32_t frame)
 }
 
 void
-frame_manager_decref (uint32_t frame)
+frame_manager_decref (frame frame)
 {
   stack_allocator_t* ptr = find_allocator (frame);
 

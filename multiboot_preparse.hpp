@@ -20,7 +20,7 @@
 
 int
 multiboot_preparse_memory_map (const multiboot_info_t* multiboot_info,
-			       size_t* multiboot_begin,
-			       size_t* multiboot_end);
+			       physical_address& multiboot_begin,
+			       physical_address& multiboot_end);
 
 #endif /* __multiboot_preparse_h__ */

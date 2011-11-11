@@ -20,8 +20,8 @@ class boot_automaton : public automaton_interface {
 private:
   vm_area_t data_;
 public:
-  boot_automaton (void* begin,
-		  void* end);
+  boot_automaton (logical_address begin,
+		  logical_address end);
   
   const vm_area_t*
   get_data_area (void) const;
@@ -29,24 +29,24 @@ public:
   scheduler_context_t*
   get_scheduler_context (void) const;
 
-  void*
+  logical_address
   get_stack_pointer (void) const;
   
   int
   insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result));
   
-  void*
+  logical_address
   alloc (size_t size,
 	 syserror_t* error) __attribute__((warn_unused_result));
   
-  void*
+  logical_address
   reserve (size_t size);
   
   void
-  unreserve (void* ptr);
+  unreserve (logical_address address);
   
   void
-  page_fault (void* address,
+  page_fault (logical_address address,
 	      uint32_t error);
 
   void
@@ -57,7 +57,7 @@ public:
   get_action_type (void* action_entry_point);
   
   void
-  execute (void* switch_stack,
+  execute (logical_address switch_stack,
 	   size_t switch_stack_size,
 	   void* action_entry_point,
 	   parameter_t parameter,

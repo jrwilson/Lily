@@ -91,6 +91,19 @@ loop2:
 highhalf:	
 	;; Setup the stack in order to call kmain.
 	mov esp, stack_end
+
+	;; Call the constructors.
+	[extern ctors_begin]
+	[extern ctors_end]
+	mov ebx, ctors_begin
+	jmp .ctors_until_end
+.call_constructor:
+	call [ebx]
+	add ebx, 4
+.ctors_until_end:
+	cmp ebx, ctors_end
+	jb .call_constructor
+
 	;; Push the multiboot magic number.
 	mov eax, [boot_eax]
 	push eax

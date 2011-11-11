@@ -30,8 +30,8 @@
 #define SWITCH_STACK_SIZE 256
 
 /* Locations to use for data segments of system automata. */
-#define SYSTEM_DATA_BEGIN 0X00100000
-#define SYSTEM_DATA_END   0X00101000
+const logical_address SYSTEM_DATA_BEGIN (reinterpret_cast<void*> (0X00100000));
+const logical_address SYSTEM_DATA_END (reinterpret_cast<void*> (0X00101000));
 
 /* Markers for the kernel. */
 extern int text_begin;
@@ -74,24 +74,24 @@ system_automaton_first_effect ()
   /* First, create a new page directory. */
 
   /* Reserve some logical address space for the page directory. */
-  page_directory_t* page_directory = static_cast<page_directory_t*> (system_automaton->reserve (PAGE_SIZE));
+  page_directory_t* page_directory = static_cast<page_directory_t*> (system_automaton->reserve (PAGE_SIZE).value ());
   kassert (page_directory != 0);
   /* Allocate a frame. */
-  frame_t frame = frame_manager_alloc ();
+  frame frame = frame_manager_alloc ();
   /* Map the page directory. */
-  vm_manager_map (page_directory, frame, SUPERVISOR, WRITABLE);
+  vm_manager_map (logical_address (page_directory), frame, SUPERVISOR, WRITABLE);
   /* Initialize the page directory with a copy of the current page directory. */
-  page_directory_initialize_with_current (page_directory, FRAME_TO_ADDRESS (frame));
+  page_directory_initialize_with_current (page_directory, frame);
   /* Unmap. */
-  vm_manager_unmap (page_directory);
+  vm_manager_unmap (logical_address (page_directory));
   /* Unreserve. */
-  system_automaton->unreserve (page_directory);
+  system_automaton->unreserve (logical_address (page_directory));
 
   /* Switch to the new page directory. */
-  vm_manager_switch_to_directory (FRAME_TO_ADDRESS (frame));
+  vm_manager_switch_to_directory (physical_address (frame));
   
   /* Second, create the automaton. */
-  automaton* initrd = new (static_cast<automaton*> (list_allocator_alloc (system_allocator, sizeof (automaton)))) automaton (system_allocator, RING0, FRAME_TO_ADDRESS (frame), (void*)KERNEL_VIRTUAL_BASE, (void*)KERNEL_VIRTUAL_BASE, SUPERVISOR);
+  automaton* initrd = new (static_cast<automaton*> (list_allocator_alloc (system_allocator, sizeof (automaton)))) automaton (system_allocator, RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
 
   /* Third, create the automaton's memory map. */
   {
@@ -99,8 +99,8 @@ system_automaton_first_effect ()
     vm_area_t data;
     vm_area_initialize (&data,
 			VM_AREA_DATA,
-			(void*)SYSTEM_DATA_BEGIN,
-			(void*)SYSTEM_DATA_END,
+			SYSTEM_DATA_BEGIN,
+			SYSTEM_DATA_END,
 			SUPERVISOR);
     kassert (initrd->insert_vm_area (&data) == 0);
 
@@ -108,12 +108,12 @@ system_automaton_first_effect ()
     vm_area_t stack;
     vm_area_initialize (&stack,
 			VM_AREA_STACK,
-			(void*)PAGE_ALIGN_DOWN ((size_t)initrd->get_stack_pointer () - SYSTEM_STACK_SIZE),
-			(void*)PAGE_ALIGN_DOWN ((size_t)initrd->get_stack_pointer ()),
+			(initrd->get_stack_pointer () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
+			initrd->get_stack_pointer ().align_down (PAGE_SIZE),
 			SUPERVISOR);
     kassert (initrd->insert_vm_area (&stack) == 0);
     /* Back with physical pages.  See comment in system_automaton_initialize (). */
-    uint8_t* ptr;
+    logical_address ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
       vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
     }
@@ -188,8 +188,8 @@ schedule ()
 }
 
 void
-system_automaton_initialize (void* placement_begin,
-			     void* placement_end)
+system_automaton_initialize (logical_address placement_begin,
+			     logical_address placement_end)
 {
   kassert (system_automaton == 0);
 
@@ -220,7 +220,7 @@ system_automaton_initialize (void* placement_begin,
   /* Allocate and set the switch stack for the scheduler. */
   void* switch_stack = list_allocator_alloc (system_allocator, SWITCH_STACK_SIZE);
   kassert (switch_stack != 0);
-  scheduler_set_switch_stack (switch_stack, SWITCH_STACK_SIZE);
+  scheduler_set_switch_stack (logical_address (switch_stack), SWITCH_STACK_SIZE);
 
   /* Allocate the real system automaton.
      The system automaton's ceiling is the start of the paging data structures.
@@ -232,23 +232,23 @@ system_automaton_initialize (void* placement_begin,
     vm_area_t text;
     vm_area_initialize (&text,
 			VM_AREA_TEXT,
-			(void*)PAGE_ALIGN_DOWN ((size_t)&text_begin),
-			(void*)PAGE_ALIGN_UP ((size_t)&text_end),
+			logical_address (&text_begin).align_down (PAGE_SIZE),
+			logical_address (&text_end).align_up (PAGE_SIZE),
 			SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&text) == 0);
     vm_area_t rodata;
     vm_area_initialize (&rodata,
-    		      VM_AREA_DATA,
-    		      (void*)PAGE_ALIGN_DOWN ((size_t)&rodata_begin),
-    		      (void*)PAGE_ALIGN_UP ((size_t)&rodata_end),
-    		      SUPERVISOR);
+			VM_AREA_DATA,
+			logical_address (&rodata_begin).align_down (PAGE_SIZE),
+			logical_address (&rodata_end).align_up (PAGE_SIZE),
+			SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&rodata) == 0);
     vm_area_t data;
     vm_area_initialize (&data,
-    		      VM_AREA_DATA,
-    		      (void*)PAGE_ALIGN_DOWN ((size_t)&data_begin),
-    		      (void*)PAGE_ALIGN_UP ((size_t)&data_end),
-    		      SUPERVISOR);
+			VM_AREA_DATA,
+			logical_address (&data_begin).align_down (PAGE_SIZE),
+			logical_address (&data_end).align_up (PAGE_SIZE),
+			SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&data) == 0);
     kassert (sys_automaton->insert_vm_area (boot_automaton.get_data_area ()) == 0);
   }
@@ -257,8 +257,8 @@ system_automaton_initialize (void* placement_begin,
     vm_area_t stack;
     vm_area_initialize (&stack,
 			VM_AREA_STACK,
-			(void*)PAGE_ALIGN_DOWN ((size_t)vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE),
-			(void*)PAGE_ALIGN_DOWN ((size_t)vm_manager_page_directory_logical_address ()),
+			(vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
+			(vm_manager_page_directory_logical_address ()).align_down (PAGE_SIZE),
 			SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&stack) == 0);
     /* When call finish_action below, we will switch to the new stack.
@@ -271,7 +271,7 @@ system_automaton_initialize (void* placement_begin,
 
        So, we need to back the stack with physical pages.
     */
-    uint8_t* ptr;
+    logical_address ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
       vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
     }

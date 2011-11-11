@@ -55,9 +55,9 @@ syscall_handler (registers_t* regs)
     {
       size_t size = regs->ebx;
       syserror_t error = SYSERROR_SUCCESS;
-      void* ptr = scheduler_get_current_automaton ()->alloc (size, &error);
+      logical_address ptr = scheduler_get_current_automaton ()->alloc (size, &error);
       regs->eax = error;
-      regs->ebx = (uint32_t)ptr;
+      regs->ebx = reinterpret_cast<uint32_t> (ptr.value ());
       return;
     }
     break;

@@ -18,8 +18,8 @@
 
 /* Does not return. */
 void
-system_automaton_initialize (void* placement_begin,
-			     void* placement_end);
+system_automaton_initialize (logical_address placement_begin,
+			     logical_address placement_end);
 
 automaton_interface*
 system_automaton_get_instance (void);

@@ -33,25 +33,25 @@ public:
   virtual scheduler_context_t*
   get_scheduler_context (void) const = 0;
 
-  virtual void*
+  virtual logical_address
   get_stack_pointer (void) const = 0;
   
   virtual int
   insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result)) = 0;
   
-  virtual void*
+  virtual logical_address
   alloc (size_t size,
 	 syserror_t* error) __attribute__((warn_unused_result)) = 0;
   
-  virtual void*
+  virtual logical_address
   reserve (size_t size) __attribute__((warn_unused_result)) = 0;
   
   virtual void
-  page_fault (void* address,
-	      uint32_t error) = 0;
+  unreserve (logical_address address) = 0;
 
   virtual void
-  unreserve (void* ptr) = 0;
+  page_fault (logical_address address,
+	      uint32_t error) = 0;
   
   virtual void
   set_action_type (void* action_entry_point,
@@ -61,7 +61,7 @@ public:
   get_action_type (void* action_entry_point) = 0;
   
   virtual void
-  execute (void* switch_stack,
+  execute (logical_address switch_stack,
 	   size_t switch_stack_size,
 	   void* action_entry_point,
 	   parameter_t parameter,

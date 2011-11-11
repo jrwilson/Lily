@@ -16,13 +16,13 @@
 #include "string.hpp"
 #include "page_fault_handler.hpp"
 
-boot_automaton::boot_automaton (void* begin,
-				void* end)
+boot_automaton::boot_automaton (logical_address begin,
+				logical_address end)
 {
   vm_area_initialize (&data_,
   		      VM_AREA_DATA,
-  		      (void*)PAGE_ALIGN_DOWN ((size_t)begin),
-  		      (void*)PAGE_ALIGN_UP ((size_t)end),
+  		      begin.align_down (PAGE_SIZE),
+  		      end.align_up (PAGE_SIZE),
   		      SUPERVISOR);
 }
 
@@ -39,11 +39,11 @@ boot_automaton::get_scheduler_context (void) const
   return 0;
 }
 
-void*
+logical_address
 boot_automaton::get_stack_pointer (void) const
 {
   kassert (0);
-  return 0;
+  return logical_address ();
 }
   
 int
@@ -53,32 +53,32 @@ boot_automaton::insert_vm_area (const vm_area_t*)
   return -1;
 }
   
-void*
+logical_address
 boot_automaton::alloc (size_t size,
 		       syserror_t*)
 {
-  kassert (IS_PAGE_ALIGNED (size));
+  kassert (physical_address (size).is_aligned (PAGE_SIZE));
 
-  void* retval = data_.end;
+  logical_address retval (data_.end);
   data_.end += size;
   return retval;
 }
   
-void*
+logical_address
 boot_automaton::reserve (size_t)
 {
   kassert (0);
-  return 0;
+  return logical_address ();
 }
   
 void
-boot_automaton::unreserve (void*)
+boot_automaton::unreserve (logical_address)
 {
   kassert (0);
 }
 
 void
-boot_automaton::page_fault (void* address,
+boot_automaton::page_fault (logical_address address,
 			    uint32_t error)
 {
   kassert (address >= data_.begin);
@@ -92,7 +92,7 @@ boot_automaton::page_fault (void* address,
   vm_manager_map (address, frame_manager_alloc (), SUPERVISOR, WRITABLE);
   /* Clear the frame. */
   /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
-  memset (address, 0x00, PAGE_SIZE);
+  memset (address.value (), 0x00, PAGE_SIZE);
 }
   
 void
@@ -110,7 +110,7 @@ boot_automaton::get_action_type (void*)
 }
   
 void
-boot_automaton::execute (void*,
+boot_automaton::execute (logical_address,
 			 size_t,
 			 void*,
 			 parameter_t,

@@ -20,7 +20,7 @@ void
 scheduler_initialize (automaton_interface* automaton);
 
 void
-scheduler_set_switch_stack (void* switch_stack,
+scheduler_set_switch_stack (logical_address switch_stack,
 			    size_t switch_stack_size);
 
 scheduler_context_t*

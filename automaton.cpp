@@ -37,9 +37,9 @@ action_entry_point_compare_func (const void* x,
 
 automaton::automaton (list_allocator_t* list_allocator,
 		      privilege_t privilege,
-		      size_t page_directory,
-		      void* stack_pointer,
-		      void* memory_ceiling,
+		      physical_address page_directory,
+		      logical_address stack_pointer,
+		      logical_address memory_ceiling,
 		      page_privilege_t page_privilege) :
   list_allocator_ (list_allocator),
   actions_ (hash_map_allocate (list_allocator, action_entry_point_hash_func, action_entry_point_compare_func)),
@@ -48,7 +48,7 @@ automaton::automaton (list_allocator_t* list_allocator,
   stack_pointer_ (stack_pointer),
   memory_map_begin_ (0),
   memory_map_end_ (0),
-  memory_ceiling_ (reinterpret_cast<uint8_t*> (PAGE_ALIGN_DOWN ((size_t)memory_ceiling))),
+  memory_ceiling_ (memory_ceiling.align_down (PAGE_SIZE)),
   page_privilege_ (page_privilege)
 {
   switch (privilege) {
@@ -132,23 +132,23 @@ automaton::insert_vm_area (const vm_area_t* area)
 }
 
 /* Create or expand a data area for the requested size. */
-void*
+logical_address
 automaton::alloc (size_t size,
 		  syserror_t* error)
 {
-  if (IS_PAGE_ALIGNED (size)) {
+  if (physical_address (size).is_aligned (PAGE_SIZE)) {
 
     vm_area_t* ptr;
     for (ptr = memory_map_begin_; ptr != 0; ptr = ptr->next) {
       /* Start with the floor and ceiling of the automaton. */
-      uint8_t* ceiling = memory_ceiling_;
+      logical_address ceiling = memory_ceiling_;
       if (ptr->next != 0) {
 	/* Ceiling drops so we don't interfere with next area. */
 	ceiling = ptr->next->begin;
       }
 
       if (size <= (size_t)(ceiling - ptr->end)) {
-	uint8_t* retval = ptr->end;
+	logical_address retval = ptr->end;
 	if (ptr->type == VM_AREA_DATA) {
 	  /* Extend a data area. */
 	  ptr->end += size;
@@ -180,31 +180,31 @@ automaton::alloc (size_t size,
     }
 
     *error = SYSERROR_OUT_OF_MEMORY;
-    return 0;
+    return logical_address ();
   }
   else {
     *error = SYSERROR_REQUESTED_SIZE_NOT_ALIGNED;
-    return 0;
+    return logical_address ();
   }
 }
 
 /* Reserve a region of memory. */
-void*
+logical_address
 automaton::reserve (size_t size)
 {
-  kassert (IS_PAGE_ALIGNED (size));
+  kassert (physical_address (size).is_aligned (PAGE_SIZE));
 
   vm_area_t* ptr;
   for (ptr = memory_map_begin_; ptr != 0; ptr = ptr->next) {
     /* Start with the floor and ceiling of the automaton. */
-    uint8_t* ceiling = memory_ceiling_;
+    logical_address ceiling = memory_ceiling_;
     if (ptr->next != 0) {
       /* Ceiling drops so we don't interfere with next area. */
       ceiling = ptr->next->begin;
     }
     
     if (size <= (size_t)(ceiling - ptr->end)) {
-      uint8_t* retval = ptr->end;
+      logical_address retval = ptr->end;
       /* Insert after the current area. */
       vm_area_t* area = vm_area_allocate (list_allocator_, VM_AREA_RESERVED, retval, retval + size, page_privilege_);
       kassert (area != 0);
@@ -225,18 +225,18 @@ automaton::reserve (size_t size)
     }
   }
   
-  return 0;
+  return logical_address ();
 }
 
 void
-automaton::unreserve (void* logical_addr)
+automaton::unreserve (logical_address address)
 {
-  kassert (logical_addr != 0);
-  kassert (IS_PAGE_ALIGNED ((size_t)logical_addr));
+  kassert (address != logical_address ());
+  kassert (address.is_aligned (PAGE_SIZE));
 
   vm_area_t** nptr;
   vm_area_t** pptr;
-  for (nptr = &memory_map_begin_; (*nptr) != 0 && (*nptr)->begin != logical_addr; nptr = &(*nptr)->next) ;;
+  for (nptr = &memory_map_begin_; (*nptr) != 0 && (*nptr)->begin != address; nptr = &(*nptr)->next) ;;
 
   kassert (*nptr != 0);
   kassert ((*nptr)->type == VM_AREA_RESERVED);
@@ -256,7 +256,7 @@ automaton::unreserve (void* logical_addr)
 }
 
 void
-automaton::page_fault (void* address,
+automaton::page_fault (logical_address address,
 		       uint32_t error)
 {
   vm_area_t* ptr;
@@ -281,7 +281,7 @@ automaton::page_fault (void* address,
       vm_manager_map (address, frame_manager_alloc (), ptr->page_privilege, WRITABLE);
       /* Clear the frame. */
       /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
-      memset (address, 0x00, PAGE_SIZE);
+      memset (address.value (), 0x00, PAGE_SIZE);
       return;
       break;
     case VM_AREA_STACK:
@@ -323,15 +323,15 @@ automaton::get_action_type (void* action_entry_point)
 }
 
 void
-automaton::execute (void* switch_stack,
+automaton::execute (logical_address switch_stack,
 		    size_t switch_stack_size,
 		    void* action_entry_point,
 		    parameter_t parameter,
 		    value_t input_value)
 {
-  uint32_t* stack_begin;
-  uint32_t* stack_end;
-  uint32_t* new_stack_begin;
+  logical_address stack_begin;
+  logical_address stack_end;
+  logical_address new_stack_begin;
   size_t stack_size;
   size_t idx;
 
@@ -340,13 +340,14 @@ automaton::execute (void* switch_stack,
   /* Determine the beginning of the stack. */
   asm volatile ("mov %%esp, %0\n" : "=m"(stack_begin));
   /* Determine the end of the stack. */
-  stack_end = &input_value;
-  ++stack_end;
+  stack_end = logical_address (&input_value);
+  stack_end += sizeof (size_t);
   /* Compute the beginning of the new stack. */
   stack_size = stack_end - stack_begin;
   /* Use a bigger switch stack. */
-  kassert (stack_size * sizeof (uint32_t) < switch_stack_size);
-  new_stack_begin = (uint32_t*)ALIGN_DOWN ((size_t)switch_stack + switch_stack_size - stack_size * sizeof (uint32_t), STACK_ALIGN);
+  kassert (stack_size < switch_stack_size);
+  new_stack_begin = (switch_stack + (switch_stack_size - stack_size)).align_down (STACK_ALIGN);
+  //new_stack_begin = (uint32_t*)ALIGN_DOWN ((size_t)switch_stack + switch_stack_size - stack_size * sizeof (uint32_t), STACK_ALIGN);
   /* Copy. */
   for (idx = 0; idx < stack_size; ++idx) {
     new_stack_begin[idx] = stack_begin[idx];

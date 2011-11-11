@@ -33,7 +33,7 @@ struct scheduler_context {
 };
 
 typedef struct {
-  void* switch_stack;
+  logical_address switch_stack;
   size_t switch_stack_size;
   action_type_t action_type;
   automaton_interface* current_automaton;
@@ -58,11 +58,11 @@ scheduler_initialize (automaton_interface* automaton)
 }
 
 void
-scheduler_set_switch_stack (void* switch_stack,
+scheduler_set_switch_stack (logical_address switch_stack,
 			    size_t switch_stack_size)
 {
-  kassert (switch_stack != 0);
-  kassert (switch_stack >= (void*)KERNEL_VIRTUAL_BASE);
+  kassert (switch_stack != logical_address ());
+  kassert (switch_stack >= KERNEL_VIRTUAL_BASE);
   kassert (switch_stack_size > 0);
 
   exec_context.switch_stack = switch_stack;
