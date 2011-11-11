@@ -274,6 +274,16 @@ Since the switching stack exists in all address spaces, switching to a different
 For my productivity, I believe I'm going to switch to C++.
 Basically, I'm tired of writing the same code and algorithms for lists but refuse to make a generic non-type safe implementation.
 Thus, C++ seems like the way to go.
+Started conversion to C++ objects with automaton.
+Introduced frames, logical address, and physical addresses.
+Also introduced a bug that I think is related to stack switching.
+
+2011-11-11
+
+Bug was related to stack switch.  Fixed.
+
+
+
 
 Take out page scrub in page_handler.
 Use traps instread of interrupts.

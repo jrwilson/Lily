@@ -347,7 +347,6 @@ automaton::execute (logical_address switch_stack,
   /* Use a bigger switch stack. */
   kassert (stack_size < switch_stack_size);
   new_stack_begin = (switch_stack + (switch_stack_size - stack_size)).align_down (STACK_ALIGN);
-  //new_stack_begin = (uint32_t*)ALIGN_DOWN ((size_t)switch_stack + switch_stack_size - stack_size * sizeof (uint32_t), STACK_ALIGN);
   /* Copy. */
   for (idx = 0; idx < stack_size; ++idx) {
     new_stack_begin[idx] = stack_begin[idx];
@@ -355,7 +354,7 @@ automaton::execute (logical_address switch_stack,
 
   /* Update the base and stack pointers. */
   asm volatile ("add %0, %%esp\n"
-		"add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
+		"add %0, %%ebp\n" :: "r"(new_stack_begin - stack_begin) : "%esp", "memory");
 
   /* Switch page directories. */
   vm_manager_switch_to_directory (page_directory_);
