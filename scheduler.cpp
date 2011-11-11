@@ -24,7 +24,7 @@ typedef enum {
 } status_t;
 
 struct scheduler_context {
-  automaton_t* automaton;
+  automaton* automaton_;
   void* action_entry_point;
   parameter_t parameter;
   status_t status;
@@ -36,7 +36,7 @@ typedef struct {
   void* switch_stack;
   size_t switch_stack_size;
   action_type_t action_type;
-  automaton_t* automaton;
+  automaton_interface* current_automaton;
   void* action_entry_point;
   parameter_t parameter;
   input_action_t* input;
@@ -49,12 +49,12 @@ static scheduler_context_t* tail = 0;
 static execution_context_t exec_context;
 
 void
-scheduler_initialize (automaton_t* automaton)
+scheduler_initialize (automaton_interface* automaton)
 {
   kassert (automaton != 0);
 
   exec_context.action_type = NO_ACTION;
-  exec_context.automaton = automaton;
+  exec_context.current_automaton = automaton;
 }
 
 void
@@ -71,12 +71,12 @@ scheduler_set_switch_stack (void* switch_stack,
 
 scheduler_context_t*
 scheduler_allocate_context (list_allocator_t* list_allocator,
-			    automaton_t* automaton)
+			    automaton* automaton)
 {
   kassert (list_allocator != 0);
   kassert (automaton != 0);
   scheduler_context_t* ptr = static_cast<scheduler_context_t*> (list_allocator_alloc (list_allocator, sizeof (scheduler_context_t)));
-  ptr->automaton = automaton;
+  ptr->automaton_ = automaton;
   ptr->action_entry_point = 0;
   ptr->parameter = 0;
   ptr->status = NOT_SCHEDULED;
@@ -85,20 +85,20 @@ scheduler_allocate_context (list_allocator_t* list_allocator,
   return ptr;
 }
 
-automaton_t*
+automaton_interface*
 scheduler_get_current_automaton (void)
 {
-  kassert (exec_context.automaton != 0);
-  return exec_context.automaton;
+  kassert (exec_context.current_automaton != 0);
+  return exec_context.current_automaton;
 }
 
 void
-schedule_action (automaton_t* automaton,
+schedule_action (automaton_interface* automaton,
 		 void* action_entry_point,
 		 parameter_t parameter)
 {
   kassert (automaton != 0);
-  scheduler_context_t* ptr = automaton->scheduler_context;
+  scheduler_context_t* ptr = automaton->get_scheduler_context ();
   kassert (ptr != 0);
 
   ptr->action_entry_point = action_entry_point;
@@ -125,7 +125,7 @@ switch_to_next_action ()
 {
   if (head != 0) {
     /* Load the execution context. */
-    exec_context.automaton = head->automaton;
+    exec_context.current_automaton = head->automaton_;
     exec_context.action_entry_point = head->action_entry_point;
     exec_context.parameter = head->parameter;
 
@@ -148,15 +148,15 @@ switch_to_next_action ()
     }
 
     /* Get the type to make sure its a local action. */
-    exec_context.action_type = automaton_get_action_type (exec_context.automaton, exec_context.action_entry_point);
+    exec_context.action_type = exec_context.current_automaton->get_action_type (exec_context.action_entry_point);
     switch (exec_context.action_type) {
     case OUTPUT:
       /* Get the inputs that are composed with the output. */
-      exec_context.input = binding_manager_get_bound_inputs (exec_context.automaton, exec_context.action_entry_point, exec_context.parameter);
+      exec_context.input = binding_manager_get_bound_inputs (exec_context.current_automaton, exec_context.action_entry_point, exec_context.parameter);
       /* Fall through. */
     case INTERNAL:
       /* Execute.  (This does not return). */
-      automaton_execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, 0);
+      exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, 0);
       break;
     case INPUT:
     case NO_ACTION:
@@ -185,11 +185,11 @@ finish_action (int output_status,
     exec_context.input = exec_context.input->next;
     if (exec_context.input != 0) {
       /* Load the execution context. */
-      exec_context.automaton = exec_context.input->automaton;
+      exec_context.current_automaton = exec_context.input->automaton_;
       exec_context.action_entry_point = exec_context.input->action_entry_point;
       exec_context.parameter = exec_context.input->parameter;
       /* Execute.  (This does not return). */
-      automaton_execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+      exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
     }
     break;
   case OUTPUT:
@@ -198,11 +198,11 @@ finish_action (int output_status,
       exec_context.output_value = output_value;
       /* Load the execution context. */
       exec_context.action_type = INPUT;
-      exec_context.automaton = exec_context.input->automaton;
+      exec_context.current_automaton = exec_context.input->automaton_;
       exec_context.action_entry_point = exec_context.input->action_entry_point;
       exec_context.parameter = exec_context.input->parameter;
       /* Execute.  (This does not return). */
-      automaton_execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.automaton, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+      exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
     }
     break;
   case INTERNAL:

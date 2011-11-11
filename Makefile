@@ -33,7 +33,9 @@ string.o \
 fifo_scheduler.o \
 hash_map.o \
 page_fault_handler.o \
-initrd_automaton.o
+initrd_automaton.o \
+cpp_runtime.o \
+boot_automaton.o
 
 # pit.o \
 # count_to_ten.o \

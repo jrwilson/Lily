@@ -21,11 +21,6 @@
 
 /* Macros for page faults. */
 #define PAGE_FAULT_INTERRUPT 14
-#define PAGE_PROTECTION_ERROR (1 << 0)
-#define PAGE_WRITE_ERROR (1 << 1)
-#define PAGE_USER_ERROR (1 << 2)
-#define PAGE_RESERVED_ERROR (1 << 3)
-#define PAGE_INSTRUCTION_ERROR (1 << 4)
 
 static void
 page_fault_handler (registers_t* regs)
@@ -35,7 +30,7 @@ page_fault_handler (registers_t* regs)
   asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
   addr = (void*)PAGE_ALIGN_DOWN ((size_t)addr);
 
-  automaton_t* automaton;
+  automaton_interface* automaton;
 
   if (addr < (void*)KERNEL_VIRTUAL_BASE) {
     /* Get the current automaton. */  
@@ -45,52 +40,8 @@ page_fault_handler (registers_t* regs)
     automaton = system_automaton_get_instance ();
   }
 
-  /* Find the address in the memory map. */
-  vm_area_t* ptr;
-  for (ptr = automaton->memory_map_begin; ptr != 0; ptr = ptr->next) {
-    if (addr >= ptr->begin && addr < ptr->end) {
-      break;
-    }
-  }
-
-  if (ptr != 0) {
-    switch (ptr->type) {
-    case VM_AREA_TEXT:
-      /* TODO. */
-      kassert (0);
-      break;
-    case VM_AREA_RODATA:
-      /* TODO. */
-      kassert (0);
-      break;
-    case VM_AREA_DATA:
-      /* Fault should come from not being present. */
-      kassert ((regs->error & PAGE_PROTECTION_ERROR) == 0);
-      /* Fault should come from data. */
-      kassert ((regs->error & PAGE_INSTRUCTION_ERROR) == 0);
-      /* Back the request with a frame. */
-      vm_manager_map (addr, frame_manager_alloc (), ptr->page_privilege, WRITABLE);
-      /* Clear the frame. */
-      /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
-      memset (addr, 0x00, PAGE_SIZE);
-      return;
-      break;
-    case VM_AREA_STACK:
-      /* TODO. */
-      kassert (0);
-      break;
-    case VM_AREA_RESERVED:
-      /* There is a bug in the kernel.  A reserved memory area was not backed. */
-      kassert (0);
-      break;
-    }
-
-  }
-  else {
-    /* TODO:  Accessed memory not in their map. Segmentation fault. */
-    kassert (0);
-  }
-
+  automaton->page_fault (addr, regs->error);
+  
   /* kputs ("Page fault!!\n"); */
   
   /* kputs ("Address: "); kputp (addr); kputs ("\n"); */

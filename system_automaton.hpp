@@ -21,7 +21,7 @@ void
 system_automaton_initialize (void* placement_begin,
 			     void* placement_end);
 
-automaton_t*
+automaton_interface*
 system_automaton_get_instance (void);
 
 #endif /* __system_automaton_h__ */

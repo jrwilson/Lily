@@ -1,10 +1,10 @@
-#ifndef __automaton_h__
-#define __automaton_h__
+#ifndef __automaton_hpp__
+#define __automaton_hpp__
 
 /*
   File
   ----
-  automaton.h
+  automaton.hpp
   
   Description
   -----------
@@ -18,88 +18,81 @@
 #include "hash_map.hpp"
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
+#include "automaton_interface.hpp"
 
-typedef enum {
-  NO_ACTION = 0,
-  INPUT,
-  OUTPUT,
-  INTERNAL
-} action_type_t;
-
-typedef struct scheduler_context scheduler_context_t;
-
-typedef struct {
+class automaton : public automaton_interface {
+private:
   /* Allocator for data structures. */
-  list_allocator_t* list_allocator;
+  list_allocator_t* list_allocator_;
   /* Segments including privilege. */
-  uint32_t code_segment;
-  uint32_t stack_segment;
+  uint32_t code_segment_;
+  uint32_t stack_segment_;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
-  hash_map_t* actions;
+  hash_map_t* actions_;
   /* The scheduler uses this object. */
-  scheduler_context_t* scheduler_context;
+  scheduler_context_t* scheduler_context_;
   /* Physical address of the page directory. */
-  size_t page_directory;
+  size_t page_directory_;
   /* Stack pointer (constant). */
-  void* stack_pointer;
+  void* stack_pointer_;
   /* Memory map. */
-  vm_area_t* memory_map_begin;
-  vm_area_t* memory_map_end;
+  vm_area_t* memory_map_begin_;
+  vm_area_t* memory_map_end_;
   /* Can map between [floor, ceiling). */
-  void* memory_floor;
-  uint8_t* memory_ceiling;
+  void* memory_floor_;
+  uint8_t* memory_ceiling_;
   /* Default privilege for new VM_AREA_DATA. */
-  page_privilege_t page_privilege;
-} automaton_t;
+  page_privilege_t page_privilege_;
 
-void
-automaton_initialize (automaton_t* ptr,
-		      privilege_t privilege,
-		      size_t page_directory,
-		      void* stack_pointer,
-		      void* memory_ceiling,
-		      page_privilege_t page_privilege);
+  void
+  merge (vm_area_t* area);
 
-automaton_t*
-automaton_allocate (list_allocator_t* list_allocator,
-		    privilege_t privilege,
-		    size_t page_directory,
-		    void* stack_pointer,
-		    void* memory_ceiling,
-		    page_privilege_t page_privilege) __attribute__((warn_unused_result));
+public:
+  automaton (list_allocator_t* list_allocator,
+	     privilege_t privilege,
+	     size_t page_directory,
+	     void* stack_pointer,
+	     void* memory_ceiling,
+	     page_privilege_t page_privilege);
 
-int
-automaton_insert_vm_area (automaton_t* ptr,
-			  const vm_area_t* area) __attribute__((warn_unused_result));
+  inline scheduler_context_t* get_scheduler_context (void) const {
+    return scheduler_context_;
+  }
 
-void*
-automaton_alloc (automaton_t* automaton,
-		 size_t size,
-		 syserror_t* error) __attribute__((warn_unused_result));
+  inline void* get_stack_pointer (void) const {
+    return stack_pointer_;
+  }
+  
+  int
+  insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result));
+  
+  void*
+  alloc (size_t size,
+	 syserror_t* error) __attribute__((warn_unused_result));
+  
+  void*
+  reserve (size_t size);
+  
+  void
+  unreserve (void* ptr);
 
-void*
-automaton_reserve (automaton_t* automaton,
-		   size_t size);
+  void
+  page_fault (void* address,
+	      uint32_t error);
 
-void
-automaton_unreserve (automaton_t* automaton,
-		     void* ptr);
+  void
+  set_action_type (void* action_entry_point,
+		   action_type_t action_type);
+  
+  action_type_t
+  get_action_type (void* action_entry_point);
+  
+  void
+  execute (void* switch_stack,
+	   size_t switch_stack_size,
+	   void* action_entry_point,
+	   parameter_t parameter,
+	   value_t input_value);
+};
 
-void
-automaton_set_action_type (automaton_t* ptr,
-			   void* action_entry_point,
-			   action_type_t action_type);
-
-action_type_t
-automaton_get_action_type (automaton_t* automaton,
-			   void* action_entry_point);
-
-void
-automaton_execute (void* switch_stack,
-		   size_t switch_stack_size,
-		   automaton_t* ptr,
-		   void* action_entry_point,
-		   parameter_t parameter,
-		   value_t input_value);
-
-#endif /* __automaton_h__ */
+#endif /* __automaton_hpp__ */

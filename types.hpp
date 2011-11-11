@@ -33,8 +33,18 @@ typedef unsigned long long uint64_t;
 
 typedef uint32_t size_t;
 
-typedef size_t parameter_t;
-typedef size_t value_t;
+class physical_address {
+private:
+  size_t address_;
+};
+
+class logical_address {
+private:
+  size_t address_;
+};
+
+typedef uint32_t parameter_t;
+typedef uint32_t value_t;
 
 #endif /* __types_h__ */
 

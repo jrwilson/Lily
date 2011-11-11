@@ -17,7 +17,7 @@
 #include "automaton.hpp"
 
 void
-scheduler_initialize (automaton_t* automaton);
+scheduler_initialize (automaton_interface* automaton);
 
 void
 scheduler_set_switch_stack (void* switch_stack,
@@ -25,13 +25,13 @@ scheduler_set_switch_stack (void* switch_stack,
 
 scheduler_context_t*
 scheduler_allocate_context (list_allocator_t* list_allocator,
-			    automaton_t* automaton);
+			    automaton* automaton);
 
-automaton_t*
+automaton_interface*
 scheduler_get_current_automaton (void);
 
 void
-schedule_action (automaton_t* automaton,
+schedule_action (automaton_interface* automaton,
 		 void* action_entry_point,
 		 parameter_t parameter);
 
