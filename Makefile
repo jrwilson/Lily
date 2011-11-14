@@ -18,6 +18,7 @@ idt_asm.o \
 idt.o \
 multiboot_preparse.o \
 placement_allocator.o \
+frame.o \
 frame_manager.o \
 multiboot_parse.o \
 vm_manager.o \

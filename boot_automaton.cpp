@@ -89,15 +89,15 @@ boot_automaton::page_fault (logical_address address,
   /* Fault should come from data. */
   kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
   /* Back the request with a frame. */
-  vm_manager_map (address, frame_manager_alloc (), SUPERVISOR, WRITABLE);
+  vm_manager_map (address, frame_manager::alloc (), SUPERVISOR, WRITABLE);
   /* Clear the frame. */
   /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
   memset (address.value (), 0x00, PAGE_SIZE);
 }
   
 void
-boot_automaton::set_action_type (void*,
-				 action_type_t)
+boot_automaton::add_action (void*,
+			    action_type_t)
 {
   kassert (0);
 }

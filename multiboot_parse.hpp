@@ -19,6 +19,6 @@
 
 void
 multiboot_parse_memory_map (const multiboot_info_t* multiboot_info,
-			    placement_allocator_t* placement_allocator);
+			    placement_allocator& placement_allocator);
 
 #endif /* __multiboot_parse_h__ */

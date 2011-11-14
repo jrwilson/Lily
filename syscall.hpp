@@ -18,13 +18,13 @@
 #include "types.hpp"
 
 void
-sys_finish (int output_status,
+sys_finish (bool output_status,
 	    value_t output_value);
 
 void
 sys_schedule (void* action_entry_point,
 	      parameter_t parameter,
-	      int output_status,
+	      bool output_status,
 	      value_t output_value);
 
 size_t

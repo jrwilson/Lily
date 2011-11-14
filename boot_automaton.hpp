@@ -50,8 +50,8 @@ public:
 	      uint32_t error);
 
   void
-  set_action_type (void* action_entry_point,
-		   action_type_t action_type);
+  add_action (void* action_entry_point,
+	      action_type_t action_type);
   
   action_type_t
   get_action_type (void* action_entry_point);

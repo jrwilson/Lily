@@ -16,22 +16,25 @@
 
 #include "types.hpp"
 
-typedef struct {
-  logical_address begin;
-  logical_address end;
-  logical_address marker;
-} placement_allocator_t;
+class placement_allocator {
+private:
+  logical_address begin_;
+  logical_address end_;
+  logical_address marker_;
 
-void
-placement_allocator_initialize (placement_allocator_t* placement_allocator,
-				logical_address begin,
-				logical_address end);
+public:
+  
+  placement_allocator (const logical_address& begin,
+		       const logical_address& end);
+  
+  void*
+  alloc (size_t size) __attribute__((warn_unused_result));
+  
+  inline logical_address
+  get_marker (void) const {
+    return marker_;
+  }
+};
 
-void*
-placement_allocator_alloc (placement_allocator_t* placement_allocator,
-			   size_t size) __attribute__((warn_unused_result));
-
-logical_address
-placement_allocator_get_marker (placement_allocator_t* placement_allocator);
 
 #endif /* __placement_allocator_h__ */

@@ -30,6 +30,9 @@
   However, this should only require expanding the interface and changing the implementation as opposed to redesigning the interface.
  */
 
+stack_allocator_t* frame_manager::stack_allocators_ = 0;
+
+
 /*
   A frame entry stores the next entry on the free list or the reference count.
   Next has the range [0, size - 1].
@@ -53,8 +56,7 @@ typedef int16_t frame_entry_t;
 #define STACK_ALLOCATOR_EOL -32768
 const size_t MAX_REGION_SIZE = 0x07FFF000;
 
-typedef struct stack_allocator stack_allocator_t;
-struct stack_allocator {
+struct stack_allocator_t {
   stack_allocator_t* next;
   frame begin;
   frame end;
@@ -62,25 +64,15 @@ struct stack_allocator {
   frame_entry_t entry[];
 };
 
-static placement_allocator_t* placement_allocator = 0;
-static stack_allocator_t* stack_allocators = 0;
-
-frame::frame (const page_directory_entry_t& entry) :
-  f_ (entry.frame_)
-{ }
-
-frame::frame (const page_table_entry_t& entry) :
-  f_ (entry.frame_)
-{ }
-
 static stack_allocator_t*
-stack_allocator_allocate (frame begin,
+stack_allocator_allocate (placement_allocator& p_a,
+			  frame begin,
 			  frame end)
 {
   kassert (begin < end);
 
   frame_entry_t size = end - begin;
-  stack_allocator_t* ptr = static_cast<stack_allocator_t*> (placement_allocator_alloc (placement_allocator, sizeof (stack_allocator_t) + size * sizeof (frame_entry_t)));
+  stack_allocator_t* ptr = static_cast<stack_allocator_t*> (p_a.alloc (sizeof (stack_allocator_t) + size * sizeof (frame_entry_t)));
   kassert (ptr != 0);
   ptr->next = 0;
   ptr->begin = begin;
@@ -160,19 +152,10 @@ stack_allocator_decref (stack_allocator_t* ptr,
 }
 
 void
-frame_manager_initialize (placement_allocator_t* p_a)
+frame_manager::add (placement_allocator& p_a,
+		    physical_address begin,
+		    physical_address end)
 {
-  kassert (placement_allocator == 0);
-  kassert (p_a != 0);
-  placement_allocator = p_a;
-}
-
-void
-frame_manager_add (placement_allocator_t* p_a,
-		   physical_address begin,
-		   physical_address end)
-{
-  kassert (p_a == placement_allocator);
   kassert (begin >= USABLE_MEMORY_BEGIN);
   kassert (end <= USABLE_MEMORY_END);
 
@@ -184,27 +167,27 @@ frame_manager_add (placement_allocator_t* p_a,
     size_t size = end - begin;
     while (size != 0) {
       size_t sz = min (MAX_REGION_SIZE, size);
-      stack_allocator_t* stack_allocator = stack_allocator_allocate (frame (begin), frame (begin + sz));
-      stack_allocator->next = stack_allocators;
-      stack_allocators = stack_allocator;
+      stack_allocator_t* stack_allocator = stack_allocator_allocate (p_a, frame (begin), frame (begin + sz));
+      stack_allocator->next = stack_allocators_;
+      stack_allocators_ = stack_allocator;
       size -= sz;
       begin += sz;
     }
   }
 }
 
-static stack_allocator_t*
-find_allocator (frame frame)
+stack_allocator_t*
+frame_manager::find_allocator (frame frame)
 {
   stack_allocator_t* ptr;
   /* Find the allocator. */
-  for (ptr = stack_allocators; ptr != 0 && !(frame >= ptr->begin && frame < ptr->end) ; ptr = ptr->next) ;;
+  for (ptr = stack_allocators_; ptr != 0 && !(frame >= ptr->begin && frame < ptr->end) ; ptr = ptr->next) ;;
 
   return ptr;
 }
 
 void
-frame_manager_mark_as_used (frame frame)
+frame_manager::mark_as_used (const frame& frame)
 {
   stack_allocator_t* ptr = find_allocator (frame);
 
@@ -214,11 +197,11 @@ frame_manager_mark_as_used (frame frame)
 }
 
 frame
-frame_manager_alloc ()
+frame_manager::alloc ()
 {
   stack_allocator_t* ptr;
   /* Find an allocator with a free frame. */
-  for (ptr = stack_allocators; ptr != 0 && ptr->free_head == STACK_ALLOCATOR_EOL; ptr = ptr->next) ;;
+  for (ptr = stack_allocators_; ptr != 0 && ptr->free_head == STACK_ALLOCATOR_EOL; ptr = ptr->next) ;;
 
   /* Out of frames. */
   kassert (ptr != 0);
@@ -227,7 +210,7 @@ frame_manager_alloc ()
 }
 
 void
-frame_manager_incref (frame frame)
+frame_manager::incref (const frame& frame)
 {
   stack_allocator_t* ptr = find_allocator (frame);
 
@@ -238,7 +221,7 @@ frame_manager_incref (frame frame)
 }
 
 void
-frame_manager_decref (frame frame)
+frame_manager::decref (const frame& frame)
 {
   stack_allocator_t* ptr = find_allocator (frame);
 

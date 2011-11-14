@@ -35,14 +35,14 @@ action_entry_point_compare_func (const void* x,
   return static_cast<const uint8_t*> (x) - static_cast<const uint8_t*> (y);
 }
 
-automaton::automaton (list_allocator_t* list_allocator,
+automaton::automaton (list_allocator& list_allocator,
 		      privilege_t privilege,
 		      physical_address page_directory,
 		      logical_address stack_pointer,
 		      logical_address memory_ceiling,
 		      page_privilege_t page_privilege) :
   list_allocator_ (list_allocator),
-  actions_ (hash_map_allocate (list_allocator, action_entry_point_hash_func, action_entry_point_compare_func)),
+  actions_ (hash_map_allocate (&list_allocator, action_entry_point_hash_func, action_entry_point_compare_func)),
   scheduler_context_ (scheduler_allocate_context (list_allocator, this)),
   page_directory_ (page_directory),
   stack_pointer_ (stack_pointer),
@@ -278,7 +278,7 @@ automaton::page_fault (logical_address address,
       /* Fault should come from data. */
       kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
       /* Back the request with a frame. */
-      vm_manager_map (address, frame_manager_alloc (), ptr->page_privilege, WRITABLE);
+      vm_manager_map (address, frame_manager::alloc (), ptr->page_privilege, WRITABLE);
       /* Clear the frame. */
       /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
       memset (address.value (), 0x00, PAGE_SIZE);
@@ -301,8 +301,8 @@ automaton::page_fault (logical_address address,
 }
 
 void
-automaton::set_action_type (void* action_entry_point,
-			    action_type_t action_type)
+automaton::add_action (void* action_entry_point,
+		       action_type_t action_type)
 {
   kassert (!hash_map_contains (actions_, action_entry_point));
   hash_map_insert (actions_, action_entry_point, (void *)action_type);

@@ -54,8 +54,8 @@ public:
 	      uint32_t error) = 0;
   
   virtual void
-  set_action_type (void* action_entry_point,
-		   action_type_t action_type) = 0;
+  add_action (void* action_entry_point,
+	      action_type_t action_type) = 0;
   
   virtual action_type_t
   get_action_type (void* action_entry_point) = 0;

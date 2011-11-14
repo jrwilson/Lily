@@ -95,7 +95,7 @@ vm_manager_initialize (logical_address placement_begin,
     physical_address pa (reinterpret_cast<size_t> (begin.value ()));
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry_t (frame, SUPERVISOR, WRITABLE, PRESENT);
-    frame_manager_mark_as_used (frame);
+    frame_manager::mark_as_used (frame);
   }
 
   /* Map the kernel text. */
@@ -108,7 +108,7 @@ vm_manager_initialize (logical_address placement_begin,
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry_t (frame, SUPERVISOR, NOT_WRITABLE, PRESENT);
-    frame_manager_mark_as_used (frame);
+    frame_manager::mark_as_used (frame);
   }
 
   /* Map the kernel read-only data. */
@@ -121,7 +121,7 @@ vm_manager_initialize (logical_address placement_begin,
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry_t (frame, SUPERVISOR, WRITABLE, PRESENT);
-    frame_manager_mark_as_used (frame);
+    frame_manager::mark_as_used (frame);
   }
 
   /* Map the kernel data. */
@@ -134,7 +134,7 @@ vm_manager_initialize (logical_address placement_begin,
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry_t (frame, SUPERVISOR, WRITABLE, PRESENT);
-    frame_manager_mark_as_used (frame);
+    frame_manager::mark_as_used (frame);
   }
 
   /* Map the memory allocated by placement. */
@@ -147,7 +147,7 @@ vm_manager_initialize (logical_address placement_begin,
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry_t (frame, SUPERVISOR, WRITABLE, PRESENT);
-    frame_manager_mark_as_used (frame);
+    frame_manager::mark_as_used (frame);
   }
 
   vm_manager_switch_to_directory (kernel_page_directory_paddr);
@@ -193,7 +193,7 @@ vm_manager_map (logical_address logical_addr,
 	page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory.entry[PAGE_ENTRY_COUNT - 1].frame_) {
       /* Either the address is in user space or we are using the kernel page directory. */
       /* Allocate a page table. */
-      page_directory->entry[logical_addr.page_directory_entry ()] = page_directory_entry_t (frame_manager_alloc (), PRESENT);
+      page_directory->entry[logical_addr.page_directory_entry ()] = page_directory_entry_t (frame_manager::alloc (), PRESENT);
       /* Flush the TLB. */
       asm volatile ("invlpg %0\n" :: "m" (page_table));
       /* Initialize the page table. */
@@ -204,9 +204,9 @@ vm_manager_map (logical_address logical_addr,
       if (!kernel_page_directory.entry[logical_addr.page_directory_entry ()].present_) {
 	/* The page table is not present in the kernel. */
 	/* Allocate a page table and map it in both directories. */
-	kernel_page_directory.entry[logical_addr.page_directory_entry ()] = page_directory_entry_t (frame_manager_alloc (), PRESENT);
+	kernel_page_directory.entry[logical_addr.page_directory_entry ()] = page_directory_entry_t (frame_manager::alloc (), PRESENT);
 	page_directory->entry[logical_addr.page_directory_entry ()] = kernel_page_directory.entry[logical_addr.page_directory_entry ()];
-	frame_manager_incref (frame (page_directory->entry[logical_addr.page_directory_entry ()]));
+	frame_manager::incref (frame (page_directory->entry[logical_addr.page_directory_entry ()]));
 	/* Flush the TLB. */
 	asm volatile ("invlpg %0\n" :: "m" (page_table));
 	/* Initialize the page table. */
@@ -216,7 +216,7 @@ vm_manager_map (logical_address logical_addr,
 	/* The page table is present in the kernel. */
 	/* Copy the entry. */
 	page_directory->entry[logical_addr.page_directory_entry ()] = kernel_page_directory.entry[logical_addr.page_directory_entry ()];
-	frame_manager_incref ( frame (page_directory->entry[logical_addr.page_directory_entry ()]));
+	frame_manager::incref ( frame (page_directory->entry[logical_addr.page_directory_entry ()]));
 	/* Flush the TLB. */
 	asm volatile ("invlpg %0\n" :: "m" (page_table));
       }
@@ -258,7 +258,7 @@ page_directory_initialize_with_current (page_directory_t* ptr,
     ptr->entry[k] = current->entry[k];
     /* Increment the reference count. */
     if (ptr->entry[k].present_) {
-      frame_manager_incref (frame (ptr->entry[k]));
+      frame_manager::incref (frame (ptr->entry[k]));
     }
   }
 

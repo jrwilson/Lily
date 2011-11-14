@@ -282,8 +282,11 @@ Also introduced a bug that I think is related to stack switching.
 
 Bug was related to stack switch.  Fixed.
 
+2011-11-14
+
 
 
 
 Take out page scrub in page_handler.
 Use traps instread of interrupts.
+Implement a better allocator.

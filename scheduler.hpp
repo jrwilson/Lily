@@ -24,7 +24,7 @@ scheduler_set_switch_stack (logical_address switch_stack,
 			    size_t switch_stack_size);
 
 scheduler_context_t*
-scheduler_allocate_context (list_allocator_t* list_allocator,
+scheduler_allocate_context (list_allocator& list_allocator,
 			    automaton* automaton);
 
 automaton_interface*

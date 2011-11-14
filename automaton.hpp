@@ -23,7 +23,7 @@
 class automaton : public automaton_interface {
 private:
   /* Allocator for data structures. */
-  list_allocator_t* list_allocator_;
+  list_allocator& list_allocator_;
   /* Segments including privilege. */
   uint32_t code_segment_;
   uint32_t stack_segment_;
@@ -47,7 +47,7 @@ private:
   merge (vm_area_t* area);
 
 public:
-  automaton (list_allocator_t* list_allocator,
+  automaton (list_allocator& list_allocator,
 	     privilege_t privilege,
 	     physical_address page_directory,
 	     logical_address stack_pointer,
@@ -80,8 +80,8 @@ public:
 	      uint32_t error);
 
   void
-  set_action_type (void* action_entry_point,
-		   action_type_t action_type);
+  add_action (void* action_entry_point,
+	      action_type_t action_type);
   
   action_type_t
   get_action_type (void* action_entry_point);

@@ -1,7 +1,7 @@
 /*
   File
   ----
-  list_allocator.c
+  list_allocator.cpp
   
   Description
   -----------
@@ -13,70 +13,71 @@
 
 #include "list_allocator.hpp"
 #include "syscall.hpp"
+#include "new.hpp"
 
 /* This will need to be removed later. */
 #include "kassert.hpp"
 #include "vm_manager.hpp"
 
-#define MAGIC 0x7ACEDEAD
+const uint32_t MAGIC = 0x7ACEDEAD;
 
-typedef struct header header_t;
-struct header {
+struct list_allocator::chunk_header {
   uint32_t available : 1;
   uint32_t magic : 31;
   size_t size; /* Does not include header. */
-  header_t* prev;
-  header_t* next;
+  chunk_header* prev;
+  chunk_header* next;
+
+  chunk_header (size_t sz) :
+    available (1),
+    magic (MAGIC),
+    size (sz),
+    prev (0),
+    next (0)
+  { }
 };
 
-struct list_allocator {
-  size_t page_size;
-  header_t* first_header;
-  header_t* last_header;
-};
-
-list_allocator_t*
-list_allocator_allocate (void)
+list_allocator::list_allocator ()
 {
-  size_t page_size = sys_get_page_size ();
-  size_t request_size = physical_address (sizeof (list_allocator_t) + sizeof (header_t)).align_up (page_size).value ();
-  list_allocator_t* ptr = static_cast<list_allocator_t*> (sys_allocate (request_size));
-  if (ptr != 0) {
-    ptr->first_header = (header_t*)((char*)ptr + sizeof (list_allocator_t));
-    ptr->last_header = ptr->first_header;
-    ptr->first_header->available = 1;
-    ptr->first_header->magic = MAGIC;
-    ptr->first_header->size = request_size - sizeof (list_allocator_t) - sizeof (header_t);
-    ptr->first_header->prev = 0;
-    ptr->first_header->next = 0;
-  }
+  page_size_ = sys_get_page_size ();
+  size_t request_size = physical_address (sizeof (list_allocator) + sizeof (chunk_header)).align_up (page_size_).value ();
 
-  return ptr;
+  first_header_ = new ((logical_address (this) + sizeof (list_allocator)).value ()) chunk_header (request_size - sizeof (list_allocator) - sizeof (chunk_header));
+  last_header_ = first_header_;
 }
 
-static header_t*
-find_header (header_t* start,
-	     size_t size)
+void*
+list_allocator::operator new (size_t)
+{
+  size_t page_size = sys_get_page_size ();
+  size_t request_size = physical_address (sizeof (list_allocator) + sizeof (chunk_header)).align_up (page_size).value ();
+  return sys_allocate (request_size);
+}
+
+void
+list_allocator::operator delete (void*)
+{
+  kassert (0);
+}
+
+list_allocator::chunk_header*
+list_allocator::find_header (chunk_header* start,
+			     size_t size)
 {
   for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
   return start;
 }
 
-static void
-split_header (list_allocator_t* la,
-	      header_t* ptr,
-	      size_t size)
+void
+list_allocator::split_header (chunk_header* ptr,
+			      size_t size)
 {
-  kassert (la != 0);
   kassert (ptr != 0);
   kassert (ptr->available);
-  kassert (ptr->size > sizeof (header_t) + size);
+  kassert (ptr->size > sizeof (chunk_header) + size);
 
   /* Split the block. */
-  header_t* n = (header_t*)((char*)ptr + sizeof (header_t) + size);
-  n->available = 1;
-  n->magic = MAGIC;
-  n->size = ptr->size - size - sizeof (header_t);
+  chunk_header* n = new ((logical_address (ptr) + sizeof (chunk_header) + size).value ()) chunk_header (ptr->size - size - sizeof (chunk_header));
   n->prev = ptr;
   n->next = ptr->next;
   
@@ -87,42 +88,39 @@ split_header (list_allocator_t* la,
     n->next->prev = n;
   }
   
-  if (ptr == la->last_header) {
-    la->last_header = n;
+  if (ptr == last_header_) {
+    last_header_ = n;
   }
 }
 
-static void
-dump_heap_int (header_t* ptr)
-{
-  if (ptr != 0) {
-    kputp (ptr); kputs (" "); kputx32 (ptr->magic); kputs (" "); kputx32 (ptr->size); kputs (" "); kputp (ptr->prev); kputs (" "); kputp (ptr->next);
-    if (ptr->available) {
-      kputs (" Free\n");
-    }
-    else {
-      kputs (" Used\n");
-    }
+// static void
+// dump_heap_int (chunk_header* ptr)
+// {
+//   if (ptr != 0) {
+//     kputp (ptr); kputs (" "); kputx32 (ptr->magic); kputs (" "); kputx32 (ptr->size); kputs (" "); kputp (ptr->prev); kputs (" "); kputp (ptr->next);
+//     if (ptr->available) {
+//       kputs (" Free\n");
+//     }
+//     else {
+//       kputs (" Used\n");
+//     }
 
-    dump_heap_int (ptr->next);
-  }
-}
+//     dump_heap_int (ptr->next);
+//   }
+// }
 
-static void
-list_allocator_dump (list_allocator_t* la)
-{
-  kputs ("first = "); kputp (la->first_header); kputs (" last = "); kputp (la->last_header); kputs ("\n");
-  kputs ("Node       Magic      Size       Prev       Next\n");
-  dump_heap_int (la->first_header);
-}
+// static void
+// list_allocator_dump (list_allocator_t* la)
+// {
+//   kputs ("first = "); kputp (la->first_header); kputs (" last = "); kputp (la->last_header); kputs ("\n");
+//   kputs ("Node       Magic      Size       Prev       Next\n");
+//   dump_heap_int (la->first_header);
+// }
 
 void*
-list_allocator_alloc (list_allocator_t* la,
-		      size_t size)
+list_allocator::alloc (size_t size)
 {
-  kassert (la != 0);
-
-  header_t* ptr = find_header (la->first_header, size);
+  chunk_header* ptr = find_header (first_header_, size);
 
   /* Acquire more memory. */
   if (ptr == 0) {
@@ -131,8 +129,8 @@ list_allocator_alloc (list_allocator_t* la,
   }
 
   /* Found something we can use. */
-  if ((ptr->size - size) > sizeof (header_t)) {
-    split_header (la, ptr, size);
+  if ((ptr->size - size) > sizeof (chunk_header)) {
+    split_header (ptr, size);
   }
   /* Mark as used and return. */
   ptr->available = 0;
@@ -140,36 +138,34 @@ list_allocator_alloc (list_allocator_t* la,
 }
 
 void
-list_allocator_free (list_allocator_t* la,
-		     void* p)
+list_allocator::free (void* p)
 {
-  kassert (la != 0);
-  header_t* ptr = static_cast<header_t*> (p);
+  chunk_header* ptr = static_cast<chunk_header*> (p);
   --ptr;
-  kassert (ptr >= la->first_header);
-  kassert (ptr <= la->last_header);
+  kassert (ptr >= first_header_);
+  kassert (ptr <= last_header_);
   kassert (ptr->magic == MAGIC);
   kassert (ptr->available == 0);
 
   ptr->available = 1;
   
   /* Merge with next. */
-  if (ptr->next != 0 && ptr->next->available && ptr->next == (header_t*)((char*)ptr + sizeof (header_t) + ptr->size)) {
-    ptr->size += sizeof (header_t) + ptr->next->size;
-    if (ptr->next == la->last_header) {
-      la->last_header = ptr;
+  if (ptr->next != 0 && ptr->next->available && ptr->next == (chunk_header*)((char*)ptr + sizeof (chunk_header) + ptr->size)) {
+    ptr->size += sizeof (chunk_header) + ptr->next->size;
+    if (ptr->next == last_header_) {
+      last_header_ = ptr;
     }
     ptr->next = ptr->next->next;
     ptr->next->prev = ptr;
   }
   
   /* Merge with prev. */
-  if (ptr->prev != 0 && ptr->prev->available && ptr == (header_t*)((char*)ptr->prev + sizeof (header_t) + ptr->prev->size)) {
-    ptr->prev->size += sizeof (header_t) + ptr->size;
+  if (ptr->prev != 0 && ptr->prev->available && ptr == (chunk_header*)((char*)ptr->prev + sizeof (chunk_header) + ptr->prev->size)) {
+    ptr->prev->size += sizeof (chunk_header) + ptr->size;
     ptr->prev->next = ptr->next;
     ptr->next->prev = ptr->prev;
-    if (ptr == la->last_header) {
-      la->last_header = ptr->prev;
+    if (ptr == last_header_) {
+      last_header_ = ptr->prev;
     }
   }
 }
@@ -192,16 +188,16 @@ list_allocator_free (list_allocator_t* la,
 /* } */
 
 
-/* static header_t* */
-/* find_header_pa (header_t* start, */
+/* static chunk_header* */
+/* find_header_pa (chunk_header* start, */
 /* 		unsigned int size, */
 /* 		unsigned int* base, */
 /* 		unsigned int* limit) */
 /* { */
 /*   while (start != 0) { */
 /*     if (start->available && start->size >= size) { */
-/*       *base = PAGE_ALIGN ((unsigned int)start + sizeof (header_t) + PAGE_SIZE - 1); */
-/*       *limit = (unsigned int)start + sizeof (header_t) + start->size; */
+/*       *base = PAGE_ALIGN ((unsigned int)start + sizeof (chunk_header) + PAGE_SIZE - 1); */
+/*       *limit = (unsigned int)start + sizeof (chunk_header) + start->size; */
 /*       if ((*limit - *base) >= size) { */
 /* 	break; */
 /*       } */
@@ -217,28 +213,28 @@ list_allocator_free (list_allocator_t* la,
 /*   unsigned int base; */
 /*   unsigned int limit; */
 
-/*   header_t* ptr = find_header_pa (heap_first, size, &base, &limit); */
+/*   chunk_header* ptr = find_header_pa (heap_first, size, &base, &limit); */
 /*   while (ptr == 0) { */
 /*     expand_heap (size); */
 /*     ptr = find_header_pa (heap_last, size, &base, &limit); */
 /*   } */
 
-/*   if (((unsigned int)ptr + sizeof (header_t)) != base) { */
-/*     if ((base - sizeof (header_t)) > ((unsigned int)ptr + sizeof (header_t))) { */
+/*   if (((unsigned int)ptr + sizeof (chunk_header)) != base) { */
+/*     if ((base - sizeof (chunk_header)) > ((unsigned int)ptr + sizeof (chunk_header))) { */
 /*       /\* Split. *\/ */
-/*       split (ptr, ptr->size - sizeof (header_t) - (limit - base)); */
+/*       split (ptr, ptr->size - sizeof (chunk_header) - (limit - base)); */
 /*       /\* Change ptr to aligned block. *\/ */
 /*       ptr = ptr->next; */
 /*     } */
 /*     else { */
 /*       /\* Slide the header to align it with base. *\/ */
-/*       unsigned int amount = base - ((unsigned int)ptr + sizeof (header_t)); */
-/*       header_t* p = ptr->prev; */
-/*       header_t* n = ptr->next; */
+/*       unsigned int amount = base - ((unsigned int)ptr + sizeof (chunk_header)); */
+/*       chunk_header* p = ptr->prev; */
+/*       chunk_header* n = ptr->next; */
 /*       unsigned int s = ptr->size; */
-/*       header_t* old = ptr; */
+/*       chunk_header* old = ptr; */
       
-/*       ptr = (header_t*) ((unsigned int)ptr + amount); */
+/*       ptr = (chunk_header*) ((unsigned int)ptr + amount); */
 /*       ptr->available = 1; */
 /*       ptr->magic = HEAP_MAGIC; */
 /*       ptr->size = s - amount; */
@@ -264,7 +260,7 @@ list_allocator_free (list_allocator_t* la,
 /*     } */
 /*   } */
   
-/*   if ((ptr->size - size) > sizeof (header_t)) { */
+/*   if ((ptr->size - size) > sizeof (chunk_header)) { */
 /*     split (ptr, size); */
 /*   } */
 /*   /\* Mark as used and return. *\/ */

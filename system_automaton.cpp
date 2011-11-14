@@ -22,6 +22,7 @@
 #include "binding_manager.hpp"
 #include "boot_automaton.hpp"
 #include "new.hpp"
+#include "action_macros.hpp"
 
 /* Size of the stack used for "system" automata.
    Must be large enough for functions and interrupts. */
@@ -44,18 +45,24 @@ extern int data_end;
 extern int initrd_init;
 
 static automaton_interface* system_automaton = 0;
-static list_allocator_t* system_allocator = 0;
-static fifo_scheduler_t* scheduler = 0;
-static unsigned int counter = 0;
+static list_allocator* system_allocator = 0;
+static fifo_scheduler* scheduler = 0;
 
 static void
 schedule ();
 
-UP_INTERNAL (system_automaton_first);
-UV_P_OUTPUT (system_automaton_init, automaton*);
-UP_INTERNAL (system_automaton_increment);
+UP_INTERNAL (system_automaton_first, scheduler);
+UV_P_OUTPUT (system_automaton_init, automaton*, scheduler);
+UV_UP_INPUT (system_automaton_create_request, scheduler);
+UV_UP_OUTPUT (system_automaton_create_response, scheduler);
+UV_UP_INPUT (system_automaton_bind_request, scheduler);
+UV_UP_OUTPUT (system_automaton_bind_response, scheduler);
+UV_UP_INPUT (system_automaton_unbind_request, scheduler);
+UV_UP_OUTPUT (system_automaton_unbind_response, scheduler);
+UV_UP_INPUT (system_automaton_destroy_request, scheduler);
+UV_UP_OUTPUT (system_automaton_destroy_response, scheduler);
 
-static int
+static bool
 system_automaton_first_precondition ()
 {
   return scheduler == 0;
@@ -65,7 +72,7 @@ static void
 system_automaton_first_effect ()
 {
   /* Allocate a scheduler. */
-  scheduler = fifo_scheduler_allocate (system_allocator);
+  scheduler = new (system_allocator->alloc (sizeof (fifo_scheduler))) fifo_scheduler (*system_allocator);
 
   binding_manager_initialize (system_allocator);
 
@@ -77,7 +84,7 @@ system_automaton_first_effect ()
   page_directory_t* page_directory = static_cast<page_directory_t*> (system_automaton->reserve (PAGE_SIZE).value ());
   kassert (page_directory != 0);
   /* Allocate a frame. */
-  frame frame = frame_manager_alloc ();
+  frame frame = frame_manager::alloc ();
   /* Map the page directory. */
   vm_manager_map (logical_address (page_directory), frame, SUPERVISOR, WRITABLE);
   /* Initialize the page directory with a copy of the current page directory. */
@@ -91,7 +98,7 @@ system_automaton_first_effect ()
   vm_manager_switch_to_directory (physical_address (frame));
   
   /* Second, create the automaton. */
-  automaton* initrd = new (static_cast<automaton*> (list_allocator_alloc (system_allocator, sizeof (automaton)))) automaton (system_allocator, RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
+  automaton* initrd = new (static_cast<automaton*> (system_allocator->alloc (sizeof (automaton)))) automaton (*system_allocator, RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
 
   /* Third, create the automaton's memory map. */
   {
@@ -115,19 +122,19 @@ system_automaton_first_effect ()
     /* Back with physical pages.  See comment in system_automaton_initialize (). */
     logical_address ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
-      vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
+      vm_manager_map (ptr, frame_manager::alloc (), SUPERVISOR, WRITABLE);
     }
   }
 
   /* Fourth, add the actions. */
-  initrd->set_action_type (&initrd_init, INPUT);
+  initrd->add_action (&initrd_init, INPUT);
 
   /* Fifth, bind. */
-  binding_manager_bind (system_automaton, &system_automaton_init, (parameter_t)initrd,
+  binding_manager_bind (system_automaton, &system_automaton_init, reinterpret_cast<parameter_t> (initrd),
   			initrd, &initrd_init, 0);
 
   /* Sixth, initialize the new automaton. */
-  SCHEDULER_ADD (scheduler, &system_automaton_init, (parameter_t)initrd);
+  scheduler->add (&system_automaton_init, (parameter_t)initrd);
 
   /* Create the VFS automaton. */
 
@@ -141,10 +148,10 @@ system_automaton_first_schedule () {
   schedule ();
 }
 
-static int
+static bool
 system_automaton_init_precondition (automaton*)
 {
-  return 1;
+  return true;
 }
 
 static void
@@ -158,32 +165,116 @@ system_automaton_init_schedule (automaton*) {
   schedule ();
 }
 
-static int
-system_automaton_increment_precondition ()
-{
-  return counter < 10;
+static void
+system_automaton_create_request_effect () {
+  kassert (0);
 }
 
 static void
-system_automaton_increment_effect ()
-{
-  kputs (__func__); kputs (" counter = "); kputx32 (counter); kputs ("\n");
-  ++counter;
+system_automaton_create_request_schedule () {
+  kassert (0);
+}
+
+static bool
+system_automaton_create_response_precondition () {
+  kassert (0);
+  return false;
 }
 
 static void
-system_automaton_increment_schedule () {
-  schedule ();
+system_automaton_create_response_effect () {
+  kassert (0);
 }
+
+static void
+system_automaton_create_response_schedule () {
+  kassert (0);
+}
+
+static void
+system_automaton_bind_request_effect () {
+  kassert (0);
+}
+
+static void
+system_automaton_bind_request_schedule () {
+  kassert (0);
+}
+
+static bool
+system_automaton_bind_response_precondition () {
+  kassert (0);
+  return false;
+}
+
+static void
+system_automaton_bind_response_effect () {
+  kassert (0);
+}
+
+static void
+system_automaton_bind_response_schedule () {
+  kassert (0);
+}
+
+static void
+system_automaton_unbind_request_effect () {
+  kassert (0);
+}
+
+static void
+system_automaton_unbind_request_schedule () {
+  kassert (0);
+}
+
+static bool
+system_automaton_unbind_response_precondition () {
+  kassert (0);
+  return false;
+}
+
+static void
+system_automaton_unbind_response_effect () {
+  kassert (0);
+}
+
+static void
+system_automaton_unbind_response_schedule () {
+  kassert (0);
+}
+
+static void
+system_automaton_destroy_request_effect () {
+  kassert (0);
+}
+
+static void
+system_automaton_destroy_request_schedule () {
+  kassert (0);
+}
+
+static bool
+system_automaton_destroy_response_precondition () {
+  kassert (0);
+  return false;
+}
+
+static void
+system_automaton_destroy_response_effect () {
+  kassert (0);
+}
+
+static void
+system_automaton_destroy_response_schedule () {
+  kassert (0);
+}
+
 
 static void
 schedule ()
 {
   if (system_automaton_first_precondition ()) {
-    SCHEDULER_ADD (scheduler, &system_automaton_first, 0);
-  }
-  if (system_automaton_increment_precondition ()) {
-    SCHEDULER_ADD (scheduler, &system_automaton_increment, 0);
+    scheduler->add (&system_automaton_first, 0);
   }
 }
 
@@ -214,18 +305,18 @@ system_automaton_initialize (logical_address placement_begin,
   /* Now, we can start allocating. */
 
   /* Allocate the allocator. */
-  system_allocator = list_allocator_allocate ();
+  system_allocator = new list_allocator;
   kassert (system_allocator != 0);
 
   /* Allocate and set the switch stack for the scheduler. */
-  void* switch_stack = list_allocator_alloc (system_allocator, SWITCH_STACK_SIZE);
+  void* switch_stack = system_allocator->alloc (SWITCH_STACK_SIZE);
   kassert (switch_stack != 0);
   scheduler_set_switch_stack (logical_address (switch_stack), SWITCH_STACK_SIZE);
 
   /* Allocate the real system automaton.
      The system automaton's ceiling is the start of the paging data structures.
      This is also used as the stack pointer. */
-  automaton* sys_automaton = new (static_cast<automaton*> (list_allocator_alloc (system_allocator, sizeof (automaton)))) automaton (system_allocator, RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
+  automaton* sys_automaton = new (static_cast<automaton*> (system_allocator->alloc (sizeof (automaton)))) automaton (*system_allocator, RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
   
   {
     /* Create a memory map for the system automatom. */
@@ -273,14 +364,21 @@ system_automaton_initialize (logical_address placement_begin,
     */
     logical_address ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
-      vm_manager_map (ptr, frame_manager_alloc (), SUPERVISOR, WRITABLE);
+      vm_manager_map (ptr, frame_manager::alloc (), SUPERVISOR, WRITABLE);
     }
   }
 
   /* Add the actions. */
-  sys_automaton->set_action_type (&system_automaton_first, INTERNAL);
-  sys_automaton->set_action_type (&system_automaton_init, OUTPUT);
-  sys_automaton->set_action_type (&system_automaton_increment, INTERNAL);
+  sys_automaton->add_action (&system_automaton_first, INTERNAL);
+  sys_automaton->add_action (&system_automaton_init, OUTPUT);
+  sys_automaton->add_action (&system_automaton_create_request, INPUT);
+  sys_automaton->add_action (&system_automaton_create_response, OUTPUT);
+  sys_automaton->add_action (&system_automaton_bind_request, INPUT);
+  sys_automaton->add_action (&system_automaton_bind_response, OUTPUT);
+  sys_automaton->add_action (&system_automaton_unbind_request, INPUT);
+  sys_automaton->add_action (&system_automaton_unbind_response, OUTPUT);
+  sys_automaton->add_action (&system_automaton_destroy_request, INPUT);
+  sys_automaton->add_action (&system_automaton_destroy_response, OUTPUT);
 
   /* Set the system automaton. */
   system_automaton = sys_automaton;

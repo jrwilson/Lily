@@ -70,12 +70,11 @@ scheduler_set_switch_stack (logical_address switch_stack,
 }
 
 scheduler_context_t*
-scheduler_allocate_context (list_allocator_t* list_allocator,
+scheduler_allocate_context (list_allocator& list_allocator,
 			    automaton* automaton)
 {
-  kassert (list_allocator != 0);
   kassert (automaton != 0);
-  scheduler_context_t* ptr = static_cast<scheduler_context_t*> (list_allocator_alloc (list_allocator, sizeof (scheduler_context_t)));
+  scheduler_context_t* ptr = static_cast<scheduler_context_t*> (list_allocator.alloc (sizeof (scheduler_context_t)));
   ptr->automaton_ = automaton;
   ptr->action_entry_point = 0;
   ptr->parameter = 0;

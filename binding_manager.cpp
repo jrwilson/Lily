@@ -20,7 +20,7 @@ typedef struct {
   parameter_t parameter;
 } output_action_t;
 
-static list_allocator_t* list_allocator = 0;
+static list_allocator* list_allocator_ = 0;
 /* The set of bindings. */
 static hash_map_t* bindings = 0;
 
@@ -50,13 +50,13 @@ output_action_compare_func (const void* x,
 }
 
 void
-binding_manager_initialize (list_allocator_t* la)
+binding_manager_initialize (list_allocator* la)
 {
   kassert (la != 0);
   kassert (bindings == 0);
 
-  list_allocator = la;
-  bindings = hash_map_allocate (list_allocator, output_action_hash_func, output_action_compare_func);
+  list_allocator_ = la;
+  bindings = hash_map_allocate (list_allocator_, output_action_hash_func, output_action_compare_func);
   kassert (bindings != 0);
 }
 
@@ -65,7 +65,7 @@ allocate_output_action (automaton_interface* automaton,
 			void* action_entry_point,
 			parameter_t parameter)
 {
-  output_action_t* ptr = static_cast<output_action_t*> (list_allocator_alloc (list_allocator, sizeof (output_action_t)));
+  output_action_t* ptr = static_cast<output_action_t*> (list_allocator_->alloc (sizeof (output_action_t)));
   kassert (ptr != 0);
   ptr->automaton_ = automaton;
   ptr->action_entry_point = action_entry_point;
@@ -78,7 +78,7 @@ allocate_input_action (automaton_interface* automaton,
 		       void* action_entry_point,
 		       parameter_t parameter)
 {
-  input_action_t* ptr = static_cast<input_action_t*> (list_allocator_alloc (list_allocator, sizeof (input_action_t)));
+  input_action_t* ptr = static_cast<input_action_t*> (list_allocator_->alloc (sizeof (input_action_t)));
   kassert (ptr != 0);
   ptr->automaton_ = automaton;
   ptr->action_entry_point = action_entry_point;

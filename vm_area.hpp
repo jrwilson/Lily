@@ -44,14 +44,14 @@ vm_area_initialize (vm_area_t* ptr,
 		    page_privilege_t page_privilege);
 
 vm_area_t*
-vm_area_allocate (list_allocator_t* list_allocator,
+vm_area_allocate (list_allocator& list_allocator,
 		  vm_area_type_t type,
 		  logical_address begin,
 		  logical_address end,
 		  page_privilege_t page_privilege) __attribute__((warn_unused_result));
 
 void
-vm_area_free (list_allocator_t* list_allocator,
+vm_area_free (list_allocator& list_allocator,
 	      vm_area_t* ptr);
 
 #endif /* __vm_area_h__ */

@@ -14,8 +14,9 @@
   Justin R. Wilson
 */
 
-inline void* operator new (size_t,
-			   void* p) throw ()
+inline void*
+operator new (size_t,
+	      void* p) throw ()
 {
   return p;
 }

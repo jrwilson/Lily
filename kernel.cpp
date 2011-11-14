@@ -90,14 +90,12 @@ kmain (void* logical_end,
   {
     /* Create a placement allocator for the frame manager.
        The frame manager can use logical addresses from the end of the multiboot data structures to the logical end. */
-    placement_allocator_t placement_allocator;
-    placement_allocator_initialize (&placement_allocator, placement_begin, logical_address (logical_end));
+    placement_allocator placement_allocator (placement_begin, logical_address (logical_end));
 
     /* Initialize the frame manager. */
-    frame_manager_initialize (&placement_allocator);
-    multiboot_parse_memory_map (multiboot_info, &placement_allocator);
+    multiboot_parse_memory_map (multiboot_info, placement_allocator);
 
-    placement_end = placement_allocator_get_marker (&placement_allocator);
+    placement_end = placement_allocator.get_marker ();
   }
 
   /* Initialize the virtual memory manager. */

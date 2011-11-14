@@ -27,7 +27,7 @@ struct hash_map_node {
 };
 
 struct hash_map {
-  list_allocator_t* list_allocator;
+  list_allocator* list_allocator_;
   size_t size;
   size_t capacity;
   hash_map_node_t** hash;
@@ -36,12 +36,12 @@ struct hash_map {
 };
 
 static hash_map_node_t*
-allocate_hash_map_node (list_allocator_t* la,
+allocate_hash_map_node (list_allocator* la,
 			size_t hash,
 			const void* key,
 			void* value)
 {
-  hash_map_node_t* ptr = static_cast<hash_map_node_t*> (list_allocator_alloc (la, sizeof (hash_map_node_t)));
+  hash_map_node_t* ptr = static_cast<hash_map_node_t*> (la->alloc (sizeof (hash_map_node_t)));
   ptr->next = 0;
   ptr->hash = hash;
   ptr->key = key;
@@ -50,23 +50,23 @@ allocate_hash_map_node (list_allocator_t* la,
 }
 
 static void
-free_hash_map_node (list_allocator_t* la,
+free_hash_map_node (list_allocator* la,
 		    hash_map_node_t* ptr)
 {
   kassert (ptr != 0);
-  list_allocator_free (la, ptr);
+  la->free (ptr);
 }
 
 hash_map_t*
-hash_map_allocate (list_allocator_t* la,
+hash_map_allocate (list_allocator* la,
 		   hash_map_hash_func_t hash_func,
 		   hash_map_compare_func_t compare_func)
 {
-  hash_map_t* ptr = static_cast<hash_map_t*> (list_allocator_alloc (la, sizeof (hash_map_t)));
-  ptr->list_allocator = la;
+  hash_map_t* ptr = static_cast<hash_map_t*> (la->alloc (sizeof (hash_map_t)));
+  ptr->list_allocator_ = la;
   ptr->size = 0;
   ptr->capacity = 1;
-  ptr->hash = static_cast<hash_map_node_t**> (list_allocator_alloc (la, ptr->capacity * sizeof (hash_map_node_t*)));
+  ptr->hash = static_cast<hash_map_node_t**> (la->alloc (ptr->capacity * sizeof (hash_map_node_t*)));
   size_t idx;
   for (idx = 0; idx < ptr->capacity; ++idx) {
     ptr->hash[idx] = 0;
@@ -92,7 +92,7 @@ hash_map_insert (hash_map_t* ptr,
 
   if (HASH_LOAD_DENOMINATOR * ptr->size > HASH_LOAD_NUMERATOR * ptr->capacity) {
     size_t new_capacity = ptr->capacity * 2;
-    hash_map_node_t** new_hash = static_cast<hash_map_node_t**> (list_allocator_alloc (ptr->list_allocator, new_capacity * sizeof (hash_map_node_t*)));
+    hash_map_node_t** new_hash = static_cast<hash_map_node_t**> (ptr->list_allocator_->alloc (new_capacity * sizeof (hash_map_node_t*)));
     size_t idx;
     for (idx = 0; idx < new_capacity; ++idx) {
       new_hash[idx] = 0;
@@ -105,14 +105,14 @@ hash_map_insert (hash_map_t* ptr,
       	new_hash[n->hash % new_capacity] = n;
       }
     }
-    list_allocator_free (ptr->list_allocator, ptr->hash);
+    ptr->list_allocator_->free (ptr->hash);
     ptr->hash = new_hash;
     ptr->capacity = new_capacity;
   }
 
   size_t hash = ptr->hash_func (key);
   size_t hash_idx = hash % ptr->capacity;
-  hash_map_node_t* node = allocate_hash_map_node (ptr->list_allocator, hash, key, value);
+  hash_map_node_t* node = allocate_hash_map_node (ptr->list_allocator_, hash, key, value);
   node->next = ptr->hash[hash_idx];
   ptr->hash[hash_idx] = node;
   ++ptr->size;
@@ -132,7 +132,7 @@ hash_map_erase (hash_map_t* ptr,
   if ((*n) != 0) {
     hash_map_node_t* temp = *n;
     *n = temp->next;
-    free_hash_map_node (ptr->list_allocator, temp);
+    free_hash_map_node (ptr->list_allocator_, temp);
     --ptr->size;
   }
 }

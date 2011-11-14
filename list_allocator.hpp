@@ -1,10 +1,10 @@
-#ifndef __list_allocator_h__
-#define __list_allocator_h__
+#ifndef __list_allocator_hpp__
+#define __list_allocator_hpp__
 
 /*
   File
   ----
-  list_allocator.h
+  list_allocator.hpp
   
   Description
   -----------
@@ -16,17 +16,33 @@
 
 #include "types.hpp"
 
-typedef struct list_allocator list_allocator_t;
+class list_allocator {
+private:
+  struct chunk_header;
+  
+  size_t page_size_;
+  chunk_header* first_header_;
+  chunk_header* last_header_;
 
-list_allocator_t*
-list_allocator_allocate (void) __attribute__((warn_unused_result));
+  static chunk_header*
+  find_header (chunk_header* start,
+	       size_t size);
 
-void*
-list_allocator_alloc (list_allocator_t*,
-		      size_t) __attribute__((warn_unused_result));
+  void
+  split_header (chunk_header* ptr,
+		size_t size);
 
-void
-list_allocator_free (list_allocator_t*,
-		     void*);
+public:
+  list_allocator ();
+  void* operator new (size_t);
+  void operator delete (void*);
 
-#endif /* __list_allocator_h__ */
+  void*
+  alloc (size_t) __attribute__((warn_unused_result));
+  
+  void
+  free (void*);
+};
+
+
+#endif /* __list_allocator_hpp__ */

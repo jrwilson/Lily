@@ -1,20 +1,25 @@
+#include "list_allocator.hpp"
 #include "fifo_scheduler.hpp"
+#include "action_macros.hpp"
+#include "new.hpp"
 #include "kassert.hpp"
 
-static list_allocator_t* list_allocator = 0;
-static fifo_scheduler_t* scheduler = 0;
+static list_allocator* allocator = 0;
+static fifo_scheduler* scheduler = 0;
 
-UV_UP_INPUT (initrd_init);
+UV_UP_INPUT (initrd_init, scheduler);
 
 static void
 initrd_init_effect ()
 {
   kputs (__func__); kputs ("\n");
-  list_allocator = list_allocator_allocate ();
-  scheduler = fifo_scheduler_allocate (list_allocator);
+  allocator = new list_allocator;
+  kassert (allocator != 0);
+  scheduler = new (allocator->alloc (sizeof (fifo_scheduler))) fifo_scheduler (*allocator);
 }
 
 static void
 initrd_init_schedule () {
   /* Do nothing for right now. */
+  kputs (__func__); kputs ("\n");
 }

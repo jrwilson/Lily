@@ -1,10 +1,10 @@
-#ifndef __fifo_scheduler_h__
-#define __fifo_scheduler_h__
+#ifndef __fifo_scheduler_hpp__
+#define __fifo_scheduler_hpp__
 
 /*
   File
   ----
-  fifo_scheduler.h
+  fifo_scheduler.hpp
   
   Description
   -----------
@@ -14,32 +14,59 @@
   Justin R. Wilson
 */
 
+#include "types.hpp"
 #include "list_allocator.hpp"
+#include "list.hpp"
+#include "unordered_set.hpp"
 
-typedef struct fifo_scheduler fifo_scheduler_t;
+template <class T>
+class list_allocator_wrapper {
+public:
+  typedef T value_type;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
 
-fifo_scheduler_t*
-fifo_scheduler_allocate (list_allocator_t* list_allocator);
+  typedef T* pointer;
+  typedef const T* const_pointer;
 
-void
-fifo_scheduler_add (fifo_scheduler_t*,
-		    void* action_entry_point,
-		    parameter_t parameter);
+  typedef T& reference;
+  typedef const T& const_reference;
 
-void
-fifo_scheduler_remove (fifo_scheduler_t*,
-		       void* action_entry_point,
-		       parameter_t parameter);
+  list_allocator_wrapper (list_allocator&) { }
+};
 
-void
-fifo_scheduler_finish (fifo_scheduler_t*,
-		       int output_status,
-		       value_t output_value);
+class fifo_scheduler {
+private:
+  struct entry;
 
-#define SCHEDULER_ADD fifo_scheduler_add
-#define SCHEDULER_REMOVE fifo_scheduler_remove
-#define SCHEDULER_FINISH fifo_scheduler_finish
+  list_allocator& allocator_;
+  entry* ready_;
+  entry* free_;
 
-#include "action_macros.hpp"
+  list<entry, list_allocator_wrapper<entry> > ready_list_;
+  //unordered_set<entry> ready_set_;
 
-#endif /* __fifo_scheduler_h__ */
+  entry*
+  allocate_scheduler_entry (void* action_entry_point,
+			    parameter_t parameter);
+
+  void
+  free_scheduler_entry (entry* p);
+
+public:
+  fifo_scheduler (list_allocator& allocator);
+
+  void
+  add (void* action_entry_point,
+       parameter_t parameter);
+
+  void
+  remove (void* action_entry_point,
+	  parameter_t parameter);
+
+  void
+  finish (bool output_status,
+	  value_t output_value);
+};
+
+#endif /* __fifo_scheduler_hpp__ */

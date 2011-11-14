@@ -19,7 +19,7 @@
 
 void
 multiboot_parse_memory_map (const multiboot_info_t* multiboot_info,
-			    placement_allocator_t* placement_allocator)
+			    placement_allocator& placement_allocator)
 {
   kassert (multiboot_info != 0);
 
@@ -34,7 +34,7 @@ multiboot_parse_memory_map (const multiboot_info_t* multiboot_info,
       {
 	physical_address begin (max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN.value ()), ptr->addr));
 	physical_address end (min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END.value ()), ptr->addr + ptr->len));
-	frame_manager_add (placement_allocator, begin, end);
+	frame_manager::add (placement_allocator, begin, end);
       }
       break;
     case MULTIBOOT_MEMORY_RESERVED:

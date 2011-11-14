@@ -9,7 +9,6 @@
   Description
   -----------
   Macros for declaring actions.
-  Assumes that SCHEDULER_REMOVE and SCHEDULER_FINISH are defined and that the variable named "scheduler" is the scheduler.
 
   Authors:
   Justin R. Wilson
@@ -18,7 +17,7 @@
 #include "quote.hpp"
 
 /* Unvalued unparameterized input. */
-#define UV_UP_INPUT(name) \
+#define UV_UP_INPUT(name, scheduler)	\
   extern int name;		\
   static void name##_effect (void); \
   static void name##_schedule (void);		\
@@ -27,14 +26,14 @@ extern "C" void \
 { \
   name##_effect ();	\
   name##_schedule (); \
-  SCHEDULER_FINISH (scheduler, 0, 0);		\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
       "call " quote(name) "_driver");
 
 /* Unvalued parameterized input. */
-#define UV_P_INPUT(name, parameter_type)	\
+#define UV_P_INPUT(name, parameter_type, scheduler)	\
   extern int name;		\
   static void name##_effect (parameter_type); \
   static void name##_schedule (parameter_type);		\
@@ -43,7 +42,7 @@ extern "C" void \
 { \
   name##_effect ((parameter_type)parameter);		\
   name##_schedule ((parameter_type)parameter); \
-  SCHEDULER_FINISH (scheduler, 0, 0);		\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -51,7 +50,7 @@ extern "C" void \
       "call " quote(name) "_driver");
 
 /* Valued unparameterized input. */
-#define V_UP_INPUT(name, value_type)			\
+#define V_UP_INPUT(name, value_type, scheduler)		\
   extern int name; \
   static void name##_effect (value_type); \
   static void name##_schedule (void);		\
@@ -60,7 +59,7 @@ extern "C" void \
 { \
   name##_effect ((value_type)value);		\
   name##_schedule (); \
-  SCHEDULER_FINISH (scheduler, 0, 0);		\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -68,7 +67,7 @@ extern "C" void \
       "call " quote(name) "_driver");
 
 /* Valued parameterized input. */
-#define V_P_INPUT(name, value_type, parameter_type)		\
+#define V_P_INPUT(name, value_type, parameter_type, scheduler)	\
   extern int name; \
   static void name##_effect (value_type, parameter_type);	\
   static void name##_schedule (parameter_type);		\
@@ -77,7 +76,7 @@ extern "C" void \
 { \
   name##_effect ((value_type)value, (parameter_type)parameter);	\
   name##_schedule ((parameter_type)parameter);				\
-  SCHEDULER_FINISH (scheduler, 0, 0);		\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }			\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -86,42 +85,42 @@ extern "C" void \
       "call " quote(name) "_driver");
 
 /* Unvalued unparameterized output. */
-#define UV_UP_OUTPUT(name) \
+#define UV_UP_OUTPUT(name, scheduler)			\
   extern int name; \
-  static int name##_precondition (void); \
+  static bool name##_precondition (void); \
   static void name##_effect (void); \
   static void name##_schedule (void);		\
 extern "C" void \
 name##_driver () \
 { \
-  SCHEDULER_REMOVE (scheduler, &name, 0); \
-  int status = name##_precondition (); \
+  if ((scheduler) != 0) { (scheduler)->remove (&name, 0); }	\
+  bool status = name##_precondition ();	\
   if (status) { \
     name##_effect ();	\
   } \
   name##_schedule (); \
-  SCHEDULER_FINISH (scheduler, status, 0);	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
       "call " quote(name) "_driver");
 
 /* Unvalued parameterized output. */
-#define UV_P_OUTPUT(name, parameter_type)			\
+#define UV_P_OUTPUT(name, parameter_type, scheduler)	\
   extern int name; \
-  static int name##_precondition (parameter_type); \
+  static bool name##_precondition (parameter_type); \
   static void name##_effect (parameter_type); \
   static void name##_schedule (parameter_type);		\
 extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
-  SCHEDULER_REMOVE (scheduler, &name, parameter); \
-  int status = name##_precondition ((parameter_type)parameter);	\
+  if ((scheduler) != 0) { (scheduler)->remove (&name, parameter); }	\
+  bool status = name##_precondition ((parameter_type)parameter);	\
   if (status) { \
     name##_effect ((parameter_type)parameter);		\
   } \
   name##_schedule ((parameter_type)parameter);		\
-  SCHEDULER_FINISH (scheduler, status, 0);	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -129,83 +128,83 @@ name##_driver (parameter_t parameter) \
       "call " quote(name) "_driver");
 
 /* Valued unparameterized output. */
-#define V_UP_OUTPUT(name, value_type)			\
+#define V_UP_OUTPUT(name, value_type, scheduler)		\
   extern int name; \
-  static int name##_precondition (void); \
+  static bool name##_precondition (void); \
   static value_type name##_effect (void); \
   static void name##_schedule (void); \
 extern "C" void \
 name##_driver () \
 { \
-  SCHEDULER_REMOVE (scheduler, &name, 0); \
-  int status = name##_precondition (); \
+  if ((scheduler) != 0) { (scheduler)->remove (&name, 0); }	\
+  bool status = name##_precondition ();	\
   value_t value = 0;	       \
   if (status) { \
     value = (value_t)name##_effect ();		\
   } \
   name##_schedule (); \
-  SCHEDULER_FINISH (scheduler, status, value);	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, value); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
       "call " quote(name) "_driver");
 
 /* Valued parameterized output. */
-#define V_P_OUTPUT(name, value_type, parameter_type)		\
+#define V_P_OUTPUT(name, value_type, parameter_type, scheduler)	\
   extern int name; \
-  static int name##_precondition (parameter_type); \
+  static bool name##_precondition (parameter_type); \
   static value_type name##_effect (parameter_type); \
   static void name##_schedule (parameter_type); \
 extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
-  SCHEDULER_REMOVE (scheduler, &name, parameter); \
-  int status = name##_precondition ((parameter_type)parameter);	\
+  if ((scheduler) != 0) { (scheduler)->remove (&name, parameter); }	\
+  bool status = name##_precondition ((parameter_type)parameter);	\
   value_t value = 0;	       \
   if (status) { \
     value = (value_t)name##_effect ((parameter_type)parameter);	\
   } \
   name##_schedule ((parameter_type)parameter);		\
-  SCHEDULER_FINISH (scheduler, status, value);	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, value); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
       "push %ecx\n" \
       "call " quote(name) "_driver");
 
-#define UP_INTERNAL(name) \
+#define UP_INTERNAL(name, scheduler)			\
   extern int name; \
-  static int name##_precondition (void); \
+  static bool name##_precondition (void);	\
   static void name##_effect (void); \
   static void name##_schedule (void); \
 extern "C" void \
 name##_driver () \
 { \
-  SCHEDULER_REMOVE (scheduler, &name, 0); \
+  if ((scheduler) != 0) { (scheduler)->remove (&name, 0); }	\
   if (name##_precondition ()) { \
     name##_effect (); \
   } \
   name##_schedule (); \
-  SCHEDULER_FINISH (scheduler, 0, 0);		\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
 } \
 asm (".global " quote(name) "\n"		\
      quote(name) ":\n"	\
      "call " quote(name) "_driver");
 
-#define P_INTERNAL(name, parameter_type)			\
+#define P_INTERNAL(name, parameter_type, scheduler)	\
   extern int name; \
-  static int name##_precondition (parameter_type); \
+  static bool name##_precondition (parameter_type); \
   static void name##_effect (parameter_type); \
   static void name##_schedule (parameter_type); \
 extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
-  SCHEDULER_REMOVE (scheduler, &name, parameter); \
+  if ((scheduler) != 0) { (scheduler)->remove (&name, parameter); }	\
   if (name##_precondition ((parameter_type)parameter)) {	  \
     name##_effect ((parameter_type)parameter);				  \
   } \
   name##_schedule ((parameter_type)parameter);		\
-  SCHEDULER_FINISH (scheduler, 0, 0);		\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
 } \
 asm (".global " quote(name) "\n"		\
      quote(name) ":\n"	\

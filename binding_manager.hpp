@@ -25,7 +25,7 @@ struct input_action {
 };
 
 void
-binding_manager_initialize (list_allocator_t* list_allocator);
+binding_manager_initialize (list_allocator* list_allocator);
 
 void
 binding_manager_bind (automaton_interface* output_automaton,
