@@ -15,6 +15,7 @@
 */
 
 #include "quote.hpp"
+#include "syscall.hpp"
 
 /* Unvalued unparameterized input. */
 #define UV_UP_INPUT(name, scheduler)	\
@@ -26,7 +27,7 @@ extern "C" void \
 { \
   name##_effect ();	\
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); } \
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -42,7 +43,7 @@ extern "C" void \
 { \
   name##_effect ((parameter_type)parameter);		\
   name##_schedule ((parameter_type)parameter); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -59,7 +60,7 @@ extern "C" void \
 { \
   name##_effect ((value_type)value);		\
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -76,7 +77,7 @@ extern "C" void \
 { \
   name##_effect ((value_type)value, (parameter_type)parameter);	\
   name##_schedule ((parameter_type)parameter);				\
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }			\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }			\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -99,7 +100,7 @@ name##_driver () \
     name##_effect ();	\
   } \
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (status, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, 0); } else { sys_finish (status, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -120,7 +121,7 @@ name##_driver (parameter_t parameter) \
     name##_effect ((parameter_type)parameter);		\
   } \
   name##_schedule ((parameter_type)parameter);		\
-  if ((scheduler) != 0) { (scheduler)->finish (status, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, 0); } else { sys_finish (status, 0); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -143,7 +144,7 @@ name##_driver () \
     value = (value_t)name##_effect ();		\
   } \
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (status, value); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, value); } else { sys_finish (status, value); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -165,7 +166,7 @@ name##_driver (parameter_t parameter) \
     value = (value_t)name##_effect ((parameter_type)parameter);	\
   } \
   name##_schedule ((parameter_type)parameter);		\
-  if ((scheduler) != 0) { (scheduler)->finish (status, value); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (status, value); } else { sys_finish (status, value); }	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -185,7 +186,7 @@ name##_driver () \
     name##_effect (); \
   } \
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
 } \
 asm (".global " quote(name) "\n"		\
      quote(name) ":\n"	\
@@ -204,7 +205,7 @@ name##_driver (parameter_t parameter) \
     name##_effect ((parameter_type)parameter);				  \
   } \
   name##_schedule ((parameter_type)parameter);		\
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); }	\
+  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
 } \
 asm (".global " quote(name) "\n"		\
      quote(name) ":\n"	\

@@ -23,6 +23,7 @@
 #include "boot_automaton.hpp"
 #include "new.hpp"
 #include "action_macros.hpp"
+#include "vector.hpp"
 
 /* Size of the stack used for "system" automata.
    Must be large enough for functions and interrupts. */
@@ -45,7 +46,7 @@ extern int data_end;
 extern int initrd_init;
 
 static automaton_interface* system_automaton = 0;
-static list_allocator* system_allocator = 0;
+static list_allocator system_allocator;
 static fifo_scheduler* scheduler = 0;
 
 static void
@@ -72,9 +73,9 @@ static void
 system_automaton_first_effect ()
 {
   /* Allocate a scheduler. */
-  scheduler = new (system_allocator->alloc (sizeof (fifo_scheduler))) fifo_scheduler (*system_allocator);
+  scheduler = new (system_allocator.alloc (sizeof (fifo_scheduler))) fifo_scheduler (system_allocator);
 
-  binding_manager_initialize (system_allocator);
+  binding_manager_initialize (&system_allocator);
 
   /* Create the initrd automaton. */
 
@@ -98,7 +99,7 @@ system_automaton_first_effect ()
   vm_manager_switch_to_directory (physical_address (frame));
   
   /* Second, create the automaton. */
-  automaton* initrd = new (static_cast<automaton*> (system_allocator->alloc (sizeof (automaton)))) automaton (*system_allocator, RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
+  automaton* initrd = new (static_cast<automaton*> (system_allocator.alloc (sizeof (automaton)))) automaton (system_allocator, RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
 
   /* Third, create the automaton's memory map. */
   {
@@ -303,20 +304,23 @@ system_automaton_initialize (logical_address placement_begin,
   scheduler_initialize (&boot_automaton);
 
   /* Now, we can start allocating. */
-
-  /* Allocate the allocator. */
-  system_allocator = new list_allocator;
-  kassert (system_allocator != 0);
+  vector<unsigned int> vec;
+  vec.reserve (16);
+  vec.resize (32, 0x12345678);
+  kputx32 (vec.size ()); kputs ("\n");
+  kputx32 (vec.capacity ()); kputs ("\n");
+  kputx32 (vec.empty ()); kputs ("\n");
+  kputx32 (vec.max_size ()); kputs ("\n");
 
   /* Allocate and set the switch stack for the scheduler. */
-  void* switch_stack = system_allocator->alloc (SWITCH_STACK_SIZE);
+  void* switch_stack = system_allocator.alloc (SWITCH_STACK_SIZE);
   kassert (switch_stack != 0);
   scheduler_set_switch_stack (logical_address (switch_stack), SWITCH_STACK_SIZE);
 
   /* Allocate the real system automaton.
      The system automaton's ceiling is the start of the paging data structures.
      This is also used as the stack pointer. */
-  automaton* sys_automaton = new (static_cast<automaton*> (system_allocator->alloc (sizeof (automaton)))) automaton (*system_allocator, RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
+  automaton* sys_automaton = new (static_cast<automaton*> (system_allocator.alloc (sizeof (automaton)))) automaton (system_allocator, RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
   
   {
     /* Create a memory map for the system automatom. */

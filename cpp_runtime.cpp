@@ -19,9 +19,3 @@ __cxa_pure_virtual (void)
   kputs ("Pure virtual function called\n");
   halt ();
 }
-
-void
-operator delete(void*)
-{
-  kassert (0);
-}

@@ -17,7 +17,6 @@
 
 /* This will need to be removed later. */
 #include "kassert.hpp"
-#include "vm_manager.hpp"
 
 const uint32_t MAGIC = 0x7ACEDEAD;
 
@@ -37,28 +36,9 @@ struct list_allocator::chunk_header {
   { }
 };
 
-list_allocator::list_allocator ()
-{
-  page_size_ = sys_get_page_size ();
-  size_t request_size = physical_address (sizeof (list_allocator) + sizeof (chunk_header)).align_up (page_size_).value ();
-
-  first_header_ = new ((logical_address (this) + sizeof (list_allocator)).value ()) chunk_header (request_size - sizeof (list_allocator) - sizeof (chunk_header));
-  last_header_ = first_header_;
-}
-
-void*
-list_allocator::operator new (size_t)
-{
-  size_t page_size = sys_get_page_size ();
-  size_t request_size = physical_address (sizeof (list_allocator) + sizeof (chunk_header)).align_up (page_size).value ();
-  return sys_allocate (request_size);
-}
-
-void
-list_allocator::operator delete (void*)
-{
-  kassert (0);
-}
+size_t list_allocator::page_size_ = 0;
+list_allocator::chunk_header* list_allocator::first_header_ = 0;
+list_allocator::chunk_header* list_allocator::last_header_ = 0;
 
 list_allocator::chunk_header*
 list_allocator::find_header (chunk_header* start,
@@ -72,10 +52,6 @@ void
 list_allocator::split_header (chunk_header* ptr,
 			      size_t size)
 {
-  kassert (ptr != 0);
-  kassert (ptr->available);
-  kassert (ptr->size > sizeof (chunk_header) + size);
-
   /* Split the block. */
   chunk_header* n = new ((logical_address (ptr) + sizeof (chunk_header) + size).value ()) chunk_header (ptr->size - size - sizeof (chunk_header));
   n->prev = ptr;
@@ -90,6 +66,68 @@ list_allocator::split_header (chunk_header* ptr,
   
   if (ptr == last_header_) {
     last_header_ = n;
+  }
+}
+
+void*
+list_allocator::alloc (size_t size)
+{
+  if (page_size_ == 0) {
+    page_size_ = sys_get_page_size ();
+    size_t request_size = physical_address (sizeof (chunk_header) + size).align_up (page_size_).value ();
+    first_header_ = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+    last_header_ = first_header_;
+  }
+
+  chunk_header* ptr = find_header (first_header_, size);
+
+  /* Acquire more memory. */
+  if (ptr == 0) {
+    /* TODO */
+    kassert (0);
+  }
+
+  /* Found something we can use. */
+  if ((ptr->size - size) > sizeof (chunk_header)) {
+    split_header (ptr, size);
+  }
+  /* Mark as used and return. */
+  ptr->available = 0;
+  return (ptr + 1);
+}
+
+void
+list_allocator::free (void* p)
+{
+  chunk_header* ptr = static_cast<chunk_header*> (p);
+  --ptr;
+
+  if (ptr >= first_header_ &&
+      ptr <= last_header_ &&
+      ptr->magic == MAGIC &&
+      ptr->available == 0) {
+
+    ptr->available = 1;
+    
+    /* Merge with next. */
+    if (ptr->next != 0 && ptr->next->available && ptr->next == (chunk_header*)((char*)ptr + sizeof (chunk_header) + ptr->size)) {
+      ptr->size += sizeof (chunk_header) + ptr->next->size;
+      if (ptr->next == last_header_) {
+	last_header_ = ptr;
+      }
+      ptr->next = ptr->next->next;
+      ptr->next->prev = ptr;
+    }
+    
+    /* Merge with prev. */
+    if (ptr->prev != 0 && ptr->prev->available && ptr == (chunk_header*)((char*)ptr->prev + sizeof (chunk_header) + ptr->prev->size)) {
+      ptr->prev->size += sizeof (chunk_header) + ptr->size;
+      ptr->prev->next = ptr->next;
+      ptr->next->prev = ptr->prev;
+      if (ptr == last_header_) {
+	last_header_ = ptr->prev;
+      }
+    }
   }
 }
 
@@ -116,59 +154,6 @@ list_allocator::split_header (chunk_header* ptr,
 //   kputs ("Node       Magic      Size       Prev       Next\n");
 //   dump_heap_int (la->first_header);
 // }
-
-void*
-list_allocator::alloc (size_t size)
-{
-  chunk_header* ptr = find_header (first_header_, size);
-
-  /* Acquire more memory. */
-  if (ptr == 0) {
-    /* TODO */
-    kassert (0);
-  }
-
-  /* Found something we can use. */
-  if ((ptr->size - size) > sizeof (chunk_header)) {
-    split_header (ptr, size);
-  }
-  /* Mark as used and return. */
-  ptr->available = 0;
-  return (ptr + 1);
-}
-
-void
-list_allocator::free (void* p)
-{
-  chunk_header* ptr = static_cast<chunk_header*> (p);
-  --ptr;
-  kassert (ptr >= first_header_);
-  kassert (ptr <= last_header_);
-  kassert (ptr->magic == MAGIC);
-  kassert (ptr->available == 0);
-
-  ptr->available = 1;
-  
-  /* Merge with next. */
-  if (ptr->next != 0 && ptr->next->available && ptr->next == (chunk_header*)((char*)ptr + sizeof (chunk_header) + ptr->size)) {
-    ptr->size += sizeof (chunk_header) + ptr->next->size;
-    if (ptr->next == last_header_) {
-      last_header_ = ptr;
-    }
-    ptr->next = ptr->next->next;
-    ptr->next->prev = ptr;
-  }
-  
-  /* Merge with prev. */
-  if (ptr->prev != 0 && ptr->prev->available && ptr == (chunk_header*)((char*)ptr->prev + sizeof (chunk_header) + ptr->prev->size)) {
-    ptr->prev->size += sizeof (chunk_header) + ptr->size;
-    ptr->prev->next = ptr->next;
-    ptr->next->prev = ptr->prev;
-    if (ptr == last_header_) {
-      last_header_ = ptr->prev;
-    }
-  }
-}
 
 /* static void */
 /* expand_heap (unsigned int size) */
