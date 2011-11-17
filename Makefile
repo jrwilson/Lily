@@ -2,7 +2,7 @@ AS=nasm
 AFLAGS=-f elf
 CXX=g++
 # Add -Werror at some point
-CXXFLAGS=-Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector
+CXXFLAGS=-MD -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
@@ -43,7 +43,6 @@ boot_automaton.o
 # producer.o \
 # consumer.o
 
-
 KERNEL=lily
 
 .PHONY : all
@@ -61,6 +60,10 @@ $(KERNEL) : $(OBJECTS)
 .PHONY : clean
 clean :
 	-rm -f $(KERNEL) $(OBJECTS)
+
+.PHONY : depclean
+depclean :
+	-rm -f *.d
 
 .PHONY : iso
 iso : lily.iso
@@ -83,3 +86,7 @@ lily.iso : eltorito.img lily
 .PHONY : isoclean
 isoclean :
 	-rm -f core.img eltorito.img lily.iso
+
+# Include the dependencies
+-include *.d
+

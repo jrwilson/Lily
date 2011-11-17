@@ -1,7 +1,5 @@
 #include "kput.hpp"
 
-#include "memory.h"
-
 #define VIDEORAM 0xB8000
 
 /* Width and height of the framebuffer. */

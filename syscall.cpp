@@ -12,12 +12,13 @@
 */
 
 #include "syscall.hpp"
+#include "kput.hpp"
 
 static syserror_t errno;
 
 void
 sys_finish (bool output_status,
-	    unsigned int output_value)
+	    value_t output_value)
 {
   asm volatile ("mov %0, %%eax\n"
 		"mov %1, %%edx\n"

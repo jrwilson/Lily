@@ -1,7 +1,7 @@
 /*
   File
   ----
-  string.h
+  string.hpp
   
   Description
   -----------
@@ -11,7 +11,7 @@
   Justin R. Wilson
 */
 
-#include "string.h"
+#include "string.hpp"
 
 void
 memset (void* ptr,
