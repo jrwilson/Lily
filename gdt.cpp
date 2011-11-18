@@ -14,8 +14,7 @@
 #include "gdt.hpp"
 #include "descriptor.hpp"
 
-struct gdt_ptr
-{
+struct gdt_ptr {
   unsigned short limit;
   unsigned int base;
 } __attribute__((packed));

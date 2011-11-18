@@ -1,0 +1,110 @@
+#ifndef __functional__
+#define __functional__
+
+/*
+  File
+  ----
+  functional
+  
+  Description
+  -----------
+  Functional programming.
+
+  Authors:
+  Justin R. Wilson
+*/
+
+namespace std {
+
+  template <class Arg, class Result>
+  struct unary_function {
+    typedef Arg argument_type;
+    typedef Result result_type;
+  };
+
+  template <class Arg1, class Arg2, class Result>
+  struct binary_function {
+    typedef Arg1 first_argument_type;
+    typedef Arg2 second_argument_type;
+    typedef Result result_type;
+  };
+  
+  template <class T>
+  struct equal_to : public binary_function<T, T, bool> {
+    bool operator() (const T& x,
+		     const T& y) const
+    {
+      return x == y;
+    }
+  };
+
+  template <class T>
+  struct hash : public std::unary_function<T, size_t> {
+    size_t
+    operator() (T value) const
+    {
+      size_t retval = 0;
+      size_t* ptr = reinterpret_cast<size_t*> (&value);
+      size_t* limit = ptr + sizeof (T) / sizeof (size_t);
+      while (ptr != limit) {
+	retval ^= *ptr++;
+      }
+      return retval;
+    }
+  };
+
+  template <>
+  struct hash<bool>;
+  
+  template <>
+  struct hash<char>;
+
+  template <>
+  struct hash<signed char>;
+
+  template <>
+  struct hash<unsigned char>;
+
+  template <>
+  struct hash<short>;
+
+  template <>
+  struct hash<unsigned short>;
+
+  template <>
+  struct hash<int>;
+
+  template <>
+  struct hash<unsigned int>;
+
+  template <>
+  struct hash<long>;
+
+  template <>
+  struct hash<unsigned long>;
+
+  template <>
+  struct hash<long long>;
+
+  template <>
+  struct hash<unsigned long long>;
+
+  template <>
+  struct hash<float>;
+
+  template <>
+  struct hash<double>;
+
+  template <>
+  struct hash<long double>;
+
+  template <class T>
+  struct hash<T*>;
+
+}
+
+/* Local Variables: */
+/* mode:c++         */
+/* End:             */
+
+#endif /* __functional__ */

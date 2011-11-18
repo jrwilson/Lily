@@ -15,46 +15,35 @@
 */
 
 #include "types.hpp"
-#include "list_allocator.hpp"
-#include "list.hpp"
-#include "unordered_set.hpp"
-
-template <class T>
-class list_allocator_wrapper {
-public:
-  typedef T value_type;
-  typedef size_t size_type;
-  typedef ptrdiff_t difference_type;
-
-  typedef T* pointer;
-  typedef const T* const_pointer;
-
-  typedef T& reference;
-  typedef const T& const_reference;
-
-  list_allocator_wrapper (list_allocator&) { }
-};
+#include <deque>
+#include <unordered_set>
 
 class fifo_scheduler {
 private:
-  struct entry;
 
-  list_allocator& allocator_;
-  entry* ready_;
-  entry* free_;
+  struct entry {
+    void* action_entry_point;
+    parameter_t parameter;
 
-  list<entry, list_allocator_wrapper<entry> > ready_list_;
-  //unordered_set<entry> ready_set_;
+    entry (void* aep,
+	   parameter_t p) :
+      action_entry_point (aep),
+      parameter (p)
+    { }
 
-  entry*
-  allocate_scheduler_entry (void* action_entry_point,
-			    parameter_t parameter);
+    bool
+    operator== (const entry& other) const
+    {
+      return action_entry_point == other.action_entry_point && parameter == other.parameter;
+    }
+  };
 
-  void
-  free_scheduler_entry (entry* p);
+  typedef std::deque<entry> queue_type;
+  queue_type queue_;
+  typedef std::unordered_set<entry> set_type;
+  set_type set_;
 
 public:
-  fifo_scheduler (list_allocator& allocator);
 
   void
   add (void* action_entry_point,

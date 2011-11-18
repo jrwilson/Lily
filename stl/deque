@@ -1,0 +1,302 @@
+#ifndef __deque__
+#define __deque__
+
+/*
+  File
+  ----
+  deque
+  
+  Description
+  -----------
+  A deque implementation.
+
+  Authors:
+  Justin R. Wilson
+*/
+
+#include <memory>
+#include <iterator>
+
+namespace std {
+
+  template <class T, class Allocator = allocator<T> >
+  class deque : private Allocator {
+  private:
+    struct Iterator;
+    struct ConstIterator;
+
+  public:
+    typedef T value_type;
+    typedef Allocator allocator_type;
+    typedef typename Allocator::size_type size_type;
+    typedef typename Allocator::difference_type difference_type;
+    typedef typename Allocator::reference reference;
+    typedef typename Allocator::const_reference const_reference;
+    typedef typename Allocator::pointer pointer;
+    typedef typename Allocator::const_pointer const_pointer;
+    typedef Iterator iterator;
+    typedef ConstIterator const_iterator;
+    typedef std::reverse_iterator<iterator> reverse_iterator;
+    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+    
+  private:
+    pointer first_;
+    pointer begin_;
+    pointer end_;
+    pointer last_;
+
+    struct Iterator : public std::iterator<std::random_access_iterator_tag, T> {
+      pointer pos_;
+      const deque* deque_;
+
+      Iterator (pointer p,
+		const deque* d) :
+	pos_ (p),
+	deque_ (d)
+      { }
+
+      bool
+      operator== (const Iterator& other) const
+      {
+	return pos_ == other.pos_ && deque_ == other.deque_;
+      }
+
+      bool
+      operator!= (const Iterator& other) const
+      {
+	return ! (*this == other);
+      }
+
+      Iterator&
+      operator++ ()
+      {
+	deque_->advance (pos_);
+	return *this;
+      }
+
+      reference
+      operator* () const
+      {
+	return *pos_;
+      }
+    };
+
+    struct ConstIterator : public std::iterator<std::random_access_iterator_tag, const T> {
+      pointer pos_;
+      const deque* deque_;
+
+      ConstIterator (pointer p,
+		     const deque* d) :
+	pos_ (p),
+	deque_ (d)
+      { }
+
+      ConstIterator (const Iterator& i) :
+	pos_ (i.pos_),
+	deque_ (i.deque_)
+      { }
+
+      bool
+      operator== (const ConstIterator& other) const
+      {
+	return pos_ == other.pos_ && deque_ == other.deque_;
+      }
+
+      bool
+      operator!= (const ConstIterator& other) const
+      {
+	return ! (*this == other);
+      }
+
+      ConstIterator&
+      operator++ ()
+      {
+	deque_->advance (pos_);
+	return *this;
+      }
+
+      const_reference
+      operator* () const
+      {
+	return *pos_;
+      }
+    };
+
+    size_type
+    capacity () const
+    {
+      return last_ - first_;
+    }
+
+    void
+    reserve (size_type n)
+    {
+      // Need space for n elements.
+      // Need one extra for end_.
+      ++n;
+
+      size_type old_cap = capacity ();
+      if (n > old_cap) {
+       	n = max (n, 2 * old_cap);
+	// Allocate.
+       	pointer new_first = allocate (n);
+       	pointer new_begin = new_first;
+       	pointer new_end = new_first;
+	// Copy.
+       	pointer src = begin_;
+      	while (src != end_) {
+      	  construct (new_end++, *src);
+      	  destroy (src);
+	  advance (src);
+      	}
+
+       	deallocate (first_, old_cap);
+
+      	first_ = new_first;
+      	begin_ = new_begin;
+      	end_ = new_end;
+      	last_ = new_first + n;
+      }
+    }
+
+    inline void
+    advance (pointer& p) const
+    {
+      ++p;
+      p = (p != last_) ? p : first_;
+    }
+
+    inline void
+    retreat (pointer& p) const
+    {
+      p = (p != first_) ? p - 1 : last_ - 1;
+    }
+
+  public:
+    explicit deque (const Allocator& a = Allocator ()) :
+      Allocator (a)
+    {
+      first_ = Allocator::allocate (2);
+      begin_ = first_;
+      end_ = first_;
+      last_ = first_ + 2;
+    }
+
+    ~deque ()
+    {
+      clear ();
+      deallocate (first_, capacity ());
+    }
+    
+    iterator
+    begin ()
+    {
+      return iterator (begin_, this);
+    }
+
+    const_iterator
+    begin () const
+    {
+      return const_iterator (begin_, this);
+    }
+
+    iterator
+    end ()
+    {
+      return iterator (end_, this);
+    }
+
+    const_iterator
+    end () const
+    {
+      return const_iterator (end_, this);
+    }
+
+    size_type
+    size () const
+    {
+      return (begin_ <= end_) ? end_ - begin_ : (end_ + capacity ()) - begin_;
+    }
+
+    bool
+    empty () const
+    {
+      return begin_ == end_;
+    }
+
+    reference
+    front ()
+    {
+      return *begin_;
+    }
+    
+    const_reference
+    front () const
+    {
+      return *begin_;
+    }
+
+    void
+    push_front (const T& x)
+    {
+      reserve (size () + 1);
+      retreat (begin_);
+      construct (begin_, x);
+    }
+
+    void
+    pop_front ()
+    {
+      destroy (begin_);
+      advance (begin_);
+    }
+
+    void
+    push_back (const T& x)
+    {
+      reserve (size () + 1);
+      construct (end_, x);
+      advance (end_);
+    }
+
+    void
+    pop_back ()
+    {
+      retreat (end_);      
+      destroy (end_);
+    }
+
+    iterator
+    erase (iterator position)
+    {
+      pointer src = position.pos_;
+      advance (src);
+      pointer dst = position.pos_;
+      destroy (dst);
+      while (src != end_) {
+	construct (dst, *src);
+	destroy (src);
+	advance (src);
+	advance (dst);
+      }
+      retreat (end_);
+      return position;
+    }
+
+    void
+    clear ()
+    {
+      while (begin_ != end_) {
+	destroy (begin_);
+	advance (begin_);
+      }
+    }
+  };
+
+}
+
+/* Local Variables: */
+/* mode:c++         */
+/* End:             */
+
+#endif /* __deque__ */

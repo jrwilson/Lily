@@ -15,7 +15,7 @@
 #include "kassert.hpp"
 #include "types.hpp"
 #include "frame_manager.hpp"
-#include "algorithm.hpp"
+#include <algorithm>
 
 void
 multiboot_parse_memory_map (const multiboot_info_t* multiboot_info,
@@ -32,8 +32,8 @@ multiboot_parse_memory_map (const multiboot_info_t* multiboot_info,
     case MULTIBOOT_MEMORY_AVAILABLE:
       kputs (" AVAILABLE\n");
       {
-	physical_address begin (max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN.value ()), ptr->addr));
-	physical_address end (min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END.value ()), ptr->addr + ptr->len));
+	physical_address begin (std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN.value ()), ptr->addr));
+	physical_address end (std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END.value ()), ptr->addr + ptr->len));
 	frame_manager::add (placement_allocator, begin, end);
       }
       break;

@@ -282,7 +282,11 @@ Also introduced a bug that I think is related to stack switching.
 
 Bug was related to stack switch.  Fixed.
 
-2011-11-14
+2011-11-17
+
+Over the past week I've been converting code to objects.
+I've also been working on a subset of the Standard Template Libary to make development easier.
+
 
 
 
@@ -290,3 +294,4 @@ Bug was related to stack switch.  Fixed.
 Take out page scrub in page_handler.
 Use traps instread of interrupts.
 Implement a better allocator.
+Memory alignment.

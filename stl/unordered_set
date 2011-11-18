@@ -1,0 +1,201 @@
+#ifndef __unordered_set__
+#define __unordered_set__
+
+/*
+  File
+  ----
+  unordered_set
+  
+  Description
+  -----------
+  A hash table implementation.
+
+  Authors:
+  Justin R. Wilson
+*/
+
+#include <functional>
+#include <memory>
+
+namespace std {
+
+  template <class Key, class Hash>
+  struct link {
+    link* next;
+    Hash hash;
+    Key key;
+
+    link (Hash h,
+	  const Key& k) :
+      next (0),
+      hash (h),
+      key (k)
+    { }
+  };
+
+  template <class T, class Hash = std::hash<T>, class Predicate = std::equal_to<T>, class Allocator = allocator<T> >
+  class unordered_set :
+    private Hash,
+    private Predicate,
+    private Allocator::template rebind<link<T, typename Hash::result_type> >::other,
+    private Allocator::template rebind<link<T, typename Hash::result_type>*>::other {
+  private:
+    typedef link<T, typename Hash::result_type> link_type;
+    typedef typename Allocator::template rebind<link_type>::other link_allocator_type;
+    typedef typename Allocator::template rebind<link_type *>::other bucket_allocator_type;
+    
+    struct Iterator;
+    struct LocalIterator;
+
+  public:
+    typedef T key_type;
+    typedef T value_type;
+    typedef Hash hasher;
+    typedef Predicate key_equal;
+    typedef Allocator allocator_type;
+    typedef typename Allocator::pointer pointer;
+    typedef typename Allocator::const_pointer const_pointer;
+    typedef typename Allocator::reference reference;
+    typedef typename Allocator::const_reference const_reference;
+    typedef typename Allocator::size_type size_type;
+    typedef typename Allocator::difference_type difference_type;
+
+    typedef Iterator iterator;
+    typedef Iterator const_iterator;
+    typedef LocalIterator local_iterator;
+    typedef LocalIterator const_local_iterator;
+
+  private:
+    typedef typename Hash::result_type hash_type;
+
+    struct Iterator : public std::iterator<std::forward_iterator_tag, T> {
+      link_type** link;
+
+      Iterator (link_type** l) :
+	link (l)
+      { }
+
+      bool
+      operator== (const Iterator& other) const
+      {
+	return link == other.link;
+      }
+
+      bool
+      operator!= (const Iterator& other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    size_type bucket_count_;
+    link<T, hash_type>** bucket_;
+
+  public:
+
+    explicit unordered_set (size_type n = 3,
+			    const hasher& h = hasher (),
+			    const key_equal& ke = key_equal (),
+			    const allocator_type& a = allocator_type ()) :
+      Hash (h),
+      Predicate (ke),
+      link_allocator_type (a),
+      bucket_allocator_type (a),
+      bucket_count_ (n)
+    {
+      bucket_ = bucket_allocator_type::allocate (bucket_count_);
+    }
+
+    ~unordered_set ()
+    {
+      clear ();
+      bucket_allocator_type::deallocate (bucket_, bucket_count_);
+    }
+
+    iterator
+    end ()
+    {
+      return iterator (0);
+    }
+
+    const_iterator
+    end () const
+    {
+      return iterator (0);
+    }
+
+  private:
+    iterator
+    find_ (const key_type& k)
+    {
+      const hash_type hash = Hash::operator() (k);
+      const size_type bucket_idx = hash % bucket_count_;
+      
+      link_type** ptr = &bucket_[bucket_idx];
+      while (*ptr != 0) {
+	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, k)) {
+	  return iterator (ptr);
+	}
+	ptr = &(*ptr)->next;
+      }
+      
+      return iterator (0);
+    }
+    
+  public:
+    iterator
+    find (const key_type& k)
+    {
+      return find_ (k);
+    }
+
+    const_iterator
+    find (const key_type& k) const
+    {
+      return find_ (k);
+    }
+
+    iterator
+    insert (const value_type& v)
+    {
+      const hash_type hash = Hash::operator() (v);
+      const size_type bucket_idx = hash % bucket_count_;
+
+      link_type** ptr = &bucket_[bucket_idx];
+      while (*ptr != 0) {
+	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, v)) {
+	  return iterator (ptr);
+	}
+	ptr = &(*ptr)->next;
+      }
+
+      link_type* link = link_allocator_type::allocate (1);
+      link_allocator_type::construct (link, link_type (hash, v));
+      *ptr = link;
+
+      return iterator (ptr);
+    }
+
+    void
+    erase (const_iterator position)
+    {
+      link_type* tmp = *position.link;
+      *position.link = tmp->next;
+      link_allocator_type::destroy (tmp);
+      link_allocator_type::deallocate (tmp, 1);
+    }
+
+    void
+    clear ()
+    {
+      kassert (0);
+    }
+  };
+
+}
+
+/* Local Variables: */
+/* mode:c++         */
+/* End:             */
+
+#endif /* __unordered_set__ */

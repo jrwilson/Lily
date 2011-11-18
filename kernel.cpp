@@ -26,7 +26,8 @@
 #include "syscall_handler.hpp"
 #include "system_automaton.hpp"
 #include "page_fault_handler.hpp"
-#include "algorithm.hpp"
+
+#include <algorithm>
 
 extern int text_begin;
 extern int text_end;
@@ -34,19 +35,13 @@ extern int text_end;
 extern int rodata_begin;
 extern int rodata_end;
 
-extern int ctor_begin;
-
 extern int data_begin;
 extern int data_end;
-
-extern int ctors_begin;
-extern int ctors_end;
 
 /* logical_end denotes the end of the logical address space as setup by loader.s.
    The multiboot data structures use physical addresses.
    loader.s identity maps up to (logical_address - KERNEL_VIRTUAL_BASE) so they can be read without manual translation.
  */
-
 
 extern "C" void
 kmain (void* logical_end,
@@ -85,7 +80,7 @@ kmain (void* logical_end,
   end_of_kernel.align_up (PAGE_SIZE);
 
   /* The logical beginning and end of the data allocated by the placement allocator. */
-  logical_address placement_begin = max (end_of_kernel, multiboot_end);
+  logical_address placement_begin = std::max (end_of_kernel, multiboot_end);
   logical_address placement_end;
   {
     /* Create a placement allocator for the frame manager.

@@ -13,9 +13,20 @@
 
 #include "kassert.hpp"
 
+void *__dso_handle;
+
 extern "C" void
 __cxa_pure_virtual (void)
 {
   kputs ("Pure virtual function called\n");
   halt ();
+}
+
+extern "C" int
+__cxa_atexit (void (* /*destructor*/)(void*),
+	      void* /* arg */,
+	      void* /* dso */)
+{
+  // Do nothing successfully.
+  return 0;
 }

@@ -13,7 +13,7 @@
 
 #include "list_allocator.hpp"
 #include "syscall.hpp"
-#include "new.hpp"
+#include <new>
 
 /* This will need to be removed later. */
 #include "kassert.hpp"

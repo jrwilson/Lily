@@ -21,9 +21,8 @@
 #include "fifo_scheduler.hpp"
 #include "binding_manager.hpp"
 #include "boot_automaton.hpp"
-#include "new.hpp"
+#include <new>
 #include "action_macros.hpp"
-#include "vector.hpp"
 
 /* Size of the stack used for "system" automata.
    Must be large enough for functions and interrupts. */
@@ -47,34 +46,33 @@ extern int initrd_init;
 
 static automaton_interface* system_automaton = 0;
 static list_allocator system_allocator;
+
 static fifo_scheduler* scheduler = 0;
+static bool flag = true;
 
 static void
 schedule ();
 
-UP_INTERNAL (system_automaton_first, scheduler);
-UV_P_OUTPUT (system_automaton_init, automaton*, scheduler);
-UV_UP_INPUT (system_automaton_create_request, scheduler);
-UV_UP_OUTPUT (system_automaton_create_response, scheduler);
-UV_UP_INPUT (system_automaton_bind_request, scheduler);
-UV_UP_OUTPUT (system_automaton_bind_response, scheduler);
-UV_UP_INPUT (system_automaton_unbind_request, scheduler);
-UV_UP_OUTPUT (system_automaton_unbind_response, scheduler);
-UV_UP_INPUT (system_automaton_destroy_request, scheduler);
-UV_UP_OUTPUT (system_automaton_destroy_response, scheduler);
+UP_INTERNAL (system_automaton_first, *scheduler);
+UV_P_OUTPUT (system_automaton_init, automaton*, *scheduler);
+UV_UP_INPUT (system_automaton_create_request, *scheduler);
+UV_UP_OUTPUT (system_automaton_create_response, *scheduler);
+UV_UP_INPUT (system_automaton_bind_request, *scheduler);
+UV_UP_OUTPUT (system_automaton_bind_response, *scheduler);
+UV_UP_INPUT (system_automaton_unbind_request, *scheduler);
+UV_UP_OUTPUT (system_automaton_unbind_response, *scheduler);
+UV_UP_INPUT (system_automaton_destroy_request, *scheduler);
+UV_UP_OUTPUT (system_automaton_destroy_response, *scheduler);
 
 static bool
 system_automaton_first_precondition ()
 {
-  return scheduler == 0;
+  return flag;
 }
 
 static void
 system_automaton_first_effect ()
 {
-  /* Allocate a scheduler. */
-  scheduler = new (system_allocator.alloc (sizeof (fifo_scheduler))) fifo_scheduler (system_allocator);
-
   binding_manager_initialize (&system_allocator);
 
   /* Create the initrd automaton. */
@@ -135,13 +133,15 @@ system_automaton_first_effect ()
   			initrd, &initrd_init, 0);
 
   /* Sixth, initialize the new automaton. */
-  scheduler->add (&system_automaton_init, (parameter_t)initrd);
+  (*scheduler).add (&system_automaton_init, (parameter_t)initrd);
 
   /* Create the VFS automaton. */
 
   /* Create the init automaton. */
 
   kputs (__func__); kputs ("\n");
+
+  flag = false;
 }
 
 static void
@@ -275,7 +275,7 @@ static void
 schedule ()
 {
   if (system_automaton_first_precondition ()) {
-    scheduler->add (&system_automaton_first, 0);
+    (*scheduler).add (&system_automaton_first, 0);
   }
 }
 
@@ -304,444 +304,6 @@ system_automaton_initialize (logical_address placement_begin,
   scheduler_initialize (&boot_automaton);
 
   /* Now, we can start allocating. */
-
-  {
-    vector<int> vec;
-    kassert (vec.size () == 0);
-
-    for (int i = 0; i < 10; ++i) {
-      vec.push_back (i);
-    }
-    kassert (vec.size () == 10);
-    
-    vec.insert (vec.end (), 10, 100);
-    kassert (vec.size () == 20);
-
-    vec.pop_back ();
-    kassert (vec.size () == 19);
-  }
-
-  {
-    vector<int> vec;
-    kassert (vec.max_size () != 0);
-  }
-
-  {
-    vector<int> vec;
-
-    for (int i = 0; i < 10; ++i) {
-      vec.push_back (i);
-    }
-
-    vec.resize (5);
-    vec.resize (8, 100);
-    vec.resize (12);
-
-    kassert (vec[0] == 0);
-    kassert (vec[1] == 1);
-    kassert (vec[2] == 2);
-    kassert (vec[3] == 3);
-    kassert (vec[4] == 4);
-    kassert (vec[5] == 100);
-    kassert (vec[6] == 100);
-    kassert (vec[7] == 100);
-    kassert (vec[8] == 0);
-    kassert (vec[9] == 0);
-    kassert (vec[10] == 0);
-    kassert (vec[11] == 0);
-  }
-
-  {
-    vector<int> vec;
-    vec.reserve (100);
-    kassert (vec.capacity () >= 100);
-  }
-
-  {
-    vector<int> vec;
-    int sum (0);
-
-    for (int i = 1; i <= 10; ++i) {
-      vec.push_back (i);
-    }
-
-    while (!vec.empty ()) {
-      sum += vec.back ();
-      vec.pop_back ();
-    }
-
-    kassert (sum == 55);
-  }
-
-  {
-    int sz = 10;
-    vector<int> vec (sz);
-    
-    for (int i = 0; i < sz; ++i) {
-      vec[i] = i;
-    }
-
-    for (int i = 0; i < sz / 2; ++i) {
-      int temp = vec[sz - 1 - i];
-      vec[sz - 1 - i] = vec[i];
-      vec[i] = temp;
-    }
-
-    kassert (vec[0] == 9);
-    kassert (vec[1] == 8);
-    kassert (vec[2] == 7);
-    kassert (vec[3] == 6);
-    kassert (vec[4] == 5);
-    kassert (vec[5] == 4);
-    kassert (vec[6] == 3);
-    kassert (vec[7] == 2);
-    kassert (vec[8] == 1);
-    kassert (vec[9] == 0);
-  }
-
-  {
-    int sz = 10;
-    vector<int> vec (sz);
-    
-    for (int i = 0; i < sz; ++i) {
-      vec.at (i) = i;
-    }
-
-    for (int i = 0; i < sz / 2; ++i) {
-      int temp = vec.at (sz - 1 - i);
-      vec.at (sz - 1 - i) = vec.at (i);
-      vec.at (i) = temp;
-    }
-
-    kassert (vec.at (0) == 9);
-    kassert (vec.at (1) == 8);
-    kassert (vec.at (2) == 7);
-    kassert (vec.at (3) == 6);
-    kassert (vec.at (4) == 5);
-    kassert (vec.at (5) == 4);
-    kassert (vec.at (6) == 3);
-    kassert (vec.at (7) == 2);
-    kassert (vec.at (8) == 1);
-    kassert (vec.at (9) == 0);
-  }
-
-  {
-    vector<int> vec;
-    
-    vec.push_back (78);
-    vec.push_back (16);
-
-    vec.front () -= vec.back ();
-
-    kassert (vec.front () == 62);
-  }
-
-  {
-    vector<int> vec;
-
-    vec.push_back (10);
-
-    while (vec.back () != 0) {
-      vec.push_back (vec.back () - 1);
-    }
-
-    kassert (vec[0] == 10);
-    kassert (vec[1] == 9);
-    kassert (vec[2] == 8);
-    kassert (vec[3] == 7);
-    kassert (vec[4] == 6);
-    kassert (vec[5] == 5);
-    kassert (vec[6] == 4);
-    kassert (vec[7] == 3);
-    kassert (vec[8] == 2);
-    kassert (vec[9] == 1);
-    kassert (vec[10] == 0);
-  }
-
-  {
-    vector<int> first;
-    vector<int> second;
-    vector<int> third;
-
-    first.assign (7, 100);
-
-    second.assign (first.begin () + 1, first.end () - 1);
-
-    int arr[] = {1776, 7, 4};
-    third.assign (arr, arr + 3);
-
-    kassert (first.size () == 7);
-    kassert (first[0] == 100);
-    kassert (first[1] == 100);
-    kassert (first[2] == 100);
-    kassert (first[3] == 100);
-    kassert (first[4] == 100);
-    kassert (first[5] == 100);
-    kassert (first[6] == 100);
-
-    kassert (second.size () == 5);
-    kassert (second[0] == 100);
-    kassert (second[1] == 100);
-    kassert (second[2] == 100);
-    kassert (second[3] == 100);
-    kassert (second[4] == 100);
-
-    kassert (third.size () == 3);
-    kassert (third[0] == arr[0]);
-    kassert (third[1] == arr[1]);
-    kassert (third[2] == arr[2]);
-  }
-
-  {
-    vector<int> vec;
-
-    for (int i = 0; i < 10; ++i) {
-      vec.push_back (i);
-    }
-
-    kassert (vec.size () == 10);
-    kassert (vec[0] == 0);
-    kassert (vec[1] == 1);
-    kassert (vec[2] == 2);
-    kassert (vec[3] == 3);
-    kassert (vec[4] == 4);
-    kassert (vec[5] == 5);
-    kassert (vec[6] == 6);
-    kassert (vec[7] == 7);
-    kassert (vec[8] == 8);
-    kassert (vec[9] == 9);
-  }
-
-  {
-    vector<int> vec;
-    int sum (0);
-
-    vec.push_back (100);
-    vec.push_back (200);
-    vec.push_back (300);
-
-    while (!vec.empty ()) {
-      sum += vec.back ();
-      vec.pop_back ();
-    }
-
-    kassert (sum == 600);
-  }
-
-  {
-    vector<int> vec (3, 100);
-    vector<int>::iterator it;
-
-    it = vec.begin ();
-    it = vec.insert (it, 200);
-
-    vec.insert (it, 2, 300);
-
-    it = vec.begin ();
-
-    vector<int> vec2 (2, 400);
-    vec.insert (it + 2, vec2.begin (), vec2.end ());
-
-    int arr[] = { 501, 502, 503 };
-    vec.insert (vec.begin (), arr, arr + 3);
-
-    kassert (vec.size () == 11);
-    kassert (vec[0] == arr[0]);
-    kassert (vec[1] == arr[1]);
-    kassert (vec[2] == arr[2]);
-    kassert (vec[3] == 300);
-    kassert (vec[4] == 300);
-    kassert (vec[5] == 400);
-    kassert (vec[6] == 400);
-    kassert (vec[7] == 200);
-    kassert (vec[8] == 100);
-    kassert (vec[9] == 100);
-    kassert (vec[10] == 100);
-  }
-
-  {
-    vector<int> vec;
-
-    for (int i = 1; i <= 10; i++) {
-      vec.push_back (i);
-    }
-
-    vec.erase (vec.begin () + 5);
-    
-    vec.erase (vec.begin (), vec.begin () + 3);
-
-    kassert (vec.size () == 6);
-    kassert (vec[0] == 4);
-    kassert (vec[1] == 5);
-    kassert (vec[2] == 7);
-    kassert (vec[3] == 8);
-    kassert (vec[4] == 9);
-    kassert (vec[5] == 10);
-  }
-
-  {
-    vector<int> first (3, 100);
-    vector<int> second (5, 200);
-
-    first.swap (second);
-
-    kassert (first.size () == 5);
-    kassert (first[0] == 200);
-    kassert (first[1] == 200);
-    kassert (first[2] == 200);
-    kassert (first[3] == 200);
-    kassert (first[4] == 200);
-
-    kassert (second.size () == 3);
-    kassert (second[0] == 100);
-    kassert (second[1] == 100);
-    kassert (second[2] == 100);
-  }
-
-  {
-    vector<int> vec;
-
-    vec.push_back (100);
-    vec.push_back (200);
-    vec.push_back (300);
-
-    kassert (vec.size () == 3);
-    kassert (vec[0] == 100);
-    kassert (vec[1] == 200);
-    kassert (vec[2] == 300);
-
-    vec.clear ();
-    vec.push_back (1101);
-    vec.push_back (2202);
-
-    kassert (vec.size () == 2);
-    kassert (vec[0] == 1101);
-    kassert (vec[1] == 2202);
-  }
-
-  {
-    vector<int> vec;
-
-    int* p = vec.get_allocator ().allocate (5);
-
-    for (int i = 0; i < 5; ++i) {
-      p[i] = i;
-    }
-
-    kassert (p[0] == 0);
-    kassert (p[1] == 1);
-    kassert (p[2] == 2);
-    kassert (p[3] == 3);
-    kassert (p[4] == 4);
-
-    vec.get_allocator ().deallocate (p, 5);
-  }
-
-  {
-    vector<int> vec;
-
-    for (int i = 0; i < 5; ++i) {
-      vec.push_back (i);
-    }
-
-    *vec.begin () = 10;
-
-    kassert (vec.size () == 5);
-    vector<int>::const_iterator it = vec.begin ();
-    kassert (*it++ == 10);
-    kassert (*it++ == 1);
-    kassert (*it++ == 2);
-    kassert (*it++ == 3);
-    kassert (*it++ == 4);
-    kassert (it == vec.end ());
-  }
-
-  {
-    vector<int> vec;
-    int sum (0);
-
-    for (int i = 1; i <= 10; ++i) {
-      vec.insert (vec.end (), i);
-    }
-
-    for (vector<int>::const_iterator it = vec.begin ();
-	 it != vec.end ();
-	 ++it) {
-      sum += *it;
-    }
-
-    kassert (sum == 55);
-  }
-
-  {
-    vector<int> vec;
-
-    for (int i = 0; i < 5; ++i) {
-      vec.push_back (i);
-    }
-
-    *vec.rbegin () = 10;
-
-    kassert (vec.size () == 5);
-    vector<int>::const_reverse_iterator it = vec.rbegin ();
-    kassert (*it++ == 10);
-    kassert (*it++ == 3);
-    kassert (*it++ == 2);
-    kassert (*it++ == 1);
-    kassert (*it++ == 0);
-    kassert (it == vec.rend ());
-  }
-
-  {
-    vector<int> first;
-    vector<int> second (4, 100);
-    vector<int> third (second.begin (), second.end ());
-    vector<int> fourth (third);
-
-    int arr[] = {16, 2, 77, 29};
-    vector<int> fifth (arr, arr + 4);
-
-    kassert (first.size () == 0);
-
-    kassert (second.size () == 4);
-    kassert (second[0] == 100);
-    kassert (second[1] == 100);
-    kassert (second[2] == 100);
-    kassert (second[3] == 100);
-
-    kassert (third.size () == 4);
-    kassert (third[0] == 100);
-    kassert (third[1] == 100);
-    kassert (third[2] == 100);
-    kassert (third[3] == 100);
-
-    kassert (fourth.size () == 4);
-    kassert (fourth[0] == 100);
-    kassert (fourth[1] == 100);
-    kassert (fourth[2] == 100);
-    kassert (fourth[3] == 100);
-
-    kassert (fifth.size () == 4);
-    kassert (fifth[0] == 16);
-    kassert (fifth[1] == 2);
-    kassert (fifth[2] == 77);
-    kassert (fifth[3] == 29);
-  }
-
-  {
-    vector<int> first (3, 300);
-    vector<int> second (5, 0);
-
-    second = first;
-    first = vector<int> ();
-
-    kassert (first.size () == 0);
-
-    kassert (second.size () == 3);
-    kassert (second[0] == 300);
-    kassert (second[1] == 300);
-    kassert (second[2] == 300);
-  }
 
   /* Allocate and set the switch stack for the scheduler. */
   void* switch_stack = system_allocator.alloc (SWITCH_STACK_SIZE);
@@ -817,6 +379,10 @@ system_automaton_initialize (logical_address placement_begin,
 
   /* Set the system automaton. */
   system_automaton = sys_automaton;
+
+  /* Create a scheduler. */
+  scheduler = new fifo_scheduler ();
+  kassert (scheduler != 0);
 
   /* Go! */
   schedule_action (system_automaton, &system_automaton_first, 0);

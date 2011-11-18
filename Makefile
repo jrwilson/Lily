@@ -2,7 +2,7 @@ AS=nasm
 AFLAGS=-f elf
 CXX=g++
 # Add -Werror at some point
-CXXFLAGS=-MD -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector
+CXXFLAGS=-MD -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.

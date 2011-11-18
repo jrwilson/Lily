@@ -14,7 +14,7 @@
 #include "frame_manager.hpp"
 #include "vm_manager.hpp"
 #include "kassert.hpp"
-#include "algorithm.hpp"
+#include <algorithm>
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -166,7 +166,7 @@ frame_manager::add (placement_allocator& p_a,
   if (begin < end) {
     size_t size = end - begin;
     while (size != 0) {
-      size_t sz = min (MAX_REGION_SIZE, size);
+      size_t sz = std::min (MAX_REGION_SIZE, size);
       stack_allocator_t* stack_allocator = stack_allocator_allocate (p_a, frame (begin), frame (begin + sz));
       stack_allocator->next = stack_allocators_;
       stack_allocators_ = stack_allocator;

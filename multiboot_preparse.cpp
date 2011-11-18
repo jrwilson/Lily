@@ -15,20 +15,20 @@
 
 #include "multiboot_preparse.hpp"
 #include "kassert.hpp"
-#include "algorithm.hpp"
+#include <algorithm>
 
 static void
 multiboot_new_begin (physical_address& multiboot_begin,
 		     size_t new_begin)
 {
-  multiboot_begin = min (multiboot_begin, physical_address (new_begin));
+  multiboot_begin = std::min (multiboot_begin, physical_address (new_begin));
 }
 
 static void
 multiboot_new_end (physical_address& multiboot_end,
 		   size_t new_end)
 {
-  multiboot_end = max (multiboot_end, physical_address (new_end));
+  multiboot_end = std::max (multiboot_end, physical_address (new_end));
 }
 
 int

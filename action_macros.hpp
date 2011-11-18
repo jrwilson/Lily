@@ -27,7 +27,7 @@ extern "C" void \
 { \
   name##_effect ();	\
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); } \
+  (scheduler).finish (0, 0);			\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -43,7 +43,7 @@ extern "C" void \
 { \
   name##_effect ((parameter_type)parameter);		\
   name##_schedule ((parameter_type)parameter); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
+  (scheduler).finish (0, 0);	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -60,7 +60,7 @@ extern "C" void \
 { \
   name##_effect ((value_type)value);		\
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
+  (scheduler).finish (0, 0);	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -77,7 +77,7 @@ extern "C" void \
 { \
   name##_effect ((value_type)value, (parameter_type)parameter);	\
   name##_schedule ((parameter_type)parameter);				\
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }			\
+  (scheduler).finish (0, 0);			\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -94,13 +94,13 @@ extern "C" void \
 extern "C" void \
 name##_driver () \
 { \
-  if ((scheduler) != 0) { (scheduler)->remove (&name, 0); }	\
+  (scheduler).remove (&name, 0);	\
   bool status = name##_precondition ();	\
   if (status) { \
     name##_effect ();	\
   } \
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (status, 0); } else { sys_finish (status, 0); }	\
+  (scheduler).finish (status, 0);	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -115,13 +115,13 @@ name##_driver () \
 extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
-  if ((scheduler) != 0) { (scheduler)->remove (&name, parameter); }	\
+  (scheduler).remove (&name, parameter);	\
   bool status = name##_precondition ((parameter_type)parameter);	\
   if (status) { \
     name##_effect ((parameter_type)parameter);		\
   } \
   name##_schedule ((parameter_type)parameter);		\
-  if ((scheduler) != 0) { (scheduler)->finish (status, 0); } else { sys_finish (status, 0); }	\
+  (scheduler).finish (status, 0);	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -137,14 +137,14 @@ name##_driver (parameter_t parameter) \
 extern "C" void \
 name##_driver () \
 { \
-  if ((scheduler) != 0) { (scheduler)->remove (&name, 0); }	\
+  (scheduler).remove (&name, 0);	\
   bool status = name##_precondition ();	\
   value_t value = 0;	       \
   if (status) { \
     value = (value_t)name##_effect ();		\
   } \
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (status, value); } else { sys_finish (status, value); }	\
+  (scheduler).finish (status, value);	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -159,14 +159,14 @@ name##_driver () \
 extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
-  if ((scheduler) != 0) { (scheduler)->remove (&name, parameter); }	\
+  (scheduler).remove (&name, parameter);	\
   bool status = name##_precondition ((parameter_type)parameter);	\
   value_t value = 0;	       \
   if (status) { \
     value = (value_t)name##_effect ((parameter_type)parameter);	\
   } \
   name##_schedule ((parameter_type)parameter);		\
-  if ((scheduler) != 0) { (scheduler)->finish (status, value); } else { sys_finish (status, value); }	\
+  (scheduler).finish (status, value);	\
 } \
  asm (".global " quote(name) "\n" \
       quote(name) ":\n"	\
@@ -181,12 +181,12 @@ name##_driver (parameter_t parameter) \
 extern "C" void \
 name##_driver () \
 { \
-  if ((scheduler) != 0) { (scheduler)->remove (&name, 0); }	\
+  (scheduler).remove (&name, 0);	\
   if (name##_precondition ()) { \
     name##_effect (); \
   } \
   name##_schedule (); \
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
+  (scheduler).finish (0, 0);	\
 } \
 asm (".global " quote(name) "\n"		\
      quote(name) ":\n"	\
@@ -200,12 +200,12 @@ asm (".global " quote(name) "\n"		\
 extern "C" void \
 name##_driver (parameter_t parameter) \
 { \
-  if ((scheduler) != 0) { (scheduler)->remove (&name, parameter); }	\
+  (scheduler).remove (&name, parameter);	\
   if (name##_precondition ((parameter_type)parameter)) {	  \
     name##_effect ((parameter_type)parameter);				  \
   } \
   name##_schedule ((parameter_type)parameter);		\
-  if ((scheduler) != 0) { (scheduler)->finish (0, 0); } else { sys_finish (0, 0); }	\
+  (scheduler).finish (0, 0);	\
 } \
 asm (".global " quote(name) "\n"		\
      quote(name) ":\n"	\
