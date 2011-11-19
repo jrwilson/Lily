@@ -15,7 +15,6 @@
 */
 
 #include "vm_manager.hpp"
-#include "hash_map.hpp"
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
 
@@ -37,7 +36,7 @@ public:
   get_stack_pointer (void) const = 0;
   
   virtual int
-  insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result)) = 0;
+  insert_vm_area (const vm_area* area) __attribute__((warn_unused_result)) = 0;
   
   virtual logical_address
   alloc (size_t size,

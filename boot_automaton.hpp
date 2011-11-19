@@ -18,12 +18,12 @@
 
 class boot_automaton : public automaton_interface {
 private:
-  vm_area_t data_;
+  vm_area data_;
 public:
   boot_automaton (logical_address begin,
 		  logical_address end);
   
-  const vm_area_t*
+  const vm_area*
   get_data_area (void) const;
 
   scheduler_context_t*
@@ -33,7 +33,7 @@ public:
   get_stack_pointer (void) const;
   
   int
-  insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result));
+  insert_vm_area (const vm_area* area) __attribute__((warn_unused_result));
   
   logical_address
   alloc (size_t size,

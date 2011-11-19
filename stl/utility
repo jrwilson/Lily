@@ -17,8 +17,38 @@
 namespace std {
   
   template <class T, class U>
-  struct pair;
+  struct pair {
+    typedef T first_type;
+    typedef U second_type;
 
+    T first;
+    U second;
+
+    pair () :
+      first (),
+      second ()
+    { }
+
+    pair (const T& t,
+	  const U& u) :
+      first (t),
+      second (u)
+    { }
+
+    template <class V, class W>
+    pair (const pair<V, W>& pr) :
+      first (pr.first),
+      second (pr.second)
+    { }
+  };
+
+  template <class T, class U>
+  pair<T, U>
+  make_pair (T t,
+	     U u)
+  {
+    return pair<T, U> (t, u);
+  }
 }
 
 /* Local Variables: */

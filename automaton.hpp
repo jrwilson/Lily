@@ -19,6 +19,7 @@
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
 #include "automaton_interface.hpp"
+#include <unordered_map>
 
 class automaton : public automaton_interface {
 private:
@@ -28,15 +29,16 @@ private:
   uint32_t code_segment_;
   uint32_t stack_segment_;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
-  hash_map_t* actions_;
+  typedef std::unordered_map<void*, action_type_t> action_map_type;
+  action_map_type action_map_;
   /* The scheduler uses this object. */
   scheduler_context_t* scheduler_context_;
   physical_address page_directory_;
   /* Stack pointer (constant). */
   logical_address stack_pointer_;
   /* Memory map. */
-  vm_area_t* memory_map_begin_;
-  vm_area_t* memory_map_end_;
+  vm_area* memory_map_begin_;
+  vm_area* memory_map_end_;
   /* Can map between [floor, ceiling). */
   void* memory_floor_;
   logical_address memory_ceiling_;
@@ -44,7 +46,7 @@ private:
   page_privilege_t page_privilege_;
 
   void
-  merge (vm_area_t* area);
+  merge (vm_area* area);
 
 public:
   automaton (list_allocator& list_allocator,
@@ -63,7 +65,7 @@ public:
   }
   
   int
-  insert_vm_area (const vm_area_t* area) __attribute__((warn_unused_result));
+  insert_vm_area (const vm_area* area) __attribute__((warn_unused_result));
   
   logical_address
   alloc (size_t size,

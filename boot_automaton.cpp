@@ -17,16 +17,14 @@
 #include "page_fault_handler.hpp"
 
 boot_automaton::boot_automaton (logical_address begin,
-				logical_address end)
-{
-  vm_area_initialize (&data_,
-  		      VM_AREA_DATA,
-  		      begin.align_down (PAGE_SIZE),
-  		      end.align_up (PAGE_SIZE),
-  		      SUPERVISOR);
-}
+				logical_address end) :
+  data_ (VM_AREA_DATA,
+	 begin.align_down (PAGE_SIZE),
+	 end.align_up (PAGE_SIZE),
+	 SUPERVISOR)
+{ }
 
-const vm_area_t*
+const vm_area*
 boot_automaton::get_data_area (void) const
 {
   return &data_;
@@ -47,7 +45,7 @@ boot_automaton::get_stack_pointer (void) const
 }
   
 int
-boot_automaton::insert_vm_area (const vm_area_t*)
+boot_automaton::insert_vm_area (const vm_area*)
 {
   kassert (0);
   return -1;

@@ -1,10 +1,10 @@
-#ifndef __vm_area_h__
-#define __vm_area_h__
+#ifndef __vm_area_hpp__
+#define __vm_area_hpp__
 
 /*
   File
   ----
-  vm_area.h
+  vm_area.hpp
   
   Description
   -----------
@@ -16,7 +16,7 @@
 */
 
 #include "vm_manager.hpp"
-#include "list_allocator.hpp"
+#include "kassert.hpp"
 
 typedef enum {
   VM_AREA_TEXT,
@@ -26,32 +26,30 @@ typedef enum {
   VM_AREA_RESERVED,
 } vm_area_type_t;
 
-typedef struct vm_area vm_area_t;
 struct vm_area {
   vm_area_type_t type;
   logical_address begin;
   logical_address end;
   page_privilege_t page_privilege;
-  vm_area_t* prev;
-  vm_area_t* next;
+  vm_area* prev;
+  vm_area* next;
+
+  vm_area (vm_area_type_t t,
+	   logical_address b,
+	   logical_address e,
+	   page_privilege_t pp) :
+    type (t),
+    begin (b),
+    end (e),
+    page_privilege (pp),
+    prev (0),
+    next (0)
+  {
+    kassert (begin.is_aligned (PAGE_SIZE));
+    kassert (end.is_aligned (PAGE_SIZE));
+    kassert (begin < end);
+  }
+
 };
 
-void
-vm_area_initialize (vm_area_t* ptr,
-		    vm_area_type_t type,
-		    logical_address begin,
-		    logical_address end,
-		    page_privilege_t page_privilege);
-
-vm_area_t*
-vm_area_allocate (list_allocator& list_allocator,
-		  vm_area_type_t type,
-		  logical_address begin,
-		  logical_address end,
-		  page_privilege_t page_privilege) __attribute__((warn_unused_result));
-
-void
-vm_area_free (list_allocator& list_allocator,
-	      vm_area_t* ptr);
-
-#endif /* __vm_area_h__ */
+#endif /* __vm_area_hpp__ */

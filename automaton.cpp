@@ -22,19 +22,6 @@
 /* Alignment of stack for switch. */
 #define STACK_ALIGN 16
 
-static size_t
-action_entry_point_hash_func (const void* x)
-{
-  return (size_t)x;
-}
-
-static int
-action_entry_point_compare_func (const void* x,
-				 const void* y)
-{
-  return static_cast<const uint8_t*> (x) - static_cast<const uint8_t*> (y);
-}
-
 automaton::automaton (list_allocator& list_allocator,
 		      privilege_t privilege,
 		      physical_address page_directory,
@@ -42,7 +29,6 @@ automaton::automaton (list_allocator& list_allocator,
 		      logical_address memory_ceiling,
 		      page_privilege_t page_privilege) :
   list_allocator_ (list_allocator),
-  actions_ (hash_map_allocate (&list_allocator, action_entry_point_hash_func, action_entry_point_compare_func)),
   scheduler_context_ (scheduler_allocate_context (list_allocator, this)),
   page_directory_ (page_directory),
   stack_pointer_ (stack_pointer),
@@ -69,10 +55,10 @@ automaton::automaton (list_allocator& list_allocator,
 }
 
 void
-automaton::merge (vm_area_t* area)
+automaton::merge (vm_area* area)
 {
   if (area != 0) {
-    vm_area_t* next = area->next;
+    vm_area* next = area->next;
     /* Can the areas be merged? */
     if (next != 0 &&
 	area->type == VM_AREA_DATA &&
@@ -89,19 +75,19 @@ automaton::merge (vm_area_t* area)
       else {
 	memory_map_end_ = area;	
       }
-      vm_area_free (list_allocator_, next);
+      delete next;
     }
   }
 }
 
 int
-automaton::insert_vm_area (const vm_area_t* area)
+automaton::insert_vm_area (const vm_area* area)
 {
   kassert (area->end <= memory_ceiling_);
 
   /* Find the location to insert. */
-  vm_area_t** nptr;
-  vm_area_t** pptr;
+  vm_area** nptr;
+  vm_area** pptr;
   for (nptr = &memory_map_begin_; (*nptr) != 0 && (*nptr)->begin < area->begin; nptr = &(*nptr)->next) ;;
 
   if (*nptr == 0) {
@@ -118,7 +104,7 @@ automaton::insert_vm_area (const vm_area_t* area)
   }
 
   /* Insert. */
-  vm_area_t* ptr = vm_area_allocate (list_allocator_, area->type, area->begin, area->end, area->page_privilege);
+  vm_area* ptr = new vm_area (area->type, area->begin, area->end, area->page_privilege);
   ptr->next = *nptr;
   *nptr = ptr;
   ptr->prev = *pptr;
@@ -138,7 +124,7 @@ automaton::alloc (size_t size,
 {
   if (physical_address (size).is_aligned (PAGE_SIZE)) {
 
-    vm_area_t* ptr;
+    vm_area* ptr;
     for (ptr = memory_map_begin_; ptr != 0; ptr = ptr->next) {
       /* Start with the floor and ceiling of the automaton. */
       logical_address ceiling = memory_ceiling_;
@@ -157,7 +143,7 @@ automaton::alloc (size_t size,
 	}
 	else {
 	  /* Insert after the current area. */
-	  vm_area_t* area = vm_area_allocate (list_allocator_, VM_AREA_DATA, retval, retval + size, page_privilege_);
+	  vm_area* area = new vm_area (VM_AREA_DATA, retval, retval + size, page_privilege_);
 	  kassert (area != 0);
 
 	  area->next = ptr->next;
@@ -194,7 +180,7 @@ automaton::reserve (size_t size)
 {
   kassert (physical_address (size).is_aligned (PAGE_SIZE));
 
-  vm_area_t* ptr;
+  vm_area* ptr;
   for (ptr = memory_map_begin_; ptr != 0; ptr = ptr->next) {
     /* Start with the floor and ceiling of the automaton. */
     logical_address ceiling = memory_ceiling_;
@@ -206,7 +192,7 @@ automaton::reserve (size_t size)
     if (size <= (size_t)(ceiling - ptr->end)) {
       logical_address retval = ptr->end;
       /* Insert after the current area. */
-      vm_area_t* area = vm_area_allocate (list_allocator_, VM_AREA_RESERVED, retval, retval + size, page_privilege_);
+      vm_area* area = new vm_area (VM_AREA_RESERVED, retval, retval + size, page_privilege_);
       kassert (area != 0);
       
       area->next = ptr->next;
@@ -234,14 +220,14 @@ automaton::unreserve (logical_address address)
   kassert (address != logical_address ());
   kassert (address.is_aligned (PAGE_SIZE));
 
-  vm_area_t** nptr;
-  vm_area_t** pptr;
+  vm_area** nptr;
+  vm_area** pptr;
   for (nptr = &memory_map_begin_; (*nptr) != 0 && (*nptr)->begin != address; nptr = &(*nptr)->next) ;;
 
   kassert (*nptr != 0);
   kassert ((*nptr)->type == VM_AREA_RESERVED);
 
-  vm_area_t* temp = *nptr;
+  vm_area* temp = *nptr;
   if (temp->next != 0) {
     pptr = &temp->next->prev;
   }
@@ -252,14 +238,14 @@ automaton::unreserve (logical_address address)
   *nptr = temp->next;
   *pptr = temp->prev;
 
-  vm_area_free (list_allocator_, temp);
+  delete temp;
 }
 
 void
 automaton::page_fault (logical_address address,
 		       uint32_t error)
 {
-  vm_area_t* ptr;
+  vm_area* ptr;
   for (ptr = memory_map_begin_; ptr != 0 && (address < ptr->begin || address >= ptr->end); ptr = ptr->next) ;;
 
   if (ptr != 0) {
@@ -304,18 +290,15 @@ void
 automaton::add_action (void* action_entry_point,
 		       action_type_t action_type)
 {
-  kassert (!hash_map_contains (actions_, action_entry_point));
-  hash_map_insert (actions_, action_entry_point, (void *)action_type);
+  kassert (action_map_.insert (std::make_pair (action_entry_point, action_type)).second);
 }
 
 action_type_t
 automaton::get_action_type (void* action_entry_point)
 {
-  if (hash_map_contains (actions_, (const void*)action_entry_point)) {
-    void* x = hash_map_find (actions_, (const void*)action_entry_point);
-    action_type_t* p = reinterpret_cast<action_type_t*> (&x);
-    action_type_t retval = *p;
-    return retval;
+  action_map_type::const_iterator pos = action_map_.find (action_entry_point);
+  if (pos != action_map_.end ()) {
+    return pos->second;
   }
   else {
     return NO_ACTION;

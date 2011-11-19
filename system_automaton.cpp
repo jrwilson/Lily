@@ -14,7 +14,6 @@
 #include "system_automaton.hpp"
 #include "kassert.hpp"
 #include "descriptor.hpp"
-#include "hash_map.hpp"
 #include "scheduler.hpp"
 #include "frame_manager.hpp"
 #include "vm_manager.hpp"
@@ -102,21 +101,17 @@ system_automaton_first_effect ()
   /* Third, create the automaton's memory map. */
   {
     /* Add a data area. */
-    vm_area_t data;
-    vm_area_initialize (&data,
-			VM_AREA_DATA,
-			SYSTEM_DATA_BEGIN,
-			SYSTEM_DATA_END,
-			SUPERVISOR);
+    vm_area data (VM_AREA_DATA,
+		  SYSTEM_DATA_BEGIN,
+		  SYSTEM_DATA_END,
+		  SUPERVISOR);
     kassert (initrd->insert_vm_area (&data) == 0);
 
     /* Add a stack area. */
-    vm_area_t stack;
-    vm_area_initialize (&stack,
-			VM_AREA_STACK,
-			(initrd->get_stack_pointer () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
-			initrd->get_stack_pointer ().align_down (PAGE_SIZE),
-			SUPERVISOR);
+    vm_area stack (VM_AREA_STACK,
+		   (initrd->get_stack_pointer () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
+		   initrd->get_stack_pointer ().align_down (PAGE_SIZE),
+		   SUPERVISOR);
     kassert (initrd->insert_vm_area (&stack) == 0);
     /* Back with physical pages.  See comment in system_automaton_initialize (). */
     logical_address ptr;
@@ -317,37 +312,29 @@ system_automaton_initialize (logical_address placement_begin,
   
   {
     /* Create a memory map for the system automatom. */
-    vm_area_t text;
-    vm_area_initialize (&text,
-			VM_AREA_TEXT,
-			logical_address (&text_begin).align_down (PAGE_SIZE),
-			logical_address (&text_end).align_up (PAGE_SIZE),
-			SUPERVISOR);
+    vm_area text (VM_AREA_TEXT,
+		  logical_address (&text_begin).align_down (PAGE_SIZE),
+		  logical_address (&text_end).align_up (PAGE_SIZE),
+		  SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&text) == 0);
-    vm_area_t rodata;
-    vm_area_initialize (&rodata,
-			VM_AREA_DATA,
-			logical_address (&rodata_begin).align_down (PAGE_SIZE),
-			logical_address (&rodata_end).align_up (PAGE_SIZE),
-			SUPERVISOR);
+    vm_area rodata (VM_AREA_DATA,
+		    logical_address (&rodata_begin).align_down (PAGE_SIZE),
+		    logical_address (&rodata_end).align_up (PAGE_SIZE),
+		    SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&rodata) == 0);
-    vm_area_t data;
-    vm_area_initialize (&data,
-			VM_AREA_DATA,
-			logical_address (&data_begin).align_down (PAGE_SIZE),
-			logical_address (&data_end).align_up (PAGE_SIZE),
-			SUPERVISOR);
+    vm_area data (VM_AREA_DATA,
+		  logical_address (&data_begin).align_down (PAGE_SIZE),
+		  logical_address (&data_end).align_up (PAGE_SIZE),
+		  SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&data) == 0);
     kassert (sys_automaton->insert_vm_area (boot_automaton.get_data_area ()) == 0);
   }
   {
     /* Add a stack. */
-    vm_area_t stack;
-    vm_area_initialize (&stack,
-			VM_AREA_STACK,
-			(vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
-			(vm_manager_page_directory_logical_address ()).align_down (PAGE_SIZE),
-			SUPERVISOR);
+    vm_area stack (VM_AREA_STACK,
+		   (vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
+		   (vm_manager_page_directory_logical_address ()).align_down (PAGE_SIZE),
+		   SUPERVISOR);
     kassert (sys_automaton->insert_vm_area (&stack) == 0);
     /* When call finish_action below, we will switch to the new stack.
        If we don't back the stack with physical pages, the first stack operation will triple fault.

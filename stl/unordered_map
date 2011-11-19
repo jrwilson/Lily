@@ -1,10 +1,10 @@
-#ifndef __unordered_set__
-#define __unordered_set__
+#ifndef __unordered_map__
+#define __unordered_map__
 
 /*
   File
   ----
-  unordered_set
+  unordered_map
   
   Description
   -----------
@@ -17,40 +17,43 @@
 #include <functional>
 #include <memory>
 #include <utility>
+#include <iterator>
 
 namespace std {
 
-  template <class Key, class Hash>
-  struct us_drop {
-    us_drop* next;
+  template <class Key, class T, class Hash>
+  struct um_drop {
+    um_drop* next;
     Hash hash;
-    const Key key;
+    std::pair<const Key, T> value;
 
-    us_drop (Hash h,
-	     const Key& k) :
+    um_drop (Hash h,
+	     const std::pair<const Key, T>& v) :
       next (0),
       hash (h),
-      key (k)
+      value (v)
     { }
   };
 
-  template <class T, class Hash = std::hash<T>, class Predicate = std::equal_to<T>, class Allocator = allocator<T> >
-  class unordered_set :
+  template <class Key, class T, class Hash = std::hash<Key>, class Predicate = std::equal_to<Key>, class Allocator = std::allocator<std::pair<const Key, T> > >
+  class unordered_map :
     private Hash,
     private Predicate,
-    private Allocator::template rebind<us_drop<T, typename Hash::result_type> >::other,
-    private Allocator::template rebind<us_drop<T, typename Hash::result_type>*>::other {
+    private Allocator::template rebind<um_drop<Key, T, typename Hash::result_type> >::other,
+    private Allocator::template rebind<um_drop<Key, T, typename Hash::result_type>*>::other {
   private:
-    typedef us_drop<T, typename Hash::result_type> drop_type;
+    typedef um_drop<Key, T, typename Hash::result_type> drop_type;
     typedef typename Allocator::template rebind<drop_type>::other drop_allocator_type;
     typedef typename Allocator::template rebind<drop_type *>::other bucket_allocator_type;
     
     struct Iterator;
+    struct ConstIterator;
     struct LocalIterator;
+    struct ConstLocalIterator;
 
   public:
-    typedef T key_type;
-    typedef T value_type;
+    typedef Key key_type;
+    typedef std::pair<const Key, T> value_type;
     typedef Hash hasher;
     typedef Predicate key_equal;
     typedef Allocator allocator_type;
@@ -62,9 +65,9 @@ namespace std {
     typedef typename Allocator::difference_type difference_type;
 
     typedef Iterator iterator;
-    typedef Iterator const_iterator;
+    typedef ConstIterator const_iterator;
     typedef LocalIterator local_iterator;
-    typedef LocalIterator const_local_iterator;
+    typedef ConstLocalIterator const_local_iterator;
 
   private:
     typedef typename Hash::result_type hash_type;
@@ -89,6 +92,36 @@ namespace std {
       }
     };
 
+    struct ConstIterator : public std::iterator<std::forward_iterator_tag, T> {
+      drop_type** drop;
+      
+      ConstIterator (drop_type** l) :
+	drop (l)
+      { }
+
+      ConstIterator (const Iterator& i) :
+	drop (i.drop)
+      { }
+
+      const_pointer
+      operator-> () const
+      {
+	return &(*drop)->value;
+      }
+
+      bool
+      operator== (const ConstIterator& other) const
+      {
+	return drop == other.drop;
+      }
+
+      bool
+      operator!= (const ConstIterator& other) const
+      {
+	return !(*this == other);
+      }
+    };
+
     drop_type**
     allocate_buckets (size_type n)
     {
@@ -107,7 +140,7 @@ namespace std {
 
   public:
 
-    explicit unordered_set (size_type n = 3,
+    explicit unordered_map (size_type n = 3,
 			    const hasher& h = hasher (),
 			    const key_equal& ke = key_equal (),
 			    const allocator_type& a = allocator_type ()) :
@@ -124,23 +157,23 @@ namespace std {
     }
 
     template <class InputIterator>
-    unordered_set (InputIterator begin,
+    unordered_map (InputIterator begin,
 		   InputIterator end,
 		   size_type n = 3,
 		   const hasher& h = hasher (),
 		   const key_equal& ke = key_equal (),
 		   const allocator_type& a = allocator_type ());
 
-    unordered_set (const unordered_set&);
+    unordered_map (const unordered_map&);
 
-    ~unordered_set ()
+    ~unordered_map ()
     {
       clear ();
       bucket_allocator_type::deallocate (bucket_, bucket_count_);
     }
 
-    unordered_set&
-    operator= (const unordered_set&);
+    unordered_map&
+    operator= (const unordered_map&);
 
     allocator_type get_allocator () const;
 
@@ -177,16 +210,16 @@ namespace std {
       return iterator (0);
     }
 
-    iterator
+    std::pair<iterator, bool>
     insert (const value_type& v)
     {
-      const hash_type hash = Hash::operator() (v);
+      const hash_type hash = Hash::operator() (v.first);
       const size_type bucket_idx = hash % bucket_count_;
 
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
-	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, v)) {
-	  return iterator (ptr);
+	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->value.first, v.first)) {
+	  return std::make_pair (iterator (ptr), false);
 	}
 	ptr = &(*ptr)->next;
       }
@@ -200,7 +233,7 @@ namespace std {
 	rehash_n (2 * bucket_count_);
       }
 
-      return iterator (ptr);
+      return std::make_pair (iterator (ptr), true);
     }
 
     iterator
@@ -244,7 +277,7 @@ namespace std {
     }
 
     void
-    swap (unordered_set&);
+    swap (unordered_map&);
 
     hasher hash_function () const;
 
@@ -259,7 +292,7 @@ namespace std {
       
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
-	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, k)) {
+	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->value.first, k)) {
 	  return iterator (ptr);
 	}
 	ptr = &(*ptr)->next;
@@ -367,4 +400,4 @@ namespace std {
 /* mode:c++         */
 /* End:             */
 
-#endif /* __unordered_set__ */
+#endif /* __unordered_map__ */
