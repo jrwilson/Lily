@@ -1,0 +1,28 @@
+#ifndef __utility__
+#define __utility__
+
+/*
+  File
+  ----
+  utility
+  
+  Description
+  -----------
+  A hash table implementation.
+
+  Authors:
+  Justin R. Wilson
+*/
+
+namespace std {
+  
+  template <class T, class U>
+  struct pair;
+
+}
+
+/* Local Variables: */
+/* mode:c++         */
+/* End:             */
+
+#endif /* __utility__ */

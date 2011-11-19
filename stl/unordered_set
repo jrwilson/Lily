@@ -16,16 +16,17 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 namespace std {
 
   template <class Key, class Hash>
-  struct link {
-    link* next;
+  struct drop {
+    drop* next;
     Hash hash;
     Key key;
 
-    link (Hash h,
+    drop (Hash h,
 	  const Key& k) :
       next (0),
       hash (h),
@@ -37,12 +38,12 @@ namespace std {
   class unordered_set :
     private Hash,
     private Predicate,
-    private Allocator::template rebind<link<T, typename Hash::result_type> >::other,
-    private Allocator::template rebind<link<T, typename Hash::result_type>*>::other {
+    private Allocator::template rebind<drop<T, typename Hash::result_type> >::other,
+    private Allocator::template rebind<drop<T, typename Hash::result_type>*>::other {
   private:
-    typedef link<T, typename Hash::result_type> link_type;
-    typedef typename Allocator::template rebind<link_type>::other link_allocator_type;
-    typedef typename Allocator::template rebind<link_type *>::other bucket_allocator_type;
+    typedef drop<T, typename Hash::result_type> drop_type;
+    typedef typename Allocator::template rebind<drop_type>::other drop_allocator_type;
+    typedef typename Allocator::template rebind<drop_type *>::other bucket_allocator_type;
     
     struct Iterator;
     struct LocalIterator;
@@ -69,16 +70,16 @@ namespace std {
     typedef typename Hash::result_type hash_type;
 
     struct Iterator : public std::iterator<std::forward_iterator_tag, T> {
-      link_type** link;
+      drop_type** drop;
 
-      Iterator (link_type** l) :
-	link (l)
+      Iterator (drop_type** l) :
+	drop (l)
       { }
 
       bool
       operator== (const Iterator& other) const
       {
-	return link == other.link;
+	return drop == other.drop;
       }
 
       bool
@@ -88,9 +89,21 @@ namespace std {
       }
     };
 
+    drop_type**
+    allocate_buckets (size_type n)
+    {
+      drop_type** retval = bucket_allocator_type::allocate (n);
+      for (size_type idx = 0; idx < n; ++idx) {
+	retval[idx] = 0;
+      }
+      return retval;
+    }
+
     size_type bucket_count_;
-    link<T, hash_type>** bucket_;
-    size_type link_count_;
+    size_type drop_count_;
+    float max_load_factor_;
+    size_type max_drop_count_;
+    drop_type** bucket_;
 
   public:
 
@@ -100,22 +113,57 @@ namespace std {
 			    const allocator_type& a = allocator_type ()) :
       Hash (h),
       Predicate (ke),
-      link_allocator_type (a),
+      drop_allocator_type (a),
       bucket_allocator_type (a),
       bucket_count_ (n),
-      link_count_ (0)
+      drop_count_ (0),
+      max_load_factor_ (.70),
+      max_drop_count_ (max_load_factor_ * bucket_count_)
     {
-      bucket_ = bucket_allocator_type::allocate (bucket_count_);
-      for (size_type idx = 0; idx < bucket_count_; ++idx) {
-	bucket_[idx] = 0;
-      }
+      bucket_ = allocate_buckets (bucket_count_);
     }
+
+    template <class InputIterator>
+    unordered_set (InputIterator begin,
+		   InputIterator end,
+		   size_type n = 3,
+		   const hasher& h = hasher (),
+		   const key_equal& ke = key_equal (),
+		   const allocator_type& a = allocator_type ());
+
+    unordered_set (const unordered_set&);
 
     ~unordered_set ()
     {
       clear ();
       bucket_allocator_type::deallocate (bucket_, bucket_count_);
     }
+
+    unordered_set&
+    operator= (const unordered_set&);
+
+    allocator_type get_allocator () const;
+
+    bool
+    empty () const
+    {
+      return drop_count_ == 0;
+    }
+
+    size_type
+    size () const
+    {
+      return drop_count_;
+    }
+
+    size_type
+    max_size () const;
+
+    iterator
+    begin ();
+
+    const_iterator
+    begin () const;
 
     iterator
     end ()
@@ -129,6 +177,79 @@ namespace std {
       return iterator (0);
     }
 
+    iterator
+    insert (const value_type& v)
+    {
+      const hash_type hash = Hash::operator() (v);
+      const size_type bucket_idx = hash % bucket_count_;
+
+      drop_type** ptr = &bucket_[bucket_idx];
+      while (*ptr != 0) {
+	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, v)) {
+	  return iterator (ptr);
+	}
+	ptr = &(*ptr)->next;
+      }
+
+      drop_type* drop = drop_allocator_type::allocate (1);
+      drop_allocator_type::construct (drop, drop_type (hash, v));
+      ++drop_count_;
+      *ptr = drop;
+
+      if (drop_count_ > max_drop_count_) {
+	rehash (2 * bucket_count_);
+      }
+
+      return iterator (ptr);
+    }
+
+    iterator
+    insert (const_iterator hint,
+	    const value_type& v);
+
+    template <class InputIterator>
+    void
+    insert (InputIterator begin,
+	    InputIterator end);
+
+    void
+    erase (const_iterator position)
+    {
+      drop_type* tmp = *position.drop;
+      *position.drop = tmp->next;
+      drop_allocator_type::destroy (tmp);
+      drop_allocator_type::deallocate (tmp, 1);
+      --drop_count_;
+    }
+    
+    size_type
+    erase (const key_type& k);
+
+    void
+    erase (const_iterator begin,
+	   const_iterator end);
+
+    void
+    clear ()
+    {
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	while (bucket_[idx] != 0) {
+	  drop_type* ptr = bucket_[idx];
+	  bucket_[idx] = ptr->next;
+	  drop_allocator_type::destroy (ptr);
+	  drop_allocator_type::deallocate (ptr, 1);
+	}
+      }
+      drop_count_ = 0;
+    }
+
+    void
+    swap (unordered_set&);
+
+    hasher hash_function () const;
+
+    key_equal key_eq () const;
+
   private:
     iterator
     find_ (const key_type& k)
@@ -136,7 +257,7 @@ namespace std {
       const hash_type hash = Hash::operator() (k);
       const size_type bucket_idx = hash % bucket_count_;
       
-      link_type** ptr = &bucket_[bucket_idx];
+      drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, k)) {
 	  return iterator (ptr);
@@ -160,50 +281,75 @@ namespace std {
       return find_ (k);
     }
 
-    iterator
-    insert (const value_type& v)
+    size_type
+    count (const key_type& k) const;
+
+    std::pair<iterator, iterator>
+    equal_range (const key_type& k);
+
+    std::pair<const_iterator, const_iterator>
+    equal_range (const key_type& k) const;
+
+    size_type
+    bucket_count () const
     {
-      const hash_type hash = Hash::operator() (v);
-      const size_type bucket_idx = hash % bucket_count_;
+      return bucket_count_;
+    }
 
-      link_type** ptr = &bucket_[bucket_idx];
-      while (*ptr != 0) {
-	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, v)) {
-	  return iterator (ptr);
-	}
-	ptr = &(*ptr)->next;
-      }
+    size_type
+    max_bucket_count () const;
 
-      link_type* link = link_allocator_type::allocate (1);
-      link_allocator_type::construct (link, link_type (hash, v));
-      ++link_count_;
-      *ptr = link;
+    size_type
+    bucket_size (size_type n) const;
 
-      return iterator (ptr);
+    size_type
+    bucket (const key_type& k) const;
+
+    local_iterator
+    begin (size_type n);
+
+    const_local_iterator
+    begin (size_type n) const;
+
+    local_iterator
+    end (size_type n);
+
+    const_local_iterator
+    end (size_type n) const;
+
+    float
+    load_factor () const;
+
+    float
+    max_load_factor () const
+    {
+      return max_load_factor_;
     }
 
     void
-    erase (const_iterator position)
-    {
-      link_type* tmp = *position.link;
-      *position.link = tmp->next;
-      link_allocator_type::destroy (tmp);
-      link_allocator_type::deallocate (tmp, 1);
-      --link_count_;
-    }
+    max_load_factor (float z);
 
     void
-    clear ()
+    rehash (size_type n)
     {
-      for (size_type idx = 0; idx < bucket_count_; ++idx) {
-	while (bucket_[idx] != 0) {
-	  link_type* ptr = bucket_[idx];
-	  bucket_[idx] = ptr->next;
-	  link_allocator_type::destroy (ptr);
-	  link_allocator_type::deallocate (ptr, 1);
+      if (n > bucket_count_) {
+	drop_type** new_bucket = allocate_buckets (n);
+	for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	  while (bucket_[idx] != 0) {
+	    drop_type* drop = bucket_[idx];
+	    bucket_[idx] = drop->next;
+	    size_type new_idx = drop->hash % n;
+	    drop->next = new_bucket[new_idx];
+	    new_bucket[new_idx] = drop;
+	  }
 	}
+
+	bucket_allocator_type::deallocate (bucket_, bucket_count_);
+
+	bucket_count_ = n;
+	max_drop_count_ = max_load_factor_ * bucket_count_;
+	bucket_ = new_bucket;
       }
-      link_count_ = 0;
     }
   };
 
