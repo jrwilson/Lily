@@ -90,6 +90,7 @@ namespace std {
 
     size_type bucket_count_;
     link<T, hash_type>** bucket_;
+    size_type link_count_;
 
   public:
 
@@ -101,9 +102,13 @@ namespace std {
       Predicate (ke),
       link_allocator_type (a),
       bucket_allocator_type (a),
-      bucket_count_ (n)
+      bucket_count_ (n),
+      link_count_ (0)
     {
       bucket_ = bucket_allocator_type::allocate (bucket_count_);
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	bucket_[idx] = 0;
+      }
     }
 
     ~unordered_set ()
@@ -171,6 +176,7 @@ namespace std {
 
       link_type* link = link_allocator_type::allocate (1);
       link_allocator_type::construct (link, link_type (hash, v));
+      ++link_count_;
       *ptr = link;
 
       return iterator (ptr);
@@ -183,12 +189,21 @@ namespace std {
       *position.link = tmp->next;
       link_allocator_type::destroy (tmp);
       link_allocator_type::deallocate (tmp, 1);
+      --link_count_;
     }
 
     void
     clear ()
     {
-      kassert (0);
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	while (bucket_[idx] != 0) {
+	  link_type* ptr = bucket_[idx];
+	  bucket_[idx] = ptr->next;
+	  link_allocator_type::destroy (ptr);
+	  link_allocator_type::deallocate (ptr, 1);
+	}
+      }
+      link_count_ = 0;
     }
   };
 
