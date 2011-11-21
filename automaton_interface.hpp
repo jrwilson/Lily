@@ -17,19 +17,11 @@
 #include "vm_manager.hpp"
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
-
-typedef enum {
-  NO_ACTION = 0,
-  INPUT,
-  OUTPUT,
-  INTERNAL
-} action_type_t;
-
-typedef struct scheduler_context scheduler_context_t;
+#include "scheduler.hpp"
 
 class automaton_interface {
 public:
-  virtual scheduler_context_t*
+  virtual scheduler::automaton_context_type*
   get_scheduler_context (void) const = 0;
 
   virtual logical_address

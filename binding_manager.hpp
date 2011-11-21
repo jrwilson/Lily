@@ -14,47 +14,70 @@
   Justin R. Wilson
 */
 
-#include "automaton.hpp"
 #include <unordered_set>
+#include <unordered_map>
 
-struct output_action {
+struct automaton_interface;
+
+struct action {
   automaton_interface* automaton;
   void* action_entry_point;
   parameter_t parameter;
 
-  output_action (automaton_interface* a,
-		 void* aep,
-		 parameter_t p) :
+  action () :
+    automaton (0),
+    action_entry_point (0),
+    parameter (0)
+  { }
+
+  action (automaton_interface* a,
+	  void* aep,
+	  parameter_t p) :
     automaton (a),
     action_entry_point (aep),
     parameter (p)
   { }
-
+  
   bool
-  operator== (const output_action& other) const
+  operator== (const action& other) const
   {
     return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter == other.parameter;
   }
 };
 
-struct input_action {
-  automaton_interface* automaton;
-  void* action_entry_point;
-  parameter_t parameter;
-
+struct input_action : public action {
   input_action (automaton_interface* a,
 		void* aep,
 		parameter_t p) :
-    automaton (a),
-    action_entry_point (aep),
-    parameter (p)
+    action (a, aep, p)
+  { }
+};
+
+struct local_action : public action {
+  local_action ()
   { }
 
-  bool
-  operator== (const input_action& other) const
-  {
-    return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter == other.parameter;
-  }
+  local_action (automaton_interface* a,
+		void* aep,
+		parameter_t p) :
+    action (a, aep, p)
+  { }
+};
+
+struct output_action : public local_action {
+  output_action (automaton_interface* a,
+		 void* aep,
+		 parameter_t p) :
+    local_action (a, aep, p)
+  { }
+};
+
+struct internal_action : public local_action {
+  internal_action (automaton_interface* a,
+		   void* aep,
+		   parameter_t p) :
+    local_action (a, aep, p)
+  { }
 };
 
 class binding_manager {

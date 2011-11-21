@@ -22,8 +22,6 @@
 
 class automaton : public automaton_interface {
 private:
-  /* Allocator for data structures. */
-  list_allocator& list_allocator_;
   /* Segments including privilege. */
   uint32_t code_segment_;
   uint32_t stack_segment_;
@@ -31,7 +29,7 @@ private:
   typedef std::unordered_map<void*, action_type_t> action_map_type;
   action_map_type action_map_;
   /* The scheduler uses this object. */
-  scheduler_context_t* scheduler_context_;
+  scheduler::automaton_context_type* scheduler_context_;
   physical_address page_directory_;
   /* Stack pointer (constant). */
   logical_address stack_pointer_;
@@ -48,14 +46,13 @@ private:
   merge (vm_area* area);
 
 public:
-  automaton (list_allocator& list_allocator,
-	     privilege_t privilege,
+  automaton (privilege_t privilege,
 	     physical_address page_directory,
 	     logical_address stack_pointer,
 	     logical_address memory_ceiling,
 	     page_privilege_t page_privilege);
 
-  inline scheduler_context_t* get_scheduler_context (void) const {
+  inline scheduler::automaton_context_type* get_scheduler_context (void) const {
     return scheduler_context_;
   }
 

@@ -13,6 +13,7 @@
 
 #include "binding_manager.hpp"
 #include "kassert.hpp"
+#include "automaton_interface.hpp"
 
 binding_manager::bindings_type* binding_manager::bindings_ = 0;
 

@@ -26,7 +26,7 @@ public:
   const vm_area*
   get_data_area (void) const;
 
-  scheduler_context_t*
+  scheduler::automaton_context_type*
   get_scheduler_context (void) const;
 
   logical_address

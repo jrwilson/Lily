@@ -22,14 +22,12 @@
 /* Alignment of stack for switch. */
 #define STACK_ALIGN 16
 
-automaton::automaton (list_allocator& list_allocator,
-		      privilege_t privilege,
+automaton::automaton (privilege_t privilege,
 		      physical_address page_directory,
 		      logical_address stack_pointer,
 		      logical_address memory_ceiling,
 		      page_privilege_t page_privilege) :
-  list_allocator_ (list_allocator),
-  scheduler_context_ (scheduler_allocate_context (list_allocator, this)),
+  scheduler_context_ (scheduler::allocate_context (this)),
   page_directory_ (page_directory),
   stack_pointer_ (stack_pointer),
   memory_map_begin_ (0),

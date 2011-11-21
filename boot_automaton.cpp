@@ -30,7 +30,7 @@ boot_automaton::get_data_area (void) const
   return &data_;
 }
 
-scheduler_context_t*
+scheduler::automaton_context_type*
 boot_automaton::get_scheduler_context (void) const
 {
   kassert (0);

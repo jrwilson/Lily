@@ -29,7 +29,7 @@ syscall_handler (registers_t* regs)
     {
       int output_status = IS_OUTPUT_VALID (regs->eax);
       value_t output_value = regs->edx;
-      finish_action (output_status, output_value);
+      scheduler::finish_action (output_status, output_value);
       return;
     }
     break;
@@ -39,8 +39,8 @@ syscall_handler (registers_t* regs)
       parameter_t parameter = regs->ecx;
       int output_status = IS_OUTPUT_VALID (regs->eax);
       value_t output_value = regs->edx;
-      schedule_action (scheduler_get_current_automaton (), action_entry_point, parameter);
-      finish_action (output_status, output_value);
+      scheduler::schedule_action (scheduler::get_current_automaton (), action_entry_point, parameter);
+      scheduler::finish_action (output_status, output_value);
       return;
     }
     break;
@@ -55,7 +55,7 @@ syscall_handler (registers_t* regs)
     {
       size_t size = regs->ebx;
       syserror_t error = SYSERROR_SUCCESS;
-      logical_address ptr = scheduler_get_current_automaton ()->alloc (size, &error);
+      logical_address ptr = scheduler::get_current_automaton ()->alloc (size, &error);
       regs->eax = error;
       regs->ebx = reinterpret_cast<uint32_t> (ptr.value ());
       return;

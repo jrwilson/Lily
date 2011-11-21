@@ -44,7 +44,6 @@ extern int data_end;
 extern int initrd_init;
 
 static automaton_interface* system_automaton = 0;
-static list_allocator system_allocator;
 
 static fifo_scheduler* scheduler = 0;
 static bool flag = true;
@@ -94,7 +93,7 @@ system_automaton_first_effect ()
   vm_manager_switch_to_directory (physical_address (frame));
   
   /* Second, create the automaton. */
-  automaton* initrd = new (static_cast<automaton*> (system_allocator.alloc (sizeof (automaton)))) automaton (system_allocator, RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
+  automaton* initrd = new automaton (RING0, physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, SUPERVISOR);
 
   /* Third, create the automaton's memory map. */
   {
@@ -294,19 +293,19 @@ system_automaton_initialize (logical_address placement_begin,
   system_automaton = &boot_automaton;
 
   /* Initialize the scheduler so it thinks the system automaton is executing. */
-  scheduler_initialize (&boot_automaton);
+  scheduler::initialize (&boot_automaton);
 
   /* Now, we can start allocating. */
 
   /* Allocate and set the switch stack for the scheduler. */
-  void* switch_stack = system_allocator.alloc (SWITCH_STACK_SIZE);
+  void* switch_stack = new char[SWITCH_STACK_SIZE];
   kassert (switch_stack != 0);
-  scheduler_set_switch_stack (logical_address (switch_stack), SWITCH_STACK_SIZE);
+  scheduler::set_switch_stack (logical_address (switch_stack), SWITCH_STACK_SIZE);
 
   /* Allocate the real system automaton.
      The system automaton's ceiling is the start of the paging data structures.
      This is also used as the stack pointer. */
-  automaton* sys_automaton = new (static_cast<automaton*> (system_allocator.alloc (sizeof (automaton)))) automaton (system_allocator, RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
+  automaton* sys_automaton = new automaton (RING0, vm_manager_page_directory_physical_address (), vm_manager_page_directory_logical_address (), vm_manager_page_directory_logical_address (), SUPERVISOR);
   
   {
     /* Create a memory map for the system automatom. */
@@ -372,10 +371,10 @@ system_automaton_initialize (logical_address placement_begin,
   binding_manager::initialize ();
 
   /* Go! */
-  schedule_action (system_automaton, &system_automaton_first, 0);
+  scheduler::schedule_action (system_automaton, &system_automaton_first, 0);
 
   /* Start the scheduler.  Doesn't return. */
-  finish_action (0, 0);
+  scheduler::finish_action (0, 0);
 
   kassert (0);
 }

@@ -36,7 +36,7 @@ page_fault_handler (registers_t* regs)
 
   if (address < KERNEL_VIRTUAL_BASE) {
     /* Get the current automaton. */  
-    automaton = scheduler_get_current_automaton ();
+    automaton = scheduler::get_current_automaton ();
   }
   else {
     automaton = system_automaton_get_instance ();

@@ -68,4 +68,8 @@ operator delete[] (void*,
   // Do nothing.
 }
 
+/* Local Variables: */
+/* mode:c++         */
+/* End:             */
+
 #endif /* __new_hpp_ */
