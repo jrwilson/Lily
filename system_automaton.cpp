@@ -72,8 +72,6 @@ system_automaton_first_precondition ()
 static void
 system_automaton_first_effect ()
 {
-  binding_manager_initialize (&system_allocator);
-
   /* Create the initrd automaton. */
 
   /* First, create a new page directory. */
@@ -124,9 +122,9 @@ system_automaton_first_effect ()
   initrd->add_action (&initrd_init, INPUT);
 
   /* Fifth, bind. */
-  binding_manager_bind (system_automaton, &system_automaton_init, reinterpret_cast<parameter_t> (initrd),
-  			initrd, &initrd_init, 0);
-
+  binding_manager::bind (system_automaton, &system_automaton_init, reinterpret_cast<parameter_t> (initrd),
+			 initrd, &initrd_init, 0);
+  
   /* Sixth, initialize the new automaton. */
   (*scheduler).add (&system_automaton_init, (parameter_t)initrd);
 
@@ -370,6 +368,8 @@ system_automaton_initialize (logical_address placement_begin,
   /* Create a scheduler. */
   scheduler = new fifo_scheduler ();
   kassert (scheduler != 0);
+
+  binding_manager::initialize ();
 
   /* Go! */
   schedule_action (system_automaton, &system_automaton_first, 0);

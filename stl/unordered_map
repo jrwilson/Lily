@@ -79,6 +79,12 @@ namespace std {
 	drop (l)
       { }
 
+      pointer
+      operator-> () const
+      {
+	return &(*drop)->value;
+      }
+
       bool
       operator== (const Iterator& other) const
       {
@@ -102,6 +108,12 @@ namespace std {
       ConstIterator (const Iterator& i) :
 	drop (i.drop)
       { }
+
+      const_pointer
+      operator* () const
+      {
+	return &(*drop)->value;
+      }
 
       const_pointer
       operator-> () const

@@ -38,6 +38,7 @@ namespace std {
   class unordered_set :
     private Hash,
     private Predicate,
+    private Allocator,
     private Allocator::template rebind<us_drop<T, typename Hash::result_type> >::other,
     private Allocator::template rebind<us_drop<T, typename Hash::result_type>*>::other {
   private:
@@ -71,9 +72,17 @@ namespace std {
 
     struct Iterator : public std::iterator<std::forward_iterator_tag, T> {
       drop_type** drop;
+      const unordered_set* set;
 
-      Iterator (drop_type** l) :
-	drop (l)
+      Iterator (drop_type** l,
+		const unordered_set* s) :
+	drop (l),
+	set (s)
+      { }
+
+      Iterator () :
+	drop (0),
+	set (0)
       { }
 
       bool
@@ -86,6 +95,37 @@ namespace std {
       operator!= (const Iterator& other) const
       {
 	return !(*this == other);
+      }
+
+      Iterator&
+      operator++ ()
+      {
+	if (drop != 0) {
+	  drop_type* ptr = *drop;
+	  if (ptr->next == 0) {
+	    size_type bucket_idx;
+	    for (bucket_idx = (ptr->hash % set->bucket_count_) + 1;
+		 bucket_idx < set->bucket_count_ && set->bucket_[bucket_idx] == 0;
+		 ++bucket_idx) ;;
+	    if (bucket_idx < set->bucket_count_) {
+	      drop = &set->bucket_[bucket_idx];
+	    }
+	    else {
+	      drop = 0;
+	    }
+	  }
+	  else {
+	    drop = &ptr->next;
+	  }
+	}
+
+	return *this;
+      }
+
+      const_pointer
+      operator-> () const
+      {
+	return &(*drop)->key;
       }
     };
 
@@ -113,6 +153,7 @@ namespace std {
 			    const allocator_type& a = allocator_type ()) :
       Hash (h),
       Predicate (ke),
+      Allocator (a),
       drop_allocator_type (a),
       bucket_allocator_type (a),
       bucket_count_ (n),
@@ -131,7 +172,28 @@ namespace std {
 		   const key_equal& ke = key_equal (),
 		   const allocator_type& a = allocator_type ());
 
-    unordered_set (const unordered_set&);
+    unordered_set (const unordered_set& other) :
+      Hash (other),
+      Predicate (other),
+      Allocator (other),
+      drop_allocator_type (other),
+      bucket_allocator_type (other),
+      bucket_count_ (other.bucket_count_),
+      drop_count_ (other.drop_count_),
+      max_load_factor_ (other.max_load_factor_),
+      max_drop_count_ (other.max_drop_count_)
+    {
+      bucket_ = allocate_buckets (bucket_count_);
+
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+      	for (drop_type* ptr = other.bucket_[idx]; ptr != 0; ptr = ptr->next) {
+      	  drop_type* drop = drop_allocator_type::allocate (1);
+      	  drop_allocator_type::construct (drop, *ptr);
+      	  drop->next = bucket_[idx];
+      	  bucket_[idx] = drop;
+      	}
+      }
+    }
 
     ~unordered_set ()
     {
@@ -142,7 +204,8 @@ namespace std {
     unordered_set&
     operator= (const unordered_set&);
 
-    allocator_type get_allocator () const;
+    allocator_type
+    get_allocator () const;
 
     bool
     empty () const
@@ -159,22 +222,42 @@ namespace std {
     size_type
     max_size () const;
 
+  private:
     iterator
-    begin ();
+    begin_ () const
+    {
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	if (bucket_[idx] != 0) {
+	  return iterator (&bucket_[idx], this);
+	}
+      }
+
+      return end ();
+    }
+
+  public:
+    iterator
+    begin ()
+    {
+      return begin_ ();
+    }
 
     const_iterator
-    begin () const;
+    begin () const
+    {
+      return begin_ ();
+    }
 
     iterator
     end ()
     {
-      return iterator (0);
+      return iterator (0, this);
     }
 
     const_iterator
     end () const
     {
-      return iterator (0);
+      return iterator (0, this);
     }
 
     iterator
@@ -186,7 +269,7 @@ namespace std {
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, v)) {
-	  return iterator (ptr);
+	  return iterator (ptr, this);
 	}
 	ptr = &(*ptr)->next;
       }
@@ -200,7 +283,7 @@ namespace std {
 	rehash_n (2 * bucket_count_);
       }
 
-      return iterator (ptr);
+      return iterator (ptr, this);
     }
 
     iterator
@@ -260,12 +343,12 @@ namespace std {
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, k)) {
-	  return iterator (ptr);
+	  return iterator (ptr, this);
 	}
 	ptr = &(*ptr)->next;
       }
       
-      return iterator (0);
+      return iterator (0, this);
     }
     
   public:

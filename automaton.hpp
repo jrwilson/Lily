@@ -15,7 +15,6 @@
 */
 
 #include "vm_manager.hpp"
-#include "hash_map.hpp"
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
 #include "automaton_interface.hpp"

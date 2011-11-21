@@ -39,7 +39,8 @@ typedef struct {
   automaton_interface* current_automaton;
   void* action_entry_point;
   parameter_t parameter;
-  input_action_t* input;
+  const binding_manager::input_action_set_type* input_actions;
+  binding_manager::input_action_set_type::const_iterator input_action_pos;
   value_t output_value;
 } execution_context_t;
 
@@ -150,9 +151,6 @@ switch_to_next_action ()
     exec_context.action_type = exec_context.current_automaton->get_action_type (exec_context.action_entry_point);
     switch (exec_context.action_type) {
     case OUTPUT:
-      /* Get the inputs that are composed with the output. */
-      exec_context.input = binding_manager_get_bound_inputs (exec_context.current_automaton, exec_context.action_entry_point, exec_context.parameter);
-      /* Fall through. */
     case INTERNAL:
       /* Execute.  (This does not return). */
       exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, 0);
@@ -181,27 +179,32 @@ finish_action (int output_status,
   switch (exec_context.action_type) {
   case INPUT:
     /* Move to the next input. */
-    exec_context.input = exec_context.input->next;
-    if (exec_context.input != 0) {
+    ++exec_context.input_action_pos;
+    if (exec_context.input_action_pos != exec_context.input_actions->end ()) {
       /* Load the execution context. */
-      exec_context.current_automaton = exec_context.input->automaton_;
-      exec_context.action_entry_point = exec_context.input->action_entry_point;
-      exec_context.parameter = exec_context.input->parameter;
+      exec_context.current_automaton = exec_context.input_action_pos->automaton;
+      exec_context.action_entry_point = exec_context.input_action_pos->action_entry_point;
+      exec_context.parameter = exec_context.input_action_pos->parameter;
       /* Execute.  (This does not return). */
       exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
     }
     break;
   case OUTPUT:
-    if (output_status && exec_context.input != 0) {
-      /* The output executed and there are inputs. */
-      exec_context.output_value = output_value;
-      /* Load the execution context. */
-      exec_context.action_type = INPUT;
-      exec_context.current_automaton = exec_context.input->automaton_;
-      exec_context.action_entry_point = exec_context.input->action_entry_point;
-      exec_context.parameter = exec_context.input->parameter;
-      /* Execute.  (This does not return). */
-      exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+    if (output_status) {
+      /* Get the inputs that are composed with the output. */
+      exec_context.input_actions = binding_manager::get_bound_inputs (exec_context.current_automaton, exec_context.action_entry_point, exec_context.parameter);
+      if (exec_context.input_actions != 0) {
+	/* The output executed and there are inputs. */
+	exec_context.input_action_pos = exec_context.input_actions->begin ();
+	exec_context.output_value = output_value;
+	/* Load the execution context. */
+	exec_context.action_type = INPUT;
+	exec_context.current_automaton = exec_context.input_action_pos->automaton;
+	exec_context.action_entry_point = exec_context.input_action_pos->action_entry_point;
+	exec_context.parameter = exec_context.input_action_pos->parameter;
+	/* Execute.  (This does not return). */
+	exec_context.current_automaton->execute (exec_context.switch_stack, exec_context.switch_stack_size, exec_context.action_entry_point, exec_context.parameter, exec_context.output_value);
+      }
     }
     break;
   case INTERNAL:

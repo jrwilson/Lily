@@ -31,7 +31,6 @@ syscall.o \
 list_allocator.o \
 string.o \
 fifo_scheduler.o \
-hash_map.o \
 page_fault_handler.o \
 initrd_automaton.o \
 cpp_runtime.o \
