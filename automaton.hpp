@@ -19,6 +19,7 @@
 #include "vm_area.hpp"
 #include "automaton_interface.hpp"
 #include <unordered_map>
+#include <vector>
 
 class automaton : public automaton_interface {
 private:
@@ -33,9 +34,9 @@ private:
   physical_address page_directory_;
   /* Stack pointer (constant). */
   logical_address stack_pointer_;
-  /* Memory map. */
-  vm_area* memory_map_begin_;
-  vm_area* memory_map_end_;
+  /* Memory map. Consider using a set/map if insert/remove becomes too expensive. */
+  typedef std::vector<vm_area*> memory_map_type;
+  memory_map_type memory_map_;
   /* Can map between [floor, ceiling). */
   void* memory_floor_;
   logical_address memory_ceiling_;
@@ -43,7 +44,7 @@ private:
   page_privilege_t page_privilege_;
 
   void
-  merge (vm_area* area);
+  merge (memory_map_type::iterator pos);
 
 public:
   automaton (privilege_t privilege,
@@ -61,7 +62,7 @@ public:
   }
   
   int
-  insert_vm_area (const vm_area* area) __attribute__((warn_unused_result));
+  insert_vm_area (const vm_area& area) __attribute__((warn_unused_result));
   
   logical_address
   alloc (size_t size,

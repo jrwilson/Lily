@@ -28,7 +28,7 @@ public:
   get_stack_pointer (void) const = 0;
   
   virtual int
-  insert_vm_area (const vm_area* area) __attribute__((warn_unused_result)) = 0;
+  insert_vm_area (const vm_area& area) __attribute__((warn_unused_result)) = 0;
   
   virtual logical_address
   alloc (size_t size,

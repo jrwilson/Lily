@@ -31,8 +31,6 @@ struct vm_area {
   logical_address begin;
   logical_address end;
   page_privilege_t page_privilege;
-  vm_area* prev;
-  vm_area* next;
 
   vm_area (vm_area_type_t t,
 	   logical_address b,
@@ -41,15 +39,24 @@ struct vm_area {
     type (t),
     begin (b),
     end (e),
-    page_privilege (pp),
-    prev (0),
-    next (0)
+    page_privilege (pp)
   {
     kassert (begin.is_aligned (PAGE_SIZE));
     kassert (end.is_aligned (PAGE_SIZE));
     kassert (begin < end);
   }
 
+  bool
+  intersects (const vm_area& other) const
+  {
+    if (begin < other.begin) {
+      return other.begin < end;
+    }
+    else if (other.begin < begin) {
+      return begin < other.end;
+    }
+    return true;
+  }
 };
 
 #endif /* __vm_area_hpp__ */

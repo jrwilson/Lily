@@ -13,6 +13,9 @@
 
 #include "placement_allocator.hpp"
 #include "kassert.hpp"
+#include <utility>
+
+using namespace std::rel_ops;
 
 placement_allocator::placement_allocator (const logical_address& begin,
 					  const logical_address& end) :

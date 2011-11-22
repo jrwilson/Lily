@@ -15,6 +15,9 @@
 #include "kassert.hpp"
 #include "string.hpp"
 #include "page_fault_handler.hpp"
+#include <utility>
+
+using namespace std::rel_ops;
 
 boot_automaton::boot_automaton (logical_address begin,
 				logical_address end) :
@@ -45,7 +48,7 @@ boot_automaton::get_stack_pointer (void) const
 }
   
 int
-boot_automaton::insert_vm_area (const vm_area*)
+boot_automaton::insert_vm_area (const vm_area&)
 {
   kassert (0);
   return -1;

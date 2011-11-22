@@ -319,6 +319,57 @@ namespace std {
     return dist (begin, end, typename iterator_traits<InputIterator>::iterator_category ());
   }
 
+  template <class InputIterator, class Distance>
+  void
+  adva (InputIterator& pos,
+	Distance n,
+	random_access_iterator_tag)
+  {
+    pos += n;
+  }
+
+  template <class InputIterator, class Distance>
+  void
+  adva (InputIterator& pos,
+	Distance n,
+	bidirectional_iterator_tag)
+  {
+    if (n > 0) {
+      while (n != 0) {
+	++pos;
+	--n;
+      }
+    }
+    else {
+      while (n != 0) {
+	--pos;
+	++n;
+      }
+    }
+    
+  }
+
+  template <class InputIterator, class Distance>
+  void
+  adva (InputIterator& pos,
+	Distance n,
+	input_iterator_tag)
+  {
+    while (n != 0) {
+      ++pos;
+      --n;
+    }
+  }
+	
+
+  template <class InputIterator, class Distance>
+  void
+  advance (InputIterator& pos,
+	   Distance n)
+  {
+    return adva (pos, n, typename iterator_traits<InputIterator>::iterator_category ());
+  }
+
 }
 
 /* Local Variables: */

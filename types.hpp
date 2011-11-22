@@ -46,16 +46,12 @@ public:
     return address_;
   }
 
+  inline bool operator== (const physical_address& other) const {
+    return address_ == other.address_;
+  }
+
   inline bool operator< (const physical_address& other) const {
     return address_ < other.address_;
-  }
-
-  inline bool operator<= (const physical_address& other) const {
-    return address_ <= other.address_;
-  }
-
-  inline bool operator>= (const physical_address& other) const {
-    return address_ >= other.address_;
   }
 
   inline size_t operator- (const physical_address& other) const {
@@ -102,24 +98,12 @@ public:
     return *this;
   }
 
-  inline bool operator< (const logical_address& other) const {
-    return address_ < other.address_;
-  }
-
-  inline bool operator<= (const logical_address& other) const {
-    return address_ <= other.address_;
-  }
-
   inline bool operator== (const logical_address& other) const {
     return address_ == other.address_;
   }
 
-  inline bool operator!= (const logical_address& other) const {
-    return address_ != other.address_;
-  }
-
-  inline bool operator>= (const logical_address& other) const {
-    return address_ >= other.address_;
+  inline bool operator< (const logical_address& other) const {
+    return address_ < other.address_;
   }
 
   inline logical_address& operator+= (const ptrdiff_t& offset) {

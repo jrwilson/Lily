@@ -102,14 +102,14 @@ system_automaton_first_effect ()
 		  SYSTEM_DATA_BEGIN,
 		  SYSTEM_DATA_END,
 		  SUPERVISOR);
-    kassert (initrd->insert_vm_area (&data) == 0);
+    kassert (initrd->insert_vm_area (data) == 0);
 
     /* Add a stack area. */
     vm_area stack (VM_AREA_STACK,
 		   (initrd->get_stack_pointer () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
 		   initrd->get_stack_pointer ().align_down (PAGE_SIZE),
 		   SUPERVISOR);
-    kassert (initrd->insert_vm_area (&stack) == 0);
+    kassert (initrd->insert_vm_area (stack) == 0);
     /* Back with physical pages.  See comment in system_automaton_initialize (). */
     logical_address ptr;
     for (ptr = stack.begin; ptr < stack.end; ptr += PAGE_SIZE) {
@@ -313,18 +313,18 @@ system_automaton_initialize (logical_address placement_begin,
 		  logical_address (&text_begin).align_down (PAGE_SIZE),
 		  logical_address (&text_end).align_up (PAGE_SIZE),
 		  SUPERVISOR);
-    kassert (sys_automaton->insert_vm_area (&text) == 0);
+    kassert (sys_automaton->insert_vm_area (text) == 0);
     vm_area rodata (VM_AREA_DATA,
 		    logical_address (&rodata_begin).align_down (PAGE_SIZE),
 		    logical_address (&rodata_end).align_up (PAGE_SIZE),
 		    SUPERVISOR);
-    kassert (sys_automaton->insert_vm_area (&rodata) == 0);
+    kassert (sys_automaton->insert_vm_area (rodata) == 0);
     vm_area data (VM_AREA_DATA,
 		  logical_address (&data_begin).align_down (PAGE_SIZE),
 		  logical_address (&data_end).align_up (PAGE_SIZE),
 		  SUPERVISOR);
-    kassert (sys_automaton->insert_vm_area (&data) == 0);
-    kassert (sys_automaton->insert_vm_area (boot_automaton.get_data_area ()) == 0);
+    kassert (sys_automaton->insert_vm_area (data) == 0);
+    kassert (sys_automaton->insert_vm_area (*boot_automaton.get_data_area ()) == 0);
   }
   {
     /* Add a stack. */
@@ -332,7 +332,7 @@ system_automaton_initialize (logical_address placement_begin,
 		   (vm_manager_page_directory_logical_address () - SYSTEM_STACK_SIZE).align_down (PAGE_SIZE),
 		   (vm_manager_page_directory_logical_address ()).align_down (PAGE_SIZE),
 		   SUPERVISOR);
-    kassert (sys_automaton->insert_vm_area (&stack) == 0);
+    kassert (sys_automaton->insert_vm_area (stack) == 0);
     /* When call finish_action below, we will switch to the new stack.
        If we don't back the stack with physical pages, the first stack operation will triple fault.
        The scenario that we must avoid is:

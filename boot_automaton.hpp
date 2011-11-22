@@ -33,7 +33,7 @@ public:
   get_stack_pointer (void) const;
   
   int
-  insert_vm_area (const vm_area* area) __attribute__((warn_unused_result));
+  insert_vm_area (const vm_area& area) __attribute__((warn_unused_result));
   
   logical_address
   alloc (size_t size,

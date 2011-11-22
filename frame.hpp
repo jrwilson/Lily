@@ -38,12 +38,12 @@ public:
 
   explicit frame (const page_table_entry_t& entry);
 
-  bool operator< (const frame& other) const {
-    return f_ < other.f_;
+  bool operator== (const frame& other) const {
+    return f_ == other.f_;
   }
 
-  bool operator>= (const frame& other) const {
-    return f_ >= other.f_;
+  bool operator< (const frame& other) const {
+    return f_ < other.f_;
   }
 
   size_t operator- (const frame& other) const {

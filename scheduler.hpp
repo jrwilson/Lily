@@ -30,14 +30,10 @@ private:
     void* action_entry_point;
     parameter_t parameter;
     status_t status;
-    automaton_context* prev;
-    automaton_context* next;
     
     automaton_context (automaton_interface* a) :
       automaton_ (a),
-      status (NOT_SCHEDULED),
-      prev (0),
-      next (0)
+      status (NOT_SCHEDULED)
     { }
   };
     

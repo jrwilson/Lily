@@ -15,6 +15,9 @@
 #include "vm_manager.hpp"
 #include "kassert.hpp"
 #include <algorithm>
+#include <utility>
+
+using namespace std::rel_ops;
 
 /*
   The frame manager was designed under the following requirements and assumptions:

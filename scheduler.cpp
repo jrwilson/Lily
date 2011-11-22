@@ -17,6 +17,9 @@
 #include "idt.hpp"
 #include "system_automaton.hpp"
 #include "binding_manager.hpp"
+#include <utility>
+
+using namespace std::rel_ops;
 
 scheduler::queue_type* scheduler::ready_queue_ = 0;
 scheduler::execution_context scheduler::exec_context;

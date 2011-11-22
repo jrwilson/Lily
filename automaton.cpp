@@ -18,6 +18,9 @@
 #include "gdt.hpp"
 #include "page_fault_handler.hpp"
 #include "string.hpp"
+#include <utility>
+
+using namespace std::rel_ops;
 
 /* Alignment of stack for switch. */
 #define STACK_ALIGN 16
@@ -30,8 +33,6 @@ automaton::automaton (privilege_t privilege,
   scheduler_context_ (scheduler::allocate_context (this)),
   page_directory_ (page_directory),
   stack_pointer_ (stack_pointer),
-  memory_map_begin_ (0),
-  memory_map_end_ (0),
   memory_ceiling_ (memory_ceiling.align_down (PAGE_SIZE)),
   page_privilege_ (page_privilege)
 {
@@ -53,64 +54,64 @@ automaton::automaton (privilege_t privilege,
 }
 
 void
-automaton::merge (vm_area* area)
+automaton::merge (memory_map_type::iterator pos)
 {
-  if (area != 0) {
-    vm_area* next = area->next;
+  if (pos != memory_map_.end ()) {
+    memory_map_type::iterator next (pos);
+    ++pos;
     /* Can the areas be merged? */
-    if (next != 0 &&
-	area->type == VM_AREA_DATA &&
-	next->type == VM_AREA_DATA &&
-	area->end == next->begin &&
-	area->page_privilege == next->page_privilege) {
+    if (pos != memory_map_.end () &&
+	(*pos)->type == VM_AREA_DATA &&
+	(*next)->type == VM_AREA_DATA &&
+	(*pos)->end == (*next)->begin &&
+	(*pos)->page_privilege == (*next)->page_privilege) {
       /* Merge. */
-      area->end = next->end;
+      (*pos)->end = (*next)->end;
       /* Remove. */
-      area->next = next->next;
-      if (area->next != 0) {
-	area->next->prev = area;
-      }
-      else {
-	memory_map_end_ = area;	
-      }
-      delete next;
+      vm_area* temp = *next;
+      memory_map_.erase (next);
+      delete temp;
     }
   }
 }
 
+struct compare_vm_area {
+  bool
+  operator () (const vm_area* const x,
+	       const vm_area* const y) const
+  {
+    return x->begin < y->begin;
+  }
+};
+
 int
-automaton::insert_vm_area (const vm_area* area)
+automaton::insert_vm_area (const vm_area& area)
 {
-  kassert (area->end <= memory_ceiling_);
+  kassert (area.end <= memory_ceiling_);
 
-  /* Find the location to insert. */
-  vm_area** nptr;
-  vm_area** pptr;
-  for (nptr = &memory_map_begin_; (*nptr) != 0 && (*nptr)->begin < area->begin; nptr = &(*nptr)->next) ;;
+  // Find the location to insert.
+  memory_map_type::iterator pos = std::lower_bound (memory_map_.begin (), memory_map_.end (), &area, compare_vm_area ());
 
-  if (*nptr == 0) {
-    pptr = &memory_map_end_;
+  // Check for conflicts.
+  if (pos != memory_map_.begin ()) {
+    memory_map_type::const_iterator prev (pos);
+    --prev;
+    if ((*prev)->intersects (area)) {
+      return -1;
+    }
   }
-  else {
-    pptr = &(*nptr)->prev;
+  if (pos != memory_map_.end ()) {
+    if ((*pos)->intersects (area)) {
+      return -1;
+    }
   }
 
-  /* Check for conflicts. */
-  if ((*nptr != 0 && (*nptr)->begin < area->end) ||
-      (*pptr != 0 && area->begin < (*pptr)->end)) {
-    return -1;
-  }
-
-  /* Insert. */
-  vm_area* ptr = new vm_area (area->type, area->begin, area->end, area->page_privilege);
-  ptr->next = *nptr;
-  *nptr = ptr;
-  ptr->prev = *pptr;
-  *pptr = ptr;
+  // Insert.
+  pos = memory_map_.insert (pos, new vm_area (area));
 
   /* Merge. */
-  merge (ptr);
-  merge (ptr->prev);
+  merge (pos);
+  merge (--pos);
 
   return 0;
 }
@@ -122,41 +123,31 @@ automaton::alloc (size_t size,
 {
   if (physical_address (size).is_aligned (PAGE_SIZE)) {
 
-    vm_area* ptr;
-    for (ptr = memory_map_begin_; ptr != 0; ptr = ptr->next) {
+    for (memory_map_type::iterator pos = memory_map_.begin ();
+	 pos != memory_map_.end ();
+	 ++pos) {
       /* Start with the floor and ceiling of the automaton. */
       logical_address ceiling = memory_ceiling_;
-      if (ptr->next != 0) {
+      memory_map_type::iterator next (pos);
+      ++next;
+      if (next != memory_map_.end ()) {
 	/* Ceiling drops so we don't interfere with next area. */
-	ceiling = ptr->next->begin;
+	ceiling = (*next)->begin;
       }
 
-      if (size <= (size_t)(ceiling - ptr->end)) {
-	logical_address retval = ptr->end;
-	if (ptr->type == VM_AREA_DATA) {
+      if (size <= (size_t)(ceiling - (*pos)->end)) {
+	logical_address retval = (*pos)->end;
+	if ((*pos)->type == VM_AREA_DATA) {
 	  /* Extend a data area. */
-	  ptr->end += size;
+	  (*pos)->end += size;
 	  /* Try to merge with the next area. */
-	  merge (ptr);
+	  merge (pos);
 	}
 	else {
 	  /* Insert after the current area. */
-	  vm_area* area = new vm_area (VM_AREA_DATA, retval, retval + size, page_privilege_);
-	  kassert (area != 0);
-
-	  area->next = ptr->next;
-	  ptr->next = area;
-
-	  if (area->next != 0) {
-	    area->prev = area->next->prev;
-	    area->next->prev = area;
-	  }
-	  else {
-	    area->prev = memory_map_end_;
-	    memory_map_end_ = area;
-	  }
+	  pos = memory_map_.insert (next, new vm_area (VM_AREA_DATA, retval, retval + size, page_privilege_));
 	  /* Try to merge with the next area. */
-	  merge (area);
+	  merge (pos);
 	}
 	*error = SYSERROR_SUCCESS;
 	return retval;
@@ -178,33 +169,22 @@ automaton::reserve (size_t size)
 {
   kassert (physical_address (size).is_aligned (PAGE_SIZE));
 
-  vm_area* ptr;
-  for (ptr = memory_map_begin_; ptr != 0; ptr = ptr->next) {
+  for (memory_map_type::iterator pos = memory_map_.begin ();
+       pos != memory_map_.end ();
+       ++pos) {
+    memory_map_type::iterator next (pos);
+    ++next;
     /* Start with the floor and ceiling of the automaton. */
     logical_address ceiling = memory_ceiling_;
-    if (ptr->next != 0) {
+    if (next != memory_map_.end ()) {
       /* Ceiling drops so we don't interfere with next area. */
-      ceiling = ptr->next->begin;
+      ceiling = (*next)->begin;
     }
     
-    if (size <= (size_t)(ceiling - ptr->end)) {
-      logical_address retval = ptr->end;
+    if (size <= (size_t)(ceiling - (*pos)->end)) {
+      logical_address retval = (*pos)->end;
       /* Insert after the current area. */
-      vm_area* area = new vm_area (VM_AREA_RESERVED, retval, retval + size, page_privilege_);
-      kassert (area != 0);
-      
-      area->next = ptr->next;
-      ptr->next = area;
-      
-      if (area->next != 0) {
-	area->prev = area->next->prev;
-	area->next->prev = area;
-      }
-      else {
-	area->prev = memory_map_end_;
-	memory_map_end_ = area;
-      }
-
+      memory_map_.insert (next, new vm_area (VM_AREA_RESERVED, retval, retval + size, page_privilege_));
       return retval;
     }
   }
@@ -218,24 +198,16 @@ automaton::unreserve (logical_address address)
   kassert (address != logical_address ());
   kassert (address.is_aligned (PAGE_SIZE));
 
-  vm_area** nptr;
-  vm_area** pptr;
-  for (nptr = &memory_map_begin_; (*nptr) != 0 && (*nptr)->begin != address; nptr = &(*nptr)->next) ;;
+  vm_area k (VM_AREA_RESERVED, address, address + PAGE_SIZE, SUPERVISOR);
 
-  kassert (*nptr != 0);
-  kassert ((*nptr)->type == VM_AREA_RESERVED);
+  memory_map_type::iterator pos = std::lower_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
+  kassert (pos != memory_map_.end ());
+  kassert ((*pos)->begin == address);
+  kassert ((*pos)->type == VM_AREA_RESERVED);
 
-  vm_area* temp = *nptr;
-  if (temp->next != 0) {
-    pptr = &temp->next->prev;
-  }
-  else {
-    pptr = &memory_map_end_;
-  }
+  vm_area* temp = (*pos);
 
-  *nptr = temp->next;
-  *pptr = temp->prev;
-
+  memory_map_.erase (pos);
   delete temp;
 }
 
@@ -243,11 +215,14 @@ void
 automaton::page_fault (logical_address address,
 		       uint32_t error)
 {
-  vm_area* ptr;
-  for (ptr = memory_map_begin_; ptr != 0 && (address < ptr->begin || address >= ptr->end); ptr = ptr->next) ;;
+  kassert (address.is_aligned (PAGE_SIZE));
 
-  if (ptr != 0) {
-    switch (ptr->type) {
+  vm_area k (VM_AREA_RESERVED, address, address + PAGE_SIZE, SUPERVISOR);
+
+  memory_map_type::const_iterator pos = std::lower_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
+
+  if (pos != memory_map_.end ()) {
+    switch ((*pos)->type) {
     case VM_AREA_TEXT:
       /* TODO. */
       kassert (0);
@@ -262,7 +237,7 @@ automaton::page_fault (logical_address address,
       /* Fault should come from data. */
       kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
       /* Back the request with a frame. */
-      vm_manager_map (address, frame_manager::alloc (), ptr->page_privilege, WRITABLE);
+      vm_manager_map (address, frame_manager::alloc (), (*pos)->page_privilege, WRITABLE);
       /* Clear the frame. */
       /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
       memset (address.value (), 0x00, PAGE_SIZE);
