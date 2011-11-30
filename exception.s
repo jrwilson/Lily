@@ -23,7 +23,7 @@ exception%1:
 %endmacro
 
 	;; Import exception_handler.
-	[extern exception_handler]
+	[extern exception_dispatch]
 exception_common_stub:
 	;; Push the processor state.
 	pusha
@@ -37,7 +37,7 @@ exception_common_stub:
 	mov fs, ax
 	mov gs, ax
 	;; TODO:  What about the stack segment?
-	call exception_handler
+	call exception_dispatch
 	;; Pop the old data segment.
 	pop eax
 	;; Load the old data segment.

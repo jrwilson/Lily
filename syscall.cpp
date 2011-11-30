@@ -17,25 +17,25 @@
 static syserror_t errno;
 
 void
-sys_finish (bool output_status,
+sys_finish (bool schedule_status,
+	    void* action_entry_point,
+	    parameter_t parameter,
+	    bool output_status,
 	    value_t output_value)
 {
-  asm volatile ("mov %0, %%eax\n"
-		"mov %1, %%edx\n"
-		"int $0x80\n" : : "r"(output_status ? SYSCALL_FINISH | OUTPUT_VALID_MASK : SYSCALL_FINISH), "m"(output_value) : "eax", "edx");
-}
+  uint32_t code = SYSCALL_FINISH;
+  if (schedule_status) {
+    code |= SCHEDULE_VALID_MASK;
+  }
+  if (output_status) {
+    code |= OUTPUT_VALID_MASK;
+  }
 
-void
-sys_schedule (void* action_entry_point,
-	      parameter_t parameter,
-	      bool output_status,
-	      value_t output_value)
-{
   asm volatile ("mov %0, %%eax\n"
 		"mov %1, %%ebx\n"
 		"mov %2, %%ecx\n"
 		"mov %3, %%edx\n"
-		"int $0x80\n" : : "r"(output_status ? SYSCALL_SCHEDULE | OUTPUT_VALID_MASK : SYSCALL_SCHEDULE), "m"(action_entry_point), "m"(parameter), "m"(output_value) : "eax", "ebx", "ecx", "edx");
+		"int $0x80\n" : : "m"(code), "m"(action_entry_point), "m"(parameter), "m"(output_value) : "eax", "ebx", "ecx", "edx");
 }
 
 size_t

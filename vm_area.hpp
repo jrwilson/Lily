@@ -39,21 +39,21 @@ protected:
   const vm_area_type_t type_;
   logical_address begin_;
   logical_address end_;
-  page_privilege_t page_privilege_;
+  paging_constants::page_privilege_t page_privilege_;
 
 public:  
 
   vm_area_base (vm_area_type_t t,
 		logical_address b,
 		logical_address e,
-		page_privilege_t pp) :
+		paging_constants::page_privilege_t pp) :
     type_ (t),
     begin_ (b),
     end_ (e),
     page_privilege_ (pp)
   {
-    begin_.align_down (PAGE_SIZE);
-    end_.align_up (PAGE_SIZE);
+    begin_ >>= PAGE_SIZE;
+    end_ <<= PAGE_SIZE;
     kassert (end_ == logical_address (0) || begin_ < end_);
   }
 
@@ -81,14 +81,11 @@ public:
     return (end_ - begin_);
   }
 
-  inline page_privilege_t
+  inline paging_constants::page_privilege_t
   page_privilege () const
   {
     return page_privilege_;
   }
-
-  virtual vm_area_base*
-  clone () const = 0;
 
   virtual bool
   merge (const vm_area_base& other) = 0;
@@ -98,21 +95,14 @@ public:
 	      uint32_t error) = 0;
 };
 
-template <class AllocatorTag>
 class vm_text_area : public vm_area_base {
 public:
   vm_text_area (const logical_address& begin,
 		const logical_address& end,
-		page_privilege_t page_privilege) :
+		paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_TEXT, begin, end, page_privilege)
   { }
 
-  vm_text_area*
-  clone () const
-  {
-    return new (AllocatorTag ()) vm_text_area (*this);
-  }
-  
   bool
   merge (const vm_area_base&)
   {
@@ -128,20 +118,13 @@ public:
   }
 };
 
-template <class AllocatorTag>
 class vm_rodata_area : public vm_area_base {
 public:
   vm_rodata_area (const logical_address& begin,
 		  const logical_address& end,
-		  page_privilege_t page_privilege) :
+		  paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_RODATA, begin, end, page_privilege)
   { }
-
-  vm_rodata_area*
-  clone () const
-  {
-    return new (AllocatorTag ()) vm_rodata_area (*this);
-  }
 
   bool
   merge (const vm_area_base&)
@@ -158,20 +141,13 @@ public:
   }
 };
 
-template <class AllocatorTag>
 class vm_data_area : public vm_area_base {
 public:
   vm_data_area (const logical_address& begin,
 		const logical_address& end,
-		page_privilege_t page_privilege) :
+		paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_DATA, begin, end, page_privilege)
   { }
-
-  vm_data_area*
-  clone () const
-  {
-    return new (AllocatorTag ()) vm_data_area (*this);
-  }
 
   bool
   merge (const vm_area_base& other)
@@ -196,27 +172,21 @@ public:
     /* Fault should come from data. */
     kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
     /* Back the request with a frame. */
-    vm_manager_map (address, frame_manager::alloc (), page_privilege_, WRITABLE);
+    kassert (0);
+    //vm_manager_map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
     memset (address.value (), 0x00, PAGE_SIZE);
   }
 };
 
-template <class AllocatorTag>
 class vm_stack_area : public vm_area_base {
 public:
   vm_stack_area (const logical_address& begin,
-		const logical_address& end,
-		page_privilege_t page_privilege) :
+		 const logical_address& end,
+		 paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_STACK, begin, end, page_privilege)
   { }
-
-  vm_stack_area*
-  clone () const
-  {
-    return new (AllocatorTag ()) vm_stack_area (*this);
-  }
 
   bool
   merge (const vm_area_base&)
@@ -233,19 +203,12 @@ public:
   }
 };
 
-template <class AllocatorTag>
 class vm_reserved_area : public vm_area_base {
 public:
   vm_reserved_area (const logical_address& begin,
 		    const logical_address& end) :
-    vm_area_base (VM_AREA_RESERVED, begin, end, SUPERVISOR)
+    vm_area_base (VM_AREA_RESERVED, begin, end, paging_constants::SUPERVISOR)
   { }
-
-  vm_reserved_area*
-  clone () const
-  {
-    return new (AllocatorTag ()) vm_reserved_area (*this);
-  }
 
   bool
   merge (const vm_area_base&)
@@ -262,19 +225,12 @@ public:
   }
 };
 
-template <class AllocatorTag>
 class vm_free_area : public vm_area_base {
 public:
   vm_free_area (const logical_address& begin,
 		const logical_address& end) :
-    vm_area_base (VM_AREA_FREE, begin, end, SUPERVISOR)
+    vm_area_base (VM_AREA_FREE, begin, end, paging_constants::SUPERVISOR)
   { }
-
-  vm_free_area*
-  clone () const
-  {
-    return new (AllocatorTag ()) vm_free_area (*this);
-  }
 
   bool
   merge (const vm_area_base& other)

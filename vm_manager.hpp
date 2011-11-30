@@ -188,29 +188,50 @@ class vm_manager {
 private:
   page_directory kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
   page_table low_page_table __attribute__ ((aligned (PAGE_SIZE)));
+  frame_manager& frame_manager_;
+
+  static page_directory*
+  get_page_directory (void)
+  {
+    /* Because the page directory is mapped to itself. */
+    return reinterpret_cast<page_directory*> (0xFFFFF000);
+  }
+  
+  static page_table*
+  get_page_table (logical_address address)
+  {
+    return reinterpret_cast<page_table*> (0xFFC00000 + address.page_directory_entry () * PAGE_SIZE);
+  }
 
 public:
   vm_manager (logical_address placement_begin,
 	      logical_address placement_end,
 	      frame_manager& fm);
 
-  // logical_address
-  // vm_manager_page_directory_logical_address (void);
+  inline physical_address
+  page_directory_physical_address (void)
+  {
+    page_directory* page_directory = get_page_directory ();
+    return frame (page_directory->entry[PAGE_ENTRY_COUNT - 1]);
+  }
+  
+  inline logical_address
+  page_directory_logical_address (void)
+  {
+    return logical_address (get_page_directory ());
+  }
 
-  // physical_address
-  // vm_manager_page_directory_physical_address (void);
-
-  // void
-  // vm_manager_map (logical_address address,
-  // 		frame frame,
-  // 		page_privilege_t privilege,
-  // 		writable_t writable);
-
+  void
+  map (logical_address address,
+       frame frame,
+       paging_constants::page_privilege_t privilege,
+       paging_constants::writable_t writable);
+  
   // void
   // vm_manager_unmap (logical_address logical_addr);
 
-  // void
-  // vm_manager_switch_to_directory (physical_address address);
+  void
+  switch_to_directory (physical_address address);
 
   // void
   // page_directory_initialize_with_current (page_directory_t* page_directory,

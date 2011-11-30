@@ -29,29 +29,28 @@ frame_manager::mark_as_used (const frame& frame)
   }
 }
 
-// frame
-// frame_manager::alloc ()
-// {
-//   stack_allocator_t* ptr;
-//   /* Find an allocator with a free frame. */
-//   for (ptr = stack_allocators_; ptr != 0 && ptr->free_head == STACK_ALLOCATOR_EOL; ptr = ptr->next) ;;
+frame
+frame_manager::alloc ()
+{
+  /* Find an allocator with a free frame. */
+  stack_allocators_type::iterator pos = std::find_if (stack_allocators_.begin (), stack_allocators_.end (), stack_allocator_not_full ());
+  
+  /* Out of frames. */
+  kassert (pos != stack_allocators_.end ());
+  
+  return (*pos)->alloc ();
+}
 
-//   /* Out of frames. */
-//   kassert (ptr != 0);
+void
+frame_manager::incref (const frame& frame)
+{
+  stack_allocators_type::iterator pos = find_allocator (frame);
 
-//   return stack_allocator_alloc (ptr);
-// }
+  /* No allocator for frame. */
+  kassert (pos != stack_allocators_.end ());
 
-// void
-// frame_manager::incref (const frame& frame)
-// {
-//   stack_allocator_t* ptr = find_allocator (frame);
-
-//   /* No allocator for frame. */
-//   kassert (ptr != 0);
-
-//   stack_allocator_incref (ptr, frame);
-// }
+  (*pos)->incref (frame);
+}
 
 // void
 // frame_manager::decref (const frame& frame)

@@ -162,6 +162,14 @@ private:
     return std::find_if (stack_allocators_.begin (), stack_allocators_.end (), contains_frame (frame));
   }
 
+  struct stack_allocator_not_full {
+    bool
+    operator() (stack_allocator* const& sa) const
+    {
+      return !sa->full ();
+    }
+  };
+
 public:
   template <class InputIterator>
   frame_manager (InputIterator begin,
@@ -181,9 +189,9 @@ public:
   frame
   alloc () __attribute__((warn_unused_result));
   
-  // /* Increment the reference count for a frame. */
-  // void
-  // incref (const frame& frame);
+  /* Increment the reference count for a frame. */
+  void
+  incref (const frame& frame);
   
   // /* Decrement the reference count for a frame. */
   // void

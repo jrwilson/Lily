@@ -23,12 +23,11 @@ vm_manager.o \
 kput.o \
 halt.o \
 cpp_runtime.o \
+string.o \
+list_allocator.o \
+syscall.o \
 kmain.o
 
-
-# syscall.o \
-# list_allocator.o \
-# string.o \
 # page_fault_handler.o \
 # initrd_automaton.o \
 

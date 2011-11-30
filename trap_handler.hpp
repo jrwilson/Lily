@@ -20,6 +20,7 @@
 extern "C" void trap_dispatch (registers);
 
 class trap_handler {
+private:
   static trap_handler* instance_;
 
   system_automaton& system_automaton_;

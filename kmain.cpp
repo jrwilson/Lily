@@ -30,5 +30,6 @@ static kernel kernel (multiboot_magic, multiboot_info, logical_end);
 extern "C" void
 kmain (void)
 {
+  kernel.run ();
   kassert (0);
 }

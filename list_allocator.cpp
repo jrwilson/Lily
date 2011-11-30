@@ -18,9 +18,9 @@
 /* This will need to be removed later. */
 #include "kassert.hpp"
 
-const uint32_t MAGIC = 0x7ACEDEAD;
+static const uint32_t MAGIC = 0x7ACEDEAD;
 
-struct list_allocator::chunk_header {
+struct list_alloc::chunk_header {
   uint32_t available : 1;
   uint32_t magic : 31;
   size_t size; /* Does not include header. */
@@ -36,21 +36,17 @@ struct list_allocator::chunk_header {
   { }
 };
 
-// size_t list_allocator::page_size_ = 0;
-// list_allocator::chunk_header* list_allocator::first_header_ = 0;
-// list_allocator::chunk_header* list_allocator::last_header_ = 0;
-
-list_allocator::chunk_header*
-list_allocator::find_header (chunk_header* start,
-			     size_t size)
+list_alloc::chunk_header*
+list_alloc::find_header (chunk_header* start,
+			 size_t size)
 {
   for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
   return start;
 }
 
 void
-list_allocator::split_header (chunk_header* ptr,
-			      size_t size)
+list_alloc::split_header (chunk_header* ptr,
+			  size_t size)
 {
   /* Split the block. */
   chunk_header* n = new ((logical_address (ptr) + sizeof (chunk_header) + size).value ()) chunk_header (ptr->size - size - sizeof (chunk_header));
@@ -69,18 +65,18 @@ list_allocator::split_header (chunk_header* ptr,
   }
 }
 
+list_alloc::list_alloc () :
+  page_size_ (sys_get_page_size ())
+{
+  first_header_ = new (sys_allocate (page_size_)) chunk_header (page_size_ - sizeof (chunk_header));
+  last_header_ = first_header_;
+}
+
 void*
-list_allocator::alloc (size_t size)
+list_alloc::alloc (size_t size)
 {
   if (size == 0) {
     return 0;
-  }
-
-  if (page_size_ == 0) {
-    page_size_ = sys_get_page_size ();
-    size_t request_size = physical_address (sizeof (chunk_header) + size).align_up (page_size_).value ();
-    first_header_ = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
-    last_header_ = first_header_;
   }
 
   chunk_header* ptr = find_header (first_header_, size);
@@ -101,7 +97,7 @@ list_allocator::alloc (size_t size)
 }
 
 void
-list_allocator::free (void* p)
+list_alloc::free (void* p)
 {
   if (p == 0) {
     return;

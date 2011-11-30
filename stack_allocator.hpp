@@ -83,6 +83,12 @@ public:
     return end_;
   }
 
+  inline bool
+  full ()
+  {
+    return free_head_ == STACK_ALLOCATOR_EOL;
+  }
+
   void
   mark_as_used (frame frame)
   {
@@ -100,33 +106,30 @@ public:
     entry_[frame_idx] = -1;
   }
 
-// static frame
-// stack_allocator_alloc (stack_allocator_t* ptr)
-// {
-//   kassert (ptr != 0);
-//   kassert (ptr->free_head != STACK_ALLOCATOR_EOL);
+  frame
+  alloc ()
+  {
+    kassert (free_head_ != STACK_ALLOCATOR_EOL);
+    
+    frame_entry_t idx = free_head_;
+    free_head_ = entry_[idx];
+    entry_[idx] = -1;
+    frame retval (begin_);
+    retval += idx;
+    return retval;
+  }
 
-//   frame_entry_t idx = ptr->free_head;
-//   ptr->free_head = ptr->entry[idx];
-//   ptr->entry[idx] = -1;
-//   frame retval (ptr->begin);
-//   retval += idx;
-//   return retval;
-// }
-
-// static void
-// stack_allocator_incref (stack_allocator_t* ptr,
-// 			frame frame)
-// {
-//   kassert (ptr != 0);
-//   kassert (frame >= ptr->begin && frame < ptr->end);
-//   frame_entry_t idx = frame - ptr->begin;
-//   /* Frame is allocated. */
-//   kassert (ptr->entry[idx] < 0);
-//   /* "Increment" the reference count. */
-//   --ptr->entry[idx];
-// }
-
+  void
+  incref (frame frame)
+  {
+    kassert (frame >= begin_ && frame < end_);
+    frame_entry_t idx = frame - begin_;
+    /* Frame is allocated. */
+    kassert (entry_[idx] < 0);
+    /* "Increment" the reference count. */
+    --entry_[idx];
+  }
+  
 // static void
 // stack_allocator_decref (stack_allocator_t* ptr,
 // 			frame frame)

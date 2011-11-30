@@ -13,6 +13,8 @@
 
 #include "exception_handler.hpp"
 
+exception_handler* exception_handler::instance_ = 0;
+
 extern "C" void exception0 ();
 extern "C" void exception1 ();
 extern "C" void exception2 ();
@@ -46,8 +48,13 @@ extern "C" void exception29 ();
 extern "C" void exception30 ();
 extern "C" void exception31 ();
 
-exception_handler::exception_handler (interrupt_descriptor_table& idt)
+exception_handler::exception_handler (interrupt_descriptor_table& idt,
+				      system_automaton& s_a) :
+  system_automaton_ (s_a)
 {
+  kassert (instance_ == 0);
+  instance_ = this;
+
   idt.set (0, make_interrupt_gate (exception0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
   idt.set (1, make_interrupt_gate (exception1, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
   idt.set (2, make_interrupt_gate (exception2, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
@@ -82,99 +89,101 @@ exception_handler::exception_handler (interrupt_descriptor_table& idt)
   idt.set (31, make_interrupt_gate (exception31, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
 }
 
-extern "C" void
-exception_handler (registers regs)
+static const interrupt_number DIVIDE_ERROR = 0;
+static const interrupt_number SINGLE_STEP = 1;
+static const interrupt_number NON_MASKABLE_INTERRUPT = 2;
+static const interrupt_number BREAKPOINT = 3;
+static const interrupt_number OVERFLOW = 4;
+static const interrupt_number BOUND = 5;
+static const interrupt_number INVALID_OPCODE = 6;
+static const interrupt_number COPROCESSOR_NA = 7;
+static const interrupt_number DOUBLE_FAULT = 8;
+static const interrupt_number COPROCESSOR_SEGMENT_OVERRUN = 9;
+static const interrupt_number INVALID_TASK_STATE_SEGMENT = 10;
+static const interrupt_number SEGMENT_NOT_PRESENT = 11;
+static const interrupt_number STACK_SEGMENT_OVERRUN = 12;
+static const interrupt_number GENERAL_PROTECTION_FAULT = 13;
+static const interrupt_number PAGE_FAULT = 14;
+static const interrupt_number COPROCESSOR_ERROR = 16;
+
+void
+exception_handler::process_interrupt (registers& regs)
 {
-  kputs ("Unhandled exception!\n");
-  kputs ("Interrupt: "); kputx32 (regs.number); kputs (" Code: " ); kputx32 (regs.error); kputs ("\n");
-  
-  kputs ("CS: "); kputx32 (regs.cs); kputs (" EIP: "); kputx32 (regs.eip); kputs (" EFLAGS: "); kputx32 (regs.eflags); kputs ("\n");
-  kputs ("SS: "); kputx32 (regs.ss); kputs (" ESP: "); kputx32 (regs.useresp); kputs (" DS:"); kputx32 (regs.ds); kputs ("\n");
-  
-  kputs ("EAX: "); kputx32 (regs.eax); kputs (" EBX: "); kputx32 (regs.ebx); kputs (" ECX: "); kputx32 (regs.ecx); kputs (" EDX: "); kputx32 (regs.edx); kputs ("\n");
-  kputs ("ESP: "); kputx32 (regs.esp); kputs (" EBP: "); kputx32 (regs.ebp); kputs (" ESI: "); kputx32 (regs.esi); kputs (" EDI: "); kputx32 (regs.edi); kputs ("\n");
-  
-  halt ();
+  switch (regs.number) {
+  case DIVIDE_ERROR:
+    // TODO
+    kassert (0);
+    break;
+  case SINGLE_STEP:
+    // TODO
+    kassert (0);
+    break;
+  case NON_MASKABLE_INTERRUPT:
+    // TODO
+    kassert (0);
+    break;
+  case BREAKPOINT:
+    // TODO
+    kassert (0);
+    break;
+  case OVERFLOW:
+    // TODO
+    kassert (0);
+    break; 
+  case BOUND:
+    // TODO
+    kassert (0);
+    break; 
+  case INVALID_OPCODE:
+    // TODO
+    kassert (0);
+    break; 
+  case COPROCESSOR_NA:
+    // TODO
+    kassert (0);
+    break; 
+  case DOUBLE_FAULT:
+    // TODO
+    kassert (0);
+    break; 
+  case COPROCESSOR_SEGMENT_OVERRUN:
+    // TODO
+    kassert (0);
+    break; 
+  case INVALID_TASK_STATE_SEGMENT:
+    // TODO
+    kassert (0);
+    break; 
+  case SEGMENT_NOT_PRESENT:
+    // TODO
+    kassert (0);
+    break; 
+  case STACK_SEGMENT_OVERRUN:
+    // TODO
+    kassert (0);
+    break; 
+  case GENERAL_PROTECTION_FAULT:
+    // TODO
+    kassert (0);
+    break; 
+  case PAGE_FAULT:
+    {
+      // Get the faulting address.
+      void* addr;
+      asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
+      system_automaton_.page_fault (logical_address (addr), regs.error);
+    }
+    break; 
+  case COPROCESSOR_ERROR:
+    // TODO
+    kassert (0);
+    break; 
+  }
 }
 
-//   /* Macros for page faults. */
-// #define PAGE_FAULT_INTERRUPT 14
-
-// template <class AllocatorTag, template <typename> class Allocator>
-// class page_fault_handler {
-// private:
-//   static void
-//   handler (interrupt_descriptor_table::registers* regs)
-//   {
-//     /* Get the faulting address. */
-//     void* addr;
-//     asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-    
-//     logical_address address (addr);
-    
-//     automaton_interface* automaton;
-    
-//     if (address < KERNEL_VIRTUAL_BASE) {
-//       /* Get the current automaton. */  
-//       automaton = scheduler<AllocatorTag, Allocator>::get_current_automaton ();
-//     }
-//     else {
-//       automaton = system_automaton<AllocatorTag, Allocator>::get_instance ();
-//     }
-    
-//     automaton->page_fault (address, regs->error);
-    
-//     /* kputs ("Page fault!!\n"); */
-    
-//     /* kputs ("Address: "); kputp (addr); kputs ("\n"); */
-//     /* kputs ("Codes: "); */
-//     /* if (regs->error & PAGE_PROTECTION_ERROR) { */
-//     /*   kputs ("PROTECTION "); */
-//     /* } */
-//     /* else { */
-//     /*   kputs ("NOT_PRESENT "); */
-//     /* } */
-    
-//     /* if (regs->error & PAGE_WRITE_ERROR) { */
-//     /*   kputs ("WRITE "); */
-//     /* } */
-//     /* else { */
-//     /*   kputs ("READ "); */
-//     /* } */
-    
-//     /* if (regs->error & PAGE_USER_ERROR) { */
-//     /*   kputs ("USER "); */
-//     /* } */
-//     /* else { */
-//     /*   kputs ("SUPERVISOR "); */
-//     /* } */
-    
-//     /* if (regs->error & PAGE_RESERVED_ERROR) { */
-//     /*   kputs ("RESERVED "); */
-//     /* } */
-    
-//     /* if (regs->error & PAGE_INSTRUCTION_ERROR) { */
-//     /*   kputs ("INSTRUCTION "); */
-//     /* } */
-//     /* else { */
-//     /*   kputs ("DATA "); */
-//     /* } */
-//     /* kputs ("\n"); */
-    
-//     /* kputs ("CS: "); kputuix (regs->cs); kputs (" EIP: "); kputuix (regs->eip); kputs (" EFLAGS: "); kputuix (regs->eflags); kputs ("\n"); */
-//     /* kputs ("SS: "); kputuix (regs->ss); kputs (" ESP: "); kputuix (regs->useresp); kputs (" DS:"); kputuix (regs->ds); kputs ("\n"); */
-    
-//     /* kputs ("EAX: "); kputuix (regs->eax); kputs (" EBX: "); kputuix (regs->ebx); kputs (" ECX: "); kputuix (regs->ecx); kputs (" EDX: "); kputuix (regs->edx); kputs ("\n"); */
-//     /* kputs ("ESP: "); kputuix (regs->esp); kputs (" EBP: "); kputuix (regs->ebp); kputs (" ESI: "); kputuix (regs->esi); kputs (" EDI: "); kputuix (regs->edi); kputs ("\n"); */
-    
-//     /* kputs ("Halting"); */
-//     /* halt (); */
-//   }
-
-// public:  
-//   static void
-//   initialize (void)
-//   {
-//     set_interrupt_handler (PAGE_FAULT_INTERRUPT, handler);
-//   }
-// };
+extern "C" void
+exception_dispatch (registers regs)
+{
+  kassert (exception_handler::instance_ != 0);
+  exception_handler::instance_->process_interrupt (regs);
+}

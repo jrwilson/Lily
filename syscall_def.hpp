@@ -14,6 +14,8 @@
   Justin R. Wilson
 */
 
+#include "types.hpp"
+
 enum syscall_t {
   SYSCALL_FINISH = 0,
   SYSCALL_GET_PAGE_SIZE,

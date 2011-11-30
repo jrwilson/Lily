@@ -17,57 +17,29 @@
 #include "automaton_interface.hpp"
 #include "vm_area.hpp"
 
-template <class AllocatorTag>
 class boot_automaton : public automaton_interface {
 private:
-  struct data_area : public vm_area_base {
-    
-    data_area (logical_address begin,
-	       logical_address end) :
-      vm_area_base (VM_AREA_DATA, begin, end, SUPERVISOR)
-    { }
 
-    logical_address
-    alloc (size_t size)
-    {
-      logical_address retval = end_;
-      end_ += size;
-      end_.align_up (PAGE_SIZE);
-      return retval;
-    }
+  logical_address begin_;
+  logical_address end_;
 
-    vm_data_area<AllocatorTag>*
-    clone () const
-    {
-      return new vm_data_area<AllocatorTag> (begin_, end_, SUPERVISOR);
-    }
-
-    bool
-    merge (const vm_area_base&)
-    {
-      kassert (0);
-      return false;
-    }
-
-    void
-    page_fault (logical_address,
-		uint32_t)
-    {
-      kassert (0);
-    }
-  };
-
-  data_area data_;
 public:
   boot_automaton (logical_address begin,
 		  logical_address end) :
-    data_ (begin, end)
+    begin_ (begin >> PAGE_SIZE),
+    end_ (end << PAGE_SIZE)
   { }
-  
-  const vm_area_base&
-  get_data_area (void) const
+
+  inline logical_address
+  begin () const
   {
-    return data_;
+    return begin_;
+  }
+
+  inline logical_address
+  end () const
+  {
+    return end_;
   }
   
   void*
@@ -84,17 +56,13 @@ public:
     return logical_address ();
   }
   
-  bool
-  insert_vm_area (const vm_area_base&)
-  {
-    kassert (0);
-    return false;
-  }
-  
   logical_address
   alloc (size_t size)
   {
-    return data_.alloc (size);
+    logical_address retval = end_;
+    end_ += size;
+    end_ <<= PAGE_SIZE;
+    return retval;
   }
   
   logical_address
@@ -111,18 +79,20 @@ public:
   }
   
   void
-  page_fault (logical_address address,
+  page_fault (frame_manager& fm,
+	      vm_manager& vmm,
+	      logical_address address,
 	      uint32_t error)
   {
-    kassert (address >= data_.begin ());
-    kassert (address < data_.end ());
+    kassert (address >= begin_);
+    kassert (address < end_);
     
     /* Fault should come from not being present. */
     kassert ((error & PAGE_PROTECTION_ERROR) == 0);
     /* Fault should come from data. */
     kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
     /* Back the request with a frame. */
-    vm_manager_map (address, frame_manager::alloc (), SUPERVISOR, WRITABLE);
+    vmm.map (address, fm.alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
     memset (address.value (), 0x00, PAGE_SIZE);
@@ -143,7 +113,8 @@ public:
   }
   
   void
-  execute (logical_address,
+  execute (vm_manager&,
+	   logical_address,
 	   size_t,
 	   void*,
 	   parameter_t,

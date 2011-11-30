@@ -29,8 +29,9 @@ trap_handler::trap_handler (interrupt_descriptor_table& idt,
 			    system_automaton& s_a) :
   system_automaton_ (s_a)
 {
-  idt.set (TRAP_BASE + 0, make_trap_gate (trap0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  kassert (instance_ == 0);
   instance_ = this;
+  idt.set (TRAP_BASE + 0, make_trap_gate (trap0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
 }
 
 void

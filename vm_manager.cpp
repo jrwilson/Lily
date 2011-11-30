@@ -28,7 +28,7 @@ extern int data_begin;
 extern int data_end;
 
 void
-vm_manager_switch_to_directory (physical_address address)
+vm_manager::switch_to_directory (physical_address address)
 {
   kassert (address.is_aligned (PAGE_SIZE));
 
@@ -39,7 +39,8 @@ vm_manager_switch_to_directory (physical_address address)
 
 vm_manager::vm_manager (logical_address placement_begin,
 			logical_address placement_end,
-			frame_manager& fm)
+			frame_manager& fm) :
+  frame_manager_ (fm)
 {
   physical_address low_page_table_paddr (logical_address (&low_page_table) - KERNEL_VIRTUAL_BASE);
   physical_address kernel_page_directory_paddr (logical_address (&kernel_page_directory) - KERNEL_VIRTUAL_BASE);
@@ -117,84 +118,58 @@ vm_manager::vm_manager (logical_address placement_begin,
     fm.mark_as_used (frame);
   }
 
-  vm_manager_switch_to_directory (kernel_page_directory_paddr);
+  switch_to_directory (kernel_page_directory_paddr);
 }
 
-// static page_directory_t*
-// get_page_directory (void)
-// {
-//   /* Because the page directory is mapped to itself. */
-//   return (page_directory_t*)0xFFFFF000;
-// }
+void
+vm_manager::map (logical_address logical_addr,
+		 frame fr,
+		 paging_constants::page_privilege_t privilege,
+		 paging_constants::writable_t writable)
+{
+  page_directory* page_directory = get_page_directory ();
+  page_table* page_table = get_page_table (logical_addr);
+  
+  if (!page_directory->entry[logical_addr.page_directory_entry ()].present_) {
+    if (logical_addr < KERNEL_VIRTUAL_BASE ||
+	page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory.entry[PAGE_ENTRY_COUNT - 1].frame_) {
+      /* Either the address is in user space or we are using the kernel page directory. */
+      /* Allocate a page table. */
+      page_directory->entry[logical_addr.page_directory_entry ()] = page_directory_entry (frame_manager_.alloc (), paging_constants::PRESENT);
+      /* Flush the TLB. */
+      asm volatile ("invlpg %0\n" :: "m" (page_table));
+      /* Initialize the page table. */
+      page_table->clear ();
+    }
+    else {
+      /* Using a non-kernel page directory but we need a kernel page table. */
+      if (!kernel_page_directory.entry[logical_addr.page_directory_entry ()].present_) {
+	/* The page table is not present in the kernel. */
+	/* Allocate a page table and map it in both directories. */
+	kernel_page_directory.entry[logical_addr.page_directory_entry ()] = page_directory_entry (frame_manager_.alloc (), paging_constants::PRESENT);
+	page_directory->entry[logical_addr.page_directory_entry ()] = kernel_page_directory.entry[logical_addr.page_directory_entry ()];
+	frame_manager_.incref (frame (page_directory->entry[logical_addr.page_directory_entry ()]));
+	/* Flush the TLB. */
+	asm volatile ("invlpg %0\n" :: "m" (page_table));
+	/* Initialize the page table. */
+	page_table->clear ();
+      }
+      else {
+	/* The page table is present in the kernel. */
+	/* Copy the entry. */
+	page_directory->entry[logical_addr.page_directory_entry ()] = kernel_page_directory.entry[logical_addr.page_directory_entry ()];
+	frame_manager_.incref (frame (page_directory->entry[logical_addr.page_directory_entry ()]));
+	/* Flush the TLB. */
+	asm volatile ("invlpg %0\n" :: "m" (page_table));
+      }
+    }
+  }
 
-// static page_table_t*
-// get_page_table (logical_address address)
-// {
-//   return reinterpret_cast<page_table_t*> (0xFFC00000 + address.page_directory_entry () * PAGE_SIZE);
-// }
+  page_table->entry[logical_addr.page_table_entry ()] = page_table_entry (fr, privilege, writable, paging_constants::PRESENT);
 
-// physical_address
-// vm_manager_page_directory_physical_address (void)
-// {
-//   page_directory_t* page_directory = get_page_directory ();
-//   return frame (page_directory->entry[PAGE_ENTRY_COUNT - 1]);
-// }
-
-// logical_address
-// vm_manager_page_directory_logical_address (void)
-// {
-//   return logical_address (get_page_directory ());
-// }
-
-// void
-// vm_manager_map (logical_address logical_addr,
-// 		frame fr,
-// 		page_privilege_t privilege,
-// 		writable_t writable)
-// {
-//   page_directory_t* page_directory = get_page_directory ();
-//   page_table_t* page_table = get_page_table (logical_addr);
-
-//   if (!page_directory->entry[logical_addr.page_directory_entry ()].present_) {
-//     if (logical_addr < KERNEL_VIRTUAL_BASE ||
-// 	page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory.entry[PAGE_ENTRY_COUNT - 1].frame_) {
-//       /* Either the address is in user space or we are using the kernel page directory. */
-//       /* Allocate a page table. */
-//       page_directory->entry[logical_addr.page_directory_entry ()] = page_directory_entry_t (frame_manager::alloc (), PRESENT);
-//       /* Flush the TLB. */
-//       asm volatile ("invlpg %0\n" :: "m" (page_table));
-//       /* Initialize the page table. */
-//       page_table_clear (page_table);
-//     }
-//     else {
-//       /* Using a non-kernel page directory but we need a kernel page table. */
-//       if (!kernel_page_directory.entry[logical_addr.page_directory_entry ()].present_) {
-// 	/* The page table is not present in the kernel. */
-// 	/* Allocate a page table and map it in both directories. */
-// 	kernel_page_directory.entry[logical_addr.page_directory_entry ()] = page_directory_entry_t (frame_manager::alloc (), PRESENT);
-// 	page_directory->entry[logical_addr.page_directory_entry ()] = kernel_page_directory.entry[logical_addr.page_directory_entry ()];
-// 	frame_manager::incref (frame (page_directory->entry[logical_addr.page_directory_entry ()]));
-// 	/* Flush the TLB. */
-// 	asm volatile ("invlpg %0\n" :: "m" (page_table));
-// 	/* Initialize the page table. */
-// 	page_table_clear (page_table);
-//       }
-//       else {
-// 	/* The page table is present in the kernel. */
-// 	/* Copy the entry. */
-// 	page_directory->entry[logical_addr.page_directory_entry ()] = kernel_page_directory.entry[logical_addr.page_directory_entry ()];
-// 	frame_manager::incref ( frame (page_directory->entry[logical_addr.page_directory_entry ()]));
-// 	/* Flush the TLB. */
-// 	asm volatile ("invlpg %0\n" :: "m" (page_table));
-//       }
-//     }
-//   }
-
-//   page_table->entry[logical_addr.page_table_entry ()] = page_table_entry_t (fr, privilege, writable, PRESENT);
-
-//   /* Flush the TLB. */
-//   asm volatile ("invlpg %0\n" :: "m" (logical_addr));
-// }
+  /* Flush the TLB. */
+  asm volatile ("invlpg %0\n" :: "m" (logical_addr));
+}
 
 // void
 // vm_manager_unmap (logical_address logical_addr)

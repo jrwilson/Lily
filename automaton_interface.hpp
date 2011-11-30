@@ -18,6 +18,8 @@
 #include "action_type.hpp"
 
 struct vm_area_base;
+class frame_manager;
+class vm_manager;
 
 class automaton_interface {
 public:
@@ -26,9 +28,6 @@ public:
 
   virtual logical_address
   get_stack_pointer (void) const = 0;
-  
-  virtual bool
-  insert_vm_area (const vm_area_base& area) __attribute__((warn_unused_result)) = 0;
   
   virtual logical_address
   alloc (size_t size) __attribute__((warn_unused_result)) = 0;
@@ -40,7 +39,9 @@ public:
   unreserve (logical_address address) = 0;
 
   virtual void
-  page_fault (logical_address address,
+  page_fault (frame_manager&,
+	      vm_manager&,
+	      logical_address address,
 	      uint32_t error) = 0;
   
   virtual void
@@ -51,7 +52,8 @@ public:
   get_action_type (void* action_entry_point) = 0;
   
   virtual void
-  execute (logical_address switch_stack,
+  execute (vm_manager& vm,
+	   logical_address switch_stack,
 	   size_t switch_stack_size,
 	   void* action_entry_point,
 	   parameter_t parameter,
