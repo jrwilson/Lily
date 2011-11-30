@@ -1,10 +1,10 @@
-#ifndef __vm_manager_h__
-#define __vm_manager_h__
+#ifndef __vm_manager_hpp__
+#define __vm_manager_hpp__
 
 /*
   File
   ----
-  vm_manager.h
+  vm_manager.hpp
   
   Description
   -----------
@@ -17,40 +17,35 @@
 #include "descriptor.hpp"
 #include "frame_manager.hpp"
 
-#define PAGE_SIZE 0x1000
-
-/* Should agree with loader.s. */
-const logical_address KERNEL_VIRTUAL_BASE (reinterpret_cast<void*> (0xC0000000));
-
 /* Number of entries in a page table or directory. */
-#define PAGE_ENTRY_COUNT 1024
+static const size_t PAGE_ENTRY_COUNT = PAGE_SIZE / sizeof (void*);
 
-typedef enum {
+enum global_t {
   NOT_GLOBAL = 0,
   GLOBAL = 1,
-} global_t;
+};
 
-typedef enum {
+enum cached_t {
   CACHED = 0,
   NOT_CACHED = 1,
-} cached_t;
+};
 
-typedef enum {
+enum cache_mode_t {
   WRITE_BACK = 0,
   WRITE_THROUGH = 1,
-} cache_mode_t;
+};
 
-typedef enum {
+enum page_privilege_t {
   SUPERVISOR = 0,
   USER = 1,
-} page_privilege_t;
+};
 
-typedef enum {
+enum page_size_t {
   PAGE_SIZE_4K = 0,
   PAGE_SIZE_4M = 1,
-} page_size_t;
+};
 
-struct page_table_entry_t {
+struct page_table_entry {
   unsigned int present_ : 1;
   unsigned int writable_ : 1;
   unsigned int user_ : 1;
@@ -63,7 +58,7 @@ struct page_table_entry_t {
   unsigned int available_ : 3;
   unsigned int frame_ : 20;
 
-  page_table_entry_t () :
+  page_table_entry () :
     present_ (NOT_PRESENT),
     writable_ (NOT_WRITABLE),
     user_ (SUPERVISOR),
@@ -77,10 +72,10 @@ struct page_table_entry_t {
     frame_ (0)
   { }
 
-  page_table_entry_t (frame frame,
-		      page_privilege_t privilege,
-		      writable_t writable,
-		      present_t present) :
+  page_table_entry (frame frame,
+		    page_privilege_t privilege,
+		    writable_t writable,
+		    present_t present) :
     present_ (present),
     writable_ (writable),
     user_ (privilege),
@@ -96,11 +91,23 @@ struct page_table_entry_t {
 };
 
 
-typedef struct {
-  page_table_entry_t entry[PAGE_ENTRY_COUNT];
-} page_table_t;
+struct page_table {
+  page_table_entry entry[PAGE_ENTRY_COUNT];
 
-struct page_directory_entry_t {
+  void
+  clear (void)
+  {
+    kassert (logical_address (this).is_aligned (PAGE_SIZE));
+    
+    unsigned int k;
+    for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
+      entry[k] = page_table_entry (frame (), SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
+    }
+  }
+
+};
+
+struct page_directory_entry {
   unsigned int present_ : 1;
   unsigned int writable_ : 1;
   unsigned int user_ : 1;
@@ -113,7 +120,7 @@ struct page_directory_entry_t {
   unsigned int available_ : 3;
   unsigned int frame_ : 20;
 
-  page_directory_entry_t () :
+  page_directory_entry () :
     present_ (NOT_PRESENT),
     writable_ (WRITABLE),
     user_ (SUPERVISOR),
@@ -127,8 +134,8 @@ struct page_directory_entry_t {
     frame_ (0)
   { }
 
-  page_directory_entry_t (frame frame,
-			  present_t present) :
+  page_directory_entry (frame frame,
+			present_t present) :
     present_ (present),
     writable_ (WRITABLE),
     user_ (SUPERVISOR),
@@ -143,34 +150,59 @@ struct page_directory_entry_t {
   { }
 };
 
-typedef struct {
-  page_directory_entry_t entry[PAGE_ENTRY_COUNT];
-} page_directory_t;
+struct page_directory {
+  page_directory_entry entry[PAGE_ENTRY_COUNT];
 
-void
-vm_manager_initialize (logical_address placement_begin,
-		       logical_address placement_end);
+  void
+  clear (physical_address address)
+  {
+    kassert (logical_address (this).is_aligned (PAGE_SIZE));
+    kassert (address.is_aligned (PAGE_SIZE));
+    
+    /* Clear the page directory and page table. */
+    unsigned int k;
+    for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
+      entry[k] = page_directory_entry (frame (), NOT_PRESENT);
+    }
+    
+    /* Map the page directory to itself. */
+    entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame (address), PRESENT);
+  }
 
-logical_address
-vm_manager_page_directory_logical_address (void);
+};
 
-physical_address
-vm_manager_page_directory_physical_address (void);
+class vm_manager {
+private:
+  page_directory kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
+  page_table low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
-void
-vm_manager_map (logical_address address,
-		frame frame,
-		page_privilege_t privilege,
-		writable_t writable);
+public:
+  vm_manager (logical_address placement_begin,
+	      logical_address placement_end,
+	      frame_manager& fm);
 
-void
-vm_manager_unmap (logical_address logical_addr);
+  // logical_address
+  // vm_manager_page_directory_logical_address (void);
 
-void
-vm_manager_switch_to_directory (physical_address address);
+  // physical_address
+  // vm_manager_page_directory_physical_address (void);
 
-void
-page_directory_initialize_with_current (page_directory_t* page_directory,
-					physical_address address);
+  // void
+  // vm_manager_map (logical_address address,
+  // 		frame frame,
+  // 		page_privilege_t privilege,
+  // 		writable_t writable);
 
-#endif /* __vm_manager_h__ */
+  // void
+  // vm_manager_unmap (logical_address logical_addr);
+
+  // void
+  // vm_manager_switch_to_directory (physical_address address);
+
+  // void
+  // page_directory_initialize_with_current (page_directory_t* page_directory,
+  // 					physical_address address);
+
+};
+
+#endif /* __vm_manager_hpp__ */

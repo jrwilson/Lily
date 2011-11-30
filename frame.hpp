@@ -18,8 +18,8 @@
 
 const int FRAME_SHIFT = 12;
 
-struct page_directory_entry_t;
-struct page_table_entry_t;
+struct page_directory_entry;
+struct page_table_entry;
 
 class frame
 {
@@ -34,9 +34,9 @@ public:
     f_ (address.value () >> FRAME_SHIFT)
   { }
 
-  explicit frame (const page_directory_entry_t& entry);
+  explicit frame (const page_directory_entry& entry);
 
-  explicit frame (const page_table_entry_t& entry);
+  explicit frame (const page_table_entry& entry);
 
   bool operator== (const frame& other) const {
     return f_ == other.f_;
@@ -59,8 +59,8 @@ public:
     return physical_address (f_ << FRAME_SHIFT);
   }
 
-  friend class page_table_entry_t;
-  friend class page_directory_entry_t;
+  friend class page_table_entry;
+  friend class page_directory_entry;
 };
 
 #endif /* __frame_hpp__ */

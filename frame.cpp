@@ -14,10 +14,10 @@
 #include "frame.hpp"
 #include "vm_manager.hpp"
 
-frame::frame (const page_directory_entry_t& entry) :
+frame::frame (const page_directory_entry& entry) :
   f_ (entry.frame_)
 { }
 
-frame::frame (const page_table_entry_t& entry) :
+frame::frame (const page_table_entry& entry) :
   f_ (entry.frame_)
 { }

@@ -20,23 +20,23 @@ class list_allocator {
 private:
   struct chunk_header;
   
-  static size_t page_size_;
-  static chunk_header* first_header_;
-  static chunk_header* last_header_;
+  size_t page_size_;
+  chunk_header* first_header_;
+  chunk_header* last_header_;
 
-  static chunk_header*
+  chunk_header*
   find_header (chunk_header* start,
 	       size_t size);
 
-  static void
+  void
   split_header (chunk_header* ptr,
 		size_t size);
-
+  
 public:
-  static void*
+  void*
   alloc (size_t) __attribute__((warn_unused_result));
   
-  static void
+  void
   free (void*);
 };
 

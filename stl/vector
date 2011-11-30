@@ -14,14 +14,13 @@
   Justin R. Wilson
 */
 
-// #include <memory>
-// #include <algorithm>
+#include <memory>
 #include <iterator>
 #include <type_traits>
 
 namespace std {
 
-  template <class T, class Allocator = allocator<T> >
+  template <class T, class Allocator = std::allocator<T> >
   class vector : private Allocator {
   public:
     typedef T value_type;
@@ -51,28 +50,28 @@ namespace std {
       final_ = begin_ + 1;
     }
 
-//     explicit vector (size_type n,
-// 		     const T& value = T (),
-// 		     const Allocator& a = Allocator ()) :
-//       Allocator (a)
-//     {
-//       construct_n (n, value);
-//     }
+    explicit vector (size_type n,
+		     const T& value = T (),
+		     const Allocator& a = Allocator ()) :
+      Allocator (a)
+    {
+      construct_n (n, value);
+    }
 
-//   private:
-//     void construct_n (size_type n,
-// 		      const T& value)
-//     {
-//       const size_type cap = max (n, INITIAL_CAPACITY);
-//       begin_ = allocate (cap);
-//       end_ = begin_;
-//       final_ = begin_ + cap;
+  private:
+    void construct_n (size_type n,
+		      const T& value)
+    {
+      const size_type cap = std::max (size_type (1), n);
+      begin_ = allocate (cap);
+      end_ = begin_;
+      final_ = begin_ + cap;
 
-//       while (n != 0) {
-// 	construct (end_++, value);
-// 	--n;
-//       }
-//     }
+      while (n != 0) {
+	construct (end_++, value);
+	--n;
+      }
+    }
 
 //     template <class InputIterator>
 //     void
@@ -99,7 +98,7 @@ namespace std {
 //       }
 //     }
 
-//   public:
+  public:
 //     template <class InputIterator>
 //     vector (InputIterator begin,
 // 	    InputIterator end,
@@ -246,7 +245,7 @@ namespace std {
 	pointer src = begin_;
 	while (src != end_) {
 	  construct (new_end++, *src);
-	  destroy (src++);
+	  Allocator::destroy (src++);
 	}
 
 	deallocate (begin_, old_cap);
@@ -257,17 +256,17 @@ namespace std {
       }
     }
 
-//     reference
-//     operator[] (size_type n)
-//     {
-//       return begin_[n];
-//     }
+    reference
+    operator[] (size_type n)
+    {
+      return begin_[n];
+    }
 
-//     const_reference
-//     operator[] (size_type n) const
-//     {
-//       return begin_[n];
-//     }
+    const_reference
+    operator[] (size_type n) const
+    {
+      return begin_[n];
+    }
 
 //     reference
 //     at (size_type n)
@@ -356,12 +355,12 @@ namespace std {
 //       assign_dispatch (begin, end, typename is_integral<InputIterator>::type ());
 //     }
 
-//     void
-//     push_back (const T& x)
-//     {
-//       reserve (size () + 1);
-//       construct (end_++, x);
-//     }
+    void
+    push_back (const T& x)
+    {
+      reserve (size () + 1);
+      construct (end_++, x);
+    }
 
 //     void
 //     pop_back ()
@@ -400,7 +399,7 @@ namespace std {
       pointer dst = end_ + n;
       while (src != position) {
 	construct (--dst, *--src);
-	destroy (src);
+	Allocator::destroy (src);
       }
       end_ += n;
       // Insert.
@@ -474,12 +473,12 @@ namespace std {
       iterator src = begin;
       // Destroy.
       while (src != end) {
-	destroy (src++);
+	Allocator::destroy (src++);
       }
       iterator dst = begin;
       while (src != end_) {
 	construct (dst++, *src);
-	destroy (src++);
+	Allocator::destroy (src++);
       }
       end_ = dst;
       return begin;
@@ -497,7 +496,7 @@ namespace std {
     clear ()
     {
       while (end_ != begin_) {
-	destroy (--end_);
+	Allocator::destroy (--end_);
       }
     }
 

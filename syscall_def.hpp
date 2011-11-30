@@ -27,7 +27,6 @@ typedef enum {
 
 typedef enum {
   SYSERROR_SUCCESS = 0,
-  SYSERROR_REQUESTED_SIZE_NOT_ALIGNED,
   SYSERROR_OUT_OF_MEMORY,
 } syserror_t;
 

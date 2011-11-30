@@ -36,11 +36,19 @@
 	PAGE_DIRECTORY_HIGH_ENTRY equ (KERNEL_VIRTUAL_BASE >> 22)
 	PAGE_TABLE_ENTRY equ ((KERNEL_VIRTUAL_BASE >> 12) & 0x3FF)
 
+	;; The end of the logical address space.  (4M for every page table)
+	LOGICAL_END equ (KERNEL_VIRTUAL_BASE + 0x400000)
+	
 	;; Multiboot values.
-boot_eax:	
+	[global multiboot_magic]
+multiboot_magic:	
 	dd 0
-boot_ebx:
+	[global multiboot_info]
+multiboot_info:
 	dd 0
+	[global logical_end]
+logical_end:
+	dd LOGICAL_END
 		
 	;; Paging structures.
 	align 4096
@@ -49,15 +57,14 @@ page_directory:
 page_table:
 	times 1024 dd 0
 
-	;; The end of the logical address space.  (4M for every page table)
-	LOGICAL_END equ (KERNEL_VIRTUAL_BASE + 0x400000)
-	
 	;; Export the start symbol so the linker can find it.
 	[global start]
 start:
+	;; Disable interrupts.
+	cli
 	;; Save the multiboot values.
-	mov [boot_eax], eax
-	mov [boot_ebx], ebx
+	mov [multiboot_magic], eax
+	mov [multiboot_info], ebx
 	;; Initialize the page directory.
 	mov ecx, page_table
 	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
@@ -103,16 +110,6 @@ highhalf:
 	cmp  ebx, ctors_end
 	jb   .call_constructor
 	
-	;; Push the multiboot magic number.
-	mov eax, [boot_eax]
-	push eax
-	;; Push the multiboot data structure.
-	mov ebx, [boot_ebx]
-	push ebx
-	;; Push the logical end of the address space.
-	mov ecx, LOGICAL_END
-	push ecx
-		
 	;; Import the kmain symbol.
 	[extern kmain]
 	call kmain

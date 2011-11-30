@@ -16,29 +16,31 @@
 
 #include "list_allocator.hpp"
 
-inline void*
-operator new (size_t sz)
-{
-  return list_allocator::alloc (sz);
-}
+// extern list_allocator default_allocator;
 
-inline void
-operator delete (void* p)
-{
-  list_allocator::free (p);
-}
+// inline void*
+// operator new (size_t sz)
+// {
+//   return default_allocator.alloc (sz);
+// }
 
-inline void*
-operator new[] (size_t sz)
-{
-  return list_allocator::alloc (sz);
-}
+// inline void
+// operator delete (void* p)
+// {
+//   default_allocator.free (p);
+// }
 
-inline void
-operator delete[] (void* p)
-{
-  list_allocator::free (p);
-}
+// inline void*
+// operator new[] (size_t sz)
+// {
+//   return default_allocator.alloc (sz);
+// }
+
+// inline void
+// operator delete[] (void* p)
+// {
+//   default_allocator.free (p);
+// }
 
 inline void*
 operator new (size_t,

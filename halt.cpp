@@ -13,12 +13,12 @@
 */
 
 #include "halt.hpp"
-#include "idt.hpp"
+#include "interrupts.hpp"
 
 void
 halt ()
 {
-  disable_interrupts ();
+  interrupts::disable ();
   for (;;) {
     asm volatile ("hlt");
   }

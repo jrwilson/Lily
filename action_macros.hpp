@@ -1,10 +1,10 @@
-#ifndef __action_macros_h__
-#define __action_macros_h__
+#ifndef __action_macros_hpp__
+#define __action_macros_hpp__
 
 /*
   File
   ----
-  action_macros.h
+  action_macros.hpp
   
   Description
   -----------
@@ -173,24 +173,20 @@ name##_driver (parameter_t parameter) \
       "push %ecx\n" \
       "call " quote(name) "_driver");
 
-#define UP_INTERNAL(name, scheduler)			\
-  extern int name; \
-  static bool name##_precondition (void);	\
-  static void name##_effect (void); \
-  static void name##_schedule (void); \
+#define UP_INTERNAL(class_name, action_name)	\
 extern "C" void \
-name##_driver () \
+action_name##_driver () \
 { \
-  (scheduler).remove (&name, 0);	\
-  if (name##_precondition ()) { \
-    name##_effect (); \
+  class_name::schedule_remove (&action_name, 0); \
+  if (class_name::action_name##_precondition ()) {	\
+    class_name::action_name##_effect ();			\
   } \
-  name##_schedule (); \
-  (scheduler).finish (0, 0);	\
+  class_name::action_name##_schedule ();		\
+  class_name::schedule_finish (0, 0); \
 } \
-asm (".global " quote(name) "\n"		\
-     quote(name) ":\n"	\
-     "call " quote(name) "_driver");
+asm (".global " quote(action_name) "\n"		\
+     quote(action_name) ":\n"	\
+     "call " quote(action_name) "_driver");
 
 #define P_INTERNAL(name, parameter_type, scheduler)	\
   extern int name; \
@@ -212,4 +208,4 @@ asm (".global " quote(name) "\n"		\
       "push %ecx\n" \
      "call " quote(name) "_driver");
 
-#endif /* __action_macros_h__ */
+#endif /* __action_macros_hpp__ */

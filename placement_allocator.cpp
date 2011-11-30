@@ -17,21 +17,21 @@
 
 using namespace std::rel_ops;
 
-placement_allocator::placement_allocator (const logical_address& begin,
-					  const logical_address& end) :
+placement_alloc::placement_alloc (const logical_address& begin,
+				  const logical_address& limit) :
   begin_ (begin),
-  end_ (end),
-  marker_ (begin)
+  end_ (begin),
+  limit_ (limit)
 {
-  kassert (begin <= end);
+  kassert (begin <= limit);
 }
 
 void*
-placement_allocator::alloc (size_t size)
+placement_alloc::alloc (size_t size)
 {
-  if (size > 0 && static_cast<ptrdiff_t> (size) <= (end_ - marker_)) {
-    void* retval = marker_.value ();
-    marker_ += size;
+  if (size > 0 && static_cast<ptrdiff_t> (size) <= (limit_ - end_)) {
+    void* retval = end_.value ();
+    end_ += size;
     return retval;
   }
   else {

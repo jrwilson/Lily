@@ -36,9 +36,9 @@ struct list_allocator::chunk_header {
   { }
 };
 
-size_t list_allocator::page_size_ = 0;
-list_allocator::chunk_header* list_allocator::first_header_ = 0;
-list_allocator::chunk_header* list_allocator::last_header_ = 0;
+// size_t list_allocator::page_size_ = 0;
+// list_allocator::chunk_header* list_allocator::first_header_ = 0;
+// list_allocator::chunk_header* list_allocator::last_header_ = 0;
 
 list_allocator::chunk_header*
 list_allocator::find_header (chunk_header* start,
@@ -72,6 +72,10 @@ list_allocator::split_header (chunk_header* ptr,
 void*
 list_allocator::alloc (size_t size)
 {
+  if (size == 0) {
+    return 0;
+  }
+
   if (page_size_ == 0) {
     page_size_ = sys_get_page_size ();
     size_t request_size = physical_address (sizeof (chunk_header) + size).align_up (page_size_).value ();
@@ -99,6 +103,10 @@ list_allocator::alloc (size_t size)
 void
 list_allocator::free (void* p)
 {
+  if (p == 0) {
+    return;
+  }
+
   chunk_header* ptr = static_cast<chunk_header*> (p);
   --ptr;
 

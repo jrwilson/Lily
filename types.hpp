@@ -67,12 +67,21 @@ public:
     return *this;
   }
 
-  inline physical_address& align_down (const size_t radix) {
+  // Align down.
+  inline physical_address operator>> (const size_t radix) {
+    return physical_address (address_ & ~(radix - 1));
+  }
+
+  inline physical_address& operator>>= (const size_t radix) {
     address_ &= ~(radix - 1);
     return *this;
   }
 
-  inline physical_address& align_up (const size_t radix) {
+  inline physical_address operator<< (const size_t radix) {
+    return physical_address ((address_ + radix - 1) & ~(radix - 1));
+  }
+
+  inline physical_address& operator<<= (const size_t radix) {
     address_ = (address_ + radix - 1) & ~(radix - 1);
     return *this;
   }
@@ -131,18 +140,26 @@ public:
     return address_[idx];
   }
 
-  inline bool is_aligned (const size_t radix) const {
-    return (reinterpret_cast<size_t> (address_) & (radix - 1)) == 0;
+  inline logical_address operator>> (const size_t radix) {
+    return logical_address (reinterpret_cast<uint8_t*> (reinterpret_cast<size_t> (address_) & ~(radix - 1)));
   }
 
-  inline logical_address& align_down (const size_t radix) {
+  inline logical_address& operator>>= (const size_t radix) {
     address_ = reinterpret_cast<uint8_t*> (reinterpret_cast<size_t> (address_) & ~(radix - 1));
     return *this;
   }
 
-  inline logical_address& align_up (const size_t radix) {
+  inline logical_address operator<< (const size_t radix) {
+    return logical_address (reinterpret_cast<uint8_t*> ((reinterpret_cast<size_t> (address_) + radix - 1) & ~(radix - 1)));
+  }
+
+  inline logical_address& operator<<= (const size_t radix) {
     address_ = reinterpret_cast<uint8_t*> ((reinterpret_cast<size_t> (address_) + radix - 1) & ~(radix - 1));
     return *this;
+  }
+
+  inline bool is_aligned (const size_t radix) const {
+    return (reinterpret_cast<size_t> (address_) & (radix - 1)) == 0;
   }
 
   inline void* value (void) const {

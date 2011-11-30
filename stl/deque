@@ -147,7 +147,7 @@ namespace std {
        	pointer src = begin_;
       	while (src != end_) {
       	  construct (new_end++, *src);
-      	  destroy (src);
+	  Allocator::destroy (src);
 	  advance (src);
       	}
 
@@ -248,7 +248,7 @@ namespace std {
     void
     pop_front ()
     {
-      destroy (begin_);
+      Allocator::destroy (begin_);
       advance (begin_);
     }
 
@@ -288,7 +288,7 @@ namespace std {
     clear ()
     {
       while (begin_ != end_) {
-	destroy (begin_);
+	Allocator::destroy (begin_);
 	advance (begin_);
       }
     }

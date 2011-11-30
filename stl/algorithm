@@ -18,6 +18,18 @@
 
 namespace std {
 
+  template <class InputIterator, class Function>
+  Function
+  for_each (InputIterator begin,
+	    InputIterator end,
+	    Function func)
+  {
+    for (; begin != end; ++begin) {
+      func (*begin);
+    }
+    return func;
+  }
+
   template <class InputIterator, class T>
   InputIterator
   find (InputIterator begin,
@@ -26,6 +38,20 @@ namespace std {
   {
     for (; begin != end; ++begin) {
       if (*begin == value) {
+	break;
+      }
+    }
+    return begin;
+  }
+
+  template <class InputIterator, class Predicate>
+  InputIterator
+  find_if (InputIterator begin,
+	   InputIterator end,
+	   Predicate pred)
+  {
+    for (; begin != end; ++begin) {
+      if (pred (*begin)) {
 	break;
       }
     }
@@ -97,6 +123,55 @@ namespace std {
       step = count / 2;
       std::advance (iter, step);
       if (comp (*iter, value)) {
+	first = ++iter;
+	count -= (step + 1);
+      }
+      else {
+	count = step;
+      }
+    }
+    return first;
+  }
+
+  template <class ForwardIterator, class T>
+  ForwardIterator
+  upper_bound (ForwardIterator first,
+	       ForwardIterator last,
+	       const T& value)
+  {
+    ForwardIterator iter;
+    typename iterator_traits<ForwardIterator>::distance_type count, step;
+    count = distance (first, last);
+    while (count > 0) {
+      iter = first;
+      step = count / 2;
+      advance (iter, step);
+      if (!(value < *iter)) {
+	first = ++iter;
+	count -= (step + 1);
+      }
+      else {
+	count = step;
+      }
+    }
+    return first;
+  }
+
+  template <class ForwardIterator, class T, class Compare>
+  ForwardIterator
+  upper_bound (ForwardIterator first,
+	       ForwardIterator last,
+	       const T& value,
+	       Compare comp)
+  {
+    ForwardIterator iter;
+    typename iterator_traits<ForwardIterator>::difference_type count, step;
+    count = distance (first, last);
+    while (count > 0) {
+      iter = first;
+      step = count / 2;
+      std::advance (iter, step);
+      if (!comp (value, *iter)) {
 	first = ++iter;
 	count -= (step + 1);
       }
