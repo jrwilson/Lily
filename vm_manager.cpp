@@ -49,8 +49,8 @@ vm_manager::vm_manager (logical_address placement_begin,
   kernel_page_directory.clear (kernel_page_directory_paddr);
 
   /* Insert the page table. */
-  kernel_page_directory.entry[logical_address (0).page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), PRESENT);
-  kernel_page_directory.entry[KERNEL_VIRTUAL_BASE.page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), PRESENT);
+  kernel_page_directory.entry[logical_address (0).page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), paging_constants::PRESENT);
+  kernel_page_directory.entry[KERNEL_VIRTUAL_BASE.page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), paging_constants::PRESENT);
 
   logical_address begin, end;
 
@@ -61,7 +61,7 @@ vm_manager::vm_manager (logical_address placement_begin,
   for (; begin < end; begin += PAGE_SIZE) {
     physical_address pa (reinterpret_cast<size_t> (begin.value ()));
     frame frame (pa);
-    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
+    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
@@ -74,7 +74,7 @@ vm_manager::vm_manager (logical_address placement_begin,
   for (; begin < end; begin += PAGE_SIZE) {
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
-    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, SUPERVISOR, NOT_WRITABLE, PRESENT);
+    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
@@ -87,7 +87,7 @@ vm_manager::vm_manager (logical_address placement_begin,
   for (; begin < end; begin += PAGE_SIZE) {
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
-    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
+    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
@@ -100,7 +100,7 @@ vm_manager::vm_manager (logical_address placement_begin,
   for (; begin < end; begin += PAGE_SIZE) {
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
-    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
+    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
@@ -113,7 +113,7 @@ vm_manager::vm_manager (logical_address placement_begin,
   for (; begin < end; begin += PAGE_SIZE) {
     physical_address pa (begin - KERNEL_VIRTUAL_BASE);
     frame frame (pa);
-    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, SUPERVISOR, WRITABLE, PRESENT);
+    low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 

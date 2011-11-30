@@ -14,22 +14,22 @@ trap%1:
 	jmp trap_common_stub
 %endmacro
 
-	;; Import trap_handler.
-	[extern trap_handler]
+	;; Import trap_dispatch.
+	[extern trap_dispatch]
 trap_common_stub:
 	;; Push the processor state.
 	pusha
-	mov ax, ds
 	;; Push the old data segment.
+	mov ax, ds
 	push eax
 	;; Load the kernel data segment.
 	mov ax, KERNEL_DATA_SELECTOR
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
-	;; TODO:  What about the stack segment?
 	mov gs, ax
-	call trap_handler
+	;; TODO:  What about the stack segment?
+	call trap_dispatch
 	;; Pop the old data segment.
 	pop eax
 	;; Load the old data segment.

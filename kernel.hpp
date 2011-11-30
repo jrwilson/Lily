@@ -32,6 +32,7 @@ class kernel {
 private:
   welcome_message wm_;
   global_descriptor_table gdt_;
+  system_automaton system_automaton_;
   interrupt_descriptor_table idt_;
   exception_handler exception_handler_;
   irq_handler irq_handler_;
@@ -47,7 +48,7 @@ public:
 	  void* logical_end) :
     exception_handler_ (idt_),
     irq_handler_ (idt_),
-    trap_handler_ (idt_),
+    trap_handler_ (idt_, system_automaton_),
     multiboot_parser_ (multiboot_magic, multiboot_info),
     placement_alloc_ (std::max (logical_address (&data_end) << PAGE_SIZE,
 				(KERNEL_VIRTUAL_BASE + multiboot_parser_.end ().value ()) << PAGE_SIZE),
@@ -57,14 +58,8 @@ public:
 		    placement_alloc_),
     vm_manager_ (placement_alloc_.begin (), placement_alloc_.end (), frame_manager_)
   {
-  // /* Initialize the system call handler. */
-  // syscall_handler<system_allocator_tag, system_allocator>::initialize ();
-
-  // /* Initialize the page fault handler. */
-  // page_fault_handler<system_allocator_tag, system_allocator>::initialize ();
-
-  // /* Does not return. */
-  // system_automaton<system_allocator_tag, system_allocator>::initialize (placement_begin, placement_end);
+    // /* Does not return. */
+    // system_automaton<system_allocator_tag, system_allocator>::initialize (placement_begin, placement_end);
   }
 };
 

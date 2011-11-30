@@ -14,36 +14,49 @@
   Justin R. Wilson
 */
 
-#include "descriptor.hpp"
 #include "frame_manager.hpp"
 
 /* Number of entries in a page table or directory. */
 static const size_t PAGE_ENTRY_COUNT = PAGE_SIZE / sizeof (void*);
 
-enum global_t {
-  NOT_GLOBAL = 0,
-  GLOBAL = 1,
-};
+namespace paging_constants {
 
-enum cached_t {
-  CACHED = 0,
-  NOT_CACHED = 1,
-};
+  enum global_t {
+    NOT_GLOBAL = 0,
+    GLOBAL = 1,
+  };
 
-enum cache_mode_t {
-  WRITE_BACK = 0,
-  WRITE_THROUGH = 1,
-};
+  enum cached_t {
+    CACHED = 0,
+    NOT_CACHED = 1,
+  };
 
-enum page_privilege_t {
-  SUPERVISOR = 0,
-  USER = 1,
-};
+  enum cache_mode_t {
+    WRITE_BACK = 0,
+    WRITE_THROUGH = 1,
+  };
 
-enum page_size_t {
-  PAGE_SIZE_4K = 0,
-  PAGE_SIZE_4M = 1,
-};
+  enum page_privilege_t {
+    SUPERVISOR = 0,
+    USER = 1,
+  };
+
+  enum page_size_t {
+    PAGE_SIZE_4K = 0,
+    PAGE_SIZE_4M = 1,
+  };
+
+  enum writable_t {
+    NOT_WRITABLE = 0,
+    WRITABLE = 1,
+  };
+
+  enum present_t {
+    NOT_PRESENT = 0,
+    PRESENT = 1,
+  };
+
+}
 
 struct page_table_entry {
   unsigned int present_ : 1;
@@ -59,32 +72,32 @@ struct page_table_entry {
   unsigned int frame_ : 20;
 
   page_table_entry () :
-    present_ (NOT_PRESENT),
-    writable_ (NOT_WRITABLE),
-    user_ (SUPERVISOR),
-    write_through_ (WRITE_BACK),
-    cache_disabled_ (CACHED),
+    present_ (paging_constants::NOT_PRESENT),
+    writable_ (paging_constants::NOT_WRITABLE),
+    user_ (paging_constants::SUPERVISOR),
+    write_through_ (paging_constants::WRITE_BACK),
+    cache_disabled_ (paging_constants::CACHED),
     accessed_ (0),
     dirty_ (0),
     zero_ (0),
-    global_ (NOT_GLOBAL),  
+    global_ (paging_constants::NOT_GLOBAL),  
     available_ (0),
     frame_ (0)
   { }
 
   page_table_entry (frame frame,
-		    page_privilege_t privilege,
-		    writable_t writable,
-		    present_t present) :
+		    paging_constants::page_privilege_t privilege,
+		    paging_constants::writable_t writable,
+		    paging_constants::present_t present) :
     present_ (present),
     writable_ (writable),
     user_ (privilege),
-    write_through_ (WRITE_BACK),
-    cache_disabled_ (CACHED),
+    write_through_ (paging_constants::WRITE_BACK),
+    cache_disabled_ (paging_constants::CACHED),
     accessed_ (0),
     dirty_ (0),
     zero_ (0),
-    global_ (NOT_GLOBAL),  
+    global_ (paging_constants::NOT_GLOBAL),  
     available_ (0),
     frame_ (frame.f_)
   { }
@@ -101,7 +114,7 @@ struct page_table {
     
     unsigned int k;
     for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-      entry[k] = page_table_entry (frame (), SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
+      entry[k] = page_table_entry (frame (), paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::NOT_PRESENT);
     }
   }
 
@@ -121,29 +134,29 @@ struct page_directory_entry {
   unsigned int frame_ : 20;
 
   page_directory_entry () :
-    present_ (NOT_PRESENT),
-    writable_ (WRITABLE),
-    user_ (SUPERVISOR),
-    write_through_ (WRITE_BACK),
-    cache_disabled_ (CACHED),
+    present_ (paging_constants::NOT_PRESENT),
+    writable_ (paging_constants::WRITABLE),
+    user_ (paging_constants::SUPERVISOR),
+    write_through_ (paging_constants::WRITE_BACK),
+    cache_disabled_ (paging_constants::CACHED),
     accessed_ (0),
     zero_ (0),
-    page_size_ (PAGE_SIZE_4K),
+    page_size_ (paging_constants::PAGE_SIZE_4K),
     ignored_ (0),
     available_ (0),
     frame_ (0)
   { }
 
   page_directory_entry (frame frame,
-			present_t present) :
+			paging_constants::present_t present) :
     present_ (present),
-    writable_ (WRITABLE),
-    user_ (SUPERVISOR),
-    write_through_ (WRITE_BACK),
-    cache_disabled_ (CACHED),
+    writable_ (paging_constants::WRITABLE),
+    user_ (paging_constants::SUPERVISOR),
+    write_through_ (paging_constants::WRITE_BACK),
+    cache_disabled_ (paging_constants::CACHED),
     accessed_ (0),
     zero_ (0),
-    page_size_ (PAGE_SIZE_4K),
+    page_size_ (paging_constants::PAGE_SIZE_4K),
     ignored_ (0),
     available_ (0),
     frame_ (frame.f_)
@@ -162,11 +175,11 @@ struct page_directory {
     /* Clear the page directory and page table. */
     unsigned int k;
     for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
-      entry[k] = page_directory_entry (frame (), NOT_PRESENT);
+      entry[k] = page_directory_entry (frame (), paging_constants::NOT_PRESENT);
     }
     
     /* Map the page directory to itself. */
-    entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame (address), PRESENT);
+    entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame (address), paging_constants::PRESENT);
   }
 
 };

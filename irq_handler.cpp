@@ -106,22 +106,22 @@ irq_handler::irq_handler (interrupt_descriptor_table& idt) :
   outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask_);
   outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask_);
 
-  idt.set (PIC_MASTER_BASE + 0, make_interrupt_gate (irq0, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 1, make_interrupt_gate (irq1, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 2, make_interrupt_gate (irq2, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 3, make_interrupt_gate (irq3, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 4, make_interrupt_gate (irq4, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 5, make_interrupt_gate (irq5, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 6, make_interrupt_gate (irq6, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_MASTER_BASE + 7, make_interrupt_gate (irq7, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 0, make_interrupt_gate (irq8, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 1, make_interrupt_gate (irq9, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 2, make_interrupt_gate (irq10, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 3, make_interrupt_gate (irq11, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 4, make_interrupt_gate (irq12, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 5, make_interrupt_gate (irq13, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 6, make_interrupt_gate (irq14, KERNEL_CODE_SELECTOR, RING0, PRESENT));
-  idt.set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, KERNEL_CODE_SELECTOR, RING0, PRESENT));
+  idt.set (PIC_MASTER_BASE + 0, make_interrupt_gate (irq0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 1, make_interrupt_gate (irq1, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 2, make_interrupt_gate (irq2, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 3, make_interrupt_gate (irq3, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 4, make_interrupt_gate (irq4, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 5, make_interrupt_gate (irq5, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 6, make_interrupt_gate (irq6, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_MASTER_BASE + 7, make_interrupt_gate (irq7, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 0, make_interrupt_gate (irq8, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 1, make_interrupt_gate (irq9, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 2, make_interrupt_gate (irq10, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 3, make_interrupt_gate (irq11, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 4, make_interrupt_gate (irq12, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 5, make_interrupt_gate (irq13, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 6, make_interrupt_gate (irq14, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt.set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
 }
 
 // void

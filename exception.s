@@ -27,16 +27,16 @@ exception%1:
 exception_common_stub:
 	;; Push the processor state.
 	pusha
-	mov ax, ds
 	;; Push the old data segment.
+	mov ax, ds
 	push eax
 	;; Load the kernel data segment.
 	mov ax, KERNEL_DATA_SELECTOR
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
-	;; TODO:  What about the stack segment?
 	mov gs, ax
+	;; TODO:  What about the stack segment?
 	call exception_handler
 	;; Pop the old data segment.
 	pop eax

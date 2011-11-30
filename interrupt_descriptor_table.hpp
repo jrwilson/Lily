@@ -56,7 +56,7 @@ public:
     ip_.base = reinterpret_cast<uint32_t> (idt_entry_);
     
     for (k = 0; k < INTERRUPT_COUNT; ++k) {
-      idt_entry_[k].interrupt = make_interrupt_gate (0, 0, RING0, NOT_PRESENT);
+      idt_entry_[k].interrupt = make_interrupt_gate (0, 0, descriptor_constants::RING0, descriptor_constants::NOT_PRESENT);
     }
         
     idt_flush (&ip_);
@@ -74,7 +74,7 @@ public:
        interrupt_descriptor id)
   {
     kassert (k < INTERRUPT_COUNT);
-    kassert (idt_entry_[k].interrupt.present == NOT_PRESENT);
+    kassert (idt_entry_[k].interrupt.present == descriptor_constants::NOT_PRESENT);
     idt_entry_[k].interrupt = id;
     idt_flush (&ip_);
   }

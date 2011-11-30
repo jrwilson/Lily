@@ -83,6 +83,7 @@ struct point_descriptor {
 } __attribute__ ((packed));
 
 typedef point_descriptor interrupt_descriptor;
+typedef point_descriptor trap_descriptor;
 typedef range_descriptor tss_descriptor;
 
 union descriptor {
@@ -92,52 +93,57 @@ union descriptor {
   tss_descriptor tss;
 };
 
-enum privilege_t {
-  RING0 = 0,
-  RING1 = 1,
-  RING2 = 2,
-  RING3 = 3,
-};
+namespace descriptor_constants {
 
-enum present_t {
-  NOT_PRESENT = 0,
-  PRESENT = 1,
-};
+  enum privilege_t {
+    RING0 = 0,
+    RING1 = 1,
+    RING2 = 2,
+    RING3 = 3,
+  };
 
-enum readable_t {
-  NOT_READABLE = 0,
-  READABLE = 1,
-};
+  enum present_t {
+    NOT_PRESENT = 0,
+    PRESENT = 1,
+  };
 
-enum conforming_t {
-  NOT_CONFORMING = 0,
-  CONFORMING = 1,
-};
+  enum readable_t {
+    NOT_READABLE = 0,
+    READABLE = 1,
+  };
 
-enum width_t {
-  WIDTH_16 = 0,
-  WIDTH_32 = 1,
-};
+  enum conforming_t {
+    NOT_CONFORMING = 0,
+    CONFORMING = 1,
+  };
 
-enum granularity_t {
-  BYTE_GRANULARITY = 0,
-  PAGE_GRANULARITY = 1,
-};
+  enum width_t {
+    WIDTH_16 = 0,
+    WIDTH_32 = 1,
+  };
 
-enum writable_t {
-  NOT_WRITABLE = 0,
-  WRITABLE = 1,
-};
+  enum granularity_t {
+    BYTE_GRANULARITY = 0,
+    PAGE_GRANULARITY = 1,
+  };
 
-enum expand_t {
-  EXPAND_UP = 0,
-  EXPAND_DOWN = 1,
-};
+  enum writable_t {
+    NOT_WRITABLE = 0,
+    WRITABLE = 1,
+  };
 
-enum segment_type_t {
-  INTERRUPT_GATE = 0x0E,
-  AVAILABLE_TSS = 0x09,
-};
+  enum expand_t {
+    EXPAND_UP = 0,
+    EXPAND_DOWN = 1,
+  };
+
+  enum segment_type_t {
+    AVAILABLE_TSS = 0x09,
+    INTERRUPT_GATE = 0x0E,
+    TRAP_GATE = 0x0F,
+  };
+
+}
 
 inline descriptor
 make_null_descriptor ()
@@ -157,12 +163,12 @@ make_null_descriptor ()
 inline code_segment_descriptor
 make_code_segment_descriptor (unsigned int base,
 			      unsigned int limit,
-			      readable_t readable,
-			      conforming_t conforming,
-			      privilege_t privilege,
-			      present_t present,
-			      width_t width,
-			      granularity_t granularity)
+			      descriptor_constants::readable_t readable,
+			      descriptor_constants::conforming_t conforming,
+			      descriptor_constants::privilege_t privilege,
+			      descriptor_constants::present_t present,
+			      descriptor_constants::width_t width,
+			      descriptor_constants::granularity_t granularity)
 {
   code_segment_descriptor retval;
 
@@ -170,7 +176,7 @@ make_code_segment_descriptor (unsigned int base,
   retval.base_middle = (base >> 16) & 0xFF;
   retval.base_high = (base >> 24) & 0xFF;
 
-  if (granularity == PAGE_GRANULARITY) {
+  if (granularity == descriptor_constants::PAGE_GRANULARITY) {
     limit >>= 12;
   }
 
@@ -195,12 +201,12 @@ make_code_segment_descriptor (unsigned int base,
 inline data_segment_descriptor
 make_data_segment_descriptor (unsigned int base,
 			      unsigned int limit,
-			      writable_t writable,
-			      expand_t expand,
-			      privilege_t privilege,
-			      present_t present,
-			      width_t width,
-			      granularity_t granularity)
+			      descriptor_constants::writable_t writable,
+			      descriptor_constants::expand_t expand,
+			      descriptor_constants::privilege_t privilege,
+			      descriptor_constants::present_t present,
+			      descriptor_constants::width_t width,
+			      descriptor_constants::granularity_t granularity)
 {
   data_segment_descriptor retval;
 
@@ -208,7 +214,7 @@ make_data_segment_descriptor (unsigned int base,
   retval.base_middle = (base >> 16) & 0xFF;
   retval.base_high = (base >> 24) & 0xFF;
 
-  if (granularity == PAGE_GRANULARITY) {
+  if (granularity == descriptor_constants::PAGE_GRANULARITY) {
     limit >>= 12;
   }
 
@@ -233,9 +239,9 @@ make_data_segment_descriptor (unsigned int base,
 inline tss_descriptor
 make_tss_descriptor (unsigned int base,
 		     unsigned int limit,
-		     privilege_t privilege,
-		     present_t present,
-		     granularity_t granularity)
+		     descriptor_constants::privilege_t privilege,
+		     descriptor_constants::present_t present,
+		     descriptor_constants::granularity_t granularity)
 {
   tss_descriptor retval;
 
@@ -243,14 +249,14 @@ make_tss_descriptor (unsigned int base,
   retval.base_middle = (base >> 16) & 0xFF;
   retval.base_high = (base >> 24) & 0xFF;
 
-  if (granularity == PAGE_GRANULARITY) {
+  if (granularity == descriptor_constants::PAGE_GRANULARITY) {
     limit >>= 12;
   }
 
   retval.limit_low = (limit & 0xFFFF);
   retval.limit_high = (limit >> 16) & 0xF;
 
-  retval.type = AVAILABLE_TSS;
+  retval.type = descriptor_constants::AVAILABLE_TSS;
   retval.dpl = privilege;
   retval.present = present;
   retval.available = 0;
@@ -266,8 +272,8 @@ typedef void (*interrupt_handler) ();
 inline interrupt_descriptor
 make_interrupt_gate (interrupt_handler handler,
 		     unsigned short segment,
-		     privilege_t privilege,
-		     present_t present)
+		     descriptor_constants::privilege_t privilege,
+		     descriptor_constants::present_t present)
 {
   interrupt_descriptor retval;
   unsigned int offset = reinterpret_cast<unsigned int> (handler);
@@ -277,7 +283,28 @@ make_interrupt_gate (interrupt_handler handler,
   retval.segment = segment;
   retval.parameter_count = 0;
   retval.zero = 0;
-  retval.type = INTERRUPT_GATE;
+  retval.type = descriptor_constants::INTERRUPT_GATE;
+  retval.dpl = privilege;
+  retval.present = present;
+
+  return retval;
+}
+
+inline trap_descriptor
+make_trap_gate (interrupt_handler handler,
+		unsigned short segment,
+		descriptor_constants::privilege_t privilege,
+		descriptor_constants::present_t present)
+{
+  interrupt_descriptor retval;
+  unsigned int offset = reinterpret_cast<unsigned int> (handler);
+
+  retval.offset_low = offset & 0xFFFF;
+  retval.offset_high = (offset >> 16) & 0xFFFF;
+  retval.segment = segment;
+  retval.parameter_count = 0;
+  retval.zero = 0;
+  retval.type = descriptor_constants::TRAP_GATE;
   retval.dpl = privilege;
   retval.present = present;
 
