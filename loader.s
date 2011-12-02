@@ -36,9 +36,6 @@
 	PAGE_DIRECTORY_HIGH_ENTRY equ (KERNEL_VIRTUAL_BASE >> 22)
 	PAGE_TABLE_ENTRY equ ((KERNEL_VIRTUAL_BASE >> 12) & 0x3FF)
 
-	;; The end of the logical address space.  (4M for every page table)
-	LOGICAL_END equ (KERNEL_VIRTUAL_BASE + 0x400000)
-	
 	;; Multiboot values.
 	[global multiboot_magic]
 multiboot_magic:	
@@ -46,9 +43,6 @@ multiboot_magic:
 	[global multiboot_info]
 multiboot_info:
 	dd 0
-	[global logical_end]
-logical_end:
-	dd LOGICAL_END
 		
 	;; Paging structures.
 	align 4096

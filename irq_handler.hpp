@@ -14,7 +14,7 @@
   Justin R. Wilson
 */
 
-#include "interrupt_descriptor_table.hpp"
+#include "types.hpp"
 
 class irq_handler {
 private:
@@ -23,7 +23,7 @@ private:
 
 public:
   static void
-  install (interrupt_descriptor_table& idt);
+  install ();
 };
 
 #endif /* __irq_handler_hpp__ */

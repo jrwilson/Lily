@@ -341,6 +341,11 @@ My next goal is to implement the following stack:
 
 This will require buffers which is the immediate next order of business.
 
+2011-12-02
+
+On second thought, its easier to not use data structures requiring dynamic memory in static objects.
+This simplified the problem tremendously.
+
 
 
 Take out page scrub in page_handler.

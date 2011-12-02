@@ -43,7 +43,6 @@ private:
   
   class execution_context {
   private:
-    vm_manager& vm_manager_;
     binding_manager& binding_manager_;
     uint32_t switch_stack_[SWITCH_STACK_SIZE];
     action current_action_;
@@ -53,8 +52,7 @@ private:
     value_t output_value_;
     
   public:
-    execution_context (vm_manager& vm,
-		       binding_manager& bm);
+    execution_context (binding_manager& bm);
 
     void
     clear ();
@@ -89,7 +87,6 @@ private:
 
 public:
   scheduler (list_alloc& a,
-	     vm_manager& vm,
 	     binding_manager& bm);
 
   void

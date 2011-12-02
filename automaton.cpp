@@ -12,6 +12,7 @@
 */
 
 #include "automaton.hpp"
+#include "global_descriptor_table.hpp"
 
 automaton::memory_map_type::iterator
 automaton::find_by_address (const vm_area_base* area)
@@ -185,22 +186,13 @@ automaton::unreserve (logical_address address)
 }
   
 void
-automaton::page_fault (frame_manager& fm,
-		       vm_manager& vm,
-		       logical_address address,
+automaton::page_fault (logical_address address,
 		       uint32_t error)
 {
   vm_reserved_area k (address, address + 1);
-    
   memory_map_type::const_iterator pos = find_by_address (&k);
-    
-  if (pos != memory_map_.end ()) {
-    (*pos)->page_fault (fm, vm, address, error);
-  }
-  else {
-    /* TODO:  Not in memory map. */
-    kassert (0);
-  }
+  kassert (pos != memory_map_.end ());
+  (*pos)->page_fault (address, error);
 }
   
 void
@@ -223,8 +215,7 @@ automaton::get_action_type (void* action_entry_point)
 }
 
 void
-automaton::execute (vm_manager& vm,
-		    logical_address switch_stack,
+automaton::execute (logical_address switch_stack,
 		    size_t switch_stack_size,
 		    void* action_entry_point,
 		    parameter_t parameter,
@@ -258,7 +249,7 @@ automaton::execute (vm_manager& vm,
 		"add %0, %%ebp\n" :: "r"(new_stack_begin - stack_begin) : "%esp", "memory");
   
   /* Switch page directories. */
-  vm.switch_to_directory (page_directory_);
+  vm_manager::switch_to_directory (page_directory_);
   
   /* Load the new stack segment.
      Load the new stack pointer.

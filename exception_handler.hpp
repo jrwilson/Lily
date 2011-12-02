@@ -14,11 +14,8 @@
   Justin R. Wilson
 */
 
-#include "interrupt_descriptor_table.hpp"
-
 namespace exception_handler {
-  void install (interrupt_descriptor_table& idt);
-
+  void install ();
 }
 
 #endif /* __exception_handler_hpp__ */

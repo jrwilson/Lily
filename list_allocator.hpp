@@ -32,7 +32,10 @@ private:
   void
   split_header (chunk_header* ptr,
 		size_t size);
-  
+
+  bool
+  merge_header (chunk_header* ptr);
+
 public:
   list_alloc (bool initialize = true);
 

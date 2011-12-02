@@ -12,10 +12,11 @@
 */
 
 #include "trap_handler.hpp"
+#include "interrupt_descriptor_table.hpp"
+#include "global_descriptor_table.hpp"
 #include "syscall_def.hpp"
 #include "vm_def.hpp"
 #include "system_automaton.hpp"
-
 #include <utility>
 
 using namespace std::rel_ops;
@@ -26,9 +27,9 @@ static const interrupt_number TRAP_BASE = 128;
 extern "C" void trap0 ();
 
 void
-trap_handler::install (interrupt_descriptor_table& idt)
+trap_handler::install ()
 {
-  idt.set (TRAP_BASE + 0, make_trap_gate (trap0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (TRAP_BASE + 0, make_trap_gate (trap0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
 }
 
 extern "C" void

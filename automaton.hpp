@@ -14,14 +14,13 @@
   Justin R. Wilson
 */
 
-#include "vm_manager.hpp"
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
 #include <unordered_map>
 #include <vector>
-#include "global_descriptor_table.hpp"
 #include "list_allocator.hpp"
 #include "action_type.hpp"
+#include "descriptor.hpp"
 
 /* Alignment of stack for switch. */
 #define STACK_ALIGN 16
@@ -105,9 +104,7 @@ public:
   unreserve (logical_address address);
   
   void
-  page_fault (frame_manager& fm,
-	      vm_manager& vm,
-	      logical_address address,
+  page_fault (logical_address address,
 	      uint32_t error);
   
   void
@@ -118,8 +115,7 @@ public:
   get_action_type (void* action_entry_point);
   
   void
-  execute (vm_manager& vm,
-	   logical_address switch_stack,
+  execute (logical_address switch_stack,
 	   size_t switch_stack_size,
 	   void* action_entry_point,
 	   parameter_t parameter,

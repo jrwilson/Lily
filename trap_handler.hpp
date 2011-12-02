@@ -14,12 +14,10 @@
   Justin R. Wilson
 */
 
-#include "interrupt_descriptor_table.hpp"
-
 namespace trap_handler {
 
   void
-  install (interrupt_descriptor_table& idt);
+  install ();
 
 }
 

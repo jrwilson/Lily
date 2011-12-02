@@ -12,11 +12,22 @@
 */
 
 #include "global_descriptor_table.hpp"
+#include "types.hpp"
+#include "descriptor.hpp"
+
+struct gdt_ptr {
+  uint16_t limit;
+  uint32_t base;
+} __attribute__((packed));
+
+static gdt_ptr gp_;
+static descriptor gdt_entry_[DESCRIPTOR_COUNT];
 
 extern "C" void
 gdt_flush (gdt_ptr*);
 
-global_descriptor_table::global_descriptor_table ()
+void
+global_descriptor_table::install ()
 {
   gp_.limit = (sizeof (descriptor) * DESCRIPTOR_COUNT) - 1;
   gp_.base = reinterpret_cast<uint32_t> (gdt_entry_);

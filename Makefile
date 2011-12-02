@@ -26,12 +26,12 @@ cpp_runtime.o \
 string.o \
 list_allocator.o \
 syscall.o \
-kernel.o \
 global_descriptor_table.o \
 system_automaton.o \
 initrd_automaton.o \
 automaton.o \
 scheduler.o \
+interrupt_descriptor_table.o \
 kmain.o
 
 # pit.o \

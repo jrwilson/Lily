@@ -14,7 +14,8 @@
   Justin R. Wilson
 */
 
-#include "frame_manager.hpp"
+#include "vm_def.hpp"
+#include "frame.hpp"
 
 /* Number of entries in a page table or directory. */
 static const size_t PAGE_ENTRY_COUNT = PAGE_SIZE / sizeof (void*);
@@ -71,53 +72,18 @@ struct page_table_entry {
   unsigned int available_ : 3;
   unsigned int frame_ : 20;
 
-  page_table_entry () :
-    present_ (paging_constants::NOT_PRESENT),
-    writable_ (paging_constants::NOT_WRITABLE),
-    user_ (paging_constants::SUPERVISOR),
-    write_through_ (paging_constants::WRITE_BACK),
-    cache_disabled_ (paging_constants::CACHED),
-    accessed_ (0),
-    dirty_ (0),
-    zero_ (0),
-    global_ (paging_constants::NOT_GLOBAL),  
-    available_ (0),
-    frame_ (0)
-  { }
-
+  page_table_entry ();
   page_table_entry (frame frame,
 		    paging_constants::page_privilege_t privilege,
 		    paging_constants::writable_t writable,
-		    paging_constants::present_t present) :
-    present_ (present),
-    writable_ (writable),
-    user_ (privilege),
-    write_through_ (paging_constants::WRITE_BACK),
-    cache_disabled_ (paging_constants::CACHED),
-    accessed_ (0),
-    dirty_ (0),
-    zero_ (0),
-    global_ (paging_constants::NOT_GLOBAL),  
-    available_ (0),
-    frame_ (frame.f_)
-  { }
+		    paging_constants::present_t present);
 };
-
 
 struct page_table {
   page_table_entry entry[PAGE_ENTRY_COUNT];
 
   void
-  clear (void)
-  {
-    kassert (logical_address (this).is_aligned (PAGE_SIZE));
-    
-    unsigned int k;
-    for (k = 0; k < PAGE_ENTRY_COUNT; ++k) {
-      entry[k] = page_table_entry (frame (), paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::NOT_PRESENT);
-    }
-  }
-
+  clear (void);
 };
 
 struct page_directory_entry {
@@ -133,110 +99,60 @@ struct page_directory_entry {
   unsigned int available_ : 3;
   unsigned int frame_ : 20;
 
-  page_directory_entry () :
-    present_ (paging_constants::NOT_PRESENT),
-    writable_ (paging_constants::WRITABLE),
-    user_ (paging_constants::SUPERVISOR),
-    write_through_ (paging_constants::WRITE_BACK),
-    cache_disabled_ (paging_constants::CACHED),
-    accessed_ (0),
-    zero_ (0),
-    page_size_ (paging_constants::PAGE_SIZE_4K),
-    ignored_ (0),
-    available_ (0),
-    frame_ (0)
-  { }
-
+  page_directory_entry ();
   page_directory_entry (frame frame,
-			paging_constants::present_t present) :
-    present_ (present),
-    writable_ (paging_constants::WRITABLE),
-    user_ (paging_constants::SUPERVISOR),
-    write_through_ (paging_constants::WRITE_BACK),
-    cache_disabled_ (paging_constants::CACHED),
-    accessed_ (0),
-    zero_ (0),
-    page_size_ (paging_constants::PAGE_SIZE_4K),
-    ignored_ (0),
-    available_ (0),
-    frame_ (frame.f_)
-  { }
+			paging_constants::present_t present);
 };
 
 struct page_directory {
   page_directory_entry entry[PAGE_ENTRY_COUNT];
 
   void
-  clear (physical_address address)
-  {
-    kassert (logical_address (this).is_aligned (PAGE_SIZE));
-    kassert (address.is_aligned (PAGE_SIZE));
-    
-    /* Clear the page directory and page table. */
-    unsigned int k;
-    for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
-      entry[k] = page_directory_entry (frame (), paging_constants::NOT_PRESENT);
-    }
-    
-    /* Map the page directory to itself. */
-    entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame (address), paging_constants::PRESENT);
-  }
+  clear (physical_address address);
 
   void
-  initialize_with_current (frame_manager&,
-			   physical_address address);
+  initialize_with_current (physical_address address);
 
 };
 
 class vm_manager {
 private:
-  page_directory kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
-  page_table low_page_table __attribute__ ((aligned (PAGE_SIZE)));
-  frame_manager& frame_manager_;
+  static page_directory kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
+  static page_table low_page_table __attribute__ ((aligned (PAGE_SIZE)));
 
   friend class page_directory;
 
   static page_directory*
-  get_page_directory (void)
-  {
-    /* Because the page directory is mapped to itself. */
-    return reinterpret_cast<page_directory*> (0xFFFFF000);
-  }
+  get_page_directory (void);
   
   static page_table*
-  get_page_table (logical_address address)
-  {
-    return reinterpret_cast<page_table*> (0xFFC00000 + address.page_directory_entry () * PAGE_SIZE);
-  }
+  get_page_table (logical_address address);
+
+  vm_manager ();
+  vm_manager (const vm_manager&);
+  vm_manager& operator= (const vm_manager&);
 
 public:
-  vm_manager (logical_address placement_begin,
-	      logical_address placement_end,
-	      frame_manager& fm);
+  static void
+  initialize (logical_address placement_begin,
+	      logical_address placement_end);
 
-  inline physical_address
-  page_directory_physical_address (void)
-  {
-    page_directory* page_directory = get_page_directory ();
-    return frame (page_directory->entry[PAGE_ENTRY_COUNT - 1]);
-  }
+  static physical_address
+  page_directory_physical_address (void);
   
-  inline logical_address
-  page_directory_logical_address (void)
-  {
-    return logical_address (get_page_directory ());
-  }
+  static logical_address
+  page_directory_logical_address (void);
 
-  void
+  static void
   map (logical_address address,
        frame frame,
        paging_constants::page_privilege_t privilege,
        paging_constants::writable_t writable);
   
-  void
+  static void
   unmap (logical_address logical_addr);
 
-  void
+  static void
   switch_to_directory (physical_address address);
 };
 

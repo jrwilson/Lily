@@ -15,9 +15,6 @@
 #include "syscall.hpp"
 #include <new>
 
-/* This will need to be removed later. */
-#include "kassert.hpp"
-
 static const uint32_t MAGIC = 0x7ACEDEAD;
 
 struct list_alloc::chunk_header {
@@ -52,7 +49,7 @@ list_alloc::split_header (chunk_header* ptr,
   chunk_header* n = new ((logical_address (ptr) + sizeof (chunk_header) + size).value ()) chunk_header (ptr->size - size - sizeof (chunk_header));
   n->prev = ptr;
   n->next = ptr->next;
-  
+
   ptr->size = size;
   ptr->next = n;
   
@@ -64,6 +61,25 @@ list_alloc::split_header (chunk_header* ptr,
     last_header_ = n;
   }
 }
+
+// Try to merge with the next chunk.
+bool
+list_alloc::merge_header (chunk_header* ptr)
+{
+  if (ptr->next != 0 && ptr->next->available && ptr->next == static_cast<chunk_header*>((logical_address (ptr) + sizeof (chunk_header) + ptr->size).value ())) {
+    ptr->size += sizeof (chunk_header) + ptr->next->size;
+    if (ptr->next == last_header_) {
+      last_header_ = ptr;
+    }
+    ptr->next = ptr->next->next;
+    ptr->next->prev = ptr;
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
 
 list_alloc::list_alloc (bool initialize)
 {
@@ -85,8 +101,41 @@ list_alloc::alloc (size_t size)
 
   /* Acquire more memory. */
   if (ptr == 0) {
-    /* TODO */
-    kassert (0);
+    size_t request_size = (physical_address (sizeof (chunk_header) + size) << page_size_).value ();
+    ptr = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+
+    if (ptr > last_header_) {
+      // Append.
+      last_header_->next = ptr;
+      // ptr->next already equals 0.
+      ptr->prev = last_header_;
+      last_header_ = ptr;
+      if (merge_header (last_header_->prev)) {
+	ptr = last_header_;
+      }
+    }
+    else if (ptr < first_header_) {
+      // Prepend.
+      ptr->next = first_header_;
+      // ptr->prev already equals 0.
+      first_header_->prev = ptr;
+      first_header_ = ptr;
+      merge_header (first_header_);
+    }
+    else {
+      // Insert.
+      chunk_header* p;
+      for (p = first_header_; p < ptr; p = p->next) ;;
+      ptr->next = p;
+      ptr->prev = p->prev;
+      p->prev = ptr;
+      ptr->prev->next = ptr;
+      merge_header (ptr);
+      p = ptr->prev;
+      if (merge_header (p)) {
+	ptr = p;
+      }
+    }
   }
 
   /* Found something we can use. */
@@ -115,24 +164,12 @@ list_alloc::free (void* p)
 
     ptr->available = 1;
     
-    /* Merge with next. */
-    if (ptr->next != 0 && ptr->next->available && ptr->next == (chunk_header*)((char*)ptr + sizeof (chunk_header) + ptr->size)) {
-      ptr->size += sizeof (chunk_header) + ptr->next->size;
-      if (ptr->next == last_header_) {
-	last_header_ = ptr;
-      }
-      ptr->next = ptr->next->next;
-      ptr->next->prev = ptr;
-    }
-    
-    /* Merge with prev. */
-    if (ptr->prev != 0 && ptr->prev->available && ptr == (chunk_header*)((char*)ptr->prev + sizeof (chunk_header) + ptr->prev->size)) {
-      ptr->prev->size += sizeof (chunk_header) + ptr->size;
-      ptr->prev->next = ptr->next;
-      ptr->next->prev = ptr->prev;
-      if (ptr == last_header_) {
-	last_header_ = ptr->prev;
-      }
+    // Merge with previous.
+    merge_header (ptr);
+
+    // Merge with previous.
+    if (ptr->prev != 0) {
+      merge_header (ptr->prev);
     }
   }
 }

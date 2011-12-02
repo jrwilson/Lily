@@ -21,13 +21,12 @@
 #include "kput.hpp"
 #include "multiboot.hpp"
 #include <algorithm>
-#include <vector>
 #include "vm_def.hpp"
 #include "stack_allocator.hpp"
 
 /* Don't mess with memory below 1M or above 4G. */
-const size_t USABLE_MEMORY_BEGIN = 0x00100000;
-const size_t USABLE_MEMORY_END = 0xFFFFF000;
+const physical_address USABLE_MEMORY_BEGIN (0x00100000);
+const physical_address USABLE_MEMORY_END (0xFFFFF000);
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -45,8 +44,8 @@ const size_t USABLE_MEMORY_END = 0xFFFFF000;
 
 class frame_manager {
 private:
-  typedef std::vector<stack_allocator*, placement_allocator<stack_allocator*> > stack_allocators_type;
-  stack_allocators_type stack_allocators_;
+  static size_t stack_allocator_size_;
+  static stack_allocator** stack_allocator_;
 
   struct counter {
     size_t count;
@@ -65,10 +64,10 @@ private:
 
   struct allocate {
     size_t idx;
-    stack_allocators_type& stack_allocators;
+    stack_allocator** stack_allocators;
     placement_alloc& alloc;
 
-    allocate (stack_allocators_type& sa,
+    allocate (stack_allocator** sa,
 	      placement_alloc& a) :
       idx (0),
       stack_allocators (sa),
@@ -95,8 +94,8 @@ private:
     operator() (const multiboot_memory_map_t& entry)
     {
       if (entry.type == MULTIBOOT_MEMORY_AVAILABLE) {
-	physical_address begin (std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), entry.addr));
-	physical_address end (std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), entry.addr + entry.len));
+	physical_address begin (std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN.value ()), entry.addr));
+	physical_address end (std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END.value ()), entry.addr + entry.len));
 	
 	// Align to frame boundaries.
 	begin <<= PAGE_SIZE;
@@ -148,18 +147,11 @@ private:
     }
   };
 
-  inline stack_allocators_type::iterator
+  static inline stack_allocator**
   find_allocator (frame frame)
   {
     // TODO:  Sort the stack allocators and use binary search.
-    return std::find_if (stack_allocators_.begin (), stack_allocators_.end (), contains_frame (frame));
-  }
-
-  inline stack_allocators_type::const_iterator
-  find_allocator (frame frame) const
-  {
-    // TODO:  Sort the stack allocators and use binary search.
-    return std::find_if (stack_allocators_.begin (), stack_allocators_.end (), contains_frame (frame));
+    return std::find_if (stack_allocator_, stack_allocator_ + stack_allocator_size_, contains_frame (frame));
   }
 
   struct stack_allocator_not_full {
@@ -170,27 +162,33 @@ private:
     }
   };
 
+  frame_manager ();
+  frame_manager (const frame_manager&);
+  frame_manager& operator= (const frame_manager&);
+
 public:
   template <class InputIterator>
-  frame_manager (InputIterator begin,
-		 InputIterator end,
-		 placement_alloc& a) :
-    stack_allocators_ (std::for_each (begin, end, stack_allocator_filter<counter> ()).value.count, 0, stack_allocators_type::allocator_type (a))
+  static void
+  initialize (InputIterator begin,
+	      InputIterator end,
+	      placement_alloc& a)
   {
-    std::for_each (begin, end, stack_allocator_filter<allocate> (allocate (stack_allocators_, a)));
+    stack_allocator_size_ = std::for_each (begin, end, stack_allocator_filter<counter> ()).value.count;
+    stack_allocator_ = new (a) stack_allocator*[stack_allocator_size_];
+    std::for_each (begin, end, stack_allocator_filter<allocate> (allocate (stack_allocator_, a)));
     std::for_each (begin, end, print_mmap ());
   }
   
   /* This function allows a frame to be marked as used when initializing virtual memory. */
-  void
+  static void
   mark_as_used (const frame& frame);
   
   /* Allocate a frame. */
-  frame
+  static frame
   alloc () __attribute__((warn_unused_result));
   
   /* Increment the reference count for a frame. */
-  void
+  static void
   incref (const frame& frame);
   
   // /* Decrement the reference count for a frame. */

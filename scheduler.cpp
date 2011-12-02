@@ -15,9 +15,7 @@
 #include "interrupts.hpp"
 #include "system_automaton.hpp"
 
-scheduler::execution_context::execution_context (vm_manager& vm,
-						 binding_manager& bm) :
-  vm_manager_ (vm),
+scheduler::execution_context::execution_context (binding_manager& bm) :
   binding_manager_ (bm)
 {
   clear ();
@@ -57,7 +55,7 @@ scheduler::execution_context::load (automaton_context* c)
 void
 scheduler::execution_context::execute () const
 {
-  current_action_.automaton->execute (vm_manager_, logical_address (switch_stack_), sizeof (switch_stack_), current_action_.action_entry_point, current_action_.parameter, output_value_);
+  current_action_.automaton->execute (logical_address (switch_stack_), sizeof (switch_stack_), current_action_.action_entry_point, current_action_.parameter, output_value_);
 }
 
 void
@@ -129,10 +127,9 @@ scheduler::switch_to_next_action ()
 }
 
 scheduler::scheduler (list_alloc& a,
-		      vm_manager& vm,
 		      binding_manager& bm) :
   alloc_ (a),
-  exec_context_ (vm, bm),
+  exec_context_ (bm),
   ready_queue_ (queue_type::allocator_type (a)),
   context_map_ (3, context_map_type::hasher (), context_map_type::key_equal (), context_map_type::allocator_type (a))
 { }

@@ -16,7 +16,8 @@
 
 namespace system_automaton {
   void
-  run ();
+  run (logical_address placement_begin,
+       logical_address placement_end);
   
   void
   page_fault (logical_address const& address,
