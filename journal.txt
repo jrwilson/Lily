@@ -287,11 +287,62 @@ Bug was related to stack switch.  Fixed.
 Over the past week I've been converting code to objects.
 I've also been working on a subset of the Standard Template Libary to make development easier.
 
+2011-12-01
 
+So its been a while since I written anything.
+Mainly because I've gone through a number of iterations restructuring the code.
+Here are some observations:
+(1) The notion of a singleton object, perhaps implemented as a class with static members, is appealing because there are many singleton objects.
+(2) The order in which these singleton objects is initialized is important, i.e., some systems depend on other systems.
+(3) Static objects should be treated as being initialized in random order.  This is the nature of C++.  The lesson to be learned is that static initializers should be written assuming that nothing else is initialized.
+Based on these observations, one might manually initialize static objects using static methods.  This solves the ordering problem.  I used this idea for the exception_handler, trap_handler, and irq_handler.
+(4) STL containers can only be initialized after dynamic memory is functioning.  Consequently, singleton objects with STL contains and static initializers are out because one cannot assume that dynamic memory is functioning when their initializer is called.
+But, we'd still like to declare these objects "statically".
+What we need is a way to control the order in which the constructors are called.
+The solution is to declare all of these objects are members of a single static object in the order in which they should be constructed.
+Thus, they are declared statically but initialized in a fixed order.
+I used this technique in the kernel object since the frame_allocator uses an STL container.
+
+The boot process now looks like:
+--random static initialization--
+kernel ()
+--more random static initialization--
+kmain ()
+ -> system_automaton::run
+    deferred static initialization
+    initialize dynamic memory
+    ...
+
+system_automaton::run performs the rather tricky task of bootstrapping dynamic memory.
+The dynamic memory system is obvious built on the virtual memory system.
+There is only one way to allocate memory from the virtual memory manager and that is using a system call (software interrupt).
+When the interrupt fires, it looks up the currently running automaton and uses its memory map to fulfill the request.
+The scheduler keeps track of the currently running automaton.
+However, the scheduler requires dynamic memory for its initialization.
+To break the circular dependency, the system_automaton intercepts requests for allocations and page faults until all systems are adquately initialized and then cuts over to normal operation.
+
+My next goal is to implement the following stack:
+
++---------+
+|   VFS   |
++---------+
+     ^
+     |
+     v
++---------+
+|  ext2   |
++---------+
+     ^
+     |
+     v
++---------+
+| ramdisk |
++---------+
+
+This will require buffers which is the immediate next order of business.
 
 
 
 Take out page scrub in page_handler.
-Use traps instread of interrupts.
 Implement a better allocator.
 Memory alignment.
