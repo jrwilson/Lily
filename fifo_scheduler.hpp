@@ -18,8 +18,8 @@
 #include <deque>
 #include <unordered_set>
 #include "syscall.hpp"
+#include "list_allocator.hpp"
 
-template <class AllocatorTag, template <class> class Allocator>
 class fifo_scheduler {
 private:
 
@@ -40,12 +40,17 @@ private:
     }
   };
 
-  typedef std::deque<entry, Allocator<entry> > queue_type;
+  typedef std::deque<entry, list_allocator<entry> > queue_type;
   queue_type queue_;
-  typedef std::unordered_set<entry, std::hash<entry>, std::equal_to<entry>, Allocator<entry> > set_type;
+  typedef std::unordered_set<entry, std::hash<entry>, std::equal_to<entry>, list_allocator<entry> > set_type;
   set_type set_;
 
 public:
+
+  fifo_scheduler (list_alloc& a) :
+    queue_ (queue_type::allocator_type (a)),
+    set_ (3, set_type::hasher (), set_type::key_equal (), set_type::allocator_type (a))
+  { }
 
   void
   add (void* action_entry_point,
@@ -63,7 +68,7 @@ public:
 	  parameter_t parameter)
   {
     entry e (action_entry_point, parameter);
-    typename set_type::iterator pos = set_.find (e);
+    set_type::iterator pos = set_.find (e);
     if (pos != set_.end ()) {
       set_.erase (pos);
       
@@ -82,12 +87,12 @@ public:
   {
     if (!queue_.empty ()) {
       /* Schedule. */
-      entry e (queue_.front ());
-      sys_schedule (e.action_entry_point, e.parameter, output_status, output_value);
+      entry& e = queue_.front ();
+      sys_finish (true, e.action_entry_point, e.parameter, output_status, output_value);
     }
     else {
       /* Don't schedule. */
-      sys_finish (output_status, output_value);
+      sys_finish (false, 0, 0, output_status, output_value);
     }
   }
 

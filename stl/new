@@ -14,6 +14,8 @@
   Justin R. Wilson
 */
 
+#include "types.hpp"
+
 // #include "list_allocator.hpp"
 
 // extern list_allocator default_allocator;

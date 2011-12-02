@@ -26,8 +26,8 @@
 #include "stack_allocator.hpp"
 
 /* Don't mess with memory below 1M or above 4G. */
-static const physical_address USABLE_MEMORY_BEGIN (0x00100000);
-static const physical_address USABLE_MEMORY_END (0xFFFFF000);
+const size_t USABLE_MEMORY_BEGIN = 0x00100000;
+const size_t USABLE_MEMORY_END = 0xFFFFF000;
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -95,8 +95,8 @@ private:
     operator() (const multiboot_memory_map_t& entry)
     {
       if (entry.type == MULTIBOOT_MEMORY_AVAILABLE) {
-	physical_address begin (std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN.value ()), entry.addr));
-	physical_address end (std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END.value ()), entry.addr + entry.len));
+	physical_address begin (std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), entry.addr));
+	physical_address end (std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), entry.addr + entry.len));
 	
 	// Align to frame boundaries.
 	begin <<= PAGE_SIZE;

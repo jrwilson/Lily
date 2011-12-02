@@ -68,7 +68,7 @@ public:
   }
 
   // Align down.
-  inline physical_address operator>> (const size_t radix) {
+  inline physical_address operator>> (const size_t radix) const {
     return physical_address (address_ & ~(radix - 1));
   }
 
@@ -77,7 +77,7 @@ public:
     return *this;
   }
 
-  inline physical_address operator<< (const size_t radix) {
+  inline physical_address operator<< (const size_t radix) const {
     return physical_address ((address_ + radix - 1) & ~(radix - 1));
   }
 
@@ -140,7 +140,7 @@ public:
     return address_[idx];
   }
 
-  inline logical_address operator>> (const size_t radix) {
+  inline logical_address operator>> (const size_t radix) const {
     return logical_address (reinterpret_cast<uint8_t*> (reinterpret_cast<size_t> (address_) & ~(radix - 1)));
   }
 
@@ -149,7 +149,7 @@ public:
     return *this;
   }
 
-  inline logical_address operator<< (const size_t radix) {
+  inline logical_address operator<< (const size_t radix) const {
     return logical_address (reinterpret_cast<uint8_t*> ((reinterpret_cast<size_t> (address_) + radix - 1) & ~(radix - 1)));
   }
 

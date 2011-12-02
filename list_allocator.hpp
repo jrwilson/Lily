@@ -34,7 +34,7 @@ private:
 		size_t size);
   
 public:
-  list_alloc ();
+  list_alloc (bool initialize = true);
 
   void*
   alloc (size_t) __attribute__((warn_unused_result));

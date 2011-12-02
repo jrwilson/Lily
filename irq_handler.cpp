@@ -89,9 +89,11 @@ extern "C" void irq13 ();
 extern "C" void irq14 ();
 extern "C" void irq15 ();
 
-irq_handler::irq_handler (interrupt_descriptor_table& idt) :
-  pic_master_mask_ (~(1 << PIC_SLAVE_PIN)),
-  pic_slave_mask_ (0xFF)
+uint8_t irq_handler::pic_master_mask_ = ~(1 << PIC_SLAVE_PIN);
+uint8_t irq_handler::pic_slave_mask_ = 0xFF;
+
+void
+irq_handler::install (interrupt_descriptor_table& idt)
 {
   /* Remap IRQ 0-15 to ISR 32-47. */
   outb (PIC_MASTER_LOW, PIC_ICW1_LOW | PIC_ICW1_NEED_ICW4);

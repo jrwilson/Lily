@@ -182,6 +182,10 @@ struct page_directory {
     entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame (address), paging_constants::PRESENT);
   }
 
+  void
+  initialize_with_current (frame_manager&,
+			   physical_address address);
+
 };
 
 class vm_manager {
@@ -189,6 +193,8 @@ private:
   page_directory kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
   page_table low_page_table __attribute__ ((aligned (PAGE_SIZE)));
   frame_manager& frame_manager_;
+
+  friend class page_directory;
 
   static page_directory*
   get_page_directory (void)
@@ -227,16 +233,11 @@ public:
        paging_constants::page_privilege_t privilege,
        paging_constants::writable_t writable);
   
-  // void
-  // vm_manager_unmap (logical_address logical_addr);
+  void
+  unmap (logical_address logical_addr);
 
   void
   switch_to_directory (physical_address address);
-
-  // void
-  // page_directory_initialize_with_current (page_directory_t* page_directory,
-  // 					physical_address address);
-
 };
 
 #endif /* __vm_manager_hpp__ */

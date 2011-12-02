@@ -65,11 +65,13 @@ list_alloc::split_header (chunk_header* ptr,
   }
 }
 
-list_alloc::list_alloc () :
-  page_size_ (sys_get_page_size ())
+list_alloc::list_alloc (bool initialize)
 {
-  first_header_ = new (sys_allocate (page_size_)) chunk_header (page_size_ - sizeof (chunk_header));
-  last_header_ = first_header_;
+  if (initialize) {
+    page_size_ = sys_get_page_size ();
+    first_header_ = new (sys_allocate (page_size_)) chunk_header (page_size_ - sizeof (chunk_header));
+    last_header_ = first_header_;
+  }
 }
 
 void*

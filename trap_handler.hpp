@@ -15,24 +15,12 @@
 */
 
 #include "interrupt_descriptor_table.hpp"
-#include "system_automaton.hpp"
 
-extern "C" void trap_dispatch (registers);
-
-class trap_handler {
-private:
-  static trap_handler* instance_;
-
-  system_automaton& system_automaton_;
+namespace trap_handler {
 
   void
-  process_interrupt (registers&);
+  install (interrupt_descriptor_table& idt);
 
-public:
-  trap_handler (interrupt_descriptor_table& idt,
-		system_automaton& s_a);
-
-  friend void trap_dispatch (registers);
-};
+}
 
 #endif /* __trap_handler_hpp__ */

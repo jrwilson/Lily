@@ -44,8 +44,8 @@ namespace std {
 
   template <class T, class U>
   pair<T, U>
-  make_pair (T t,
-	     U u)
+  make_pair (const T& t,
+	     const U& u)
   {
     return pair<T, U> (t, u);
   }

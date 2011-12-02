@@ -91,7 +91,9 @@ public:
   merge (const vm_area_base& other) = 0;
 
   virtual void
-  page_fault (logical_address address,
+  page_fault (frame_manager& fm,
+	      vm_manager& vm,
+	      logical_address address,
 	      uint32_t error) = 0;
 };
 
@@ -110,7 +112,9 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (frame_manager&,
+	      vm_manager&,
+	      logical_address,
 	      uint32_t)
   {
     // TODO
@@ -133,7 +137,9 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (frame_manager&,
+	      vm_manager&,
+	      logical_address,
 	      uint32_t)
   {
     // TODO
@@ -164,7 +170,9 @@ public:
   }
 
   void
-  page_fault (logical_address address,
+  page_fault (frame_manager& fm,
+	      vm_manager& vm,
+	      logical_address address,
 	      uint32_t error)
   {
     /* Fault should come from not being present. */
@@ -172,8 +180,7 @@ public:
     /* Fault should come from data. */
     kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
     /* Back the request with a frame. */
-    kassert (0);
-    //vm_manager_map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
+    vm.map (address, fm.alloc (), page_privilege_, paging_constants::WRITABLE);
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
     memset (address.value (), 0x00, PAGE_SIZE);
@@ -195,7 +202,9 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (frame_manager&,
+	      vm_manager&,
+	      logical_address,
 	      uint32_t)
   {
     // TODO
@@ -217,7 +226,9 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (frame_manager&,
+	      vm_manager&,
+	      logical_address,
 	      uint32_t)
   {
     // There is a bug in the kernel.  A reserved memory area was not backed.
@@ -247,7 +258,9 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (frame_manager&,
+	      vm_manager&,
+	      logical_address,
 	      uint32_t)
   {
     // TODO

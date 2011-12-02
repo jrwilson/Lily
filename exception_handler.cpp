@@ -12,8 +12,7 @@
 */
 
 #include "exception_handler.hpp"
-
-exception_handler* exception_handler::instance_ = 0;
+#include "system_automaton.hpp"
 
 extern "C" void exception0 ();
 extern "C" void exception1 ();
@@ -48,13 +47,9 @@ extern "C" void exception29 ();
 extern "C" void exception30 ();
 extern "C" void exception31 ();
 
-exception_handler::exception_handler (interrupt_descriptor_table& idt,
-				      system_automaton& s_a) :
-  system_automaton_ (s_a)
+void
+exception_handler::install (interrupt_descriptor_table& idt)
 {
-  kassert (instance_ == 0);
-  instance_ = this;
-
   idt.set (0, make_interrupt_gate (exception0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
   idt.set (1, make_interrupt_gate (exception1, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
   idt.set (2, make_interrupt_gate (exception2, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
@@ -106,8 +101,8 @@ static const interrupt_number GENERAL_PROTECTION_FAULT = 13;
 static const interrupt_number PAGE_FAULT = 14;
 static const interrupt_number COPROCESSOR_ERROR = 16;
 
-void
-exception_handler::process_interrupt (registers& regs)
+extern "C" void
+exception_dispatch (registers regs)
 {
   switch (regs.number) {
   case DIVIDE_ERROR:
@@ -171,7 +166,7 @@ exception_handler::process_interrupt (registers& regs)
       // Get the faulting address.
       void* addr;
       asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-      system_automaton_.page_fault (logical_address (addr), regs.error);
+      system_automaton::page_fault (logical_address (addr), regs.error);
     }
     break; 
   case COPROCESSOR_ERROR:
@@ -179,11 +174,4 @@ exception_handler::process_interrupt (registers& regs)
     kassert (0);
     break; 
   }
-}
-
-extern "C" void
-exception_dispatch (registers regs)
-{
-  kassert (exception_handler::instance_ != 0);
-  exception_handler::instance_->process_interrupt (regs);
 }

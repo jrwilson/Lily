@@ -8,7 +8,7 @@
   
   Description
   -----------
-  An object that prints a welcome message when constructed.
+  An object that prints a welcome message.
 
   Authors:
   Justin R. Wilson
@@ -16,8 +16,7 @@
 
 #include "kput.hpp"
 
-class welcome_message {
-public:
+struct welcome_message {
   welcome_message ()
   {
     // Print a welcome message.

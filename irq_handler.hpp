@@ -18,11 +18,12 @@
 
 class irq_handler {
 private:
-  uint8_t pic_master_mask_;
-  uint8_t pic_slave_mask_;
+  static uint8_t pic_master_mask_;
+  static uint8_t pic_slave_mask_;
 
 public:
-  irq_handler (interrupt_descriptor_table& idt);
+  static void
+  install (interrupt_descriptor_table& idt);
 };
 
 #endif /* __irq_handler_hpp__ */

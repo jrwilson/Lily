@@ -1,6 +1,6 @@
 AS=nasm
 AFLAGS=-f elf
-CXX=g++
+CXX=time g++
 # Add -Werror at some point
 CXXFLAGS=-MD -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
 LD=ld
@@ -26,14 +26,13 @@ cpp_runtime.o \
 string.o \
 list_allocator.o \
 syscall.o \
+kernel.o \
+global_descriptor_table.o \
+system_automaton.o \
+initrd_automaton.o \
+automaton.o \
+scheduler.o \
 kmain.o
-
-# page_fault_handler.o \
-# initrd_automaton.o \
-
-# boot_automaton.o \
-# system_allocator.o \
-# system_automaton.o
 
 # pit.o \
 # count_to_ten.o \

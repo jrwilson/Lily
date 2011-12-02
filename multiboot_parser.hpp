@@ -17,6 +17,7 @@
 #include "multiboot.hpp"
 #include "types.hpp"
 #include <algorithm>
+#include "kassert.hpp"
 
 class multiboot_parser {
 private:

@@ -128,6 +128,12 @@ namespace std {
       {
 	return &(*drop)->key;
       }
+
+      const_reference
+      operator* () const
+      {
+	return (*drop)->key;
+      }
     };
 
     drop_type**
@@ -280,11 +286,14 @@ namespace std {
       ++drop_count_;
       *ptr = drop;
 
-      if (drop_count_ > max_drop_count_) {
-	rehash_n (2 * bucket_count_);
+      if (drop_count_ <= max_drop_count_) {
+	return iterator (ptr, this);
       }
-
-      return iterator (ptr, this);
+      else {
+	// Rehashing blows away ptr.
+	rehash_n (2 * bucket_count_);
+	return find (v);
+      }
     }
 
     iterator

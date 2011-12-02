@@ -16,9 +16,6 @@
 #include "frame_manager.hpp"
 #include "vm_def.hpp"
 
-/* Everything must fit into 4MB initialy. */
-static const logical_address INITIAL_LOGICAL_LIMIT (KERNEL_VIRTUAL_BASE + 0x400000);
-
 /* Marks the beginning and end of the kernel upon loading. */
 extern int text_begin;
 extern int text_end;
@@ -42,8 +39,8 @@ vm_manager::vm_manager (logical_address placement_begin,
 			frame_manager& fm) :
   frame_manager_ (fm)
 {
-  physical_address low_page_table_paddr (logical_address (&low_page_table) - KERNEL_VIRTUAL_BASE);
-  physical_address kernel_page_directory_paddr (logical_address (&kernel_page_directory) - KERNEL_VIRTUAL_BASE);
+  physical_address low_page_table_paddr (logical_address (&low_page_table) - logical_address (KERNEL_VIRTUAL_BASE));
+  physical_address kernel_page_directory_paddr (logical_address (&kernel_page_directory) - logical_address (KERNEL_VIRTUAL_BASE));
 
   /* Clear the page directory and page table. */
   low_page_table.clear ();
@@ -51,14 +48,14 @@ vm_manager::vm_manager (logical_address placement_begin,
 
   /* Insert the page table. */
   kernel_page_directory.entry[logical_address (0).page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), paging_constants::PRESENT);
-  kernel_page_directory.entry[KERNEL_VIRTUAL_BASE.page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), paging_constants::PRESENT);
+  kernel_page_directory.entry[logical_address (KERNEL_VIRTUAL_BASE).page_directory_entry ()] = page_directory_entry (frame (low_page_table_paddr), paging_constants::PRESENT);
 
   logical_address begin, end;
 
   /* Identity map the first 1MB. */
   begin = logical_address (0);
   end = logical_address (reinterpret_cast<void*> (0x100000));
-  kassert (end < INITIAL_LOGICAL_LIMIT);
+  kassert (end < logical_address (INITIAL_LOGICAL_LIMIT));
   for (; begin < end; begin += PAGE_SIZE) {
     physical_address pa (reinterpret_cast<size_t> (begin.value ()));
     frame frame (pa);
@@ -67,52 +64,44 @@ vm_manager::vm_manager (logical_address placement_begin,
   }
 
   /* Map the kernel text. */
-  begin = logical_address (&text_begin);
-  begin >>= PAGE_SIZE;
-  end = logical_address (&text_end);
-  end <<= PAGE_SIZE;
-  kassert (end < INITIAL_LOGICAL_LIMIT);
+  begin = logical_address (&text_begin) >> PAGE_SIZE;
+  end = logical_address (&text_end) << PAGE_SIZE;
+  kassert (end < logical_address (INITIAL_LOGICAL_LIMIT));
   for (; begin < end; begin += PAGE_SIZE) {
-    physical_address pa (begin - KERNEL_VIRTUAL_BASE);
+    physical_address pa (begin - logical_address (KERNEL_VIRTUAL_BASE));
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
   /* Map the kernel read-only data. */
-  begin = logical_address (&rodata_begin);
-  begin >>= PAGE_SIZE;
-  end = logical_address (&rodata_end);
-  end <<= PAGE_SIZE;
-  kassert (end < INITIAL_LOGICAL_LIMIT);
+  begin = logical_address (&rodata_begin) >> PAGE_SIZE;
+  end = logical_address (&rodata_end) << PAGE_SIZE;
+  kassert (end < logical_address (INITIAL_LOGICAL_LIMIT));
   for (; begin < end; begin += PAGE_SIZE) {
-    physical_address pa (begin - KERNEL_VIRTUAL_BASE);
+    physical_address pa (begin - logical_address (KERNEL_VIRTUAL_BASE));
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
   /* Map the kernel data. */
-  begin = logical_address (&data_begin);
-  begin >>= PAGE_SIZE;
-  end = logical_address (&data_end);
-  end <<= PAGE_SIZE;
-  kassert (end < INITIAL_LOGICAL_LIMIT);
+  begin = logical_address (&data_begin) >> PAGE_SIZE;
+  end = logical_address (&data_end) << PAGE_SIZE;
+  kassert (end < logical_address (INITIAL_LOGICAL_LIMIT));
   for (; begin < end; begin += PAGE_SIZE) {
-    physical_address pa (begin - KERNEL_VIRTUAL_BASE);
+    physical_address pa (begin - logical_address (KERNEL_VIRTUAL_BASE));
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
   }
 
   /* Map the memory allocated by placement. */
-  begin = logical_address (placement_begin);
-  begin >>= PAGE_SIZE;
-  end = logical_address (placement_end);
-  end <<= PAGE_SIZE;
-  kassert (end < INITIAL_LOGICAL_LIMIT);
+  begin = logical_address (placement_begin) >> PAGE_SIZE;
+  end = logical_address (placement_end) << PAGE_SIZE;
+  kassert (end < logical_address (INITIAL_LOGICAL_LIMIT));
   for (; begin < end; begin += PAGE_SIZE) {
-    physical_address pa (begin - KERNEL_VIRTUAL_BASE);
+    physical_address pa (begin - logical_address (KERNEL_VIRTUAL_BASE));
     frame frame (pa);
     low_page_table.entry[begin.page_table_entry ()] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
     fm.mark_as_used (frame);
@@ -131,7 +120,7 @@ vm_manager::map (logical_address logical_addr,
   page_table* page_table = get_page_table (logical_addr);
   
   if (!page_directory->entry[logical_addr.page_directory_entry ()].present_) {
-    if (logical_addr < KERNEL_VIRTUAL_BASE ||
+    if (logical_addr < logical_address (KERNEL_VIRTUAL_BASE) ||
 	page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory.entry[PAGE_ENTRY_COUNT - 1].frame_) {
       /* Either the address is in user space or we are using the kernel page directory. */
       /* Allocate a page table. */
@@ -171,39 +160,38 @@ vm_manager::map (logical_address logical_addr,
   asm volatile ("invlpg %0\n" :: "m" (logical_addr));
 }
 
-// void
-// vm_manager_unmap (logical_address logical_addr)
-// {
-//   page_directory_t* page_directory = get_page_directory ();
-//   page_table_t* page_table = get_page_table (logical_addr);
+void
+vm_manager::unmap (logical_address logical_addr)
+{
+  page_directory* page_directory = get_page_directory ();
+  page_table* page_table = get_page_table (logical_addr);
 
-//   if (page_directory->entry[logical_addr.page_directory_entry ()].present_) {
-//     page_table->entry[logical_addr.page_table_entry ()] = page_table_entry_t (frame (), SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
-//     /* Flush the TLB. */
-//     asm volatile ("invlpg %0\n" :: "m" (logical_addr));
-//   }
-// }
+  if (page_directory->entry[logical_addr.page_directory_entry ()].present_) {
+    page_table->entry[logical_addr.page_table_entry ()] = page_table_entry (frame (), paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::NOT_PRESENT);
+    /* Flush the TLB. */
+    asm volatile ("invlpg %0\n" :: "m" (logical_addr));
+  }
+}
 
-// void
-// page_directory_initialize_with_current (page_directory_t* ptr,
-// 					physical_address address)
-// {
-//   kassert (ptr != 0);
-//   kassert (logical_address (ptr).is_aligned (PAGE_SIZE));
-//   kassert (address.is_aligned (PAGE_SIZE));
+void
+page_directory::initialize_with_current (frame_manager& fm,
+					 physical_address address)
+{
+  kassert (logical_address (this).is_aligned (PAGE_SIZE));
+  kassert (address.is_aligned (PAGE_SIZE));
 
-//   page_directory_t* current = get_page_directory ();
+  page_directory* current = vm_manager::get_page_directory ();
 
-//   unsigned int k;
-//   for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
-//     /* Copy. */
-//     ptr->entry[k] = current->entry[k];
-//     /* Increment the reference count. */
-//     if (ptr->entry[k].present_) {
-//       frame_manager::incref (frame (ptr->entry[k]));
-//     }
-//   }
+  unsigned int k;
+  for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
+    /* Copy. */
+    entry[k] = current->entry[k];
+    /* Increment the reference count. */
+    if (entry[k].present_) {
+      fm.incref (frame (entry[k]));
+    }
+  }
 
-//   /* Map the page directory to itself. */
-//   ptr->entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry_t (frame (address), PRESENT);
-// }
+  /* Map the page directory to itself. */
+  entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame (address), paging_constants::PRESENT);
+}

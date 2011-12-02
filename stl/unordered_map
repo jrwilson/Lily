@@ -74,9 +74,12 @@ namespace std {
 
     struct Iterator : public std::iterator<std::forward_iterator_tag, T> {
       drop_type** drop;
+      const unordered_map* map;
 
-      Iterator (drop_type** l) :
-	drop (l)
+      Iterator (drop_type** l,
+		const unordered_map* m) :
+	drop (l),
+	map (m)
       { }
 
       pointer
@@ -100,13 +103,17 @@ namespace std {
 
     struct ConstIterator : public std::iterator<std::forward_iterator_tag, T> {
       drop_type** drop;
+      const unordered_map* map;
       
-      ConstIterator (drop_type** l) :
-	drop (l)
+      ConstIterator (drop_type** l,
+		     const unordered_map* m) :
+	drop (l),
+	map (m)
       { }
 
       ConstIterator (const Iterator& i) :
-	drop (i.drop)
+	drop (i.drop),
+	map (i.map)
       { }
 
       const_pointer
@@ -132,6 +139,32 @@ namespace std {
       {
 	return !(*this == other);
       }
+
+      ConstIterator&
+      operator++ ()
+      {
+	if (drop != 0) {
+	  drop_type* ptr = *drop;
+	  if (ptr->next == 0) {
+	    size_type bucket_idx;
+	    for (bucket_idx = (ptr->hash % map->bucket_count_) + 1;
+		 bucket_idx < map->bucket_count_ && map->bucket_[bucket_idx] == 0;
+		 ++bucket_idx) ;;
+	    if (bucket_idx < map->bucket_count_) {
+	      drop = &map->bucket_[bucket_idx];
+	    }
+	    else {
+	      drop = 0;
+	    }
+	  }
+	  else {
+	    drop = &ptr->next;
+	  }
+	}
+
+	return *this;
+      }
+
     };
 
     drop_type**
@@ -203,23 +236,42 @@ namespace std {
 
     size_type
     max_size () const;
-
+        
+  public:
     iterator
-    begin ();
+    begin ()
+    {
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	if (bucket_[idx] != 0) {
+	  return iterator (&bucket_[idx], this);
+	}
+      }
+      
+      return end ();
+    }
 
     const_iterator
-    begin () const;
+    begin () const
+    {
+      for (size_type idx = 0; idx < bucket_count_; ++idx) {
+	if (bucket_[idx] != 0) {
+	  return iterator (&bucket_[idx], this);
+	}
+      }
+      
+      return end ();
+    }
 
     iterator
     end ()
     {
-      return iterator (0);
+      return iterator (0, this);
     }
 
     const_iterator
     end () const
     {
-      return iterator (0);
+      return iterator (0, this);
     }
 
     std::pair<iterator, bool>
@@ -231,7 +283,7 @@ namespace std {
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->value.first, v.first)) {
-	  return std::make_pair (iterator (ptr), false);
+	  return std::make_pair (iterator (ptr, this), false);
 	}
 	ptr = &(*ptr)->next;
       }
@@ -241,11 +293,14 @@ namespace std {
       ++drop_count_;
       *ptr = drop;
 
-      if (drop_count_ > max_drop_count_) {
-	rehash_n (2 * bucket_count_);
+      if (drop_count_ <= max_drop_count_) {
+	return std::make_pair (iterator (ptr, this), true);
       }
-
-      return std::make_pair (iterator (ptr), true);
+      else {
+	rehash_n (2 * bucket_count_);
+	// Rehashing blows away ptr.
+	return std::make_pair (find (v.first), true);
+      }
     }
 
     iterator
@@ -305,12 +360,12 @@ namespace std {
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->value.first, k)) {
-	  return iterator (ptr);
+	  return iterator (ptr, this);
 	}
 	ptr = &(*ptr)->next;
       }
       
-      return iterator (0);
+      return iterator (0, this);
     }
     
   public:
