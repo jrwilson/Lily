@@ -17,11 +17,11 @@
 #include "syscall_def.hpp"
 #include "types.hpp"
 
+// action_entry_point == 0 means do not schedule an action.
+// buffer == 0 means no output was produced.
 void
-sys_finish (bool schedule_status,
-	    local_func action_entry_point,
+sys_finish (size_t action_entry_point,
 	    void* parameter,
-	    bool output_status,
 	    void* output_buffer);
 
 size_t

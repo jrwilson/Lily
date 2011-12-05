@@ -180,11 +180,6 @@ public:
   }
 };
 
-typedef void (*input_func) (void*, void*, size_t);
-typedef void (*output_func) (void*);
-typedef void (*internal_func) (void*);
-typedef void (*local_func) (void*);
-
 #endif /* __types_h__ */
 
 

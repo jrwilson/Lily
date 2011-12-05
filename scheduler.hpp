@@ -23,9 +23,6 @@ class list_alloc;
 // Note that this is probably not the number of bytes as each element in the array may occupy more than one byte.
 static const size_t SWITCH_STACK_SIZE = 256;
 
-// Size of the temporary buffer used to store the values produced by output actions.
-static const size_t MESSAGE_BUFFER_SIZE = 512;
-
 class scheduler {
 private:
   enum status_t {
@@ -36,7 +33,7 @@ private:
   struct automaton_context {
     status_t status;
     ::automaton* automaton;
-    local_func action;
+    size_t action_entry_point;
     void* parameter;
 
     
@@ -75,8 +72,7 @@ private:
     load (automaton_context* c);
 
     void
-    finish_action (bool output_status,
-		   void* buffer);
+    finish_action (void* buffer);
 
     void
     execute () const;
@@ -105,14 +101,12 @@ public:
 
   void
   schedule_action (automaton* automaton,
-		   local_func action_entry_point,
+		   size_t action_entry_point,
 		   void* parameter);
   
   void
-  finish_action (bool schedule_status,
-		 local_func action_entry_point,
+  finish_action (size_t action_entry_point,
 		 void* parameter,
-		 bool output_status,
 		 void* buffer);
 };
 

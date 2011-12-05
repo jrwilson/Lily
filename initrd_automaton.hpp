@@ -14,20 +14,12 @@
   Justin R. Wilson
 */
 
-void
-initrd_init_effect (void*,
-		    int&);
+#include "action_macros.hpp"
 
 void
-initrd_schedule ();
-
-void
-initrd_finish (bool,
-	       void*);
-
-struct initrd_init_tag { };
-typedef input_action<initrd_init_tag, void*, int, initrd_init_effect, initrd_schedule, initrd_finish> initrd_init_type;
-initrd_init_type initrd_init;
+initrd_init (void*,
+	     int);
+typedef input_action_traits<void*, int, &initrd_init> initrd_init_traits;
 
 #endif /* __initrd_automaton_hpp__ */
 

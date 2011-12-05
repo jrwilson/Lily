@@ -235,9 +235,9 @@ automaton::page_fault (logical_address address,
 }
 
 automaton::action
-automaton::get_action (local_func ptr) const
+automaton::get_action (size_t action_entry_point) const
 {
-  action_map_type::const_iterator pos = action_map_.find (reinterpret_cast<void*> (ptr));
+  action_map_type::const_iterator pos = action_map_.find (action_entry_point);
   if (pos != action_map_.end ()) {
     return pos->second;
   }

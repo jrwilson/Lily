@@ -21,6 +21,11 @@
 #include "list_allocator.hpp"
 #include "descriptor.hpp"
 #include "action_macros.hpp"
+#include "static_assert.hpp"
+#include <type_traits>
+
+// Size of the temporary buffer used to store the values produced by output actions.
+const size_t MESSAGE_BUFFER_SIZE = 512;
 
 class automaton {
 public:
@@ -33,16 +38,12 @@ public:
 
   struct action {
     action_type type;
-    union {
-      input_func input;
-      output_func output;
-      internal_func internal;
-    };
+    size_t action_entry_point;
     size_t message_size;
 
     action () :
       type (NO_ACTION),
-      input (0),
+      action_entry_point (0),
       message_size (0)
     { }
   };
@@ -62,7 +63,7 @@ private:
   uint32_t code_segment_;
   uint32_t stack_segment_;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
-  typedef std::unordered_map<void*, action, std::hash<void*>, std::equal_to<void*>, list_allocator<std::pair<void* const, action> > > action_map_type;
+  typedef std::unordered_map<size_t, action, std::hash<size_t>, std::equal_to<size_t>, list_allocator<std::pair<size_t const, action> > > action_map_type;
   action_map_type action_map_;
   physical_address page_directory_;
   /* Stack pointer (constant). */
@@ -89,44 +90,42 @@ private:
   insert_into_free_area (memory_map_type::iterator pos,
 			 vm_area_base* area);
 
-  template <class InputAction>
+  template <class ActionTraits>
   void
-  add_action_ (const InputAction&,
-	       void (*ptr) (typename InputAction::parameter_type, typename InputAction::value_type&),
-	       input_action_tag)
+  add_action_ (input_action_tag)
   {
+    STATIC_ASSERT (sizeof (typename ActionTraits::parameter_type) == sizeof (void*));
+    STATIC_ASSERT (sizeof (typename ActionTraits::message_type) <= MESSAGE_BUFFER_SIZE);
     action ac;
     ac.type = INPUT;
-    ac.input = reinterpret_cast<input_func> (ptr);
-    ac.message_size = sizeof (typename InputAction::value_type);
-    kassert (action_map_.insert (std::make_pair (reinterpret_cast<void*> (ptr), ac)).second);
+    ac.action_entry_point = ActionTraits::action_entry_point;
+    ac.message_size = sizeof (typename ActionTraits::message_type);
+    kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
-  
-  
-  template <class OutputAction>
+
+  template <class ActionTraits>
   void
-  add_action_ (const OutputAction&,
-	       void (*ptr) (typename OutputAction::parameter_type),
-	       output_action_tag)
+  add_action_ (output_action_tag)
   {
+    STATIC_ASSERT (sizeof (typename ActionTraits::parameter_type) == sizeof (void*));
+    STATIC_ASSERT (sizeof (typename ActionTraits::message_type) <= MESSAGE_BUFFER_SIZE);
     action ac;
     ac.type = OUTPUT;
-    ac.output = reinterpret_cast<output_func> (ptr);
-    ac.message_size = sizeof (typename OutputAction::value_type);
-    kassert (action_map_.insert (std::make_pair (reinterpret_cast<void*> (ptr), ac)).second);
+    ac.action_entry_point = ActionTraits::action_entry_point;
+    ac.message_size = sizeof (typename ActionTraits::message_type);
+    kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
-  
-  template <class InternalAction>
+
+  template <class ActionTraits>
   void
-  add_action_ (const InternalAction&,
-	       void (*ptr) (typename InternalAction::parameter_type),
-	       internal_action_tag)
+  add_action_ (internal_action_tag)
   {
+    STATIC_ASSERT (sizeof (typename ActionTraits::parameter_type) == sizeof (void*));
     action ac;
     ac.type = INTERNAL;
-    ac.internal = ptr;
+    ac.action_entry_point = ActionTraits::action_entry_point;
     ac.message_size = 0;
-    kassert (action_map_.insert (std::make_pair (reinterpret_cast<void*> (ptr), ac)).second);
+    kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
 
 public:
@@ -185,15 +184,15 @@ public:
 	      uint32_t error,
 	      registers* regs);
   
-  template <class Action>
+  template <class ActionTraits>
   void
-  add_action (const Action& ac)
+  add_action ()
   {
-    add_action_ (ac, &Action::action, typename Action::action_category ());
+    add_action_<ActionTraits> (typename ActionTraits::action_category ());
   }
 
   action
-  get_action (local_func) const;
+  get_action (size_t action_entry_point) const;
 };
 
 #endif /* __automaton_hpp__ */

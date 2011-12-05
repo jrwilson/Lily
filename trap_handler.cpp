@@ -35,15 +35,15 @@ trap_handler::install ()
 extern "C" void
 trap_dispatch (registers regs)
 {
-  syscall_t syscall = extract_syscall (regs.eax);
+  const syscall_t syscall = static_cast<syscall_t> (regs.eax);
   
   switch (syscall) {
   case SYSCALL_FINISH:
     {
-      local_func const action_entry_point = reinterpret_cast<local_func> (regs.ebx);
+      size_t const action_entry_point = regs.ebx;
       void* const parameter = reinterpret_cast<void*> (regs.ecx);
       void* const buffer = reinterpret_cast<void*> (regs.edx);
-      system_automaton::finish_action (is_schedule_valid (regs.eax), action_entry_point, parameter, is_output_valid (regs.eax), buffer);
+      system_automaton::finish_action (action_entry_point, parameter, buffer);
       return;
     }
     break;

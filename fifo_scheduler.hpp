@@ -19,15 +19,16 @@
 #include <unordered_set>
 #include "syscall.hpp"
 #include "list_allocator.hpp"
+#include "kassert.hpp"
 
 class fifo_scheduler {
 private:
 
   struct entry {
-    local_func action_entry_point;
+    size_t action_entry_point;
     void* parameter;
 
-    entry (local_func aep,
+    entry (size_t aep,
 	   void* p) :
       action_entry_point (aep),
       parameter (p)
@@ -52,12 +53,11 @@ public:
     set_ (3, set_type::hasher (), set_type::key_equal (), set_type::allocator_type (a))
   { }
 
-  template <class T>
+  template <class LocalAction>
   void
-  add (void (*func) (T*),
-       void* parameter)
+  add (typename LocalAction::parameter_type parameter)
   {
-    entry e (reinterpret_cast<local_func> (func), parameter);
+    entry e (LocalAction::action_entry_point, reinterpret_cast<void*> (parameter));
     if (set_.find (e) == set_.end ()) {
       set_.insert (e);
       queue_.push_back (e);
@@ -65,7 +65,7 @@ public:
   }
   
   void
-  remove (local_func action_entry_point,
+  remove (size_t action_entry_point,
 	  void* parameter)
   {
     entry e (action_entry_point, parameter);
@@ -83,17 +83,16 @@ public:
   }
   
   void
-  finish (bool status,
-	  void* buffer)
+  finish (void* buffer)
   {
     if (!queue_.empty ()) {
       /* Schedule. */
-      entry& e = queue_.front ();
-      sys_finish (true, e.action_entry_point, e.parameter, status, buffer);
+      const entry& e = queue_.front ();
+      sys_finish (e.action_entry_point, e.parameter, buffer);
     }
     else {
       /* Don't schedule. */
-      sys_finish (false, 0, 0, status, buffer);
+      sys_finish (0, 0, buffer);
     }
   }
 

@@ -43,7 +43,7 @@ void
 scheduler::execution_context::load (automaton_context* c)
 {
   automaton_ = c->automaton;
-  action_ = automaton_->get_action (c->action);
+  action_ = automaton_->get_action (c->action_entry_point);
   parameter_ = c->parameter;
   c->status = NOT_SCHEDULED;
 }
@@ -98,14 +98,12 @@ scheduler::execution_context::exec (int end_of_stack) const
 		  "mov %%ax, %%ss\n"
 		  "mov %1, %%eax\n"	// Load the new stack pointer.
 		  "mov %%eax, %%esp\n"
-		  "mov %1, %%eax\n"	// Push the pointer to the value.
-		  "push %%eax\n"	
 		  "pushl %4\n"		// Push the parameter.
-		  "sub $0x4, %%esp\n"	// Adjust the stack pointer for the cdecl calling convention.
+		  "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
 		  "pushf\n"		// Push flags (EFLAGS).
 		  "pushl %2\n"		// Push the code segment (CS).
 		  "pushl %3\n"		// Push the instruction pointer (EIP).
-		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.input), "m"(parameter_) : "%eax");
+		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point), "m"(parameter_) : "%eax");
     break;
   case automaton::OUTPUT:
   case automaton::INTERNAL:
@@ -118,7 +116,7 @@ scheduler::execution_context::exec (int end_of_stack) const
 		  "pushf\n"		// Push flags (EFLAGS).
 		  "pushl %2\n"		// Push the code segment (CS).
 		  "pushl %3\n"		// Push the instruction pointer (EIP).
-		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.output), "m"(parameter_) : "%eax");
+		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point), "m"(parameter_) : "%eax");
     break;
   case automaton::NO_ACTION:
     // Error.
@@ -128,8 +126,7 @@ scheduler::execution_context::exec (int end_of_stack) const
 }
 
 void
-scheduler::execution_context::finish_action (bool output_status,
-					     void* buffer)
+scheduler::execution_context::finish_action (void* buffer)
 {
   switch (action_.type) {
   case automaton::INPUT:
@@ -138,28 +135,34 @@ scheduler::execution_context::finish_action (bool output_status,
     if (input_action_pos_ != input_actions_->end ()) {
       /* Load the execution context. */
       automaton_ = input_action_pos_->automaton;
-      action_.input = input_action_pos_->input;
+      action_.action_entry_point = input_action_pos_->action_entry_point;
       parameter_ = input_action_pos_->parameter;
       /* Execute.  (This does not return). */
       exec ();
     }
     break;
   case automaton::OUTPUT:
-    if (output_status) {
-      input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_.output, parameter_);
-      if (input_actions_ != 0) {
-	/* The output executed and there are inputs. */
-	input_action_pos_ = input_actions_->begin ();
-	/* Load the execution context. */
-	automaton_ = input_action_pos_->automaton;
-	action_.input = input_action_pos_->input;
-	parameter_ = input_action_pos_->parameter;
-	// We know its an input.
-	action_.type = automaton::INPUT;
-	// Copy the value.
-	memcpy (message_buffer_, buffer, action_.message_size);
-	/* Execute.  (This does not return). */
-	exec ();
+    if (buffer != 0) {
+      if (automaton_->verify_span (buffer, action_.message_size)) {
+	input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_.action_entry_point, parameter_);
+	if (input_actions_ != 0) {
+	  /* The output executed and there are inputs. */
+	  /* Load the execution context. */
+	  input_action_pos_ = input_actions_->begin ();
+	  automaton_ = input_action_pos_->automaton;
+	  action_.action_entry_point = input_action_pos_->action_entry_point;
+	  parameter_ = input_action_pos_->parameter;
+	  // We know its an input.
+	  action_.type = automaton::INPUT;
+	  // Copy the value.
+	  memcpy (message_buffer_, buffer, action_.message_size);
+	  /* Execute.  (This does not return). */
+	  exec ();
+	}
+      }
+      else {
+	// The message produced by the output function is bad.
+	system_automaton::bad_message ();
       }
     }
     break;
@@ -232,7 +235,7 @@ scheduler::current_automaton () const
 
 void
 scheduler::schedule_action (automaton* automaton,
-			    local_func action_entry_point,
+			    size_t action_entry_point,
 			    void* parameter)
 {
   context_map_type::iterator pos = context_map_.find (automaton);
@@ -240,7 +243,7 @@ scheduler::schedule_action (automaton* automaton,
 
   automaton_context* c = pos->second;
 
-  c->action = action_entry_point;
+  c->action_entry_point = action_entry_point;
   c->parameter = parameter;
     
   if (c->status == NOT_SCHEDULED) {
@@ -250,15 +253,13 @@ scheduler::schedule_action (automaton* automaton,
 }
   
 void
-scheduler::finish_action (bool schedule_status,
-			  local_func action_entry_point,
+scheduler::finish_action (size_t action_entry_point,
 			  void* parameter,
-			  bool output_status,
 			  void* buffer)
 {
-  if (schedule_status) {
+  if (action_entry_point != 0) {
     schedule_action (current_automaton (), action_entry_point, parameter);
   }
-  exec_context_.finish_action (output_status, buffer);
+  exec_context_.finish_action (buffer);
   switch_to_next_action ();
 }

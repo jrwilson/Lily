@@ -27,25 +27,4 @@ enum syserror_t {
   SYSERROR_OUT_OF_MEMORY,
 };
 
-static const uint32_t SCHEDULE_VALID_MASK = (1 << 31);
-static const uint32_t OUTPUT_VALID_MASK = (1 << 30);
-
-inline bool
-is_schedule_valid (uint32_t code)
-{
-  return (code & SCHEDULE_VALID_MASK) != 0;
-}
-
-inline bool
-is_output_valid (uint32_t code)
-{
-  return (code & OUTPUT_VALID_MASK) != 0;
-}
-
-inline syscall_t
-extract_syscall (uint32_t code)
-{
-  return static_cast<syscall_t> (code & 0x3FFFFFFF);
-}
-
 #endif /* __syscall_def_hpp__ */

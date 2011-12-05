@@ -25,10 +25,8 @@ namespace system_automaton {
 	      registers* regs);
   
   void
-  finish_action (bool schedule_status,
-		 local_func action_entry_point,
+  finish_action (size_t action_entry_point,
 		 void* parameter,
-		 bool output_status,
 		 void* buffer);
   
   logical_address
@@ -39,6 +37,9 @@ namespace system_automaton {
 
   void
   bad_schedule (void);
+
+  void
+  bad_message (void);
 }
 
 #endif /* __system_automaton_hpp__ */

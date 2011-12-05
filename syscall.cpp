@@ -13,29 +13,22 @@
 
 #include "syscall.hpp"
 #include "kput.hpp"
+#include "kassert.hpp"
 
 static syserror_t errno;
 
 void
-sys_finish (bool schedule_status,
-	    local_func action_entry_point,
+sys_finish (size_t action_entry_point,
 	    void* parameter,
-	    bool output_status,
 	    void* output_buffer)
 {
   uint32_t code = SYSCALL_FINISH;
-  if (schedule_status) {
-    code |= SCHEDULE_VALID_MASK;
-  }
-  if (output_status) {
-    code |= OUTPUT_VALID_MASK;
-  }
 
   asm volatile ("mov %0, %%eax\n"
-		"mov %1, %%ebx\n"
-		"mov %2, %%ecx\n"
-		"mov %3, %%edx\n"
-		"int $0x80\n" : : "m"(code), "m"(action_entry_point), "m"(parameter), "m"(output_buffer) : "eax", "ebx", "ecx", "edx");
+  		"mov %1, %%ebx\n"
+  		"mov %2, %%ecx\n"
+  		"mov %3, %%edx\n"
+  		"int $0x80\n" : : "m"(code), "m"(action_entry_point), "m"(parameter), "m"(output_buffer) : "eax", "ebx", "ecx", "edx");
 }
 
 size_t

@@ -27,8 +27,8 @@ extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
-void
-schedule ();
+static void
+sa_schedule ();
 
 enum status {
   NORMAL,
@@ -53,177 +53,132 @@ static fifo_scheduler* scheduler_;
 typedef std::deque<automaton*, list_allocator<automaton*> > init_queue_type;
 static init_queue_type* init_queue_;
 
-void
-sa_remove (local_func action_entry_point,
+static void
+sa_remove (size_t action_entry_point,
 	   void* parameter)
 {
   scheduler_->remove (action_entry_point, parameter);
 }
 
-void
-sa_finish (bool status,
-	   void* buffer)
+static void
+sa_finish (void* buffer)
 {
-  scheduler_->finish (status, buffer);
+  scheduler_->finish (buffer);
 }
 
-bool
+void
+sa_null (void*);
+typedef internal_action_traits<void*, &sa_null> sa_null_traits;
+
+static bool
 sa_null_precondition (void*)
 {
   return true;
 }
 
-void
+static void
 sa_null_effect (void*)
 {
   // Do nothing but activate the scheduler.
   kputs (__func__); kputs ("\n");
 }
 
-struct sa_null_tag { };
-typedef internal_action<sa_null_tag, void*, sa_remove, sa_null_precondition, sa_null_effect, schedule, sa_finish> sa_null_type;
-static sa_null_type sa_null;
+void
+sa_null (void* p)
+{
+  internal_action<sa_null_traits> (p, sa_remove, sa_null_precondition, sa_null_effect, sa_schedule, sa_finish);
+}
 
-bool
+void
+sa_init (automaton*);
+typedef output_action_traits<automaton*, int, &sa_init> sa_init_traits;
+
+static bool
 sa_init_precondition (automaton* a)
 {
   return !init_queue_->empty () && init_queue_->front () == a;
 }
 
-void
+static void
 sa_init_effect (automaton*,
-		int& value)
+		int& message)
 {
   init_queue_->pop_front ();
-  value = 314;
-  kputs (__func__); kputs (" produced "); kputx32 (value); kputs ("\n");
-}
-
-struct sa_init_tag { };
-typedef output_action<sa_init_tag, automaton*, int, sa_remove, sa_init_precondition, sa_init_effect, schedule, sa_finish> sa_init_type;
-static sa_init_type sa_init;
-
-void
-sa_create_request_effect (void*,
-			  int&)
-{
-  kassert (0);
-}
-
-struct sa_create_request_tag { };
-typedef input_action<sa_create_request_tag, void*, int, sa_create_request_effect, schedule, sa_finish> sa_create_request_type;
-static sa_create_request_type sa_create_request;
-
-bool
-sa_create_response_precondition (void*)
-{
-  kassert (0);
-  return false;
+  message = 314;
+  kputs (__func__); kputs (" produced "); kputx32 (message); kputs ("\n");
 }
 
 void
-sa_create_response_effect (void*,
-			   int&)
+sa_init (automaton* p)
 {
-  kassert (0);
-}
-
-struct sa_create_response_tag { };
-typedef output_action<sa_create_response_tag, void*, int, sa_remove, sa_create_response_precondition, sa_create_response_effect, schedule, sa_finish> sa_create_response_type;
-static sa_create_response_type sa_create_response;
-
-void
-sa_bind_request_effect (void*,
-			  int&)
-{
-  kassert (0);
-}
-
-struct sa_bind_request_tag { };
-typedef input_action<sa_bind_request_tag, void*, int, sa_bind_request_effect, schedule, sa_finish> sa_bind_request_type;
-static sa_bind_request_type sa_bind_request;
-
-bool
-sa_bind_response_precondition (void*)
-{
-  kassert (0);
-  return false;
+  output_action<sa_init_traits> (p, sa_remove, sa_init_precondition, sa_init_effect, sa_schedule, sa_finish);
 }
 
 void
-sa_bind_response_effect (void*,
-			   int&)
+sa_create_request (void*,
+		   int)
 {
   kassert (0);
 }
-
-struct sa_bind_response_tag { };
-typedef output_action<sa_bind_response_tag, void*, int, sa_remove, sa_bind_response_precondition, sa_bind_response_effect, schedule, sa_finish> sa_bind_response_type;
-static sa_bind_response_type sa_bind_response;
+typedef input_action_traits<void*, int, &sa_create_request> sa_create_request_traits;
 
 void
-sa_unbind_request_effect (void*,
-			  int&)
+sa_create_response (void*)
 {
   kassert (0);
 }
-
-struct sa_unbind_request_tag { };
-typedef input_action<sa_unbind_request_tag, void*, int, sa_unbind_request_effect, schedule, sa_finish> sa_unbind_request_type;
-static sa_unbind_request_type sa_unbind_request;
-
-bool
-sa_unbind_response_precondition (void*)
-{
-  kassert (0);
-  return false;
-}
+typedef output_action_traits<void*, int, &sa_create_response> sa_create_response_traits;
 
 void
-sa_unbind_response_effect (void*,
-			   int&)
+sa_bind_request (void*,
+		   int)
 {
   kassert (0);
 }
-
-struct sa_unbind_response_tag { };
-typedef output_action<sa_unbind_response_tag, void*, int, sa_remove, sa_unbind_response_precondition, sa_unbind_response_effect, schedule, sa_finish> sa_unbind_response_type;
-static sa_unbind_response_type sa_unbind_response;
+typedef input_action_traits<void*, int, &sa_bind_request> sa_bind_request_traits;
 
 void
-sa_destroy_request_effect (void*,
-			  int&)
+sa_bind_response (void*)
 {
   kassert (0);
 }
-
-struct sa_destroy_request_tag { };
-typedef input_action<sa_destroy_request_tag, void*, int, sa_destroy_request_effect, schedule, sa_finish> sa_destroy_request_type;
-static sa_destroy_request_type sa_destroy_request;
-
-bool
-sa_destroy_response_precondition (void*)
-{
-  kassert (0);
-  return false;
-}
+typedef output_action_traits<void*, int, &sa_bind_response> sa_bind_response_traits;
 
 void
-sa_destroy_response_effect (void*,
-			   int&)
+sa_unbind_request (void*,
+		   int)
 {
   kassert (0);
 }
-
-struct sa_destroy_response_tag { };
-typedef output_action<sa_destroy_response_tag, void*, int, sa_remove, sa_destroy_response_precondition, sa_destroy_response_effect, schedule, sa_finish> sa_destroy_response_type;
-static sa_destroy_response_type sa_destroy_response;
+typedef input_action_traits<void*, int, &sa_unbind_request> sa_unbind_request_traits;
 
 void
-schedule ()
+sa_unbind_response (void*)
+{
+  kassert (0);
+}
+typedef output_action_traits<void*, int, &sa_unbind_response> sa_unbind_response_traits;
+
+void
+sa_destroy_request (void*,
+		   int)
+{
+  kassert (0);
+}
+typedef input_action_traits<void*, int, &sa_destroy_request> sa_destroy_request_traits;
+
+void
+sa_destroy_response (void*)
+{
+  kassert (0);
+}
+typedef output_action_traits<void*, int, &sa_destroy_response> sa_destroy_response_traits;
+
+static void
+sa_schedule ()
 {
   if (!init_queue_->empty ()) {
-    scheduler_->add (&sa_init_type::action, init_queue_->front ());
+    scheduler_->add<sa_init_traits> (init_queue_->front ());
   }
 }
 
@@ -282,16 +237,16 @@ namespace system_automaton {
     }
     
     /* Add the actions. */
-    system_automaton_->add_action (sa_null);
-    system_automaton_->add_action (sa_init);
-    system_automaton_->add_action (sa_create_request);
-    system_automaton_->add_action (sa_create_response);
-    system_automaton_->add_action (sa_bind_request);
-    system_automaton_->add_action (sa_bind_response);
-    system_automaton_->add_action (sa_unbind_request);
-    system_automaton_->add_action (sa_unbind_response);
-    system_automaton_->add_action (sa_destroy_request);
-    system_automaton_->add_action (sa_destroy_response);
+    system_automaton_->add_action<sa_null_traits> ();
+    system_automaton_->add_action<sa_init_traits> ();
+    system_automaton_->add_action<sa_create_request_traits> ();
+    system_automaton_->add_action<sa_create_response_traits> ();
+    system_automaton_->add_action<sa_bind_request_traits> ();
+    system_automaton_->add_action<sa_bind_response_traits> ();
+    system_automaton_->add_action<sa_unbind_request_traits> ();
+    system_automaton_->add_action<sa_unbind_response_traits> ();
+    system_automaton_->add_action<sa_destroy_request_traits> ();
+    system_automaton_->add_action<sa_destroy_response_traits> ();
     
     // Add the system automaton to the system scheduler.
     system_scheduler_->add_automaton (system_automaton_);
@@ -343,11 +298,11 @@ namespace system_automaton {
     }
     
     /* Fourth, add the actions. */
-    initrd->add_action (initrd_init);
+    initrd->add_action<initrd_init_traits> ();
 
     /* Fifth, bind. */
-    binding_manager_->bind (system_automaton_, sa_init, initrd,
-			    initrd, initrd_init, 0);
+    binding_manager_->bind<sa_init_traits, initrd_init_traits> (system_automaton_, initrd,
+								initrd, 0);
 
     /* Sixth, add the automaton to the system scheduler. */
     system_scheduler_->add_automaton (initrd);
@@ -367,10 +322,10 @@ namespace system_automaton {
     status_ = NORMAL;
 
     // Add the first action to the scheduler.
-    system_scheduler_->schedule_action (system_automaton_, &sa_null_type::action, 0);
+    system_scheduler_->schedule_action (system_automaton_, sa_null_traits::action_entry_point, 0);
     
     // Start the scheduler.  Doesn't return.
-    system_scheduler_->finish_action (false, 0, 0, false, 0);
+    system_scheduler_->finish_action (0, 0, 0);
   }
 
   void
@@ -407,13 +362,11 @@ namespace system_automaton {
   }
 
   void
-  finish_action (bool schedule_status,
-		 local_func action_entry_point,
+  finish_action (size_t action_entry_point,
 		 void* parameter,
-		 bool output_status,
 		 void* buffer)
   {
-    system_scheduler_->finish_action (schedule_status, action_entry_point, parameter, output_status, buffer);
+    system_scheduler_->finish_action (action_entry_point, parameter, buffer);
   }
 
   logical_address
@@ -443,6 +396,13 @@ namespace system_automaton {
   
   void
   bad_schedule (void)
+  {
+    // TODO
+    kassert (0);
+  }
+
+  void
+  bad_message (void)
   {
     // TODO
     kassert (0);
