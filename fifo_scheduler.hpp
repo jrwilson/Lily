@@ -24,11 +24,11 @@ class fifo_scheduler {
 private:
 
   struct entry {
-    void* action_entry_point;
-    parameter_t parameter;
+    local_func action_entry_point;
+    void* parameter;
 
-    entry (void* aep,
-	   parameter_t p) :
+    entry (local_func aep,
+	   void* p) :
       action_entry_point (aep),
       parameter (p)
     { }
@@ -52,11 +52,12 @@ public:
     set_ (3, set_type::hasher (), set_type::key_equal (), set_type::allocator_type (a))
   { }
 
+  template <class T>
   void
-  add (void* action_entry_point,
-       parameter_t parameter)
+  add (void (*func) (T*),
+       void* parameter)
   {
-    entry e (action_entry_point, parameter);
+    entry e (reinterpret_cast<local_func> (func), parameter);
     if (set_.find (e) == set_.end ()) {
       set_.insert (e);
       queue_.push_back (e);
@@ -64,8 +65,8 @@ public:
   }
   
   void
-  remove (void* action_entry_point,
-	  parameter_t parameter)
+  remove (local_func action_entry_point,
+	  void* parameter)
   {
     entry e (action_entry_point, parameter);
     set_type::iterator pos = set_.find (e);
@@ -82,17 +83,17 @@ public:
   }
   
   void
-  finish (bool output_status,
-	  value_t output_value)
+  finish (bool status,
+	  void* buffer)
   {
     if (!queue_.empty ()) {
       /* Schedule. */
       entry& e = queue_.front ();
-      sys_finish (true, e.action_entry_point, e.parameter, output_status, output_value);
+      sys_finish (true, e.action_entry_point, e.parameter, status, buffer);
     }
     else {
       /* Don't schedule. */
-      sys_finish (false, 0, 0, output_status, output_value);
+      sys_finish (false, 0, 0, status, buffer);
     }
   }
 

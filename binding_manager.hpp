@@ -19,6 +19,47 @@
 #include "automaton.hpp"
 
 class binding_manager {
+private:
+  struct output_action {
+    ::automaton* automaton;
+    output_func output;
+    void* parameter;
+
+    output_action (::automaton* a,
+		   output_func o,
+		   void* p) :
+      automaton (a),
+      output (o),
+      parameter (p)
+    { }
+
+    bool
+    operator== (const output_action& other) const
+    {
+      return automaton == other.automaton && output == other.output && parameter == other.parameter;
+    }
+  };
+
+  struct input_action {
+    ::automaton* automaton;
+    input_func input;
+    void* parameter;
+
+    input_action (::automaton* a,
+		   input_func i,
+		   void* p) :
+      automaton (a),
+      input (i),
+      parameter (p)
+    { }
+
+    bool
+    operator== (const input_action& other) const
+    {
+      return automaton == other.automaton && input == other.input && parameter == other.parameter;
+    }
+  };
+
 public:
   typedef std::unordered_set<input_action, std::hash<input_action>, std::equal_to<input_action>, list_allocator<input_action> > input_action_set_type;
 
@@ -27,24 +68,21 @@ private:
   typedef std::unordered_map<output_action, input_action_set_type, std::hash<output_action>, std::equal_to<output_action>, list_allocator<std::pair<const output_action, input_action_set_type> > > bindings_type;
   bindings_type bindings_;
 
+  template <class OutputAction, class InputAction>
   void
-  dump_bindings () const
+  bind_ (automaton* output_automaton,
+	 typename OutputAction::parameter_type output_parameter,
+	 output_action_tag,
+	 automaton* input_automaton,
+	 typename InputAction::parameter_type input_parameter,
+	 input_action_tag)
   {
-    for (bindings_type::const_iterator pos1 = bindings_.begin ();
-	 pos1 != bindings_.end ();
-	 ++pos1) {
-      kputs ("output_automaton = "); kputp (pos1->first.automaton); kputs ("\n");
-      kputs ("output_action_entry_point = "); kputp (pos1->first.action_entry_point); kputs ("\n");
-      kputs ("output_parameter = "); kputx32 (pos1->first.parameter); kputs ("\n");
-
-      for (input_action_set_type::const_iterator pos2 = pos1->second.begin ();
-      	   pos2 != pos1->second.end ();
-      	   ++pos2) {
-      	kputs ("input_automaton = "); kputp (pos2->automaton); kputs ("\n");
-      	kputs ("input_action_entry_point = "); kputp (pos2->action_entry_point); kputs ("\n");
-      	kputs ("input_parameter = "); kputx32 (pos2->parameter); kputs ("\n");
-      }
-    }
+    /* TODO:  All of the bind checks. */
+    output_action oa (output_automaton, reinterpret_cast<output_func> (&OutputAction::action), output_parameter);
+    input_action ia (input_automaton, reinterpret_cast<input_func> (&InputAction::action), input_parameter);
+    
+    std::pair<bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, input_action_set_type::hasher (), input_action_set_type::key_equal (), input_action_set_type::allocator_type (alloc_))));
+    r.first->second.insert (ia);
   }
 
 public:
@@ -53,32 +91,26 @@ public:
     bindings_ (3, bindings_type::hasher (), bindings_type::key_equal (), bindings_type::allocator_type (a))
   { }
 
+  template <class OutputAction, class InputAction>
   void
   bind (automaton* output_automaton,
-	void* output_action_entry_point,
-	parameter_t output_parameter,
+	const OutputAction&,
+	typename OutputAction::parameter_type output_parameter,
 	automaton* input_automaton,
-	void* input_action_entry_point,
-	parameter_t input_parameter)
+	const InputAction&,
+	typename InputAction::parameter_type input_parameter)
   {
     kassert (output_automaton != 0);
-    kassert (output_automaton->get_action_type (output_action_entry_point) == OUTPUT);
     kassert (input_automaton != 0);
-    kassert (input_automaton->get_action_type (input_action_entry_point) == INPUT);
-    
-    /* TODO:  All of the bind checks. */
-    output_action oa (output_automaton, output_action_entry_point, output_parameter);
-    input_action ia (input_automaton, input_action_entry_point, input_parameter);
 
-    std::pair<bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, input_action_set_type::hasher (), input_action_set_type::key_equal (), input_action_set_type::allocator_type (alloc_))));
-    r.first->second.insert (ia);
-    dump_bindings ();
+    bind_<OutputAction, InputAction> (output_automaton, output_parameter, typename OutputAction::action_category (),
+				      input_automaton, input_parameter, typename InputAction::action_category ());
   }
   
   const binding_manager::input_action_set_type*
   get_bound_inputs (automaton* output_automaton,
-		    void* output_action_entry_point,
-		    parameter_t output_parameter)
+		    output_func output_action_entry_point,
+		    void* output_parameter)
   {
     output_action oa (output_automaton, output_action_entry_point, output_parameter);
     bindings_type::const_iterator pos = bindings_.find (oa);

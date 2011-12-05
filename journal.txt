@@ -343,11 +343,12 @@ This will require buffers which is the immediate next order of business.
 
 2011-12-02
 
-On second thought, its easier to not use data structures requiring dynamic memory in static objects.
+On second thought, its easier to delay the initialization of data structures requiring dynamic memory in static objects.
 This simplified the problem tremendously.
 
 
-
+Implement segment selectors.
+Reevaluate logical/physical address.
 Take out page scrub in page_handler.
 Implement a better allocator.
 Memory alignment.

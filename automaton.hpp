@@ -19,13 +19,34 @@
 #include <unordered_map>
 #include <vector>
 #include "list_allocator.hpp"
-#include "action_type.hpp"
 #include "descriptor.hpp"
-
-/* Alignment of stack for switch. */
-#define STACK_ALIGN 16
+#include "action_macros.hpp"
 
 class automaton {
+public:
+  enum action_type {
+    INPUT,
+    OUTPUT,
+    INTERNAL,
+    NO_ACTION,
+  };
+
+  struct action {
+    action_type type;
+    union {
+      input_func input;
+      output_func output;
+      internal_func internal;
+    };
+    size_t message_size;
+
+    action () :
+      type (NO_ACTION),
+      input (0),
+      message_size (0)
+    { }
+  };
+
 private:
   struct compare_vm_area {
     bool
@@ -41,7 +62,7 @@ private:
   uint32_t code_segment_;
   uint32_t stack_segment_;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
-  typedef std::unordered_map<void*, action_type_t, std::hash<void*>, std::equal_to<void*>, list_allocator<std::pair<void* const, action_type_t> > > action_map_type;
+  typedef std::unordered_map<void*, action, std::hash<void*>, std::equal_to<void*>, list_allocator<std::pair<void* const, action> > > action_map_type;
   action_map_type action_map_;
   physical_address page_directory_;
   /* Stack pointer (constant). */
@@ -51,6 +72,9 @@ private:
   memory_map_type memory_map_;
   /* Default privilege for new VM_AREA_DATA. */
   paging_constants::page_privilege_t page_privilege_;
+
+  memory_map_type::const_iterator
+  find_by_address (const vm_area_base* area) const;
 
   memory_map_type::iterator
   find_by_address (const vm_area_base* area);
@@ -65,6 +89,46 @@ private:
   insert_into_free_area (memory_map_type::iterator pos,
 			 vm_area_base* area);
 
+  template <class InputAction>
+  void
+  add_action_ (const InputAction&,
+	       void (*ptr) (typename InputAction::parameter_type, typename InputAction::value_type&),
+	       input_action_tag)
+  {
+    action ac;
+    ac.type = INPUT;
+    ac.input = reinterpret_cast<input_func> (ptr);
+    ac.message_size = sizeof (typename InputAction::value_type);
+    kassert (action_map_.insert (std::make_pair (reinterpret_cast<void*> (ptr), ac)).second);
+  }
+  
+  
+  template <class OutputAction>
+  void
+  add_action_ (const OutputAction&,
+	       void (*ptr) (typename OutputAction::parameter_type),
+	       output_action_tag)
+  {
+    action ac;
+    ac.type = OUTPUT;
+    ac.output = reinterpret_cast<output_func> (ptr);
+    ac.message_size = sizeof (typename OutputAction::value_type);
+    kassert (action_map_.insert (std::make_pair (reinterpret_cast<void*> (ptr), ac)).second);
+  }
+  
+  template <class InternalAction>
+  void
+  add_action_ (const InternalAction&,
+	       void (*ptr) (typename InternalAction::parameter_type),
+	       internal_action_tag)
+  {
+    action ac;
+    ac.type = INTERNAL;
+    ac.internal = ptr;
+    ac.message_size = 0;
+    kassert (action_map_.insert (std::make_pair (reinterpret_cast<void*> (ptr), ac)).second);
+  }
+
 public:
   automaton (list_alloc& a,
 	     descriptor_constants::privilege_t privilege,
@@ -74,8 +138,17 @@ public:
 	     paging_constants::page_privilege_t page_privilege);
 
   logical_address
-  get_stack_pointer (void) const;
+  stack_pointer () const;
   
+  physical_address
+  page_directory () const;
+
+  uint32_t
+  code_segment () const;
+
+  uint32_t
+  stack_segment () const;
+
   template <class T>
   bool
   insert_vm_area (const T& area)
@@ -102,25 +175,25 @@ public:
   
   void
   unreserve (logical_address address);
+
+  bool
+  verify_span (void* ptr,
+	       size_t size) const;
   
   void
   page_fault (logical_address address,
-	      uint32_t error);
+	      uint32_t error,
+	      registers* regs);
   
+  template <class Action>
   void
-  add_action (void* action_entry_point,
-	      action_type_t action_type);
-  
-  action_type_t
-  get_action_type (void* action_entry_point);
-  
-  void
-  execute (logical_address switch_stack,
-	   size_t switch_stack_size,
-	   void* action_entry_point,
-	   parameter_t parameter,
-	   value_t input_value);
-  
+  add_action (const Action& ac)
+  {
+    add_action_ (ac, &Action::action, typename Action::action_category ());
+  }
+
+  action
+  get_action (local_func) const;
 };
 
 #endif /* __automaton_hpp__ */

@@ -18,10 +18,10 @@ static syserror_t errno;
 
 void
 sys_finish (bool schedule_status,
-	    void* action_entry_point,
-	    parameter_t parameter,
+	    local_func action_entry_point,
+	    void* parameter,
 	    bool output_status,
-	    value_t output_value)
+	    void* output_buffer)
 {
   uint32_t code = SYSCALL_FINISH;
   if (schedule_status) {
@@ -35,7 +35,7 @@ sys_finish (bool schedule_status,
 		"mov %1, %%ebx\n"
 		"mov %2, %%ecx\n"
 		"mov %3, %%edx\n"
-		"int $0x80\n" : : "m"(code), "m"(action_entry_point), "m"(parameter), "m"(output_value) : "eax", "ebx", "ecx", "edx");
+		"int $0x80\n" : : "m"(code), "m"(action_entry_point), "m"(parameter), "m"(output_buffer) : "eax", "ebx", "ecx", "edx");
 }
 
 size_t

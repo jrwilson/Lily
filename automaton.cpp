@@ -14,6 +14,15 @@
 #include "automaton.hpp"
 #include "global_descriptor_table.hpp"
 
+automaton::memory_map_type::const_iterator
+automaton::find_by_address (const vm_area_base* area) const
+{
+  // Find the location to insert.
+  memory_map_type::const_iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
+  kassert (pos != memory_map_.begin ());
+  return --pos;
+}
+
 automaton::memory_map_type::iterator
 automaton::find_by_address (const vm_area_base* area)
 {
@@ -124,8 +133,26 @@ automaton::automaton (list_alloc& a,
 }
 
 logical_address
-automaton::get_stack_pointer (void) const {
+automaton::stack_pointer (void) const {
   return stack_pointer_;
+}
+
+physical_address
+automaton::page_directory () const
+{
+  return page_directory_;
+}
+
+uint32_t
+automaton::code_segment () const
+{
+  return code_segment_;
+}
+
+uint32_t
+automaton::stack_segment () const
+{
+  return stack_segment_;
 }
 
 logical_address
@@ -184,93 +211,37 @@ automaton::unreserve (logical_address address)
     merge (--pos);
   }
 }
+
+bool
+automaton::verify_span (void* ptr,
+			size_t size) const
+{
+  logical_address p (ptr);
+  vm_reserved_area k (p, p + size);
+  memory_map_type::const_iterator pos = find_by_address (&k);
+  kassert (pos != memory_map_.end ());
+  return (*pos)->is_data_area ();
+}
   
 void
 automaton::page_fault (logical_address address,
-		       uint32_t error)
+		       uint32_t error,
+		       registers* regs)
 {
   vm_reserved_area k (address, address + 1);
   memory_map_type::const_iterator pos = find_by_address (&k);
   kassert (pos != memory_map_.end ());
-  (*pos)->page_fault (address, error);
+  (*pos)->page_fault (address, error, regs);
 }
-  
-void
-automaton::add_action (void* action_entry_point,
-		       action_type_t action_type)
+
+automaton::action
+automaton::get_action (local_func ptr) const
 {
-  kassert (action_map_.insert (std::make_pair (action_entry_point, action_type)).second);
-}
-  
-action_type_t
-automaton::get_action_type (void* action_entry_point)
-{
-  action_map_type::const_iterator pos = action_map_.find (action_entry_point);
+  action_map_type::const_iterator pos = action_map_.find (reinterpret_cast<void*> (ptr));
   if (pos != action_map_.end ()) {
     return pos->second;
   }
   else {
-    return NO_ACTION;
+    return action ();
   }
 }
-
-void
-automaton::execute (logical_address switch_stack,
-		    size_t switch_stack_size,
-		    void* action_entry_point,
-		    parameter_t parameter,
-		    value_t input_value)
-{
-  logical_address stack_begin;
-  logical_address stack_end;
-  logical_address new_stack_begin;
-  size_t stack_size;
-  size_t idx;
-  
-  /* Move the stack into an area mapped in all address spaces so that switching page directories doesn't cause a triple fault. */
-  
-  /* Determine the beginning of the stack. */
-  asm volatile ("mov %%esp, %0\n" : "=m"(stack_begin));
-  /* Determine the end of the stack. */
-  stack_end = logical_address (&input_value);
-  stack_end += sizeof (size_t);
-  /* Compute the beginning of the new stack. */
-  stack_size = stack_end - stack_begin;
-  /* Use a bigger switch stack. */
-  kassert (stack_size < switch_stack_size);
-  new_stack_begin = (switch_stack + (switch_stack_size - stack_size)) >> STACK_ALIGN;
-  /* Copy. */
-  for (idx = 0; idx < stack_size; ++idx) {
-    new_stack_begin[idx] = stack_begin[idx];
-  }
-  
-  /* Update the base and stack pointers. */
-  asm volatile ("add %0, %%esp\n"
-		"add %0, %%ebp\n" :: "r"(new_stack_begin - stack_begin) : "%esp", "memory");
-  
-  /* Switch page directories. */
-  vm_manager::switch_to_directory (page_directory_);
-  
-  /* Load the new stack segment.
-     Load the new stack pointer.
-     Enable interrupts on return.
-     Load the new code segment.
-     Load the new instruction pointer.
-     Load the parameter.
-     Load the value for input actions.
-  */
-  asm volatile ("mov %0, %%eax\n"
-		"mov %%ax, %%ss\n"
-		"mov %1, %%eax\n"
-		"mov %%eax, %%esp\n"
-		"pushf\n"
-		"pop %%eax\n"
-		"or $0x200, %%eax\n"
-		"push %%eax\n"
-		"pushl %2\n"
-		"pushl %3\n"
-		"movl %4, %%ecx\n"
-		"movl %5, %%edx\n"
-		"iret\n" :: "m"(stack_segment_), "m"(stack_pointer_), "m"(code_segment_), "m"(action_entry_point), "m"(parameter), "m"(input_value));
-}
-

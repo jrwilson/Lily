@@ -21,5 +21,10 @@ memset (void* ptr,
 	unsigned char value,
 	size_t size);
 
+void
+memcpy (void* dst,
+	const void* src,
+	size_t size);
+
 #endif /* __string_h__ */
 

@@ -120,6 +120,11 @@ public:
     return *this;
   }
 
+  inline logical_address& operator-= (const ptrdiff_t& offset) {
+    address_ -= offset;
+    return *this;
+  }
+
   inline logical_address operator+ (const ptrdiff_t& offset) const {
     logical_address retval (address_);
     retval.address_ += offset;
@@ -175,8 +180,10 @@ public:
   }
 };
 
-typedef uint32_t parameter_t;
-typedef uint32_t value_t;
+typedef void (*input_func) (void*, void*, size_t);
+typedef void (*output_func) (void*);
+typedef void (*internal_func) (void*);
+typedef void (*local_func) (void*);
 
 #endif /* __types_h__ */
 

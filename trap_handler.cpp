@@ -40,14 +40,10 @@ trap_dispatch (registers regs)
   switch (syscall) {
   case SYSCALL_FINISH:
     {
-      if (is_schedule_valid (regs.eax)) {
-	void* const action_entry_point = reinterpret_cast<void*> (regs.ebx);
-	parameter_t const parameter = regs.ecx;
-	system_automaton::schedule_action (action_entry_point, parameter);
-      }
-      bool const output_status = is_output_valid (regs.eax);
-      value_t const output_value = regs.edx;
-      system_automaton::finish_action (output_status, output_value);
+      local_func const action_entry_point = reinterpret_cast<local_func> (regs.ebx);
+      void* const parameter = reinterpret_cast<void*> (regs.ecx);
+      void* const buffer = reinterpret_cast<void*> (regs.edx);
+      system_automaton::finish_action (is_schedule_valid (regs.eax), action_entry_point, parameter, is_output_valid (regs.eax), buffer);
       return;
     }
     break;

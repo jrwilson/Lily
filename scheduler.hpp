@@ -23,6 +23,9 @@ class list_alloc;
 // Note that this is probably not the number of bytes as each element in the array may occupy more than one byte.
 static const size_t SWITCH_STACK_SIZE = 256;
 
+// Size of the temporary buffer used to store the values produced by output actions.
+static const size_t MESSAGE_BUFFER_SIZE = 512;
+
 class scheduler {
 private:
   enum status_t {
@@ -31,25 +34,33 @@ private:
   };
 
   struct automaton_context {
-    ::action action;
     status_t status;
+    ::automaton* automaton;
+    local_func action;
+    void* parameter;
+
     
     automaton_context (::automaton* a) :
-      status (NOT_SCHEDULED)
-    {
-      action.automaton = a;
-    }
+      status (NOT_SCHEDULED),
+      automaton (a)
+    { }
   };
   
   class execution_context {
   private:
     binding_manager& binding_manager_;
     uint32_t switch_stack_[SWITCH_STACK_SIZE];
-    action current_action_;
-    action_type_t action_type_;
+    uint8_t message_buffer_[MESSAGE_BUFFER_SIZE];
+
+    automaton* automaton_;
+    automaton::action action_;
+    void* parameter_;
+
     const binding_manager::input_action_set_type* input_actions_;
     binding_manager::input_action_set_type::const_iterator input_action_pos_;
-    value_t output_value_;
+
+    void
+    exec (int end_of_stack = -1) const;
     
   public:
     execution_context (binding_manager& bm);
@@ -57,21 +68,18 @@ private:
     void
     clear ();
 
-    ::automaton*
-    automaton () const;
-
-    action_type_t
-    action_type () const;
+    automaton*
+    current_automaton () const;
 
     void
     load (automaton_context* c);
 
     void
-    execute () const;
+    finish_action (bool output_status,
+		   void* buffer);
 
     void
-    finish_action (bool output_status,
-		   value_t output_value);
+    execute () const;
   };
 
   list_alloc& alloc_;
@@ -97,13 +105,15 @@ public:
 
   void
   schedule_action (automaton* automaton,
-		   void* action_entry_point,
-		   parameter_t parameter);
+		   local_func action_entry_point,
+		   void* parameter);
   
   void
-  finish_action (bool output_status,
-		 value_t output_value);
-
+  finish_action (bool schedule_status,
+		 local_func action_entry_point,
+		 void* parameter,
+		 bool output_status,
+		 void* buffer);
 };
 
 #endif /* __scheduler_hpp__ */

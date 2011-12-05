@@ -19,6 +19,7 @@
 #include "frame_manager.hpp"
 #include "kassert.hpp"
 #include "string.hpp"
+#include "interrupt_descriptor_table.hpp"
 
 #define PAGE_PROTECTION_ERROR (1 << 0)
 #define PAGE_WRITE_ERROR (1 << 1)
@@ -93,7 +94,11 @@ public:
 
   virtual void
   page_fault (logical_address address,
-	      uint32_t error) = 0;
+	      uint32_t error,
+	      registers*) = 0;
+
+  virtual bool
+  is_data_area () const = 0;
 };
 
 class vm_text_area : public vm_area_base {
@@ -112,10 +117,17 @@ public:
 
   void
   page_fault (logical_address,
-	      uint32_t)
+	      uint32_t,
+	      registers*)
   {
     // TODO
     kassert (0);
+  }
+
+  virtual bool
+  is_data_area () const
+  {
+    return false;
   }
 };
 
@@ -135,10 +147,17 @@ public:
 
   void
   page_fault (logical_address,
-	      uint32_t)
+	      uint32_t,
+	      registers*)
   {
     // TODO
     kassert (0);
+  }
+
+  virtual bool
+  is_data_area () const
+  {
+    return true;
   }
 };
 
@@ -166,7 +185,8 @@ public:
 
   void
   page_fault (logical_address address,
-	      uint32_t error)
+	      uint32_t error,
+	      registers*)
   {
     /* Fault should come from not being present. */
     kassert ((error & PAGE_PROTECTION_ERROR) == 0);
@@ -177,6 +197,12 @@ public:
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
     memset ((address >> PAGE_SIZE).value (), 0x00, PAGE_SIZE);
+  }
+
+  virtual bool
+  is_data_area () const
+  {
+    return true;
   }
 };
 
@@ -196,10 +222,17 @@ public:
 
   void
   page_fault (logical_address,
-	      uint32_t)
+	      uint32_t,
+	      registers*)
   {
     // TODO
     kassert (0);
+  }
+
+  virtual bool
+  is_data_area () const
+  {
+    return true;
   }
 };
 
@@ -218,10 +251,18 @@ public:
 
   void
   page_fault (logical_address,
-	      uint32_t)
+	      uint32_t,
+	      registers* regs)
   {
     // There is a bug in the kernel.  A reserved memory area was not backed.
+    kputs ("EIP = "); kputx32 (regs->eip); kputs ("\n");
     kassert (0);
+  }
+
+  virtual bool
+  is_data_area () const
+  {
+    return false;
   }
 };
 
@@ -248,13 +289,20 @@ public:
 
   void
   page_fault (logical_address address,
-	      uint32_t)
+	      uint32_t,
+	      registers*)
   {
     kputs ("Page fault in free area\n");
     kputs ("address = "); kputp (address.value ()); kputs ("\n");
 
     // TODO
     kassert (0);
+  }
+
+  virtual bool
+  is_data_area () const
+  {
+    return false;
   }
 };
 

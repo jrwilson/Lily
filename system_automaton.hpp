@@ -21,15 +21,15 @@ namespace system_automaton {
   
   void
   page_fault (logical_address const& address,
-	      uint32_t error);
+	      uint32_t error,
+	      registers* regs);
   
   void
-  schedule_action (void* action_entry_point,
-		   parameter_t parameter);
-  
-  void
-  finish_action (bool output_status,
-		 value_t output_value);
+  finish_action (bool schedule_status,
+		 local_func action_entry_point,
+		 void* parameter,
+		 bool output_status,
+		 void* buffer);
   
   logical_address
   alloc (size_t size);

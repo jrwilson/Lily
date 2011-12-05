@@ -169,7 +169,7 @@ exception_dispatch (registers regs)
       // Get the faulting address.
       void* addr;
       asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-      system_automaton::page_fault (logical_address (addr), regs.error);
+      system_automaton::page_fault (logical_address (addr), regs.error, &regs);
     }
     break; 
   case COPROCESSOR_ERROR:

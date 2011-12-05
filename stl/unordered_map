@@ -116,10 +116,10 @@ namespace std {
 	map (i.map)
       { }
 
-      const_pointer
+      const_reference
       operator* () const
       {
-	return &(*drop)->value;
+	return (*drop)->value;
       }
 
       const_pointer
@@ -350,9 +350,8 @@ namespace std {
 
     key_equal key_eq () const;
 
-  private:
     iterator
-    find_ (const key_type& k)
+    find (const key_type& k)
     {
       const hash_type hash = Hash::operator() (k);
       const size_type bucket_idx = hash % bucket_count_;
@@ -367,18 +366,22 @@ namespace std {
       
       return iterator (0, this);
     }
-    
-  public:
-    iterator
-    find (const key_type& k)
-    {
-      return find_ (k);
-    }
 
     const_iterator
     find (const key_type& k) const
     {
-      return find_ (k);
+      const hash_type hash = Hash::operator() (k);
+      const size_type bucket_idx = hash % bucket_count_;
+      
+      drop_type** ptr = &bucket_[bucket_idx];
+      while (*ptr != 0) {
+	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->value.first, k)) {
+	  return const_iterator (ptr, this);
+	}
+	ptr = &(*ptr)->next;
+      }
+      
+      return const_iterator (0, this);
     }
 
     size_type

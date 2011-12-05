@@ -14,176 +14,89 @@
   Justin R. Wilson
 */
 
-#include "quote.hpp"
-#include "syscall.hpp"
+struct action_tag { };
+struct input_action_tag : public action_tag { };
+struct output_action_tag : public action_tag { };
+struct internal_action_tag : public action_tag { };
 
-/* Unvalued unparameterized input. */
-#define UV_UP_INPUT(action_name)	\
-  extern int action_name;		\
-extern "C" void \
- action_name##_driver () \
-{ \
-  action_name##_effect ();	\
-  action_name##_schedule (); \
-  schedule_finish (0, 0);			\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "call " quote(action_name) "_driver");
+template <class Tag,
+	  class Parameter,
+	  class Value,
+	  void (*effect) (Parameter, Value&),
+	  void (*schedule) (),
+	  void (*finish) (bool, void*)>
+struct input_action {
+  typedef input_action_tag action_category;
+  typedef Parameter parameter_type;
+  typedef Value value_type;
 
-/* Unvalued parameterized input. */
-#define UV_P_INPUT(action_name, parameter_type)	\
-  extern int action_name;		\
-extern "C" void \
- action_name##_driver (parameter_t parameter) \
-{ \
-  action_name##_effect (reinterpret_cast<parameter_type> (parameter));		\
-  action_name##_schedule (reinterpret_cast<parameter_type> (parameter)); \
-  schedule_finish (0, 0);	\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "push %ecx\n" \
-      "call " quote(action_name) "_driver");
+  static void
+  action (Parameter p,
+	  Value& v)
+  {
+    effect (p, v);
+    schedule ();
+    finish (false, 0);
+  }
 
-/* Valued unparameterized input. */
-#define V_UP_INPUT(action_name, value_type)		\
-  extern int action_name; \
-extern "C" void \
- action_name##_driver (value_t value) \
-{ \
-  action_name##_effect (reinterpret_cast<value_type> (value));		\
-  action_name##_schedule (); \
-  schedule_finish (0, 0);	\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "push %edx\n" \
-      "call " quote(action_name) "_driver");
+};
 
-/* Valued parameterized input. */
-#define V_P_INPUT(action_name, value_type, parameter_type)	\
-  extern int action_name; \
-extern "C" void \
- action_name##_driver (value_t value, parameter_t parameter)			\
-{ \
-  action_name##_effect (reinterpret_cast<value_type> (value), reinterpret_cast<parameter_type> (parameter));	\
-  action_name##_schedule (reinterpret_cast<parameter_type> (parameter));				\
-  schedule_finish (0, 0);			\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "push %ecx\n" \
-      "push %edx\n" \
-      "call " quote(action_name) "_driver");
+// TODO:  Check that sizeof (Parameter) == sizeof (void*) and sizeof (Value) <= LIMIT
+template <class Tag,
+	  class Parameter,
+	  class Value,
+	  void (*remove) (local_func, void*),
+	  bool (*precondition) (Parameter),
+	  void (*effect) (Parameter, Value&),
+	  void (*schedule) (),
+	  void (*finish) (bool, void*)>
+struct output_action {
+  typedef output_action_tag action_category;
+  typedef Parameter parameter_type;
+  typedef Value value_type;
 
-/* Unvalued unparameterized output. */
-#define UV_UP_OUTPUT(action_name)			\
-  extern int action_name; \
-extern "C" void \
-action_name##_driver () \
-{ \
-  schedule_remove (&action_name, 0);	\
-  bool status = action_name##_precondition ();	\
-  if (status) { \
-    action_name##_effect ();	\
-  } \
-  action_name##_schedule (); \
-  schedule_finish (status, 0);	\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "call " quote(action_name) "_driver");
+  static void
+  action (Parameter p)
+  {
+    static Value result;
 
-/* Unvalued parameterized output. */
-#define UV_P_OUTPUT(action_name, parameter_type)	\
-  extern int action_name; \
-extern "C" void \
-action_name##_driver (parameter_t parameter) \
-{ \
-  schedule_remove (&action_name, parameter);	\
-  bool status = action_name##_precondition (reinterpret_cast<parameter_type> (parameter));	\
-  if (status) { \
-    action_name##_effect (reinterpret_cast<parameter_type> (parameter));		\
-  } \
-  action_name##_schedule (reinterpret_cast<parameter_type> (parameter));		\
-  schedule_finish (status, 0);	\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "push %ecx\n" \
-      "call " quote(action_name) "_driver");
+    remove (reinterpret_cast<local_func> (&action), p);
+    if (precondition (p)) {
+      effect (p, result);
+      schedule ();
+      finish (true, &result);
+    }
+    else {
+      schedule ();
+      finish (false, 0);
+    }
+  }
 
-/* Valued unparameterized output. */
-#define V_UP_OUTPUT(action_name, value_type)		\
-  extern int action_name; \
-extern "C" void \
-action_name##_driver () \
-{ \
-  schedule_remove (&action_name, 0);	\
-  bool status = action_name##_precondition ();	\
-  value_t value = 0;	       \
-  if (status) { \
-    value = reinterpret_cast<value_t> (action_name##_effect ());	\
-  } \
-  action_name##_schedule (); \
-  schedule_finish (status, value);	\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "call " quote(action_name) "_driver");
+};
 
-/* Valued parameterized output. */
-#define V_P_OUTPUT(action_name, value_type, parameter_type)	\
-  extern int action_name; \
-extern "C" void \
-action_name##_driver (parameter_t parameter) \
-{ \
-  schedule_remove (&action_name, parameter);	\
-  bool status = action_name##_precondition (reinterpret_cast<parameter_type> (parameter));	\
-  value_t value = 0;	       \
-  if (status) { \
-    value = reinterpret_cast<value_t> (action_name##_effect (reinterpret_cast<parameter_type> (parameter))); \
-  } \
-  action_name##_schedule (reinterpret_cast<parameter_type> (parameter));		\
-  schedule_finish (status, value);	\
-} \
- asm (".global " quote(action_name) "\n" \
-      quote(action_name) ":\n"	\
-      "push %ecx\n" \
-      "call " quote(action_name) "_driver");
+// TODO:  Check that sizeof (Parameter) == sizeof (void*)
+template <class Tag,
+	  class Parameter,
+	  void (*remove) (local_func, void*),
+	  bool (*precondition) (Parameter),
+	  void (*effect) (Parameter),
+	  void (*schedule) (),
+	  void (*finish) (bool, void*)>
+struct internal_action {
+  typedef internal_action_tag action_category;
+  typedef Parameter parameter_type;
 
-#define UP_INTERNAL(action_name) \
-extern int action_name; \
-extern "C" void \
-action_name##_driver () \
-{ \
-  schedule_remove (&action_name, 0); \
-  if (action_name##_precondition ()) {	\
-    action_name##_effect ();			\
-  } \
-  action_name##_schedule ();		\
-  schedule_finish (0, 0); \
-} \
-asm (".global " quote(action_name) "\n"		\
-     quote(action_name) ":\n"	\
-     "call " quote(action_name) "_driver");
+  static void
+  action (Parameter p)
+  {
+    remove (reinterpret_cast<local_func> (&action), p);
+    if (precondition (p)) {
+      effect (p);
+    }
+    schedule ();
+    finish (false, 0);
+  }
 
-#define P_INTERNAL(action_name, parameter_type)	\
-  extern int action_name; \
-extern "C" void \
-action_name##_driver (parameter_t parameter) \
-{ \
-  schedule_remove (&action_name, parameter);	\
-  if (action_name##_precondition (reinterpret_cast<parameter_type> (parameter))) { \
-    action_name##_effect (reinterpret_cast<parameter_type> (parameter));	\
-  } \
-  action_name##_schedule (reinterpret_cast<parameter_type> (parameter));	\
-  schedule_finish (0, 0);	\
-} \
-asm (".global " quote(action_name) "\n"		\
-     quote(action_name) ":\n"	\
-      "push %ecx\n" \
-     "call " quote(action_name) "_driver");
+};
 
 #endif /* __action_macros_hpp__ */

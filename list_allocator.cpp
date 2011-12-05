@@ -66,7 +66,7 @@ list_alloc::split_header (chunk_header* ptr,
 bool
 list_alloc::merge_header (chunk_header* ptr)
 {
-  if (ptr->next != 0 && ptr->next->available && ptr->next == static_cast<chunk_header*>((logical_address (ptr) + sizeof (chunk_header) + ptr->size).value ())) {
+  if (ptr->available && ptr->next != 0 && ptr->next->available && ptr->next == static_cast<chunk_header*>((logical_address (ptr) + sizeof (chunk_header) + ptr->size).value ())) {
     ptr->size += sizeof (chunk_header) + ptr->next->size;
     if (ptr->next == last_header_) {
       last_header_ = ptr;
