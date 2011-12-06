@@ -65,7 +65,7 @@ namespace system_automaton {
   
   void
   null (void*);
-  typedef internal_action_traits<void*, &null> null_traits;
+  typedef p_internal_action_traits<void*> null_traits;
   
   static bool
   null_precondition (void*)
@@ -88,7 +88,7 @@ namespace system_automaton {
   
   void
   init (automaton_type*);
-  typedef output_action_traits<automaton_type*, int, &init> init_traits;
+  typedef p_v_output_action_traits<automaton_type*, int> init_traits;
   
   static bool
   init_precondition (automaton_type* a)
@@ -98,11 +98,11 @@ namespace system_automaton {
   
   static void
   init_effect (automaton_type*,
-		  int& message)
+		  int& value)
   {
     init_queue_->pop_front ();
-    message = 314;
-    kputs (__func__); kputs (" produced "); kputx32 (message); kputs ("\n");
+    value = 314;
+    kputs (__func__); kputs (" produced "); kputx32 (value); kputs ("\n");
   }
   
   void
@@ -117,14 +117,14 @@ namespace system_automaton {
   {
     kassert (0);
   }
-  typedef input_action_traits<void*, int, &create_request> create_request_traits;
+  typedef p_v_input_action_traits<void*, int> create_request_traits;
   
   void
   create_response (void*)
   {
     kassert (0);
   }
-  typedef output_action_traits<void*, int, &create_response> create_response_traits;
+  typedef p_v_output_action_traits<void*, int> create_response_traits;
   
   void
   bind_request (void*,
@@ -132,14 +132,14 @@ namespace system_automaton {
   {
     kassert (0);
   }
-  typedef input_action_traits<void*, int, &bind_request> bind_request_traits;
+  typedef p_v_input_action_traits<void*, int> bind_request_traits;
   
   void
   bind_response (void*)
   {
     kassert (0);
   }
-  typedef output_action_traits<void*, int, &bind_response> bind_response_traits;
+  typedef p_v_output_action_traits<void*, int> bind_response_traits;
   
   void
   unbind_request (void*,
@@ -147,14 +147,14 @@ namespace system_automaton {
   {
     kassert (0);
   }
-  typedef input_action_traits<void*, int, &unbind_request> unbind_request_traits;
+  typedef p_v_input_action_traits<void*, int> unbind_request_traits;
   
   void
   unbind_response (void*)
   {
     kassert (0);
   }
-  typedef output_action_traits<void*, int, &unbind_response> unbind_response_traits;
+  typedef p_v_output_action_traits<void*, int> unbind_response_traits;
   
   void
   destroy_request (void*,
@@ -162,19 +162,19 @@ namespace system_automaton {
   {
     kassert (0);
   }
-  typedef input_action_traits<void*, int, &destroy_request> destroy_request_traits;
+  typedef p_v_input_action_traits<void*, int> destroy_request_traits;
 
   void
   destroy_response (void*)
   {
     kassert (0);
   }
-  typedef output_action_traits<void*, int, &destroy_response> destroy_response_traits;
+  typedef p_v_output_action_traits<void*, int> destroy_response_traits;
 
   // For testing.
   void
   read_request (void*);
-  typedef output_action_traits<void*, ramdisk::block_num, &read_request> read_request_traits;
+  typedef p_v_output_action_traits<void*, ramdisk::block_num> read_request_traits;
 
   static bool
   read_request_precondition (void*)
@@ -391,7 +391,7 @@ namespace system_automaton {
   }
 
   void
-  bad_message (void)
+  bad_value (void)
   {
     // TODO
     kassert (0);

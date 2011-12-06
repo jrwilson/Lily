@@ -28,7 +28,7 @@ namespace ramdisk {
 	       int& value)
   {
     kputs (__func__); kputs (" consumed "); kputx32 (value); kputs ("\n");
-
+    
     // Initialize the allocator.
     new (&alloc_) list_alloc ();
     
@@ -38,9 +38,9 @@ namespace ramdisk {
 
   void
   init (void* p,
-	int m)
+	int v)
   {
-    input_action <init_traits> (p, m, init_effect, schedule, finish);
+    input_action <init_traits> (p, v, init_effect, schedule, finish);
   }
 
   void

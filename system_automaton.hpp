@@ -39,7 +39,7 @@ namespace system_automaton {
   bad_schedule (void);
 
   void
-  bad_message (void);
+  bad_value (void);
 }
 
 #endif /* __system_automaton_hpp__ */

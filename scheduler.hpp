@@ -52,7 +52,7 @@ private:
   private:
     binding_manager<Alloc, Allocator>& binding_manager_;
     uint32_t switch_stack_[SWITCH_STACK_SIZE];
-    uint8_t message_buffer_[MESSAGE_BUFFER_SIZE];
+    uint8_t value_buffer_[VALUE_BUFFER_SIZE];
 
     automaton_type* automaton_;
     typename automaton_type::action action_;
@@ -103,9 +103,9 @@ private:
 
       switch (action_.type) {
       case automaton_type::INPUT:
-	// Copy the message to the stack.
-	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.message_size, STACK_ALIGN)));
-	memcpy (stack_pointer, message_buffer_, action_.message_size);
+	// Copy the value to the stack.
+	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.value_size, STACK_ALIGN)));
+	memcpy (stack_pointer, value_buffer_, action_.value_size);
 	if (action_.is_parameterized) {
 	  // Copy the parameter to the stack.
 	  --stack_pointer;
@@ -194,7 +194,7 @@ private:
 	break;
       case automaton_type::OUTPUT:
 	if (buffer != 0) {
-	  if (automaton_->verify_span (buffer, action_.message_size)) {
+	  if (automaton_->verify_span (buffer, action_.value_size)) {
 	    input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_.action_entry_point, parameter_);
 	    if (input_actions_ != 0) {
 	      /* The output executed and there are inputs. */
@@ -206,14 +206,14 @@ private:
 	      // We know its an input.
 	      action_.type = automaton_type::INPUT;
 	      // Copy the value.
-	      memcpy (message_buffer_, buffer, action_.message_size);
+	      memcpy (value_buffer_, buffer, action_.value_size);
 	      /* Execute.  (This does not return). */
 	      exec ();
 	    }
 	  }
 	  else {
-	    // The message produced by the output function is bad.
-	    system_automaton::bad_message ();
+	    // The value produced by the output function is bad.
+	    system_automaton::bad_value ();
 	  }
 	}
 	break;

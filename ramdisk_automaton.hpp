@@ -23,12 +23,12 @@ namespace ramdisk {
   void
   init (void*,
 	int);
-  typedef input_action_traits<void*, int, &init> init_traits;
+  typedef p_v_input_action_traits<void*, int> init_traits;
 
   void
   read_request (aid_t,
 		block_num);
-  typedef input_action_traits<aid_t, block_num, &read_request> read_request_traits;
+  typedef ap_v_input_action_traits<block_num> read_request_traits;
 }
 
 #endif /* __ramdisk_automaton_hpp__ */

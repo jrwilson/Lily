@@ -26,34 +26,41 @@
 #include "automaton_interface.hpp"
 
 // Size of the temporary buffer used to store the values produced by output actions.
-const size_t MESSAGE_BUFFER_SIZE = 512;
+const size_t VALUE_BUFFER_SIZE = 512;
 
-template <class Category, bool Check>
-struct input_action_helper : public std::false_type { };
-
-template <>
-struct input_action_helper<input_action_tag, true> : public std::true_type { };
-
-template <class T>
-struct is_input_action : public input_action_helper<typename T::action_category, sizeof (typename T::parameter_type) == sizeof (void*) && sizeof (typename T::message_type) <= MESSAGE_BUFFER_SIZE> { };
-
-template <class Category, bool Check>
-struct output_action_helper : public std::false_type { };
+template <bool>
+struct bool_dispatch : public std::false_type { };
 
 template <>
-struct output_action_helper<output_action_tag, true> : public std::true_type { };
+struct bool_dispatch<true> : public std::true_type { };
 
 template <class T>
-struct is_output_action : public output_action_helper<typename T::action_category, sizeof (typename T::parameter_type) == sizeof (void*) && sizeof (typename T::message_type) <= MESSAGE_BUFFER_SIZE> { };
-
-template <class Category, bool Check>
-struct internal_action_helper : public std::false_type { };
-
-template <>
-struct internal_action_helper<internal_action_tag, true> : public std::true_type { };
+struct is_input_action : public bool_dispatch<
+  ((std::is_same<typename T::parameter_category, no_parameter_tag>::value && std::is_same<typename T::parameter_type, null_type>::value) ||
+   (std::is_same<typename T::parameter_category, parameter_tag>::value && sizeof (typename T::parameter_type) == sizeof (aid_t)) ||
+   (std::is_same<typename T::parameter_category, auto_parameter_tag>::value && std::is_same<typename T::parameter_type, aid_t>::value)) &&
+  ((std::is_same<typename T::value_category, no_value_tag>::value && std::is_same<typename T::value_type, null_type>::value) ||
+   (std::is_same<typename T::value_category, value_tag>::value && sizeof (typename T::value_type) <= VALUE_BUFFER_SIZE)) &&
+    std::is_same<typename T::action_category, input_action_tag>::value    
+  > { };
 
 template <class T>
-struct is_internal_action : public internal_action_helper<typename T::action_category, sizeof (typename T::parameter_type) == sizeof (void*)> { };
+struct is_output_action : public bool_dispatch<
+  ((std::is_same<typename T::parameter_category, no_parameter_tag>::value && std::is_same<typename T::parameter_type, null_type>::value) ||
+   (std::is_same<typename T::parameter_category, parameter_tag>::value && sizeof (typename T::parameter_type) == sizeof (aid_t)) ||
+   (std::is_same<typename T::parameter_category, auto_parameter_tag>::value && std::is_same<typename T::parameter_type, aid_t>::value)) &&
+  ((std::is_same<typename T::value_category, no_value_tag>::value && std::is_same<typename T::value_type, null_type>::value) ||
+   (std::is_same<typename T::value_category, value_tag>::value && sizeof (typename T::value_type) <= VALUE_BUFFER_SIZE)) &&
+    std::is_same<typename T::action_category, output_action_tag>::value    
+  > { };
+
+template <class T>
+struct is_internal_action : public bool_dispatch<
+  ((std::is_same<typename T::parameter_category, no_parameter_tag>::value && std::is_same<typename T::parameter_type, null_type>::value) ||
+   (std::is_same<typename T::parameter_category, parameter_tag>::value && sizeof (typename T::parameter_type) == sizeof (aid_t))) &&
+  ((std::is_same<typename T::value_category, no_value_tag>::value && std::is_same<typename T::value_type, null_type>::value)) &&
+  std::is_same<typename T::action_category, internal_action_tag>::value    
+  > { };
 
 template <class Alloc, template <typename> class Allocator>
 class automaton : public automaton_interface {
@@ -68,20 +75,20 @@ public:
   struct action {
     action_type type;
     size_t action_entry_point;
-    size_t message_size;
+    size_t value_size;
     bool is_parameterized;
 
     action () :
       type (NO_ACTION),
       action_entry_point (0),
-      message_size (0),
+      value_size (0),
       is_parameterized (false)
     { }
 
     action (const action& other) :
       type (other.type),
       action_entry_point (other.action_entry_point),
-      message_size (other.message_size),
+      value_size (other.value_size),
       is_parameterized (other.is_parameterized)
     { }
 
@@ -91,7 +98,7 @@ public:
       if (this != &other) {
 	type = other.type;
 	action_entry_point = other.action_entry_point;
-	message_size = other.message_size;
+	value_size = other.value_size;
 	is_parameterized = other.is_parameterized;
       }
       return *this;
@@ -216,7 +223,7 @@ private:
     action ac;
     ac.type = INPUT;
     ac.action_entry_point = ActionTraits::action_entry_point;
-    ac.message_size = sizeof (typename ActionTraits::message_type);
+    ac.value_size = sizeof (typename ActionTraits::value_type);
     ac.is_parameterized = true;
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
@@ -229,7 +236,7 @@ private:
     action ac;
     ac.type = OUTPUT;
     ac.action_entry_point = ActionTraits::action_entry_point;
-    ac.message_size = sizeof (typename ActionTraits::message_type);
+    ac.value_size = sizeof (typename ActionTraits::value_type);
     ac.is_parameterized = true;
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
@@ -242,7 +249,7 @@ private:
     action ac;
     ac.type = INTERNAL;
     ac.action_entry_point = ActionTraits::action_entry_point;
-    ac.message_size = 0;
+    ac.value_size = 0;
     ac.is_parameterized = true;
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }

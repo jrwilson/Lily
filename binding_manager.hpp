@@ -87,12 +87,15 @@ public:
     STATIC_ASSERT (is_output_action<OutputAction>::value);
     // This checks that the automaton contains the action at run time.
     kassert (output_automaton->get_action (OutputAction::action_entry_point).type == automaton<Alloc COMMA Allocator>::OUTPUT);
+
     kassert (input_automaton != 0);
+    // This checks that the input is an output at compile time.
     STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Message types must be the same.
+    // This checks that the automaton contains the action at run time.
     kassert (input_automaton->get_action (InputAction::action_entry_point).type == automaton<Alloc COMMA Allocator>::INPUT);
-    
-    STATIC_ASSERT (std::is_same <typename OutputAction::message_type COMMA typename InputAction::message_type>::value);
+
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
 
     // /* TODO:  All of the bind checks. */
     output_action oa (output_automaton, OutputAction::action_entry_point, reinterpret_cast<const void*> (output_parameter));
