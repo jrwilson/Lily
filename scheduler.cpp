@@ -49,74 +49,97 @@ scheduler::execution_context::load (automaton_context* c)
 }
 
 void
-scheduler::execution_context::exec (int end_of_stack) const
+scheduler::execution_context::exec (uint32_t end_of_stack) const
 {
-  logical_address stack_begin;
-  logical_address stack_end;
-  logical_address new_stack_begin;
+  uint32_t* stack_begin;
+  uint32_t* stack_end;
+  uint32_t* new_stack_begin;
   size_t stack_size;
   size_t idx;
   uint32_t stack_segment = automaton_->stack_segment ();
-  logical_address stack_pointer = automaton_->stack_pointer ();
+  uint32_t* stack_pointer = const_cast<uint32_t*> (static_cast<const uint32_t*> (automaton_->stack_pointer ()));
   uint32_t code_segment = automaton_->code_segment ();
 
-  /* Move the stack into an area mapped in all address spaces so that switching page directories doesn't cause a triple fault. */
+  // Move the stack into an area mapped in all address spaces so that switching page directories doesn't cause a triple fault.
   
-  /* Determine the beginning of the stack. */
+  // Determine the beginning of the stack.
   asm volatile ("mov %%esp, %0\n" : "=m"(stack_begin));
-  stack_begin += sizeof (uint32_t);
 
-  /* Determine the end of the stack. */
-  stack_end = logical_address (&end_of_stack);
-  stack_end += sizeof (end_of_stack);
-  /* Compute the beginning of the new stack. */
+  // Determine the end of the stack.
+  stack_end = &end_of_stack + 1;
+
+  kputs ("before stack_begin = "); kputp (stack_begin); kputs ("\n");
+  kputs ("before stack_end = "); kputp (stack_end); kputs ("\n");
+
+  // Compute the size of the stack.
   stack_size = stack_end - stack_begin;
 
-  /* Use a bigger switch stack. */
-  kassert (stack_size < sizeof (switch_stack_));
-  new_stack_begin = (logical_address (switch_stack_) + (sizeof (switch_stack_) - stack_size)) >> STACK_ALIGN;
-  /* Copy. */
+  kputs ("before stack_size = "); kputx32 (stack_size); kputs ("\n");
+
+  new_stack_begin = static_cast<uint32_t*> (const_cast<void*> (align_down (switch_stack_ + SWITCH_STACK_SIZE - stack_size, STACK_ALIGN)));
+  kputs ("before new_stack_begin = "); kputp (new_stack_begin); kputs ("\n");
+  kputs ("before stack_pointer = "); kputp (stack_pointer); kputs ("\n");
+
+  // Check that the stack will work.
+  kassert (new_stack_begin >= switch_stack_);
+
+  //
   for (idx = 0; idx < stack_size; ++idx) {
     new_stack_begin[idx] = stack_begin[idx];
   }
   
   /* Update the base and stack pointers. */
   asm volatile ("add %0, %%esp\n"
-		"add %0, %%ebp\n" :: "r"(new_stack_begin - stack_begin) : "%esp", "memory");
+		"add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
 
   /* Switch page directories. */
   vm_manager::switch_to_directory (automaton_->page_directory ());
 
+  kputs ("after stack_begin = "); kputp (stack_begin); kputs ("\n");
+  kputs ("after stack_end = "); kputp (stack_end); kputs ("\n");
+  kputs ("after stack_size = "); kputx32 (stack_size); kputs ("\n");
+  kputs ("after new_stack_begin = "); kputp (new_stack_begin); kputs ("\n");
+  kputs ("after stack_pointer = "); kputp (stack_pointer); kputs ("\n");
+
   switch (action_.type) {
   case automaton::INPUT:
-    // Adjust the stack pointer.
-    stack_pointer -= action_.message_size;
-    stack_pointer >>= STACK_ALIGN;
-    // Copy the value to the stack.
-    memcpy (stack_pointer.value (), message_buffer_, action_.message_size);
+    // Copy the message to the stack.
+    stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.message_size, STACK_ALIGN)));
+    memcpy (stack_pointer, message_buffer_, action_.message_size);
+    kputs ("after message stack_pointer = "); kputp (stack_pointer); kputs ("\n");
+    if (action_.is_parameterized) {
+      // Copy the parameter to the stack.
+      --stack_pointer;
+      *stack_pointer = reinterpret_cast<uint32_t> (parameter_);
+      kputs ("after parameter stack_pointer = "); kputp (stack_pointer); kputs ("\n");
+    }
     asm volatile ("mov %0, %%eax\n"	// Load the new stack segment.
-		  "mov %%ax, %%ss\n"
-		  "mov %1, %%eax\n"	// Load the new stack pointer.
-		  "mov %%eax, %%esp\n"
-		  "pushl %4\n"		// Push the parameter.
-		  "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
-		  "pushf\n"		// Push flags (EFLAGS).
-		  "pushl %2\n"		// Push the code segment (CS).
-		  "pushl %3\n"		// Push the instruction pointer (EIP).
-		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point), "m"(parameter_) : "%eax");
+    		  "mov %%ax, %%ss\n"
+    		  "mov %1, %%eax\n"	// Load the new stack pointer.
+    		  "mov %%eax, %%esp\n"
+    		  "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
+    		  "pushf\n"		// Push flags (EFLAGS).
+    		  "pushl %2\n"		// Push the code segment (CS).
+    		  "pushl %3\n"		// Push the instruction pointer (EIP).
+    		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point) : "%eax");
     break;
   case automaton::OUTPUT:
   case automaton::INTERNAL:
+    if (action_.is_parameterized) {
+      // Copy the parameter to the stack.
+      --stack_pointer;
+      *stack_pointer = reinterpret_cast<uint32_t> (parameter_);
+      kputs ("after parameter stack_pointer = "); kputp (stack_pointer); kputs ("\n");
+    }
     asm volatile ("mov %0, %%eax\n"	// Load the new stack segment.
 		  "mov %%ax, %%ss\n"
 		  "mov %1, %%eax\n"	// Load the new stack pointer.
 		  "mov %%eax, %%esp\n"
-		  "pushl %4\n"		// Push the parameter.
-		  "sub $0x4, %%esp\n"	// Adjust the stack pointer for the cdecl calling convention.
+     		  "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
 		  "pushf\n"		// Push flags (EFLAGS).
 		  "pushl %2\n"		// Push the code segment (CS).
 		  "pushl %3\n"		// Push the instruction pointer (EIP).
-		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point), "m"(parameter_) : "%eax");
+		  "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point) : "%eax", "%esp");
     break;
   case automaton::NO_ACTION:
     // Error.

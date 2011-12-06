@@ -16,11 +16,11 @@
 
 namespace system_automaton {
   void
-  run (logical_address placement_begin,
-       logical_address placement_end);
+  run (const void* placement_begin,
+       const void* placement_end);
   
   void
-  page_fault (logical_address const& address,
+  page_fault (const void* address,
 	      uint32_t error,
 	      registers* regs);
   
@@ -29,7 +29,7 @@ namespace system_automaton {
 		 void* parameter,
 		 void* buffer);
   
-  logical_address
+  void*
   alloc (size_t size);
   
   void

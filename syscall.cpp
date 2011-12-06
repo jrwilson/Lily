@@ -22,13 +22,11 @@ sys_finish (size_t action_entry_point,
 	    void* parameter,
 	    void* output_buffer)
 {
-  uint32_t code = SYSCALL_FINISH;
-
   asm volatile ("mov %0, %%eax\n"
   		"mov %1, %%ebx\n"
   		"mov %2, %%ecx\n"
   		"mov %3, %%edx\n"
-  		"int $0x80\n" : : "m"(code), "m"(action_entry_point), "m"(parameter), "m"(output_buffer) : "eax", "ebx", "ecx", "edx");
+  		"int $0x80\n" : : "r"(SYSCALL_FINISH), "m"(action_entry_point), "m"(parameter), "m"(output_buffer) : "eax", "ebx", "ecx", "edx");
 }
 
 size_t

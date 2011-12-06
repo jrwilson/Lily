@@ -48,29 +48,6 @@ struct internal_action_traits {
   static const size_t action_entry_point = reinterpret_cast<size_t> (Ptr);
 };
 
-// // TODO:  Get rid of reinterpret casts.
-// template <class Tag,
-// 	  class Parameter,
-// 	  class Message,
-// 	  void (*effect) (Parameter, Message&),
-// 	  void (*schedule) (),
-// 	  void (*finish) (bool, void*)>
-// struct input_action {
-//   typedef input_action_tag action_category;
-//   typedef Parameter parameter_type;
-//   typedef Message message_type;
-
-//   static void
-//   action (Parameter p,
-// 	  Message& v)
-//   {
-//     effect (p, v);
-//     schedule ();
-//     finish (false, 0);
-//   }
-
-// };
-
 template <class InputAction,
 	  class Effect,
 	  class Schedule,

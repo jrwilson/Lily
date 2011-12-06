@@ -17,7 +17,6 @@ trap.o \
 trap_handler.o \
 placement_allocator.o \
 stack_allocator.o \
-frame.o \
 frame_manager.o \
 vm_manager.o \
 kput.o \
@@ -28,7 +27,7 @@ list_allocator.o \
 syscall.o \
 global_descriptor_table.o \
 system_automaton.o \
-initrd_automaton.o \
+ramdisk_automaton.o \
 automaton.o \
 scheduler.o \
 interrupt_descriptor_table.o \

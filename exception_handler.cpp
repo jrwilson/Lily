@@ -107,6 +107,7 @@ static const interrupt_number COPROCESSOR_ERROR = 16;
 extern "C" void
 exception_dispatch (registers regs)
 {
+  kputs (__func__); kputs ("\n");
   switch (regs.number) {
   case DIVIDE_ERROR:
     // TODO
@@ -167,9 +168,9 @@ exception_dispatch (registers regs)
   case PAGE_FAULT:
     {
       // Get the faulting address.
-      void* addr;
+      const void* addr;
       asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
-      system_automaton::page_fault (logical_address (addr), regs.error, &regs);
+      system_automaton::page_fault (addr, regs.error, &regs);
     }
     break; 
   case COPROCESSOR_ERROR:

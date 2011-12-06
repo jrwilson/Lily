@@ -19,31 +19,31 @@
 
 class placement_alloc {
 private:
-  logical_address begin_;
-  logical_address end_;
-  logical_address limit_;
+  const uint8_t* begin_;
+  const uint8_t* end_;
+  const uint8_t* limit_;
   
 public:
   
-  placement_alloc (const logical_address& begin,
-		   const logical_address& limit);
+  placement_alloc (const void* begin,
+		   const void* limit);
   
   void*
   alloc (size_t size) __attribute__((warn_unused_result));
   
-  inline logical_address
+  inline const void*
   begin (void) const
   {
     return begin_;
   }
   
-  inline logical_address
+  inline const void*
   end (void) const
   {
     return end_;
   }
   
-  inline logical_address
+  inline const void*
   limit (void) const
   {
     return limit_;
@@ -138,7 +138,7 @@ public:
   
   size_type
   max_size () const {
-    return (alloc_.limit () - alloc_.begin ()) / sizeof (T);
+    return (static_cast<char*> (alloc_.limit ()) - static_cast<char*> (alloc_.begin ())) / sizeof (T);
   }
   
   template <class U>

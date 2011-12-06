@@ -27,6 +27,33 @@
 // Size of the temporary buffer used to store the values produced by output actions.
 const size_t MESSAGE_BUFFER_SIZE = 512;
 
+template <class Category, bool Check>
+struct input_action_helper : public std::false_type { };
+
+template <>
+struct input_action_helper<input_action_tag, true> : public std::true_type { };
+
+template <class T>
+struct is_input_action : public input_action_helper<typename T::action_category, sizeof (typename T::parameter_type) == sizeof (void*) && sizeof (typename T::message_type) <= MESSAGE_BUFFER_SIZE> { };
+
+template <class Category, bool Check>
+struct output_action_helper : public std::false_type { };
+
+template <>
+struct output_action_helper<output_action_tag, true> : public std::true_type { };
+
+template <class T>
+struct is_output_action : public output_action_helper<typename T::action_category, sizeof (typename T::parameter_type) == sizeof (void*) && sizeof (typename T::message_type) <= MESSAGE_BUFFER_SIZE> { };
+
+template <class Category, bool Check>
+struct internal_action_helper : public std::false_type { };
+
+template <>
+struct internal_action_helper<internal_action_tag, true> : public std::true_type { };
+
+template <class T>
+struct is_internal_action : public internal_action_helper<typename T::action_category, sizeof (typename T::parameter_type) == sizeof (void*)> { };
+
 class automaton {
 public:
   enum action_type {
@@ -40,12 +67,33 @@ public:
     action_type type;
     size_t action_entry_point;
     size_t message_size;
+    bool is_parameterized;
 
     action () :
       type (NO_ACTION),
       action_entry_point (0),
-      message_size (0)
+      message_size (0),
+      is_parameterized (false)
     { }
+
+    action (const action& other) :
+      type (other.type),
+      action_entry_point (other.action_entry_point),
+      message_size (other.message_size),
+      is_parameterized (other.is_parameterized)
+    { }
+
+    action&
+    operator= (const action& other)
+    {
+      if (this != &other) {
+	type = other.type;
+	action_entry_point = other.action_entry_point;
+	message_size = other.message_size;
+	is_parameterized = other.is_parameterized;
+      }
+      return *this;
+    }
   };
 
 private:
@@ -65,14 +113,14 @@ private:
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
   typedef std::unordered_map<size_t, action, std::hash<size_t>, std::equal_to<size_t>, list_allocator<std::pair<size_t const, action> > > action_map_type;
   action_map_type action_map_;
-  physical_address page_directory_;
+  physical_address_t const page_directory_;
   /* Stack pointer (constant). */
-  logical_address stack_pointer_;
+  const void* const stack_pointer_;
   /* Memory map. Consider using a set/map if insert/remove becomes too expensive. */
   typedef std::vector<vm_area_base*, list_allocator<vm_area_base*> > memory_map_type;
   memory_map_type memory_map_;
   /* Default privilege for new VM_AREA_DATA. */
-  paging_constants::page_privilege_t page_privilege_;
+  paging_constants::page_privilege_t const page_privilege_;
 
   memory_map_type::const_iterator
   find_by_address (const vm_area_base* area) const;
@@ -94,12 +142,12 @@ private:
   void
   add_action_ (input_action_tag)
   {
-    STATIC_ASSERT (sizeof (typename ActionTraits::parameter_type) == sizeof (void*));
-    STATIC_ASSERT (sizeof (typename ActionTraits::message_type) <= MESSAGE_BUFFER_SIZE);
+    STATIC_ASSERT (is_input_action<ActionTraits>::value);
     action ac;
     ac.type = INPUT;
     ac.action_entry_point = ActionTraits::action_entry_point;
     ac.message_size = sizeof (typename ActionTraits::message_type);
+    ac.is_parameterized = true;
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
 
@@ -107,12 +155,12 @@ private:
   void
   add_action_ (output_action_tag)
   {
-    STATIC_ASSERT (sizeof (typename ActionTraits::parameter_type) == sizeof (void*));
-    STATIC_ASSERT (sizeof (typename ActionTraits::message_type) <= MESSAGE_BUFFER_SIZE);
+    STATIC_ASSERT (is_output_action<ActionTraits>::value);
     action ac;
     ac.type = OUTPUT;
     ac.action_entry_point = ActionTraits::action_entry_point;
     ac.message_size = sizeof (typename ActionTraits::message_type);
+    ac.is_parameterized = true;
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
 
@@ -120,26 +168,27 @@ private:
   void
   add_action_ (internal_action_tag)
   {
-    STATIC_ASSERT (sizeof (typename ActionTraits::parameter_type) == sizeof (void*));
+    STATIC_ASSERT (is_internal_action<ActionTraits>::value);
     action ac;
     ac.type = INTERNAL;
     ac.action_entry_point = ActionTraits::action_entry_point;
     ac.message_size = 0;
+    ac.is_parameterized = true;
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
 
 public:
   automaton (list_alloc& a,
 	     descriptor_constants::privilege_t privilege,
-	     physical_address page_directory,
-	     logical_address stack_pointer,
-	     logical_address memory_ceiling,
+	     physical_address_t page_directory,
+	     const void* stack_pointer,
+	     const void* memory_ceiling,
 	     paging_constants::page_privilege_t page_privilege);
 
-  logical_address
+  const void*
   stack_pointer () const;
   
-  physical_address
+  physical_address_t
   page_directory () const;
 
   uint32_t
@@ -166,21 +215,21 @@ public:
     }
   }
   
-  logical_address
+  void*
   alloc (size_t size) __attribute__((warn_unused_result));
 
-  logical_address
+  void*
   reserve (size_t size);
   
   void
-  unreserve (logical_address address);
+  unreserve (const void* address);
 
   bool
-  verify_span (void* ptr,
+  verify_span (const void* ptr,
 	       size_t size) const;
   
   void
-  page_fault (logical_address address,
+  page_fault (const void* address,
 	      uint32_t error,
 	      registers* regs);
   

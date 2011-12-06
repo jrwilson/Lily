@@ -72,11 +72,11 @@ automaton::insert_into_free_area (memory_map_type::iterator pos,
   kassert ((*pos)->type () == VM_AREA_FREE);
   kassert (area->size () < (*pos)->size ());
     
-  logical_address left_begin = (*pos)->begin ();
-  logical_address left_end = area->begin ();
+  const void* left_begin = (*pos)->begin ();
+  const void* left_end = area->begin ();
     
-  logical_address right_begin = area->end ();
-  logical_address right_end = (*pos)->end ();
+  const void* right_begin = area->end ();
+  const void* right_end = (*pos)->end ();
     
   // Take out the old entry.
   destroy (*pos, alloc_);
@@ -99,9 +99,9 @@ automaton::insert_into_free_area (memory_map_type::iterator pos,
 
 automaton::automaton (list_alloc& a,
 		      descriptor_constants::privilege_t privilege,
-		      physical_address page_directory,
-		      logical_address stack_pointer,
-		      logical_address memory_ceiling,
+		      physical_address_t page_directory,
+		      const void* stack_pointer,
+		      const void* memory_ceiling,
 		      paging_constants::page_privilege_t page_privilege) :
   alloc_ (a),
   action_map_ (3, action_map_type::hasher (), action_map_type::key_equal (), action_map_type::allocator_type (alloc_)),
@@ -126,18 +126,18 @@ automaton::automaton (list_alloc& a,
     break;
   }
     
-  memory_ceiling <<= PAGE_SIZE;
+  memory_ceiling = align_up (memory_ceiling, PAGE_SIZE);
     
-  memory_map_.push_back (new (alloc_) vm_free_area (logical_address (0), memory_ceiling));
-  memory_map_.push_back (new (alloc_) vm_reserved_area (memory_ceiling, logical_address (0)));
+  memory_map_.push_back (new (alloc_) vm_free_area (0, memory_ceiling));
+  memory_map_.push_back (new (alloc_) vm_reserved_area (memory_ceiling, 0));
 }
 
-logical_address
+const void*
 automaton::stack_pointer (void) const {
   return stack_pointer_;
 }
 
-physical_address
+physical_address_t
 automaton::page_directory () const
 {
   return page_directory_;
@@ -155,23 +155,23 @@ automaton::stack_segment () const
   return stack_segment_;
 }
 
-logical_address
+void*
 automaton::alloc (size_t size)
 {
   kassert (size > 0);
     
   memory_map_type::iterator pos = find_by_size (size);
   if (pos != memory_map_.end ()) {
-    logical_address retval ((*pos)->begin ());
-    insert_into_free_area (pos, new (alloc_) vm_data_area (retval, retval + size, page_privilege_));
+    void* retval = const_cast<void*> ((*pos)->begin ());
+    insert_into_free_area (pos, new (alloc_) vm_data_area (retval, static_cast<uint8_t*> (retval) + size, page_privilege_));
     return retval;
   }
   else {
-    return logical_address ();
+    return 0;
   }
 }
 
-logical_address
+void*
 automaton::reserve (size_t size)
 {
   kassert (size > 0);
@@ -179,22 +179,22 @@ automaton::reserve (size_t size)
   memory_map_type::iterator pos = find_by_size (size);
     
   if (pos != memory_map_.end ()) {
-    logical_address retval ((*pos)->begin ());
-    insert_into_free_area (pos, new (alloc_) vm_reserved_area ((*pos)->begin (), (*pos)->begin () + size));
+    void* retval = const_cast<void*> ((*pos)->begin ());
+    insert_into_free_area (pos, new (alloc_) vm_reserved_area (retval, static_cast<uint8_t*> (retval) + size));
     return retval;
   }
   else {
-    return logical_address ();
+    return 0;
   }
 }
   
 void
-automaton::unreserve (logical_address address)
+automaton::unreserve (const void* address)
 {
-  kassert (address != logical_address ());
-  kassert (address.is_aligned (PAGE_SIZE));
+  kassert (address != 0);
+  kassert (is_aligned (address, PAGE_SIZE));
     
-  vm_reserved_area k (address, address + PAGE_SIZE);
+  vm_reserved_area k (address, static_cast<const uint8_t*> (address) + PAGE_SIZE);
     
   memory_map_type::iterator pos = find_by_address (&k);
   kassert (pos != memory_map_.end ());
@@ -213,22 +213,21 @@ automaton::unreserve (logical_address address)
 }
 
 bool
-automaton::verify_span (void* ptr,
+automaton::verify_span (const void* ptr,
 			size_t size) const
 {
-  logical_address p (ptr);
-  vm_reserved_area k (p, p + size);
+  vm_reserved_area k (ptr, static_cast<const uint8_t*> (ptr) + size);
   memory_map_type::const_iterator pos = find_by_address (&k);
   kassert (pos != memory_map_.end ());
   return (*pos)->is_data_area ();
 }
   
 void
-automaton::page_fault (logical_address address,
+automaton::page_fault (const void* address,
 		       uint32_t error,
 		       registers* regs)
 {
-  vm_reserved_area k (address, address + 1);
+  vm_reserved_area k (address, static_cast<const uint8_t*> (address) + 1);
   memory_map_type::const_iterator pos = find_by_address (&k);
   kassert (pos != memory_map_.end ());
   (*pos)->page_fault (address, error, regs);

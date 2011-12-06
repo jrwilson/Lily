@@ -15,7 +15,6 @@
 */
 
 #include "vm_def.hpp"
-#include "frame.hpp"
 
 /* Number of entries in a page table or directory. */
 static const size_t PAGE_ENTRY_COUNT = PAGE_SIZE / sizeof (void*);
@@ -73,7 +72,7 @@ struct page_table_entry {
   unsigned int frame_ : 20;
 
   page_table_entry ();
-  page_table_entry (frame frame,
+  page_table_entry (frame_t frame,
 		    paging_constants::page_privilege_t privilege,
 		    paging_constants::writable_t writable,
 		    paging_constants::present_t present);
@@ -100,7 +99,7 @@ struct page_directory_entry {
   unsigned int frame_ : 20;
 
   page_directory_entry ();
-  page_directory_entry (frame frame,
+  page_directory_entry (frame_t frame,
 			paging_constants::present_t present);
 };
 
@@ -108,10 +107,10 @@ struct page_directory {
   page_directory_entry entry[PAGE_ENTRY_COUNT];
 
   void
-  clear (physical_address address);
+  clear (physical_address_t physical_address);
 
   void
-  initialize_with_current (physical_address address);
+  initialize_with_current (physical_address_t physical_address);
 
 };
 
@@ -126,7 +125,7 @@ private:
   get_page_directory (void);
   
   static page_table*
-  get_page_table (logical_address address);
+  get_page_table (const void* address);
 
   vm_manager ();
   vm_manager (const vm_manager&);
@@ -134,26 +133,26 @@ private:
 
 public:
   static void
-  initialize (logical_address placement_begin,
-	      logical_address placement_end);
+  initialize (const void* placement_begin,
+	      const void* placement_end);
 
-  static physical_address
+  static physical_address_t
   page_directory_physical_address (void);
   
-  static logical_address
+  static void*
   page_directory_logical_address (void);
 
   static void
-  map (logical_address address,
-       frame frame,
+  map (const void* address,
+       frame_t frame,
        paging_constants::page_privilege_t privilege,
        paging_constants::writable_t writable);
   
   static void
-  unmap (logical_address logical_addr);
+  unmap (const void* logical_addr);
 
   static void
-  switch_to_directory (physical_address address);
+  switch_to_directory (physical_address_t physical_address);
 };
 
 #endif /* __vm_manager_hpp__ */

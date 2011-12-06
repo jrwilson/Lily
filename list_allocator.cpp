@@ -46,7 +46,7 @@ list_alloc::split_header (chunk_header* ptr,
 			  size_t size)
 {
   /* Split the block. */
-  chunk_header* n = new ((logical_address (ptr) + sizeof (chunk_header) + size).value ()) chunk_header (ptr->size - size - sizeof (chunk_header));
+  chunk_header* n = new (reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + size) chunk_header (ptr->size - size - sizeof (chunk_header));
   n->prev = ptr;
   n->next = ptr->next;
 
@@ -66,7 +66,7 @@ list_alloc::split_header (chunk_header* ptr,
 bool
 list_alloc::merge_header (chunk_header* ptr)
 {
-  if (ptr->available && ptr->next != 0 && ptr->next->available && ptr->next == static_cast<chunk_header*>((logical_address (ptr) + sizeof (chunk_header) + ptr->size).value ())) {
+  if (ptr->available && ptr->next != 0 && ptr->next->available && ptr->next == reinterpret_cast<chunk_header*>((reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + ptr->size))) {
     ptr->size += sizeof (chunk_header) + ptr->next->size;
     if (ptr->next == last_header_) {
       last_header_ = ptr;
@@ -90,6 +90,14 @@ list_alloc::list_alloc (bool initialize)
   }
 }
 
+static inline size_t
+align_up (size_t value,
+	  size_t radix)
+{
+  return (value + radix - 1) & ~(radix - 1);
+}
+
+
 void*
 list_alloc::alloc (size_t size)
 {
@@ -101,7 +109,7 @@ list_alloc::alloc (size_t size)
 
   /* Acquire more memory. */
   if (ptr == 0) {
-    size_t request_size = (physical_address (sizeof (chunk_header) + size) << page_size_).value ();
+    size_t request_size = align_up (sizeof (chunk_header) + size, page_size_);
     ptr = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
 
     if (ptr > last_header_) {

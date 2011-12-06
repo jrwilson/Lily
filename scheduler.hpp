@@ -51,13 +51,13 @@ private:
 
     automaton* automaton_;
     automaton::action action_;
-    void* parameter_;
+    const void* parameter_;
 
     const binding_manager::input_action_set_type* input_actions_;
     binding_manager::input_action_set_type::const_iterator input_action_pos_;
 
     void
-    exec (int end_of_stack = -1) const;
+    exec (uint32_t end_of_stack = -1) const;
     
   public:
     execution_context (binding_manager& bm);

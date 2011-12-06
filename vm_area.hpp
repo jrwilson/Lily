@@ -39,24 +39,22 @@ enum vm_area_type_t {
 class vm_area_base {
 protected:
   const vm_area_type_t type_;
-  logical_address begin_;
-  logical_address end_;
+  const void* begin_;
+  const void* end_;
   paging_constants::page_privilege_t page_privilege_;
 
 public:  
 
   vm_area_base (vm_area_type_t t,
-		logical_address b,
-		logical_address e,
+		const void* b,
+		const void* e,
 		paging_constants::page_privilege_t pp) :
     type_ (t),
-    begin_ (b),
-    end_ (e),
+    begin_ (align_down (b, PAGE_SIZE)),
+    end_ (align_up (e, PAGE_SIZE)),
     page_privilege_ (pp)
   {
-    begin_ >>= PAGE_SIZE;
-    end_ <<= PAGE_SIZE;
-    kassert (end_ == logical_address (0) || begin_ < end_);
+    kassert (end_ == 0 || begin_ < end_);
   }
 
   inline vm_area_type_t 
@@ -65,13 +63,13 @@ public:
     return type_;
   }
 
-  inline logical_address
+  inline const void*
   begin () const
   {
     return begin_;
   }
 
-  inline logical_address
+  inline const void*
   end () const
   {
     return end_;
@@ -80,7 +78,7 @@ public:
   inline size_t
   size () const
   {
-    return (end_ - begin_);
+    return (reinterpret_cast<size_t> (end_) - reinterpret_cast<size_t> (begin_));
   }
 
   inline paging_constants::page_privilege_t
@@ -93,7 +91,7 @@ public:
   merge (const vm_area_base& other) = 0;
 
   virtual void
-  page_fault (logical_address address,
+  page_fault (const void* address,
 	      uint32_t error,
 	      registers*) = 0;
 
@@ -103,8 +101,8 @@ public:
 
 class vm_text_area : public vm_area_base {
 public:
-  vm_text_area (const logical_address& begin,
-		const logical_address& end,
+  vm_text_area (const void* begin,
+		const void* end,
 		paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_TEXT, begin, end, page_privilege)
   { }
@@ -116,7 +114,7 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (const void*,
 	      uint32_t,
 	      registers*)
   {
@@ -133,8 +131,8 @@ public:
 
 class vm_rodata_area : public vm_area_base {
 public:
-  vm_rodata_area (const logical_address& begin,
-		  const logical_address& end,
+  vm_rodata_area (const void* begin,
+		  const void* end,
 		  paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_RODATA, begin, end, page_privilege)
   { }
@@ -146,7 +144,7 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (const void*,
 	      uint32_t,
 	      registers*)
   {
@@ -163,8 +161,8 @@ public:
 
 class vm_data_area : public vm_area_base {
 public:
-  vm_data_area (const logical_address& begin,
-		const logical_address& end,
+  vm_data_area (const void* begin,
+		const void* end,
 		paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_DATA, begin, end, page_privilege)
   { }
@@ -184,7 +182,7 @@ public:
   }
 
   void
-  page_fault (logical_address address,
+  page_fault (const void* address,
 	      uint32_t error,
 	      registers*)
   {
@@ -196,7 +194,7 @@ public:
     vm_manager::map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
-    memset ((address >> PAGE_SIZE).value (), 0x00, PAGE_SIZE);
+    memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 
   virtual bool
@@ -208,8 +206,8 @@ public:
 
 class vm_stack_area : public vm_area_base {
 public:
-  vm_stack_area (const logical_address& begin,
-		 const logical_address& end,
+  vm_stack_area (const void* begin,
+		 const void* end,
 		 paging_constants::page_privilege_t page_privilege) :
     vm_area_base (VM_AREA_STACK, begin, end, page_privilege)
   { }
@@ -221,7 +219,7 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (const void*,
 	      uint32_t,
 	      registers*)
   {
@@ -238,8 +236,8 @@ public:
 
 class vm_reserved_area : public vm_area_base {
 public:
-  vm_reserved_area (const logical_address& begin,
-		    const logical_address& end) :
+  vm_reserved_area (const void* begin,
+		    const void* end) :
     vm_area_base (VM_AREA_RESERVED, begin, end, paging_constants::SUPERVISOR)
   { }
 
@@ -250,7 +248,7 @@ public:
   }
 
   void
-  page_fault (logical_address,
+  page_fault (const void*,
 	      uint32_t,
 	      registers* regs)
   {
@@ -268,8 +266,8 @@ public:
 
 class vm_free_area : public vm_area_base {
 public:
-  vm_free_area (const logical_address& begin,
-		const logical_address& end) :
+  vm_free_area (const void* begin,
+		const void* end) :
     vm_area_base (VM_AREA_FREE, begin, end, paging_constants::SUPERVISOR)
   { }
 
@@ -288,12 +286,12 @@ public:
   }
 
   void
-  page_fault (logical_address address,
+  page_fault (const void* address,
 	      uint32_t,
 	      registers*)
   {
     kputs ("Page fault in free area\n");
-    kputs ("address = "); kputp (address.value ()); kputs ("\n");
+    kputs ("address = "); kputp (address); kputs ("\n");
 
     // TODO
     kassert (0);
