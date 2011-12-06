@@ -273,10 +273,10 @@ namespace std {
       pointer src = position.pos_;
       advance (src);
       pointer dst = position.pos_;
-      destroy (dst);
+      Allocator::destroy (dst);
       while (src != end_) {
 	construct (dst, *src);
-	destroy (src);
+	Allocator::destroy (src);
 	advance (src);
 	advance (dst);
       }

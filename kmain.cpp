@@ -47,7 +47,7 @@ kmain (void)
   interrupt_descriptor_table::install ();
   
   multiboot_parser multiboot_parser_ (multiboot_magic, multiboot_info);
-  placement_alloc place_alloc (std::max (logical_address (&data_end), KERNEL_VIRTUAL_BASE + multiboot_parser_.end ().value ()) << PAGE_SIZE, INITIAL_LOGICAL_LIMIT);
+  placement_alloc place_alloc (align_up (std::max (static_cast<const void*> (&data_end), static_cast<const void*> (static_cast<const uint8_t*> (KERNEL_VIRTUAL_BASE) + multiboot_parser_.end ())), PAGE_SIZE), INITIAL_LOGICAL_LIMIT);
   
   frame_manager::initialize (multiboot_parser_.memory_map_begin (), multiboot_parser_.memory_map_end (), place_alloc);
   vm_manager::initialize (place_alloc.begin (), place_alloc.end ());

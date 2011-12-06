@@ -22,13 +22,13 @@ template <class Alloc, template <typename> class Allocator>
 class binding_manager {
 private:
   struct output_action {
-    ::automaton* automaton;
-    size_t action_entry_point;
-    void* parameter;
+    ::automaton<Alloc, Allocator>* const automaton;
+    size_t const action_entry_point;
+    const void* const parameter;
 
-    output_action (::automaton* a,
-		   size_t aep,
-		   void* p) :
+    output_action (::automaton<Alloc, Allocator>* const a,
+		   size_t const aep,
+		   const void* const p) :
       automaton (a),
       action_entry_point (aep),
       parameter (p)
@@ -42,13 +42,13 @@ private:
   };
 
   struct input_action {
-    ::automaton* automaton;
-    size_t action_entry_point;
-    void* parameter;
+    ::automaton<Alloc, Allocator>* const automaton;
+    size_t const action_entry_point;
+    const void* const parameter;
 
-    input_action (::automaton* a,
-		  size_t aep,
-		  void* p) :
+    input_action (::automaton<Alloc, Allocator>* const a,
+		  size_t const aep,
+		  const void* const p) :
       automaton (a),
       action_entry_point (aep),
       parameter (p)
@@ -72,38 +72,40 @@ private:
 public:
   binding_manager (Alloc& a) :
     alloc_ (a),
-    bindings_ (3, bindings_type::hasher (), bindings_type::key_equal (), bindings_type::allocator_type (a))
+    bindings_ (3, typename bindings_type::hasher (), typename bindings_type::key_equal (), typename bindings_type::allocator_type (a))
   { }
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton* output_automaton,
+  bind (automaton<Alloc, Allocator>* output_automaton,
 	typename OutputAction::parameter_type output_parameter,
-	automaton* input_automaton,
+	automaton<Alloc, Allocator>* input_automaton,
 	typename InputAction::parameter_type input_parameter)
   {
     kassert (output_automaton != 0);
     // This checks that the output is an output at compile time.
-    STATIC_ASSERT (std::is_same <typename OutputAction::action_category COMMA output_action_tag>::value);
+    STATIC_ASSERT (is_output_action<OutputAction>::value);
     // This checks that the automaton contains the action at run time.
-    kassert (output_automaton->get_action (OutputAction::action_entry_point).type == automaton::OUTPUT);
+    kassert (output_automaton->get_action (OutputAction::action_entry_point).type == automaton<Alloc COMMA Allocator>::OUTPUT);
     kassert (input_automaton != 0);
-    STATIC_ASSERT (std::is_same <typename InputAction::action_category COMMA input_action_tag>::value);
-    kassert (input_automaton->get_action (InputAction::action_entry_point).type == automaton::INPUT);
+    STATIC_ASSERT (is_input_action<InputAction>::value);
+    // Message types must be the same.
+    kassert (input_automaton->get_action (InputAction::action_entry_point).type == automaton<Alloc COMMA Allocator>::INPUT);
+    
     STATIC_ASSERT (std::is_same <typename OutputAction::message_type COMMA typename InputAction::message_type>::value);
 
     // /* TODO:  All of the bind checks. */
-    output_action oa (output_automaton, OutputAction::action_entry_point, output_parameter);
-    input_action ia (input_automaton, InputAction::action_entry_point, input_parameter);
+    output_action oa (output_automaton, OutputAction::action_entry_point, reinterpret_cast<const void*> (output_parameter));
+    input_action ia (input_automaton, InputAction::action_entry_point, reinterpret_cast<const void*> (input_parameter));
     
-    std::pair<typename bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, input_action_set_type::hasher (), input_action_set_type::key_equal (), input_action_set_type::allocator_type (alloc_))));
+    std::pair<typename bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, typename input_action_set_type::hasher (), typename input_action_set_type::key_equal (), typename input_action_set_type::allocator_type (alloc_))));
     r.first->second.insert (ia);
   }
   
   const binding_manager::input_action_set_type*
-  get_bound_inputs (automaton* output_automaton,
+  get_bound_inputs (automaton<Alloc, Allocator>* output_automaton,
 		    size_t output_action_entry_point,
-		    void* output_parameter)
+		    const void* output_parameter)
   {
     output_action oa (output_automaton, output_action_entry_point, output_parameter);
     typename bindings_type::const_iterator pos = bindings_.find (oa);

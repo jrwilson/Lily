@@ -7,19 +7,20 @@ LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
+global_descriptor_table.o \
 gdt_flush.o \
+interrupt_descriptor_table.o \
 idt_flush.o \
+placement_allocator.o \
+stack_allocator.o \
+frame_manager.o \
+vm_manager.o \
 exception.o \
 exception_handler.o \
 irq.o \
 irq_handler.o \
 trap.o \
 trap_handler.o \
-placement_allocator.o \
-stack_allocator.o \
-frame.o \
-frame_manager.o \
-vm_manager.o \
 kput.o \
 halt.o \
 cpp_runtime.o \
@@ -27,12 +28,8 @@ string.o \
 system_allocator.o \
 list_allocator.o \
 syscall.o \
-global_descriptor_table.o \
 system_automaton.o \
-initrd_automaton.o \
-automaton.o \
-scheduler.o \
-interrupt_descriptor_table.o \
+ramdisk_automaton.o \
 kmain.o
 
 # pit.o \

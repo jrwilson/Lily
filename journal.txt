@@ -350,5 +350,5 @@ This simplified the problem tremendously.
 Implement segment selectors.
 Reevaluate logical/physical address.
 Take out page scrub in page_handler.
-Implement a better allocator.
+Implement a better allocator (or improve existing one).
 Memory alignment.

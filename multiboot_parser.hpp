@@ -16,14 +16,15 @@
 
 #include "multiboot.hpp"
 #include "types.hpp"
+#include "vm_def.hpp"
 #include <algorithm>
 #include "kassert.hpp"
 
 class multiboot_parser {
 private:
   multiboot_info* info_;
-  physical_address begin_;
-  physical_address end_;
+  physical_address_t begin_;
+  physical_address_t end_;
 
   class mmap_iter : std::iterator<std::forward_iterator_tag, const multiboot_memory_map_t> {
   private:
@@ -79,19 +80,19 @@ public:
     kassert (multiboot_magic == MULTIBOOT_BOOTLOADER_MAGIC);
     
     if (info_->flags & MULTIBOOT_INFO_MEM_MAP) {
-      begin_ = std::min (begin_, physical_address (multiboot_info->mmap_addr));
-      end_ = std::max (end_, physical_address (multiboot_info->mmap_addr + multiboot_info->mmap_length));
+      begin_ = std::min (begin_, static_cast<physical_address_t> (multiboot_info->mmap_addr));
+      end_ = std::max (end_, static_cast<physical_address_t> (multiboot_info->mmap_addr + multiboot_info->mmap_length));
     }
 
   }
 
-  inline physical_address
+  inline physical_address_t
   begin () const
   {
     return begin_;
   }
 
-  inline physical_address
+  inline physical_address_t
   end () const
   {
     return end_;

@@ -18,9 +18,9 @@
 #include <deque>
 #include <unordered_set>
 #include "syscall.hpp"
-#include "list_allocator.hpp"
 #include "kassert.hpp"
 
+template <class Alloc, template <typename> class Allocator>
 class fifo_scheduler {
 private:
 
@@ -41,16 +41,16 @@ private:
     }
   };
 
-  typedef std::deque<entry, list_allocator<entry> > queue_type;
+  typedef std::deque<entry, Allocator<entry> > queue_type;
   queue_type queue_;
-  typedef std::unordered_set<entry, std::hash<entry>, std::equal_to<entry>, list_allocator<entry> > set_type;
+  typedef std::unordered_set<entry, std::hash<entry>, std::equal_to<entry>, Allocator<entry> > set_type;
   set_type set_;
 
 public:
 
-  fifo_scheduler (list_alloc& a) :
-    queue_ (queue_type::allocator_type (a)),
-    set_ (3, set_type::hasher (), set_type::key_equal (), set_type::allocator_type (a))
+  fifo_scheduler (Alloc& a) :
+    queue_ (typename queue_type::allocator_type (a)),
+    set_ (3, typename set_type::hasher (), typename set_type::key_equal (), typename set_type::allocator_type (a))
   { }
 
   template <class LocalAction>
@@ -69,7 +69,7 @@ public:
 	  void* parameter)
   {
     entry e (action_entry_point, parameter);
-    set_type::iterator pos = set_.find (e);
+    typename set_type::iterator pos = set_.find (e);
     if (pos != set_.end ()) {
       set_.erase (pos);
       

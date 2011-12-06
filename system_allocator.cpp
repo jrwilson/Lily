@@ -1,7 +1,7 @@
 /*
   File
   ----
-  list_allocator.cpp
+  system_allocator.cpp
   
   Description
   -----------
@@ -11,13 +11,26 @@
   Justin R. Wilson
 */
 
-#include "list_allocator.hpp"
-#include "syscall.hpp"
+#include "system_allocator.hpp"
+#include "frame_manager.hpp"
+#include "vm_manager.hpp"
 #include <new>
+#include "kassert.hpp"
+#include "vm_area.hpp"
+
+// A call to alloc () might call automaton->alloc ().
+// automaton->alloc () might call alloc () to create data structures.
+// The recursive calls must succeed without calling automaton->alloc (), otherwise, infinite recursion.
+// If we can assume an upper bound on the memory allocated by the recursive call, then we can ensure the recursive calls will succeed by having that must extra memory on hand.
+// THE CURRENT IMPLEMENTATION DOES NOT MEET THIS REQUIREMENT.
+// Mainly because it uses a dynamic array.
+// In order to meet this requirement, one needs to use something like a list or tree where inserting can be performed in constant space.
+
+static const size_t RESERVE_AMOUNT = PAGE_SIZE;
 
 static const uint32_t MAGIC = 0x7ACEDEAD;
 
-struct list_alloc::chunk_header {
+struct system_alloc::chunk_header {
   uint32_t available : 1;
   uint32_t magic : 31;
   size_t size; /* Does not include header. */
@@ -33,8 +46,8 @@ struct list_alloc::chunk_header {
   { }
 };
 
-list_alloc::chunk_header*
-list_alloc::find_header (chunk_header* start,
+system_alloc::chunk_header*
+system_alloc::find_header (chunk_header* start,
 			 size_t size) const
 {
   for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
@@ -42,7 +55,7 @@ list_alloc::find_header (chunk_header* start,
 }
 
 void
-list_alloc::split_header (chunk_header* ptr,
+system_alloc::split_header (chunk_header* ptr,
 			  size_t size)
 {
   /* Split the block. */
@@ -64,7 +77,7 @@ list_alloc::split_header (chunk_header* ptr,
 
 // Try to merge with the next chunk.
 bool
-list_alloc::merge_header (chunk_header* ptr)
+system_alloc::merge_header (chunk_header* ptr)
 {
   if (ptr->available && ptr->next != 0 && ptr->next->available && ptr->next == reinterpret_cast<chunk_header*>((reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + ptr->size))) {
     ptr->size += sizeof (chunk_header) + ptr->next->size;
@@ -80,26 +93,74 @@ list_alloc::merge_header (chunk_header* ptr)
   }
 }
 
-
-list_alloc::list_alloc (bool initialize)
+void*
+system_alloc::allocate (size_t size)
 {
-  if (initialize) {
-    page_size_ = sys_get_page_size ();
-    first_header_ = new (sys_allocate (page_size_)) chunk_header (page_size_ - sizeof (chunk_header));
-    last_header_ = first_header_;
+  kassert (is_aligned (size, PAGE_SIZE));
+
+  switch (status_) {
+  case NORMAL:
+    {
+      return automaton_->alloc (size);
+    }
+    break;
+  case BOOTING:
+    {
+      void* retval = const_cast<void*> (static_cast<const void*> (boot_end_));
+      boot_end_ += size;
+      boot_end_ = static_cast<uint8_t*> (const_cast<void*> (align_up (boot_end_, PAGE_SIZE)));
+      // Back the memory with frames to avoid page faults when the memory map is incomplete.
+      // Page faults are okay later.
+      for (uint8_t* address = static_cast<uint8_t*> (retval); address < boot_end_; address += PAGE_SIZE) {
+	vm_manager::map (address, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+      }
+      return retval;
+    }
+    break;
   }
+
+  // The system automaton allocated memory during an operation.
+  kassert (0);
+  return 0;
 }
 
-static inline size_t
-align_up (size_t value,
-	  size_t radix)
+void
+system_alloc::boot (const void* boot_begin,
+		    const void* boot_end)
 {
-  return (value + radix - 1) & ~(radix - 1);
+  status_ = BOOTING;
+  boot_begin_ = static_cast<uint8_t*> (const_cast<void*> (align_down (boot_begin, PAGE_SIZE)));
+  boot_end_ = static_cast<uint8_t*> (const_cast<void*> (align_up (boot_end, PAGE_SIZE)));
 }
 
+void
+system_alloc::normal (automaton_interface* a)
+{
+  kassert (a != 0);
+  automaton_ = a;
+  size_t request_size = align_up (sizeof (chunk_header) + RESERVE_AMOUNT, PAGE_SIZE);
+  first_header_ = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+  last_header_ = first_header_;
+
+  // Finish the memory map for the system automaton with data that has been allocated.
+  // We use a fixed-point style because inserting might cause the end to move.
+  void* boot_end_before;
+  while (true) {
+    boot_end_before = boot_end_;
+    vm_data_area* d = new (alloc (sizeof (vm_data_area))) vm_data_area (boot_begin_, boot_end_, paging_constants::SUPERVISOR);
+    kassert (automaton_->insert_vm_area (d));
+    if (boot_end_before == boot_end_) {
+      break;
+    }
+    else {
+      automaton_->remove_vm_area (d);
+    }
+  }
+  status_ = NORMAL;
+}
 
 void*
-list_alloc::alloc (size_t size)
+system_alloc::alloc (size_t size)
 {
   if (size == 0) {
     return 0;
@@ -109,8 +170,8 @@ list_alloc::alloc (size_t size)
 
   /* Acquire more memory. */
   if (ptr == 0) {
-    size_t request_size = align_up (sizeof (chunk_header) + size, page_size_);
-    ptr = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+    size_t request_size = align_up (sizeof (chunk_header) + size + RESERVE_AMOUNT, PAGE_SIZE);
+    ptr = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
 
     if (ptr > last_header_) {
       // Append.
@@ -156,7 +217,7 @@ list_alloc::alloc (size_t size)
 }
 
 void
-list_alloc::free (void* p)
+system_alloc::free (void* p)
 {
   if (p == 0) {
     return;
@@ -199,7 +260,7 @@ list_alloc::free (void* p)
 // }
 
 // static void
-// list_allocator_dump (list_allocator_t* la)
+// system_allocator_dump (system_allocator_t* la)
 // {
 //   kputs ("first = "); kputp (la->first_header); kputs (" last = "); kputp (la->last_header); kputs ("\n");
 //   kputs ("Node       Magic      Size       Prev       Next\n");

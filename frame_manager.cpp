@@ -23,7 +23,7 @@ size_t frame_manager::stack_allocator_size_;
 stack_allocator** frame_manager::stack_allocator_;
 
 void
-frame_manager::mark_as_used (const frame& frame)
+frame_manager::mark_as_used (frame_t frame)
 {
   stack_allocator** pos = find_allocator (frame);
 
@@ -32,7 +32,7 @@ frame_manager::mark_as_used (const frame& frame)
   }
 }
 
-frame
+frame_t
 frame_manager::alloc ()
 {
   /* Find an allocator with a free frame. */
@@ -45,7 +45,7 @@ frame_manager::alloc ()
 }
 
 void
-frame_manager::incref (const frame& frame)
+frame_manager::incref (frame_t frame)
 {
   stack_allocator** pos = find_allocator (frame);
 

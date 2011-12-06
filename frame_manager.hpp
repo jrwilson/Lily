@@ -17,7 +17,6 @@
 
 #include "placement_allocator.hpp"
 #include "types.hpp"
-#include "frame.hpp"
 #include "kput.hpp"
 #include "multiboot.hpp"
 #include <algorithm>
@@ -25,8 +24,8 @@
 #include "stack_allocator.hpp"
 
 /* Don't mess with memory below 1M or above 4G. */
-const physical_address USABLE_MEMORY_BEGIN (0x00100000);
-const physical_address USABLE_MEMORY_END (0xFFFFF000);
+const physical_address_t USABLE_MEMORY_BEGIN = 0x00100000;
+const physical_address_t USABLE_MEMORY_END = 0xFFFFF000;
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -55,7 +54,7 @@ private:
     { }
 
     void
-    operator() (const physical_address&,
+    operator() (const size_t&,
 		size_t&)
     {
       ++count;
@@ -75,10 +74,10 @@ private:
     { }
 
     void
-    operator() (const physical_address& begin,
+    operator() (const physical_address_t& begin,
 		size_t& size)
     {
-      stack_allocators[idx++] = new (alloc) stack_allocator (frame (begin), frame (begin + size), alloc);
+      stack_allocators[idx++] = new (alloc) stack_allocator (physical_address_to_frame (begin), physical_address_to_frame (begin + size), alloc);
     }
   };
 
@@ -94,12 +93,12 @@ private:
     operator() (const multiboot_memory_map_t& entry)
     {
       if (entry.type == MULTIBOOT_MEMORY_AVAILABLE) {
-	physical_address begin (std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN.value ()), entry.addr));
-	physical_address end (std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END.value ()), entry.addr + entry.len));
+	physical_address_t begin = std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), entry.addr);
+	physical_address_t end = std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), entry.addr + entry.len);
 	
 	// Align to frame boundaries.
-	begin <<= PAGE_SIZE;
-	end >>= PAGE_SIZE;
+	begin = align_up (begin, PAGE_SIZE);
+	end = align_down (end, PAGE_SIZE);
 
 	if (begin < end) {
 	  size_t size = end - begin;
@@ -134,9 +133,9 @@ private:
   };
 
   struct contains_frame {
-    frame f;
+    frame_t f;
 
-    contains_frame (frame x) :
+    contains_frame (frame_t x) :
       f (x)
     { }
 
@@ -148,7 +147,7 @@ private:
   };
 
   static inline stack_allocator**
-  find_allocator (frame frame)
+  find_allocator (frame_t frame)
   {
     // TODO:  Sort the stack allocators and use binary search.
     return std::find_if (stack_allocator_, stack_allocator_ + stack_allocator_size_, contains_frame (frame));
@@ -181,15 +180,15 @@ public:
   
   /* This function allows a frame to be marked as used when initializing virtual memory. */
   static void
-  mark_as_used (const frame& frame);
+  mark_as_used (frame_t frame);
   
   /* Allocate a frame. */
-  static frame
+  static frame_t
   alloc () __attribute__((warn_unused_result));
   
   /* Increment the reference count for a frame. */
   static void
-  incref (const frame& frame);
+  incref (frame_t frame);
   
   // /* Decrement the reference count for a frame. */
   // void

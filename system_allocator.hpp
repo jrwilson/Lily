@@ -1,14 +1,14 @@
-#ifndef __list_allocator_hpp__
-#define __list_allocator_hpp__
+#ifndef __system_allocator_hpp__
+#define __system_allocator_hpp__
 
 /*
   File
   ----
-  list_allocator.hpp
+  system_allocator.hpp
   
   Description
   -----------
-  Memory allocator using a doubly-linked list.
+  Memory allocator using a doubly-linked list and no system calls.
 
   Authors:
   Justin R. Wilson
@@ -16,12 +16,22 @@
 
 #include "types.hpp"
 #include <memory>
+#include "automaton_interface.hpp"
 
-class list_alloc {
+class system_alloc {
 private:
+  enum status {
+    NORMAL,
+    BOOTING,
+  };
+
   struct chunk_header;
-  
-  size_t page_size_;
+
+  status status_;
+  uint8_t* boot_begin_;
+  uint8_t* boot_end_;
+
+  automaton_interface* automaton_;
   chunk_header* first_header_;
   chunk_header* last_header_;
 
@@ -36,8 +46,16 @@ private:
   bool
   merge_header (chunk_header* ptr);
 
+  void*
+  allocate (size_t size);
+
 public:
-  list_alloc (bool initialize = true);
+  void
+  boot (const void* boot_begin,
+	const void* boot_end);
+
+  void
+  normal (automaton_interface* a);
 
   void*
   alloc (size_t) __attribute__((warn_unused_result));
@@ -48,14 +66,14 @@ public:
 
 inline void*
 operator new (size_t sz,
-	      list_alloc& pa)
+	      system_alloc& pa)
 {
   return pa.alloc (sz);
 }
 
 inline void*
 operator new[] (size_t sz,
-		list_alloc& pa)
+		system_alloc& pa)
 {
   return pa.alloc (sz);
 }
@@ -63,7 +81,7 @@ operator new[] (size_t sz,
 template <class T>
 inline void
 destroy (T* p,
-	 list_alloc& la)
+	 system_alloc& la)
 {
   if (p != 0) {
     p->~T ();
@@ -72,9 +90,9 @@ destroy (T* p,
 }
 
 template <class T>
-class list_allocator {
+class system_allocator {
 private:
-  list_alloc& alloc_;
+  system_alloc& alloc_;
 
 public:
   typedef T value_type;
@@ -99,24 +117,24 @@ public:
     return &r;
   }
   
-  list_allocator (list_alloc& a) :
+  system_allocator (system_alloc& a) :
     alloc_ (a)
   { }
 
-  list_allocator (const list_allocator& other) :
+  system_allocator (const system_allocator& other) :
     alloc_ (other.alloc_)
   { }
 
-  ~list_allocator ()
+  ~system_allocator ()
   { }
 
   template <class U>
-  list_allocator (const list_allocator<U>& other) :
+  system_allocator (const system_allocator<U>& other) :
     alloc_ (other.get_alloc ())
   { }
 
 private:
-  void operator= (const list_allocator&);
+  void operator= (const system_allocator&);
   
 public:
   pointer
@@ -149,14 +167,14 @@ public:
   
   template <class U>
   struct rebind {
-    typedef list_allocator<U> other;
+    typedef system_allocator<U> other;
   };
 
-  list_alloc&
+  system_alloc&
   get_alloc () const
   {
     return alloc_;
   }
 };
 
-#endif /* __list_allocator_hpp__ */
+#endif /* __system_allocator_hpp__ */

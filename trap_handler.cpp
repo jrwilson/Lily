@@ -36,7 +36,7 @@ extern "C" void
 trap_dispatch (registers regs)
 {
   const syscall_t syscall = static_cast<syscall_t> (regs.eax);
-  
+
   switch (syscall) {
   case SYSCALL_FINISH:
     {
@@ -58,10 +58,10 @@ trap_dispatch (registers regs)
     {
       size_t size = regs.ebx;
       if (size > 0) {
-      	logical_address ptr = system_automaton::alloc (size);
-      	if (ptr != logical_address ()) {
+      	void* ptr = system_automaton::alloc (size);
+      	if (ptr != 0) {
       	  regs.eax = SYSERROR_SUCCESS;
-      	  regs.ebx = reinterpret_cast<uint32_t> (ptr.value ());
+      	  regs.ebx = reinterpret_cast<uint32_t> (ptr);
       	}
       	else {
       	  regs.eax = SYSERROR_OUT_OF_MEMORY;
