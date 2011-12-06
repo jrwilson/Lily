@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include "automaton.hpp"
 
+template <class Alloc, template <typename> class Allocator>
 class binding_manager {
 private:
   struct output_action {
@@ -61,15 +62,15 @@ private:
   };
 
 public:
-  typedef std::unordered_set<input_action, std::hash<input_action>, std::equal_to<input_action>, list_allocator<input_action> > input_action_set_type;
+  typedef std::unordered_set<input_action, std::hash<input_action>, std::equal_to<input_action>, Allocator<input_action> > input_action_set_type;
 
 private:
-  list_alloc& alloc_;
-  typedef std::unordered_map<output_action, input_action_set_type, std::hash<output_action>, std::equal_to<output_action>, list_allocator<std::pair<const output_action, input_action_set_type> > > bindings_type;
+  Alloc& alloc_;
+  typedef std::unordered_map<output_action, input_action_set_type, std::hash<output_action>, std::equal_to<output_action>, Allocator<std::pair<const output_action, input_action_set_type> > > bindings_type;
   bindings_type bindings_;
 
 public:
-  binding_manager (list_alloc& a) :
+  binding_manager (Alloc& a) :
     alloc_ (a),
     bindings_ (3, bindings_type::hasher (), bindings_type::key_equal (), bindings_type::allocator_type (a))
   { }
@@ -95,7 +96,7 @@ public:
     output_action oa (output_automaton, OutputAction::action_entry_point, output_parameter);
     input_action ia (input_automaton, InputAction::action_entry_point, input_parameter);
     
-    std::pair<bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, input_action_set_type::hasher (), input_action_set_type::key_equal (), input_action_set_type::allocator_type (alloc_))));
+    std::pair<typename bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, input_action_set_type::hasher (), input_action_set_type::key_equal (), input_action_set_type::allocator_type (alloc_))));
     r.first->second.insert (ia);
   }
   
@@ -105,7 +106,7 @@ public:
 		    void* output_parameter)
   {
     output_action oa (output_automaton, output_action_entry_point, output_parameter);
-    bindings_type::const_iterator pos = bindings_.find (oa);
+    typename bindings_type::const_iterator pos = bindings_.find (oa);
     if (pos != bindings_.end ()) {
       return &pos->second;
     }

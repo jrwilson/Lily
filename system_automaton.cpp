@@ -11,6 +11,7 @@
   Justin R. Wilson
 */
 
+#include "system_allocator.hpp"
 #include "scheduler.hpp"
 #include "binding_manager.hpp"
 #include "automaton.hpp"
@@ -44,13 +45,15 @@ static const logical_address ONE_MEGABYTE (reinterpret_cast<const void*> (0x0010
 static status status_;
 static logical_address boot_begin_;
 static logical_address boot_end_;
-static list_alloc alloc_ (false); // Delay initialization.
-static binding_manager* binding_manager_;
-static scheduler* system_scheduler_;
+static system_alloc alloc_ (false); // Delay initialization.
+typedef binding_manager<system_alloc, system_allocator> binding_manager_type;
+static binding_manager_type* binding_manager_;
+typedef scheduler<system_alloc, system_allocator> scheduler_type;
+static scheduler_type* system_scheduler_;
 static automaton* system_automaton_;
 
 static fifo_scheduler* scheduler_;
-typedef std::deque<automaton*, list_allocator<automaton*> > init_queue_type;
+typedef std::deque<automaton*, system_allocator<automaton*> > init_queue_type;
 static init_queue_type* init_queue_;
 
 static void
@@ -194,13 +197,13 @@ namespace system_automaton {
 
     // We delayed initialization of the allocator because we don't know when interrupts are enabled.
     // However, they are enabled now so reinitialize using placement new.
-    new (&alloc_) list_alloc ();
+    new (&alloc_) system_alloc ();
 
     // Allocate the binding manager.
-    binding_manager_ = new (alloc_) binding_manager (alloc_);
+    binding_manager_ = new (alloc_) binding_manager_type (alloc_);
 
     // Allocate the scheduler.
-    system_scheduler_ = new (alloc_) scheduler (alloc_, *binding_manager_);
+    system_scheduler_ = new (alloc_) scheduler_type (alloc_, *binding_manager_);
 
     // The system automaton's ceiling is the start of the paging data structures.
     // This is also used as the stack pointer.
@@ -333,11 +336,14 @@ namespace system_automaton {
 	      uint32_t error,
 	      registers* regs)
   {
+    automaton* current_automaton = system_scheduler_->current_automaton ();
+    kassert (current_automaton != system_automaton_);
+
     switch (status_) {
     case NORMAL:
       if (address < KERNEL_VIRTUAL_BASE) {
 	// Use the automaton's memory map.
-	system_scheduler_->current_automaton ()->page_fault (address, error, regs);
+	current_automaton->page_fault (address, error, regs);
       }
       else {
 	// Use our memory map.
@@ -372,9 +378,12 @@ namespace system_automaton {
   logical_address
   alloc (size_t size)
   {
+    automaton* current_automaton = system_scheduler_->current_automaton ();
+    kassert (current_automaton != system_automaton_);
+
     switch (status_) {
     case NORMAL:
-      return system_scheduler_->current_automaton ()->alloc (size);
+      return current_automaton->alloc (size);
       break;
     case BOOTING:
       {

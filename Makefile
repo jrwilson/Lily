@@ -24,6 +24,7 @@ kput.o \
 halt.o \
 cpp_runtime.o \
 string.o \
+system_allocator.o \
 list_allocator.o \
 syscall.o \
 global_descriptor_table.o \
