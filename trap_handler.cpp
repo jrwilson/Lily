@@ -40,9 +40,9 @@ trap_dispatch (registers regs)
   switch (syscall) {
   case SYSCALL_FINISH:
     {
-      size_t const action_entry_point = regs.ebx;
-      void* const parameter = reinterpret_cast<void*> (regs.ecx);
-      void* const buffer = reinterpret_cast<void*> (regs.edx);
+      const void* action_entry_point = reinterpret_cast<const void*> (regs.ebx);
+      aid_t parameter = static_cast<aid_t> (regs.ecx);
+      const void* buffer = reinterpret_cast<const void*> (regs.edx);
       system_automaton::finish_action (action_entry_point, parameter, buffer);
       return;
     }

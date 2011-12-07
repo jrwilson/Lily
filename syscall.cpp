@@ -18,9 +18,9 @@
 static syserror_t errno;
 
 void
-sys_finish (size_t action_entry_point,
-	    void* parameter,
-	    void* output_buffer)
+sys_finish (const void* action_entry_point,
+	    aid_t parameter,
+	    const void* output_buffer)
 {
   asm volatile ("mov %0, %%eax\n"
   		"mov %1, %%ebx\n"

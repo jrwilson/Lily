@@ -20,7 +20,8 @@ namespace ramdisk {
   static void
   finish (void* buffer)
   {
-    scheduler_->finish (buffer);
+    kassert (0);
+    //scheduler_->finish (buffer);
   }
   
   static void
@@ -40,7 +41,8 @@ namespace ramdisk {
   init (void* p,
 	int v)
   {
-    input_action <init_traits> (p, v, init_effect, schedule, finish);
+    kassert (0);
+    //input_action <init_traits> (p, v, init_effect, schedule, finish);
   }
 
   void

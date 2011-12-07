@@ -23,41 +23,47 @@ class binding_manager {
 private:
   struct output_action {
     ::automaton<Alloc, Allocator>* const automaton;
-    size_t const action_entry_point;
-    const void* const parameter;
+    const void* const action_entry_point;
+    parameter_mode_t parameter_mode;
+    aid_t const parameter;
 
     output_action (::automaton<Alloc, Allocator>* const a,
-		   size_t const aep,
-		   const void* const p) :
+		   const void* aep,
+		   parameter_mode_t pm,
+		   aid_t p) :
       automaton (a),
       action_entry_point (aep),
+      parameter_mode (pm),
       parameter (p)
     { }
 
     bool
     operator== (const output_action& other) const
     {
-      return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter == other.parameter;
+      return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter_mode == other.parameter_mode && parameter == other.parameter;
     }
   };
 
   struct input_action {
     ::automaton<Alloc, Allocator>* const automaton;
-    size_t const action_entry_point;
-    const void* const parameter;
+    const void* const action_entry_point;
+    parameter_mode_t parameter_mode;
+    aid_t const parameter;
 
     input_action (::automaton<Alloc, Allocator>* const a,
-		  size_t const aep,
-		  const void* const p) :
+		  const void* aep,
+		  parameter_mode_t pm,
+		  aid_t p) :
       automaton (a),
       action_entry_point (aep),
+      parameter_mode (pm),
       parameter (p)
     { }
 
     bool
     operator== (const input_action& other) const
     {
-      return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter == other.parameter;
+      return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter_mode == other.parameter_mode && parameter == other.parameter;
     }
   };
 
@@ -106,11 +112,12 @@ public:
   }
   
   const binding_manager::input_action_set_type*
-  get_bound_inputs (automaton<Alloc, Allocator>* output_automaton,
-		    size_t output_action_entry_point,
-		    const void* output_parameter)
+  get_bound_inputs (automaton<Alloc, Allocator>* automaton,
+		    const void* action_entry_point,
+		    parameter_mode_t parameter_mode,
+		    aid_t parameter)
   {
-    output_action oa (output_automaton, output_action_entry_point, output_parameter);
+    output_action oa (automaton, action_entry_point, parameter_mode, parameter);
     typename bindings_type::const_iterator pos = bindings_.find (oa);
     if (pos != bindings_.end ()) {
       return &pos->second;

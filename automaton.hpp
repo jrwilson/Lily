@@ -25,84 +25,25 @@
 #include "global_descriptor_table.hpp"
 #include "automaton_interface.hpp"
 
-// Size of the temporary buffer used to store the values produced by output actions.
-const size_t VALUE_BUFFER_SIZE = 512;
-
-template <bool>
-struct bool_dispatch : public std::false_type { };
-
-template <>
-struct bool_dispatch<true> : public std::true_type { };
-
-template <class T>
-struct is_input_action : public bool_dispatch<
-  ((std::is_same<typename T::parameter_category, no_parameter_tag>::value && std::is_same<typename T::parameter_type, null_type>::value) ||
-   (std::is_same<typename T::parameter_category, parameter_tag>::value && sizeof (typename T::parameter_type) == sizeof (aid_t)) ||
-   (std::is_same<typename T::parameter_category, auto_parameter_tag>::value && std::is_same<typename T::parameter_type, aid_t>::value)) &&
-  ((std::is_same<typename T::value_category, no_value_tag>::value && std::is_same<typename T::value_type, null_type>::value) ||
-   (std::is_same<typename T::value_category, value_tag>::value && sizeof (typename T::value_type) <= VALUE_BUFFER_SIZE)) &&
-    std::is_same<typename T::action_category, input_action_tag>::value    
-  > { };
-
-template <class T>
-struct is_output_action : public bool_dispatch<
-  ((std::is_same<typename T::parameter_category, no_parameter_tag>::value && std::is_same<typename T::parameter_type, null_type>::value) ||
-   (std::is_same<typename T::parameter_category, parameter_tag>::value && sizeof (typename T::parameter_type) == sizeof (aid_t)) ||
-   (std::is_same<typename T::parameter_category, auto_parameter_tag>::value && std::is_same<typename T::parameter_type, aid_t>::value)) &&
-  ((std::is_same<typename T::value_category, no_value_tag>::value && std::is_same<typename T::value_type, null_type>::value) ||
-   (std::is_same<typename T::value_category, value_tag>::value && sizeof (typename T::value_type) <= VALUE_BUFFER_SIZE)) &&
-    std::is_same<typename T::action_category, output_action_tag>::value    
-  > { };
-
-template <class T>
-struct is_internal_action : public bool_dispatch<
-  ((std::is_same<typename T::parameter_category, no_parameter_tag>::value && std::is_same<typename T::parameter_type, null_type>::value) ||
-   (std::is_same<typename T::parameter_category, parameter_tag>::value && sizeof (typename T::parameter_type) == sizeof (aid_t))) &&
-  ((std::is_same<typename T::value_category, no_value_tag>::value && std::is_same<typename T::value_type, null_type>::value)) &&
-  std::is_same<typename T::action_category, internal_action_tag>::value    
-  > { };
-
 template <class Alloc, template <typename> class Allocator>
 class automaton : public automaton_interface {
 public:
-  enum action_type {
-    INPUT,
-    OUTPUT,
-    INTERNAL,
-    NO_ACTION,
-  };
 
   struct action {
-    action_type type;
-    size_t action_entry_point;
+    action_type_t type;
+    const void* action_entry_point;
+    parameter_mode_t parameter_mode;
     size_t value_size;
-    bool is_parameterized;
 
-    action () :
-      type (NO_ACTION),
-      action_entry_point (0),
-      value_size (0),
-      is_parameterized (false)
+    action (action_type_t t,
+	    const void* aep,
+	    parameter_mode_t pm,
+	    size_t vs) :
+      type (t),
+      action_entry_point (aep),
+      parameter_mode (pm),
+      value_size (vs)
     { }
-
-    action (const action& other) :
-      type (other.type),
-      action_entry_point (other.action_entry_point),
-      value_size (other.value_size),
-      is_parameterized (other.is_parameterized)
-    { }
-
-    action&
-    operator= (const action& other)
-    {
-      if (this != &other) {
-	type = other.type;
-	action_entry_point = other.action_entry_point;
-	value_size = other.value_size;
-	is_parameterized = other.is_parameterized;
-      }
-      return *this;
-    }
   };
 
 private:
@@ -120,7 +61,7 @@ private:
   uint32_t code_segment_;
   uint32_t stack_segment_;
   /* Table of action descriptors for guiding execution, checking bindings, etc. */
-  typedef std::unordered_map<size_t, action, std::hash<size_t>, std::equal_to<size_t>, Allocator<std::pair<size_t const, action> > > action_map_type;
+  typedef std::unordered_map<const void*, action, std::hash<const void*>, std::equal_to<const void*>, Allocator<std::pair<const void* const, action> > > action_map_type;
   action_map_type action_map_;
   physical_address_t const page_directory_;
   /* Stack pointer (constant). */
@@ -131,6 +72,31 @@ private:
   memory_map_type memory_map_;
   /* Default privilege for new VM_AREA_DATA. */
   paging_constants::page_privilege_t const page_privilege_;
+
+public:
+  class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, action> {
+  private:
+    typename action_map_type::const_iterator pos_;
+    
+  public:
+    const_action_iterator (const typename action_map_type::const_iterator& p) :
+      pos_ (p)
+    { }
+
+    bool
+    operator== (const const_action_iterator& other) const
+    {
+      return pos_ == other.pos_;
+    }
+
+    const action*
+    operator-> () const
+    {
+      return &(pos_->second);
+    }
+  };
+
+private:
 
   typename memory_map_type::const_iterator
   find_by_address (const vm_area_base* area) const
@@ -212,45 +178,13 @@ private:
     if (pos != memory_map_.begin ()) {
       merge (--pos);
     }
-    
   }
 
-  template <class ActionTraits>
+  template <class Action>
   void
-  add_action_ (input_action_tag)
+  add_action_ (const void* action_entry_point)
   {
-    STATIC_ASSERT (is_input_action<ActionTraits>::value);
-    action ac;
-    ac.type = INPUT;
-    ac.action_entry_point = ActionTraits::action_entry_point;
-    ac.value_size = sizeof (typename ActionTraits::value_type);
-    ac.is_parameterized = true;
-    kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
-  }
-
-  template <class ActionTraits>
-  void
-  add_action_ (output_action_tag)
-  {
-    STATIC_ASSERT (is_output_action<ActionTraits>::value);
-    action ac;
-    ac.type = OUTPUT;
-    ac.action_entry_point = ActionTraits::action_entry_point;
-    ac.value_size = sizeof (typename ActionTraits::value_type);
-    ac.is_parameterized = true;
-    kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
-  }
-
-  template <class ActionTraits>
-  void
-  add_action_ (internal_action_tag)
-  {
-    STATIC_ASSERT (is_internal_action<ActionTraits>::value);
-    action ac;
-    ac.type = INTERNAL;
-    ac.action_entry_point = ActionTraits::action_entry_point;
-    ac.value_size = 0;
-    ac.is_parameterized = true;
+    action ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::value_size);
     kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
   }
 
@@ -423,23 +357,60 @@ public:
     (*pos)->page_fault (address, error, regs);
   }
   
-  template <class ActionTraits>
+  template <class Action>
   void
-  add_action ()
+  add_action (void (*action_entry_point) (void))
   {
-    add_action_<ActionTraits> (typename ActionTraits::action_category ());
+    STATIC_ASSERT (is_action<Action>::value);
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == NO_PARAMETER && Action::value_size == 0) ||
+		   (Action::action_type == OUTPUT && Action::parameter_mode == NO_PARAMETER) ||
+		   (Action::action_type == INTERNAL && Action::parameter_mode == NO_PARAMETER));
+    
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
 
-  action
-  get_action (size_t action_entry_point) const
+  template <class Action>
+  void
+  add_action (void (*action_entry_point) (typename Action::parameter_type))
   {
-    typename action_map_type::const_iterator pos = action_map_.find (action_entry_point);
-    if (pos != action_map_.end ()) {
-      return pos->second;
-    }
-    else {
-      return action ();
-    }
+    STATIC_ASSERT (is_action<Action>::value);
+    STATIC_ASSERT ((Action::action_type == INPUT && (Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::value_size == 0) ||
+		   (Action::action_type == OUTPUT && (Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER)) ||
+		   (Action::action_type == INTERNAL && Action::parameter_mode == PARAMETER));
+
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action (void (*action_entry_point) (typename Action::value_type))
+  {
+    STATIC_ASSERT (is_action<Action>::value);
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == NO_PARAMETER && Action::value_size != 0));
+
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action (void (*action_entry_point) (typename Action::parameter_type, typename Action::value_type))
+  {
+    STATIC_ASSERT (is_action<Action>::value);
+    STATIC_ASSERT ((Action::action_type == INPUT && (Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::value_size != 0));
+
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  const_action_iterator
+  action_end () const
+  {
+    return const_action_iterator (action_map_.end ());
+  }
+
+  const_action_iterator
+  action_find (const void* action_entry_point) const
+  {
+    return const_action_iterator (action_map_.find (action_entry_point));
   }
 
 };

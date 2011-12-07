@@ -38,8 +38,8 @@ private:
   struct automaton_context {
     status_t status;
     automaton_type* automaton;
-    size_t action_entry_point;
-    void* parameter;
+    const void* action_entry_point;
+    aid_t parameter;
 
     
     automaton_context (automaton_type* a) :
@@ -55,8 +55,13 @@ private:
     uint8_t value_buffer_[VALUE_BUFFER_SIZE];
 
     automaton_type* automaton_;
-    typename automaton_type::action action_;
-    const void* parameter_;
+    
+    action_type_t type_;
+    const void* action_entry_point_;
+    parameter_mode_t parameter_mode_;
+    size_t value_size_;
+
+    aid_t parameter_;
 
     const typename binding_manager<Alloc, Allocator>::input_action_set_type* input_actions_;
     typename binding_manager<Alloc, Allocator>::input_action_set_type::const_iterator input_action_pos_;
@@ -101,48 +106,32 @@ private:
       /* Switch page directories. */
       vm_manager::switch_to_directory (automaton_->page_directory ());
 
-      switch (action_.type) {
-      case automaton_type::INPUT:
+      if (type_ == INPUT) {
 	// Copy the value to the stack.
-	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.value_size, STACK_ALIGN)));
-	memcpy (stack_pointer, value_buffer_, action_.value_size);
-	if (action_.is_parameterized) {
-	  // Copy the parameter to the stack.
-	  --stack_pointer;
-	  *stack_pointer = reinterpret_cast<uint32_t> (parameter_);
-	}
-	asm volatile ("mov %0, %%eax\n"	// Load the new stack segment.
-		      "mov %%ax, %%ss\n"
-		      "mov %1, %%eax\n"	// Load the new stack pointer.
-		      "mov %%eax, %%esp\n"
-		      "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
-		      "pushf\n"		// Push flags (EFLAGS).
-		      "pushl %2\n"		// Push the code segment (CS).
-		      "pushl %3\n"		// Push the instruction pointer (EIP).
-		      "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point) : "%eax");
-	break;
-      case automaton_type::OUTPUT:
-      case automaton_type::INTERNAL:
-	if (action_.is_parameterized) {
-	  // Copy the parameter to the stack.
-	  --stack_pointer;
-	  *stack_pointer = reinterpret_cast<uint32_t> (parameter_);
-	}
-	asm volatile ("mov %0, %%eax\n"	// Load the new stack segment.
-		      "mov %%ax, %%ss\n"
-		      "mov %1, %%eax\n"	// Load the new stack pointer.
-		      "mov %%eax, %%esp\n"
-		      "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
-		      "pushf\n"		// Push flags (EFLAGS).
-		      "pushl %2\n"		// Push the code segment (CS).
-		      "pushl %3\n"		// Push the instruction pointer (EIP).
-		      "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_.action_entry_point) : "%eax", "%esp");
-	break;
-      case automaton_type::NO_ACTION:
-	// Error.
-	kassert (0);
-	break;
+	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - value_size_, STACK_ALIGN)));
+	memcpy (stack_pointer, value_buffer_, value_size_);
       }
+
+      switch (parameter_mode_) {
+      case NO_PARAMETER:
+	break;
+      case PARAMETER:
+      case AUTO_PARAMETER:
+	  // Copy the parameter to the stack.
+	  --stack_pointer;
+	  *stack_pointer = static_cast<uint32_t> (parameter_);
+	  break;
+      }
+
+      asm volatile ("mov %0, %%eax\n"	// Load the new stack segment.
+		    "mov %%ax, %%ss\n"
+		    "mov %1, %%eax\n"	// Load the new stack pointer.
+		    "mov %%eax, %%esp\n"
+		    "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
+		    "pushf\n"		// Push flags (EFLAGS).
+		    "pushl %2\n"		// Push the code segment (CS).
+		    "pushl %3\n"		// Push the instruction pointer (EIP).
+		    "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_entry_point_) : "%eax", "%esp");
     }
     
   public:
@@ -156,8 +145,6 @@ private:
     clear ()
     {
       automaton_ = 0;
-      action_ = typename automaton_type::action ();
-      parameter_ = 0;
     }
 
     automaton_type*
@@ -170,70 +157,91 @@ private:
     void
     load (automaton_context* c)
     {
-      automaton_ = c->automaton;
-      action_ = automaton_->get_action (c->action_entry_point);
-      parameter_ = c->parameter;
+      typename automaton_type::const_action_iterator pos = c->automaton->action_find (c->action_entry_point);
+      if (pos != c->automaton->action_end ()) {
+	automaton_ = c->automaton;
+
+	type_ = pos->type;
+	action_entry_point_ = pos->action_entry_point;
+	parameter_mode_ = pos->parameter_mode;
+	value_size_ = pos->value_size;
+
+	parameter_ = c->parameter;
+      }
+      else {
+	clear ();
+      }
+
       c->status = NOT_SCHEDULED;
     }
 
     void
-    finish_action (void* buffer)
+    finish_action (const void* buffer)
     {
-      switch (action_.type) {
-      case automaton_type::INPUT:
-	/* Move to the next input. */
-	++input_action_pos_;
-	if (input_action_pos_ != input_actions_->end ()) {
-	  /* Load the execution context. */
-	  automaton_ = input_action_pos_->automaton;
-	  action_.action_entry_point = input_action_pos_->action_entry_point;
-	  parameter_ = input_action_pos_->parameter;
-	  /* Execute.  (This does not return). */
-	  exec ();
-	}
-	break;
-      case automaton_type::OUTPUT:
-	if (buffer != 0) {
-	  if (automaton_->verify_span (buffer, action_.value_size)) {
-	    input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_.action_entry_point, parameter_);
-	    if (input_actions_ != 0) {
-	      /* The output executed and there are inputs. */
-	      /* Load the execution context. */
-	      input_action_pos_ = input_actions_->begin ();
-	      automaton_ = input_action_pos_->automaton;
-	      action_.action_entry_point = input_action_pos_->action_entry_point;
-	      parameter_ = input_action_pos_->parameter;
-	      // We know its an input.
-	      action_.type = automaton_type::INPUT;
-	      // Copy the value.
-	      memcpy (value_buffer_, buffer, action_.value_size);
-	      /* Execute.  (This does not return). */
-	      exec ();
+      if (automaton_ != 0) {
+	
+	switch (type_) {
+	case INPUT:
+	  /* Move to the next input. */
+	  ++input_action_pos_;
+	  if (input_action_pos_ != input_actions_->end ()) {
+	    /* Load the execution context. */
+	    automaton_ = input_action_pos_->automaton;
+	    
+	    action_entry_point_ = input_action_pos_->action_entry_point;
+	    parameter_mode_ = input_action_pos_->parameter_mode;
+	    
+	    parameter_ = input_action_pos_->parameter;
+	    /* Execute.  (This does not return). */
+	    exec ();
+	  }
+	  break;
+	case OUTPUT:
+	  if (buffer != 0) {
+	    if (automaton_->verify_span (buffer, value_size_)) {
+	      input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_entry_point_, parameter_mode_, parameter_);
+	      if (input_actions_ != 0) {
+		/* The output executed and there are inputs. */
+		// Copy the value.
+		memcpy (value_buffer_, buffer, value_size_);
+		
+		/* Load the execution context. */
+		input_action_pos_ = input_actions_->begin ();
+		automaton_ = input_action_pos_->automaton;
+		
+		type_ = INPUT;
+		action_entry_point_ = input_action_pos_->action_entry_point;
+		parameter_mode_ = input_action_pos_->parameter_mode;
+		
+		parameter_ = input_action_pos_->parameter;
+		/* Execute.  (This does not return). */
+		exec ();
+	      }
+	    }
+	    else {
+	      // The value produced by the output function is bad.
+	      system_automaton::bad_value ();
 	    }
 	  }
-	  else {
-	    // The value produced by the output function is bad.
-	    system_automaton::bad_value ();
-	  }
+	  break;
+	case INTERNAL:
+	  break;
 	}
-	break;
-      case automaton_type::INTERNAL:
-      case automaton_type::NO_ACTION:
-	break;
       }
     }
 
     void
     execute () const
     {
-      switch (action_.type) {
-      case automaton_type::OUTPUT:
-      case automaton_type::INTERNAL:
-	exec ();
-	break;
-      case automaton_type::NO_ACTION:
-      case automaton_type::INPUT:
-	break;
+      if (automaton_ != 0) {
+	switch (type_) {
+	case OUTPUT:
+	case INTERNAL:
+	  exec ();
+	  break;
+	case INPUT:
+	  break;
+	}
       }
     }
 
@@ -297,8 +305,8 @@ public:
 
   void
   schedule_action (automaton_type* automaton,
-		   size_t action_entry_point,
-		   void* parameter)
+		   const void* action_entry_point,
+		   aid_t parameter)
   {
     typename context_map_type::iterator pos = context_map_.find (automaton);
     kassert (pos != context_map_.end ());
@@ -315,9 +323,9 @@ public:
   }
   
   void
-  finish_action (size_t action_entry_point,
-		 void* parameter,
-		 void* buffer)
+  finish_action (const void* action_entry_point,
+		 aid_t parameter,
+		 const void* buffer)
   {
     if (action_entry_point != 0) {
       schedule_action (current_automaton (), action_entry_point, parameter);

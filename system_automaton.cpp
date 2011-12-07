@@ -46,49 +46,38 @@ namespace system_automaton {
   static scheduler_type* scheduler_;
   typedef std::deque<automaton_type*, system_allocator<automaton_type*> > init_queue_type;
   static init_queue_type* init_queue_;
-  
-  static void
-  schedule ();
 
-  static void
-  remove (size_t action_entry_point,
-	     void* parameter)
-  {
-    scheduler_->remove (action_entry_point, parameter);
-  }
+  struct schedule {
+    void
+    operator () () const;
+  };
+
+  typedef up_internal_action_traits null_traits;
+  
+  struct null_precondition {
+    inline bool
+    operator() () const
+    {
+      return true;
+    }
+  };
+  
+  struct null_effect {
+    void
+    operator() () const
+    {
+      // Do nothing but activate the scheduler.
+      kputs ("null_effect\n");
+    }
+  };
   
   static void
-  finish (void* buffer)
+  null ()
   {
-    scheduler_->finish (buffer);
+    internal_action<null_traits> (scheduler_->remove<null_traits> (&null), null_precondition (), null_effect (), schedule (), scheduler_->finish ());
   }
   
-  void
-  null (void*);
-  typedef p_internal_action_traits<void*> null_traits;
-  
-  static bool
-  null_precondition (void*)
-  {
-    return true;
-  }
-  
-  static void
-  null_effect (void*)
-  {
-    // Do nothing but activate the scheduler.
-    kputs (__func__); kputs ("\n");
-  }
-  
-  void
-  null (void* p)
-  {
-    internal_action<null_traits> (p, remove, null_precondition, null_effect, schedule, finish);
-  }
-  
-  void
-  init (automaton_type*);
-  typedef p_v_output_action_traits<automaton_type*, int> init_traits;
+  typedef p_uv_output_action_traits<automaton_type*> init_traits;
   
   static bool
   init_precondition (automaton_type* a)
@@ -97,115 +86,83 @@ namespace system_automaton {
   }
   
   static void
-  init_effect (automaton_type*,
-		  int& value)
+  init_effect (automaton_type*)
   {
     init_queue_->pop_front ();
-    value = 314;
-    kputs (__func__); kputs (" produced "); kputx32 (value); kputs ("\n");
-  }
-  
-  void
-  init (automaton_type* p)
-  {
-    output_action<init_traits> (p, remove, init_precondition, init_effect, schedule, finish);
-  }
-  
-  void
-  create_request (void*,
-		     int)
-  {
-    kassert (0);
-  }
-  typedef p_v_input_action_traits<void*, int> create_request_traits;
-  
-  void
-  create_response (void*)
-  {
-    kassert (0);
-  }
-  typedef p_v_output_action_traits<void*, int> create_response_traits;
-  
-  void
-  bind_request (void*,
-		   int)
-  {
-    kassert (0);
-  }
-  typedef p_v_input_action_traits<void*, int> bind_request_traits;
-  
-  void
-  bind_response (void*)
-  {
-    kassert (0);
-  }
-  typedef p_v_output_action_traits<void*, int> bind_response_traits;
-  
-  void
-  unbind_request (void*,
-		     int)
-  {
-    kassert (0);
-  }
-  typedef p_v_input_action_traits<void*, int> unbind_request_traits;
-  
-  void
-  unbind_response (void*)
-  {
-    kassert (0);
-  }
-  typedef p_v_output_action_traits<void*, int> unbind_response_traits;
-  
-  void
-  destroy_request (void*,
-		      int)
-  {
-    kassert (0);
-  }
-  typedef p_v_input_action_traits<void*, int> destroy_request_traits;
-
-  void
-  destroy_response (void*)
-  {
-    kassert (0);
-  }
-  typedef p_v_output_action_traits<void*, int> destroy_response_traits;
-
-  // For testing.
-  void
-  read_request (void*);
-  typedef p_v_output_action_traits<void*, ramdisk::block_num> read_request_traits;
-
-  static bool
-  read_request_precondition (void*)
-  {
-    return true;
-  }
-
-  static void
-  read_request_effect (void*,
-		       ramdisk::block_num& block_num)
-  {
-    block_num = 0;
-  }
-
-  void
-  read_request (void* p)
-  {
-    output_action<read_request_traits> (p, remove, read_request_precondition, read_request_effect, schedule, finish);
+    kputs (__func__); kputs ("\n");
   }
   
   static void
-  schedule ()
+  init (automaton_type*)
+  {
+    kassert (0);
+    //output_action<init_traits> (p, remove, init_precondition, init_effect, schedule, finish);
+  }
+
+  void
+  schedule::operator() () const
   {
     if (!init_queue_->empty ()) {
-      scheduler_->add<init_traits> (init_queue_->front ());
-    }
-    if (read_request_precondition (0)) {
-      scheduler_->add<read_request_traits> (0);
+      scheduler_->add<init_traits> (&init, init_queue_->front ());
     }
   }
-  
+
+  static void
+  create_ramdisk ()
+  {
+    // /* Create the ramdisk automaton. */
+    
+    // /* First, create a new page directory. */
+    
+    // /* Reserve some logical address space for the page directory. */
+    // page_directory* pd = static_cast<page_directory*> (system_automaton_->reserve (PAGE_SIZE));
+    // kassert (pd != 0);
+    // // Allocate a frame.
+    // frame_t frame = frame_manager::alloc ();
+    // /* Map the page directory. */
+    // vm_manager::map (pd, frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+    // /* Initialize the page directory with a copy of the current page directory. */
+    // pd->initialize_with_current (frame_to_physical_address (frame));
+    // /* Unmap. */
+    // vm_manager::unmap (pd);
+    // /* Unreserve. */
+    // system_automaton_->unreserve (pd);
+    
+    // /* Switch to the new page directory. */
+    // vm_manager::switch_to_directory (frame_to_physical_address (frame));
+    
+    // /* Second, create the automaton. */
+    // automaton_type* ramdisk = new (alloc_) automaton_type (alloc_, descriptor_constants::RING0, frame_to_physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, paging_constants::SUPERVISOR);
+
+    // /* Third, create the automaton's memory map. */
+    // {
+    //   // Reserve low memory.
+    //   kassert (ramdisk->insert_vm_area (new (alloc_) vm_reserved_area (0, ONE_MEGABYTE)));
+      
+    //   /* Add a stack area. */
+    //   vm_stack_area* stack = new (alloc_) vm_stack_area (static_cast<const uint8_t*> (ramdisk->stack_pointer ()) - SYSTEM_STACK_SIZE,
+    // 							 ramdisk->stack_pointer (),
+    // 							 paging_constants::SUPERVISOR);
+    //   kassert (ramdisk->insert_vm_area (stack));
+    //   /* Back with physical pages.  See previous comment about the stack. */
+    //   stack->back_with_frames ();
+    // }
+    
+    // /* Fourth, add the actions. */
+    // ramdisk->add_action<ramdisk::init_traits> ();
+    // ramdisk->add_action<ramdisk::read_request_traits> ();
+
+    // /* Fifth, bind. */
+    // binding_manager_->bind<init_traits, ramdisk::init_traits> (system_automaton_, ramdisk,
+    // 							       ramdisk, 0);
+
+    // /* Sixth, add the automaton to the system scheduler. */
+    // system_scheduler_->add_automaton (ramdisk);
+
+    // /* Seventh, initialize the new automaton. */
+    // init_queue_->push_back (ramdisk);
+  }
+    
   void
   run (const void* placement_begin,
        const void* placement_end)
@@ -254,17 +211,8 @@ namespace system_automaton {
     alloc_.normal (system_automaton_);
     
     /* Add the actions. */
-    system_automaton_->add_action<null_traits> ();
-    system_automaton_->add_action<init_traits> ();
-    system_automaton_->add_action<create_request_traits> ();
-    system_automaton_->add_action<create_response_traits> ();
-    system_automaton_->add_action<bind_request_traits> ();
-    system_automaton_->add_action<bind_response_traits> ();
-    system_automaton_->add_action<unbind_request_traits> ();
-    system_automaton_->add_action<unbind_response_traits> ();
-    system_automaton_->add_action<destroy_request_traits> ();
-    system_automaton_->add_action<destroy_response_traits> ();
-    system_automaton_->add_action<read_request_traits> ();
+    system_automaton_->add_action<null_traits> (&null);
+    system_automaton_->add_action<init_traits> (&init);
     
     // Add the system automaton to the system scheduler.
     system_scheduler_->add_automaton (system_automaton_);
@@ -272,70 +220,11 @@ namespace system_automaton {
     // Allocate the data structures for the system automaton.
     scheduler_ = new (alloc_) scheduler_type (alloc_);
     init_queue_ = new (alloc_) init_queue_type (alloc_);
-    
-    /* Create the ramdisk automaton. */
-    
-    /* First, create a new page directory. */
-    
-    /* Reserve some logical address space for the page directory. */
-    page_directory* pd = static_cast<page_directory*> (system_automaton_->reserve (PAGE_SIZE));
-    kassert (pd != 0);
-    // Allocate a frame.
-    frame_t frame = frame_manager::alloc ();
-    /* Map the page directory. */
-    vm_manager::map (pd, frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE);
-    /* Initialize the page directory with a copy of the current page directory. */
-    pd->initialize_with_current (frame_to_physical_address (frame));
-    /* Unmap. */
-    vm_manager::unmap (pd);
-    /* Unreserve. */
-    system_automaton_->unreserve (pd);
-    
-    /* Switch to the new page directory. */
-    vm_manager::switch_to_directory (frame_to_physical_address (frame));
-    
-    /* Second, create the automaton. */
-    automaton_type* ramdisk = new (alloc_) automaton_type (alloc_, descriptor_constants::RING0, frame_to_physical_address (frame), KERNEL_VIRTUAL_BASE, KERNEL_VIRTUAL_BASE, paging_constants::SUPERVISOR);
-
-    /* Third, create the automaton's memory map. */
-    {
-      // Reserve low memory.
-      kassert (ramdisk->insert_vm_area (new (alloc_) vm_reserved_area (0, ONE_MEGABYTE)));
-      
-      /* Add a stack area. */
-      vm_stack_area* stack = new (alloc_) vm_stack_area (static_cast<const uint8_t*> (ramdisk->stack_pointer ()) - SYSTEM_STACK_SIZE,
-							 ramdisk->stack_pointer (),
-							 paging_constants::SUPERVISOR);
-      kassert (ramdisk->insert_vm_area (stack));
-      /* Back with physical pages.  See previous comment about the stack. */
-      stack->back_with_frames ();
-    }
-    
-    /* Fourth, add the actions. */
-    ramdisk->add_action<ramdisk::init_traits> ();
-    ramdisk->add_action<ramdisk::read_request_traits> ();
-
-    /* Fifth, bind. */
-    binding_manager_->bind<init_traits, ramdisk::init_traits> (system_automaton_, ramdisk,
-							       ramdisk, 0);
-
-    binding_manager_->bind<read_request_traits, ramdisk::read_request_traits> (system_automaton_, 0,
-									       ramdisk, 0);
-    
-    /* Sixth, add the automaton to the system scheduler. */
-    system_scheduler_->add_automaton (ramdisk);
-
-    /* Seventh, initialize the new automaton. */
-    init_queue_->push_back (ramdisk);
-    
-    /* Create the VFS automaton. */
-    // TODO
-
-    /* Create the init automaton. */
-    // TODO
 
     // Add the first action to the scheduler.
-    system_scheduler_->schedule_action (system_automaton_, null_traits::action_entry_point, 0);
+    system_scheduler_->schedule_action (system_automaton_, reinterpret_cast<void*> (&null), 0);
+
+    //create_ramdisk ();
     
     // Start the scheduler.  Doesn't return.
     system_scheduler_->finish_action (0, 0, 0);
@@ -360,9 +249,9 @@ namespace system_automaton {
   }
 
   void
-  finish_action (size_t action_entry_point,
-		 void* parameter,
-		 void* buffer)
+  finish_action (const void* action_entry_point,
+		 aid_t parameter,
+		 const void* buffer)
   {
     system_scheduler_->finish_action (action_entry_point, parameter, buffer);
   }

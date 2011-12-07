@@ -25,9 +25,9 @@ namespace system_automaton {
 	      registers* regs);
   
   void
-  finish_action (size_t action_entry_point,
-		 void* parameter,
-		 void* buffer);
+  finish_action (const void* action_entry_point,
+		 aid_t parameter,
+		 const void* buffer);
   
   void*
   alloc (size_t size);
