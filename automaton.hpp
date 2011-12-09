@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 #include "descriptor.hpp"
-#include "action_macros.hpp"
+#include "action_traits.hpp"
 #include "static_assert.hpp"
 #include <type_traits>
 #include "global_descriptor_table.hpp"
@@ -57,6 +57,7 @@ private:
   };
 
   Alloc& alloc_;
+  aid_t aid_;
   /* Segments including privilege. */
   uint32_t code_segment_;
   uint32_t stack_segment_;
@@ -185,18 +186,21 @@ private:
   add_action_ (const void* action_entry_point)
   {
     action ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::value_size);
-    kassert (action_map_.insert (std::make_pair (ac.action_entry_point, ac)).second);
+    std::pair<typename action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac.action_entry_point, ac));
+    kassert (r.second);
   }
 
 public:
 
   automaton (Alloc& a,
+	     aid_t aid,
 	     descriptor_constants::privilege_t privilege,
 	     physical_address_t page_directory,
 	     const void* stack_pointer,
 	     const void* memory_ceiling,
 	     paging_constants::page_privilege_t page_privilege) :
     alloc_ (a),
+    aid_ (aid),
     action_map_ (3, typename action_map_type::hasher (), typename action_map_type::key_equal (), typename action_map_type::allocator_type (alloc_)),
     page_directory_ (page_directory),
     stack_pointer_ (stack_pointer),
@@ -223,6 +227,12 @@ public:
     
     memory_map_.push_back (new (alloc_) vm_free_area (0, memory_ceiling));
     memory_map_.push_back (new (alloc_) vm_reserved_area (memory_ceiling, 0));
+  }
+
+  aid_t
+  aid () const
+  {
+    return aid_;
   }
 
   const void*
@@ -356,7 +366,7 @@ public:
     kassert (pos != memory_map_.end ());
     (*pos)->page_fault (address, error, regs);
   }
-  
+
   template <class Action>
   void
   add_action (void (*action_entry_point) (void))
@@ -371,32 +381,54 @@ public:
 
   template <class Action>
   void
-  add_action (void (*action_entry_point) (typename Action::parameter_type))
+  add_action_dispatch_ (no_parameter_tag,
+			void (*action_entry_point) (typename Action::value_type))
+  {
+    STATIC_ASSERT (is_input_action<Action>::value);
+    STATIC_ASSERT (Action::parameter_mode == NO_PARAMETER && Action::value_size != 0);
+    
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (parameter_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
   {
     STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && (Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::value_size == 0) ||
-		   (Action::action_type == OUTPUT && (Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER)) ||
-		   (Action::action_type == INTERNAL && Action::parameter_mode == PARAMETER));
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == PARAMETER && Action::value_size == 0) ||
+  		   (Action::action_type == OUTPUT && Action::parameter_mode == PARAMETER) ||
+  		   (Action::action_type == INTERNAL && Action::parameter_mode == PARAMETER));
 
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
 
   template <class Action>
   void
-  add_action (void (*action_entry_point) (typename Action::value_type))
+  add_action_dispatch_ (auto_parameter_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
   {
     STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == NO_PARAMETER && Action::value_size != 0));
-
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == AUTO_PARAMETER && Action::value_size == 0) ||
+  		   (Action::action_type == OUTPUT && Action::parameter_mode == AUTO_PARAMETER));
+    
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action,
+	    class T>
+  void
+  add_action (void (*action_entry_point) (T))
+  {
+    add_action_dispatch_<Action> (typename Action::parameter_category (), action_entry_point);
   }
 
   template <class Action>
   void
   add_action (void (*action_entry_point) (typename Action::parameter_type, typename Action::value_type))
   {
-    STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && (Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::value_size != 0));
+    STATIC_ASSERT (is_input_action<Action>::value);
+    STATIC_ASSERT ((Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::value_size != 0);
 
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }

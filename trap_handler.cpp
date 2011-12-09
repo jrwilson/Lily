@@ -42,8 +42,9 @@ trap_dispatch (registers regs)
     {
       const void* action_entry_point = reinterpret_cast<const void*> (regs.ebx);
       aid_t parameter = static_cast<aid_t> (regs.ecx);
-      const void* buffer = reinterpret_cast<const void*> (regs.edx);
-      system_automaton::finish_action (action_entry_point, parameter, buffer);
+      bool output_status = regs.edx;
+      const void* buffer = reinterpret_cast<const void*> (regs.esi);
+      system_automaton::finish_action (action_entry_point, parameter, output_status, buffer);
       return;
     }
     break;

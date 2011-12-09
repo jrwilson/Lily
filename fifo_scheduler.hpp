@@ -19,7 +19,7 @@
 #include <unordered_set>
 #include "syscall.hpp"
 #include "kassert.hpp"
-#include "action_macros.hpp"
+#include "action_traits.hpp"
 
 template <class Alloc, template <typename> class Allocator>
 class fifo_scheduler {
@@ -77,16 +77,17 @@ private:
   }
 
   void
-  finish_ (const void* buffer = 0)
+  finish_ (bool output_status,
+	   const void* buffer)
   {
     if (!queue_.empty ()) {
       /* Schedule. */
       const entry& e = queue_.front ();
-      sys_finish (e.action_entry_point, e.parameter, buffer);
+      sys_finish (e.action_entry_point, e.parameter, output_status, buffer);
     }
     else {
       /* Don't schedule. */
-      sys_finish (0, 0, buffer);
+      sys_finish (0, 0, output_status, buffer);
     }
   }
 
@@ -113,7 +114,7 @@ public:
   {
     STATIC_ASSERT (is_local_action<LocalAction>::value);
     STATIC_ASSERT (LocalAction::parameter_mode == PARAMETER || LocalAction::parameter_mode == AUTO_PARAMETER);
-    add_ (reinterpret_cast<const void*> (action_entry_point), reinterpret_cast<aid_t> (parameter));
+    add_ (reinterpret_cast<const void*> (action_entry_point), aid_cast (parameter));
   }
 
   template <class LocalAction>
@@ -125,6 +126,12 @@ public:
   public:
     remover (fifo_scheduler<Alloc, Allocator>& sched,
 	     void (*ptr) (void)) :
+      sched_ (sched),
+      action_entry_point_ (reinterpret_cast<const void*> (ptr))
+    { }
+
+    remover (fifo_scheduler<Alloc, Allocator>& sched,
+	     void (*ptr) (typename LocalAction::parameter_type)) :
       sched_ (sched),
       action_entry_point_ (reinterpret_cast<const void*> (ptr))
     { }
@@ -142,7 +149,7 @@ public:
     {
       STATIC_ASSERT (is_local_action<LocalAction>::value);
       STATIC_ASSERT (LocalAction::parameter_mode == PARAMETER || LocalAction::parameter_mode == AUTO_PARAMETER);
-      sched_.remove_ (action_entry_point_, reinterpret_cast<aid_t> (parameter));
+      sched_.remove_ (action_entry_point_, aid_cast (parameter));
     }
   };
 
@@ -170,13 +177,19 @@ public:
     void
     operator() ()
     {
-      sched_.finish_ ();
+      sched_.finish_ (false, 0);
+    }
+
+    void
+    operator() (bool output_status)
+    {
+      sched_.finish_ (output_status, 0);
     }
 
     void
     operator() (const void* buffer)
     {
-      sched_.finish_ (buffer);
+      sched_.finish_ (buffer != 0, buffer);
     }
   };
 

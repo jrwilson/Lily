@@ -74,7 +74,13 @@ namespace std {
   struct hash<unsigned short>;
 
   template <>
-  struct hash<int>;
+  struct hash<int> : public std::unary_function<int, size_t> {
+    size_t
+    operator() (int value) const
+    {
+      return value;
+    }
+  };
 
   template <>
   struct hash<unsigned int> : public std::unary_function<unsigned int, size_t> {

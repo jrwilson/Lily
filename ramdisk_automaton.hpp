@@ -14,7 +14,7 @@
   Justin R. Wilson
 */
 
-#include "action_macros.hpp"
+#include "action_traits.hpp"
 
 namespace ramdisk {
 

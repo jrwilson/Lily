@@ -27,6 +27,7 @@ namespace system_automaton {
   void
   finish_action (const void* action_entry_point,
 		 aid_t parameter,
+		 bool output_status,
 		 const void* buffer);
   
   void*

@@ -35,17 +35,64 @@ private:
     NOT_SCHEDULED
   };
 
-  struct automaton_context {
-    status_t status;
-    automaton_type* automaton;
+  struct action_parameter {
     const void* action_entry_point;
     aid_t parameter;
-
     
-    automaton_context (automaton_type* a) :
+    action_parameter (const void* aep,
+		      aid_t p) :
+      action_entry_point (aep),
+      parameter (p)
+    { }
+    
+    bool
+    operator== (const action_parameter& other) const
+    {
+      return action_entry_point == other.action_entry_point && parameter == other.parameter;
+    }
+  };
+
+  class automaton_context {
+  private:
+    typedef std::deque<action_parameter, Allocator<action_parameter> > queue_type;
+    queue_type queue_;
+    typedef std::unordered_set<action_parameter, std::hash<action_parameter>, std::equal_to<action_parameter>, Allocator<action_parameter> > set_type;
+    set_type set_;
+    
+  public:
+    status_t status;
+    automaton_type* automaton;
+    
+    automaton_context (Alloc& alloc,
+		       automaton_type* a) :
+      queue_ (typename queue_type::allocator_type (alloc)),
+      set_ (3, typename set_type::hasher (), typename set_type::key_equal (), typename set_type::allocator_type (alloc)),
       status (NOT_SCHEDULED),
       automaton (a)
     { }
+
+    void
+    push (const action_parameter& ap)
+    {
+      if (set_.find (ap) == set_.end ()) {
+  	set_.insert (ap);
+  	queue_.push_back (ap);
+      }	
+    }
+
+    void
+    pop ()
+    {
+      const size_t count = set_.erase (queue_.front ());
+      kassert (count == 1);
+      queue_.pop_front ();
+    }
+
+    const action_parameter&
+    front () const
+    {
+      return queue_.front ();
+    }
   };
   
   class execution_context {
@@ -129,8 +176,15 @@ private:
 		    "mov %%eax, %%esp\n"
 		    "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
 		    "pushf\n"		// Push flags (EFLAGS).
-		    "pushl %2\n"		// Push the code segment (CS).
-		    "pushl %3\n"		// Push the instruction pointer (EIP).
+		    "pushl %2\n"	// Push the code segment (CS).
+		    "pushl %3\n"	// Push the instruction pointer (EIP).
+		    "mov $0x0, %%eax\n"	// Clear the registers.
+		    "mov $0x0, %%ebx\n"
+		    "mov $0x0, %%ecx\n"
+		    "mov $0x0, %%edx\n"
+		    "mov $0x0, %%edi\n"
+		    "mov $0x0, %%esi\n"
+		    "mov $0x0, %%ebp\n"
 		    "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_entry_point_) : "%eax", "%esp");
     }
     
@@ -157,7 +211,9 @@ private:
     void
     load (automaton_context* c)
     {
-      typename automaton_type::const_action_iterator pos = c->automaton->action_find (c->action_entry_point);
+      action_parameter ap = c->front ();
+      c->pop ();
+      typename automaton_type::const_action_iterator pos = c->automaton->action_find (ap.action_entry_point);
       if (pos != c->automaton->action_end ()) {
 	automaton_ = c->automaton;
 
@@ -166,7 +222,7 @@ private:
 	parameter_mode_ = pos->parameter_mode;
 	value_size_ = pos->value_size;
 
-	parameter_ = c->parameter;
+	parameter_ = ap.parameter;
       }
       else {
 	clear ();
@@ -176,7 +232,8 @@ private:
     }
 
     void
-    finish_action (const void* buffer)
+    finish_action (bool output_status,
+		   const void* buffer)
     {
       if (automaton_ != 0) {
 	
@@ -197,11 +254,13 @@ private:
 	  }
 	  break;
 	case OUTPUT:
-	  if (buffer != 0) {
-	    if (automaton_->verify_span (buffer, value_size_)) {
+	  // Only proceed if the output executed.
+	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
+	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
+	  if (output_status) {
+	    if (value_size_ == 0 || automaton_->verify_span (buffer, value_size_)) {
 	      input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_entry_point_, parameter_mode_, parameter_);
 	      if (input_actions_ != 0) {
-		/* The output executed and there are inputs. */
 		// Copy the value.
 		memcpy (value_buffer_, buffer, value_size_);
 		
@@ -292,7 +351,7 @@ public:
   {
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
-    automaton_context* c = new (alloc_) automaton_context (automaton);
+    automaton_context* c = new (alloc_) automaton_context (alloc_, automaton);
     std::pair<typename context_map_type::iterator, bool> r = context_map_.insert (std::make_pair (automaton, c));
     kassert (r.second);
   }
@@ -313,8 +372,7 @@ public:
 
     automaton_context* c = pos->second;
 
-    c->action_entry_point = action_entry_point;
-    c->parameter = parameter;
+    c->push (action_parameter (action_entry_point, parameter));
     
     if (c->status == NOT_SCHEDULED) {
       c->status = SCHEDULED;
@@ -325,12 +383,13 @@ public:
   void
   finish_action (const void* action_entry_point,
 		 aid_t parameter,
+		 bool output_status,
 		 const void* buffer)
   {
     if (action_entry_point != 0) {
       schedule_action (current_automaton (), action_entry_point, parameter);
     }
-    exec_context_.finish_action (buffer);
+    exec_context_.finish_action (output_status, buffer);
     switch_to_next_action ();
   }
 

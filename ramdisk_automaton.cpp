@@ -1,7 +1,6 @@
 #include "ramdisk_automaton.hpp"
 #include "list_allocator.hpp"
 #include "fifo_scheduler.hpp"
-#include "action_macros.hpp"
 #include "kput.hpp"
 #include "kassert.hpp"
 

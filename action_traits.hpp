@@ -1,14 +1,15 @@
-#ifndef __action_macros_hpp__
-#define __action_macros_hpp__
+#ifndef __action_traits_hpp__
+#define __action_traits_hpp__
 
 /*
   File
   ----
-  action_macros.hpp
+  action_traits.hpp
   
   Description
   -----------
-  Macros for declaring actions.
+  Types for describing actions.
+  Algorithms for executing actions.
 
   Authors:
   Justin R. Wilson
@@ -17,6 +18,9 @@
 #include "types.hpp"
 #include <type_traits>
 #include "static_assert.hpp"
+
+// Size of the temporary buffer used to store the values produced by output actions.
+const size_t VALUE_BUFFER_SIZE = 512;
 
 // The absence of a type.
 struct null_type { };
@@ -134,9 +138,6 @@ struct up_internal_action_traits : public no_parameter, public no_value, public 
 template <class Parameter>
 struct p_internal_action_traits : public parameter<Parameter>, public no_value, public internal_action  { };
 
-// Size of the temporary buffer used to store the values produced by output actions.
-const size_t VALUE_BUFFER_SIZE = 512;
-
 // These struct encode the schema of action traits.
 template <bool>
 struct bool_dispatch : public std::false_type { };
@@ -180,6 +181,7 @@ struct is_local_action : public bool_dispatch<is_output_action<T>::value || is_i
 template <class T>
 struct is_action : public bool_dispatch<is_input_action<T>::value || is_output_action<T>::value || is_internal_action<T>::value> { };
 
+// Algorithms for executing actions.
 template <class InputAction,
 	  class Effect,
 	  class Schedule,
@@ -189,6 +191,9 @@ input_action (Effect effect,
 	      Schedule schedule,
 	      Finish finish)
 {
+  STATIC_ASSERT (is_input_action<InputAction>::value);
+  STATIC_ASSERT (InputAction::parameter_mode == NO_PARAMETER && InputAction::value_size == 0);
+
   effect ();
   schedule ();
   finish ();
@@ -204,6 +209,9 @@ input_action (typename InputAction::parameter_type parameter,
 	      Schedule schedule,
 	      Finish finish)
 {
+  STATIC_ASSERT (is_input_action<InputAction>::value);
+  STATIC_ASSERT ((InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode == AUTO_PARAMETER) && InputAction::value_size == 0);
+
   effect (parameter);
   schedule ();
   finish ();
@@ -219,6 +227,9 @@ input_action (typename InputAction::value_type& value,
 	      Schedule schedule,
 	      Finish finish)
 {
+  STATIC_ASSERT (is_input_action<InputAction>::value);
+  STATIC_ASSERT (InputAction::parameter_mode == NO_PARAMETER && InputAction::value_size != 0);
+
   effect (value);
   schedule ();
   finish ();
@@ -235,6 +246,9 @@ input_action (typename InputAction::parameter_type parameter,
 	      Schedule schedule,
 	      Finish finish)
 {
+  STATIC_ASSERT (is_input_action<InputAction>::value);
+  STATIC_ASSERT ((InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode == AUTO_PARAMETER) && InputAction::value_size != 0);
+
   effect (parameter, value);
   schedule ();
   finish ();
@@ -300,12 +314,12 @@ template <class OutputAction,
 	  class Schedule,
 	  class Finish>
 void
-output_action (value_tag,
-	       Remove remove,
-	       Precondition precondition,
-	       Effect effect,
-	       Schedule schedule,
-	       Finish finish)
+output_action_ (value_tag,
+		Remove remove,
+		Precondition precondition,
+		Effect effect,
+		Schedule schedule,
+		Finish finish)
 {
   static typename OutputAction::value_type value;
 
@@ -317,7 +331,7 @@ output_action (value_tag,
   }
   else {
     schedule ();
-    finish (0);
+    finish (false);
   }
 }
 
@@ -328,13 +342,13 @@ template <class OutputAction,
 	  class Schedule,
 	  class Finish>
 void
-output_action (value_tag,
-	       typename OutputAction::parameter_type parameter,
-	       Remove remove,
-	       Precondition precondition,
-	       Effect effect,
-	       Schedule schedule,
-	       Finish finish)
+output_action_ (value_tag,
+		typename OutputAction::parameter_type parameter,
+		Remove remove,
+		Precondition precondition,
+		Effect effect,
+		Schedule schedule,
+		Finish finish)
 {
   static typename OutputAction::value_type value;
 
@@ -346,7 +360,7 @@ output_action (value_tag,
   }
   else {
     schedule ();
-    finish (0);
+    finish (false);
   }
 }
 
@@ -363,7 +377,10 @@ output_action (Remove remove,
 	       Schedule schedule,
 	       Finish finish)
 {
-  output_action_<OutputAction> (typename OutputAction::value_category (), remove, precondition, effect, schedule);
+  STATIC_ASSERT (is_output_action<OutputAction>::value);
+  STATIC_ASSERT (OutputAction::parameter_mode == NO_PARAMETER);
+
+  output_action_<OutputAction> (typename OutputAction::value_category (), remove, precondition, effect, schedule, finish);
 }
 
 template <class OutputAction,
@@ -380,7 +397,10 @@ output_action (typename OutputAction::parameter_type parameter,
 	       Schedule schedule,
 	       Finish finish)
 {
-  output_action_<OutputAction> (typename OutputAction::value_category (), parameter, remove, precondition, effect, schedule);
+  STATIC_ASSERT (is_output_action<OutputAction>::value);
+  STATIC_ASSERT (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER);
+
+  output_action_<OutputAction> (typename OutputAction::value_category (), parameter, remove, precondition, effect, schedule, finish);
 }
 
 template <class InternalAction,
@@ -396,6 +416,9 @@ internal_action (Remove remove,
 		 Schedule schedule,
 		 Finish finish)
 {
+  STATIC_ASSERT (is_internal_action<InternalAction>::value);
+  STATIC_ASSERT (InternalAction::parameter_mode == NO_PARAMETER);
+
   remove ();
   if (precondition ()) {
     effect ();
@@ -418,6 +441,9 @@ internal_action (typename InternalAction::parameter_type parameter,
 		 Schedule schedule,
 		 Finish finish)
 {
+  STATIC_ASSERT (is_internal_action<InternalAction>::value);
+  STATIC_ASSERT (InternalAction::parameter_mode == PARAMETER);
+
   remove (parameter);
   if (precondition (parameter)) {
     effect (parameter);
@@ -426,4 +452,13 @@ internal_action (typename InternalAction::parameter_type parameter,
   finish ();
 }
 
-#endif /* __action_macros_hpp__ */
+template <typename T>
+inline aid_t
+aid_cast (T v)
+{
+  STATIC_ASSERT (sizeof (T) == sizeof (aid_t));
+  // Nasty C-style cast but it gets around static vs reinterpret casting issues.
+  return (aid_t)v;
+}
+
+#endif /* __action_traits_hpp__ */

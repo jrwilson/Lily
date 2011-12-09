@@ -29,6 +29,7 @@ system_allocator.o \
 list_allocator.o \
 syscall.o \
 system_automaton.o \
+action_test_automaton.o \
 ramdisk_automaton.o \
 kmain.o
 

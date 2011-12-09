@@ -22,6 +22,7 @@
 void
 sys_finish (const void* action_entry_point,
 	    aid_t parameter,
+	    bool output_status,
 	    const void* output_buffer);
 
 size_t

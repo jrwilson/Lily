@@ -20,13 +20,15 @@ static syserror_t errno;
 void
 sys_finish (const void* action_entry_point,
 	    aid_t parameter,
+	    bool output_status,
 	    const void* output_buffer)
 {
   asm volatile ("mov %0, %%eax\n"
   		"mov %1, %%ebx\n"
   		"mov %2, %%ecx\n"
   		"mov %3, %%edx\n"
-  		"int $0x80\n" : : "r"(SYSCALL_FINISH), "m"(action_entry_point), "m"(parameter), "m"(output_buffer) : "eax", "ebx", "ecx", "edx");
+		"mov %4, %%esi\n"
+  		"int $0x80\n" : : "r"(SYSCALL_FINISH), "m"(action_entry_point), "m"(parameter), "m"(output_status), "m"(output_buffer) : "eax", "ebx", "ecx", "edx", "esi");
 }
 
 size_t
