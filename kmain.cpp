@@ -25,16 +25,14 @@
 #include "system_automaton.hpp"
 #include "kassert.hpp"
 
-extern uint32_t multiboot_magic;
-extern multiboot_info_t* multiboot_info;
-
 extern int data_end;
 
 extern int* ctors_begin;
 extern int* ctors_end;
 
 extern "C" void
-kmain (void)
+kmain (uint32_t multiboot_magic,
+       multiboot_info_t* multiboot_info)  // Physical address.
 {
   // Print a welcome message.
   clear_console ();

@@ -16,8 +16,8 @@
 #include "vm_manager.hpp"
 #include <new>
 #include "kassert.hpp"
-#include "vm_area.hpp"
 #include "system_automaton.hpp"
+#include "automaton.hpp"
 
 static const uint32_t MAGIC = 0x7ACEDEAD;
 
@@ -91,8 +91,16 @@ system_alloc::merge_header (chunk_header* ptr)
 void*
 system_alloc::allocate (size_t size)
 {
+  // Page aligment makes mapping easier.
+  kassert (is_aligned (size, PAGE_SIZE));
   if (system_automaton::system_automaton != 0) {
-    kassert (0);
+    void* retval = system_automaton::system_automaton->allocate (size);
+    kassert (retval != 0);
+    // Back with frames.
+    for (size_t x = 0; x < size; x += PAGE_SIZE) {
+      vm_manager::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+    }
+    return retval;
   }
   else {
     void* retval = reinterpret_cast<uint8_t*> (last_header_ + 1) + last_header_->size;
@@ -100,35 +108,6 @@ system_alloc::allocate (size_t size)
     kassert (static_cast<uint8_t*> (retval) + size <= heap_end_);
     return retval;
   }
-  // switch (status_) {
-  // case NORMAL:
-  //   {
-  //     void* retval = automaton_->alloc (size);
-  //     kassert (retval != 0);
-  //     // Back with frames.
-  //     for (size_t x = 0; x < size; x += PAGE_SIZE) {
-  // 	vm_manager::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
-  //     }
-  //   }
-  //   break;
-  // case BOOTING:
-  //   {
-  //     void* retval = const_cast<void*> (static_cast<const void*> (boot_end_));
-  //     boot_end_ += size;
-  //     boot_end_ = static_cast<uint8_t*> (const_cast<void*> (align_up (boot_end_, PAGE_SIZE)));
-  //     // Back the memory with frames to avoid page faults when the memory map is incomplete.
-  //     // Page faults are okay later.
-  //     for (uint8_t* address = static_cast<uint8_t*> (retval); address < boot_end_; address += PAGE_SIZE) {
-  // 	vm_manager::map (address, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
-  //     }
-  //     return retval;
-  //   }
-  //   break;
-  // }
-
-  // The system automaton allocated memory during an operation.
-  kassert (0);
-  return 0;
 }
 
 void
@@ -157,32 +136,6 @@ system_alloc::heap_size ()
   return (reinterpret_cast<uint8_t*> (last_header_ + 1) + last_header_->size) - reinterpret_cast<uint8_t*> (first_header_);
 }
 
-// void
-// system_alloc::normal (automaton_interface* a)
-// {
-//   kassert (a != 0);
-//   automaton_ = a;
-//   size_t request_size = align_up (sizeof (chunk_header) + RESERVE_AMOUNT, PAGE_SIZE);
-//   first_header_ = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
-//   last_header_ = first_header_;
-
-//   // Finish the memory map for the system automaton with data that has been allocated.
-//   // We use a fixed-point style because inserting might cause the end to move.
-//   void* boot_end_before;
-//   while (true) {
-//     boot_end_before = boot_end_;
-//     vm_data_area* d = new (alloc (sizeof (vm_data_area))) vm_data_area (boot_begin_, boot_end_, paging_constants::SUPERVISOR);
-//     kassert (automaton_->insert_vm_area (d));
-//     if (boot_end_before == boot_end_) {
-//       break;
-//     }
-//     else {
-//       automaton_->remove_vm_area (d);
-//     }
-//   }
-//   status_ = NORMAL;
-// }
-
 void*
 system_alloc::alloc (size_t size)
 {
@@ -194,7 +147,8 @@ system_alloc::alloc (size_t size)
 
   /* Acquire more memory. */
   if (ptr == 0) {
-    ptr = new (allocate (sizeof (chunk_header) + size)) chunk_header (size);
+    const size_t request_size = align_up (size + sizeof (chunk_header), PAGE_SIZE);
+    ptr = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
 
     if (ptr > last_header_) {
       // Append.

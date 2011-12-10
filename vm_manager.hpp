@@ -106,40 +106,37 @@ struct page_directory_entry {
 struct page_directory {
   page_directory_entry entry[PAGE_ENTRY_COUNT];
 
-  void
-  clear (physical_address_t physical_address);
+  // void
+  // clear (physical_address_t physical_address);
 
   void
   initialize_with_current (physical_address_t physical_address);
 
 };
 
-class vm_manager {
-private:
-  vm_manager ();
-  vm_manager (const vm_manager&);
-  vm_manager& operator= (const vm_manager&);
-
-public:
-  static physical_address_t
+namespace vm_manager {
+  physical_address_t
   page_directory_physical_address (void);
 
-  static page_directory*
+  page_directory*
+  get_kernel_page_directory (void);
+
+  page_directory*
   get_page_directory (void);
   
-  static page_table*
+  page_table*
   get_page_table (const void* address);
 
-  static void
+  void
   map (const void* address,
        frame_t frame,
        paging_constants::page_privilege_t privilege,
        paging_constants::writable_t writable);
   
-  static void
+  void
   unmap (const void* logical_addr);
 
-  static void
+  void
   switch_to_directory (physical_address_t physical_address);
 };
 

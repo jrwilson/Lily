@@ -11,16 +11,16 @@ static const physical_address_t USABLE_MEMORY_BEGIN = 0x00100000;
 static const physical_address_t USABLE_MEMORY_END = 0xFFFFF000;
 
 /* Should agree with loader.s. */
-static const void* KERNEL_VIRTUAL_BASE = reinterpret_cast<const void*> (0xC0000000);
+static const void* const KERNEL_VIRTUAL_BASE = reinterpret_cast<const void*> (0xC0000000);
 
 /* Everything must fit into 4MB initialy. */
-static const void* INITIAL_LOGICAL_LIMIT = reinterpret_cast<const void*> (0xC0400000);
+static const void* const INITIAL_LOGICAL_LIMIT = reinterpret_cast<const void*> (0xC0400000);
 
 /* Memory under one megabyte is not used. */
 static const size_t ONE_MEGABYTE = 0x00100000;
 
 /* Logical address above this address are using for page tables. */
-static const void* PAGING_AREA = reinterpret_cast<const void*> (0xFFC00000);
+static const void* const PAGING_AREA = reinterpret_cast<const void*> (0xFFC00000);
 
 #define PAGE_SIZE 0x1000
 
@@ -111,6 +111,13 @@ inline size_t
 get_page_directory_entry (const void* address)
 {
   return (reinterpret_cast<size_t> (address) & 0xFFC00000) >> 22;
+}
+
+inline const void*
+get_address (size_t directory_entry,
+	     size_t table_entry)
+{
+  return reinterpret_cast<const void*> (directory_entry << 22 | table_entry << 12);
 }
 
 #endif /* __vm_def_hpp__ */

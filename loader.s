@@ -36,17 +36,10 @@
 	PAGE_DIRECTORY_HIGH_ENTRY equ (KERNEL_VIRTUAL_BASE >> 22)
 	PAGE_TABLE_ENTRY equ ((KERNEL_VIRTUAL_BASE >> 12) & 0x3FF)
 
-	;; Multiboot values.
-	[global multiboot_magic]
-multiboot_magic:	
-	dd 0
-	[global multiboot_info]
-multiboot_info:
-	dd 0
-		
 	;; Paging structures.
 	align 4096
-page_directory:
+	[global kernel_page_directory]
+kernel_page_directory:
 	times 1024 dd 0
 page_table:
 	times 1024 dd 0
@@ -56,19 +49,22 @@ page_table:
 start:
 	;; Disable interrupts.
 	cli
-	;; Save the multiboot values.
-	mov [multiboot_magic], eax
-	mov [multiboot_info], ebx
+	;; Setup a stack.
+	mov esp, (stack_end - KERNEL_VIRTUAL_BASE)
+	;; Push the pointer to the multiboot info structure.
+	push ebx
+	;; Push the multiboot magic number.
+	push eax
 	;; Initialize the page directory.
 	mov ecx, page_table
 	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
 	;; Page table is mapped in both locations.
-	mov [page_directory + 4 * PAGE_DIRECTORY_LOW_ENTRY], ecx
-	mov [page_directory + 4 * PAGE_DIRECTORY_HIGH_ENTRY], ecx
+	mov [kernel_page_directory + 4 * PAGE_DIRECTORY_LOW_ENTRY], ecx
+	mov [kernel_page_directory + 4 * PAGE_DIRECTORY_HIGH_ENTRY], ecx
 	;; Map page directory to itself.
-	mov ecx, page_directory
+	mov ecx, kernel_page_directory
 	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
-	mov [page_directory + 4 * 1023], ecx
+	mov [kernel_page_directory + 4 * 1023], ecx
 	;; Initialize the page table.  Map the first 4MB.
 	mov eax, 0
 	mov ebx, 0x400000
@@ -85,7 +81,7 @@ loop1:
 	jmp loop1
 loop2:
 	;; Initialize paging.
-	mov eax, page_directory
+	mov eax, kernel_page_directory
 	mov cr3, eax
 	mov eax, cr0
 	or eax, 0x80000000
@@ -95,18 +91,7 @@ loop2:
 	[section .text]
 highhalf:	
 	;; Setup the stack in order to call kmain.
-	mov esp, stack_end
-
-;; 	[extern ctors_begin]
-;; 	[extern ctors_end]
-;; 	mov  ebx, ctors_begin               ; call the constructors
-;; 	jmp  .ctors_until_end
-;; .call_constructor:
-;; 	call [ebx]
-;; 	add  ebx,4
-;; .ctors_until_end:
-;; 	cmp  ebx, ctors_end
-;; 	jb   .call_constructor
+	add esp, KERNEL_VIRTUAL_BASE
 	
 	;; Import the kmain symbol.
 	[extern kmain]
@@ -115,8 +100,5 @@ highhalf:
 	[section .bss]
 	;; Reserve space for the stack.
 	ALIGN STACK_ALIGN
-	[global stack_begin]
-stack_begin:	
 	resb STACK_SIZE
-	[global stack_end]
 stack_end:	

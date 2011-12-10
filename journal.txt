@@ -379,8 +379,7 @@ Regardless, the compile-time checks still apply.
 
 Implement segment selectors.
 Take out page scrub in page_handler.
-Implement a better allocator (or improve existing one).
+Implement a better allocator (or improve existing one).  Use assumption of contiguous heap.
 Memory alignment.
 
-wasted stacked in loader
-arguments to kmain could be passed through stack
+wasted stack space in loader -> map like page directory

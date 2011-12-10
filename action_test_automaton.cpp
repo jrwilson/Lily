@@ -4,6 +4,15 @@
 #include "kput.hpp"
 #include "kassert.hpp"
 
+struct allocator_tag { };
+typedef list_alloc<allocator_tag> alloc_type;
+
+template <class T>
+typename list_alloc<T>::data list_alloc<T>::data_;
+
+template <typename T>
+struct allocator_type : public list_allocator<T, allocator_tag> { };
+
 namespace action_test {
 
   static bool up_uv_input1_flag = true;
@@ -33,9 +42,7 @@ namespace action_test {
   aid_t ap_v_input2_parameter;
   aid_t ap_v_input3_parameter;
 
-  // Delay initialization.
-  static list_alloc alloc_ (false);
-  typedef fifo_scheduler<list_alloc, list_allocator> scheduler_type;
+  typedef fifo_scheduler<allocator_type> scheduler_type;
   static scheduler_type* scheduler_ = 0;
 
   static bool up_uv_output_flag = true;
@@ -65,9 +72,9 @@ namespace action_test {
   init ()
   {
     // Initialize the allocator.
-    new (&alloc_) list_alloc ();
+    alloc_type::initialize ();
     // Allocate a scheduler.
-    scheduler_ = new (alloc_) scheduler_type (alloc_);
+    scheduler_ = new (alloc_type ()) scheduler_type ();
 
     input_action <init_traits> (init_effect, schedule, scheduler_->finish ());
   }

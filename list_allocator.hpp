@@ -16,54 +16,207 @@
 
 #include "types.hpp"
 #include <memory>
+#include "syscall.hpp"
 
+template <typename Tag>
 class list_alloc {
 private:
-  struct chunk_header;
+
+  static const uint32_t MAGIC = 0x7ACEDEAD;
   
-  size_t page_size_;
-  chunk_header* first_header_;
-  chunk_header* last_header_;
+  struct chunk_header {
+    uint32_t available : 1;
+    uint32_t magic : 31;
+    size_t size; /* Does not include header. */
+    chunk_header* prev;
+    chunk_header* next;
+    
+    chunk_header (size_t sz) :
+      available (1),
+      magic (MAGIC),
+      size (sz),
+      prev (0),
+      next (0)
+    { }
+  };
 
-  chunk_header*
+  struct data {
+    size_t page_size_;
+    chunk_header* first_header_;
+    chunk_header* last_header_;
+  };
+
+  static data data_;
+
+  static inline size_t
+  align_up (size_t value,
+	    size_t radix)
+  {
+    return (value + radix - 1) & ~(radix - 1);
+  }
+
+  static chunk_header*
   find_header (chunk_header* start,
-	       size_t size) const;
+	       size_t size)
+  {
+    for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
+    return start;
+  }
 
-  void
+  static void
   split_header (chunk_header* ptr,
-		size_t size);
+		size_t size)
+  {
+    /* Split the block. */
+    chunk_header* n = new (reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + size) chunk_header (ptr->size - size - sizeof (chunk_header));
+    n->prev = ptr;
+    n->next = ptr->next;
+    
+    ptr->size = size;
+    ptr->next = n;
+    
+    if (n->next != 0) {
+      n->next->prev = n;
+    }
+    
+    if (ptr == data_.last_header_) {
+      data_.last_header_ = n;
+    }
+  }
 
-  bool
-  merge_header (chunk_header* ptr);
+  // Try to merge with the next chunk.
+  static bool
+  merge_header (chunk_header* ptr)
+  {
+    if (ptr->available && ptr->next != 0 && ptr->next->available && ptr->next == reinterpret_cast<chunk_header*>((reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + ptr->size))) {
+      ptr->size += sizeof (chunk_header) + ptr->next->size;
+      if (ptr->next == data_.last_header_) {
+	data_.last_header_ = ptr;
+      }
+      ptr->next = ptr->next->next;
+      ptr->next->prev = ptr;
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
 
 public:
-  list_alloc (bool initialize = true);
+  static void
+  initialize ()
+  {
+    data_.page_size_ = sys_get_page_size ();
+    data_.first_header_ = new (sys_allocate (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
+    data_.last_header_ = data_.first_header_;
+  }
 
-  void*
-  alloc (size_t) __attribute__((warn_unused_result));
+  static void*
+  alloc (size_t size)
+  {
+    if (size == 0) {
+      return 0;
+    }
+    
+    chunk_header* ptr = find_header (data_.first_header_, size);
+    
+    /* Acquire more memory. */
+    if (ptr == 0) {
+      size_t request_size = align_up (sizeof (chunk_header) + size, data_.page_size_);
+      ptr = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+      
+      if (ptr > data_.last_header_) {
+	// Append.
+	data_.last_header_->next = ptr;
+	// ptr->next already equals 0.
+	ptr->prev = data_.last_header_;
+	data_.last_header_ = ptr;
+	if (merge_header (data_.last_header_->prev)) {
+	  ptr = data_.last_header_;
+	}
+      }
+      else if (ptr < data_.first_header_) {
+	// Prepend.
+	ptr->next = data_.first_header_;
+	// ptr->prev already equals 0.
+	data_.first_header_->prev = ptr;
+	data_.first_header_ = ptr;
+	merge_header (data_.first_header_);
+      }
+      else {
+	// Insert.
+	chunk_header* p;
+	for (p = data_.first_header_; p < ptr; p = p->next) ;;
+	ptr->next = p;
+	ptr->prev = p->prev;
+	p->prev = ptr;
+	ptr->prev->next = ptr;
+	merge_header (ptr);
+	p = ptr->prev;
+	if (merge_header (p)) {
+	  ptr = p;
+	}
+      }
+    }
+    
+    /* Found something we can use. */
+    if ((ptr->size - size) > sizeof (chunk_header)) {
+      split_header (ptr, size);
+    }
+    /* Mark as used and return. */
+    ptr->available = 0;
+    return (ptr + 1);
+  }
   
-  void
-  free (void*);
+  static void
+  free (void* p)
+  {
+    if (p == 0) {
+      return;
+    }
+    
+    chunk_header* ptr = static_cast<chunk_header*> (p);
+    --ptr;
+    
+    if (ptr >= data_.first_header_ &&
+	ptr <= data_.last_header_ &&
+	ptr->magic == MAGIC &&
+	ptr->available == 0) {
+      
+      ptr->available = 1;
+      
+      // Merge with previous.
+      merge_header (ptr);
+      
+      // Merge with previous.
+      if (ptr->prev != 0) {
+	merge_header (ptr->prev);
+      }
+    }
+  }
+  
 };
 
+template <typename Tag>
 inline void*
 operator new (size_t sz,
-	      list_alloc& pa)
+	      const list_alloc<Tag>& pa)
 {
   return pa.alloc (sz);
 }
 
+template <typename Tag>
 inline void*
 operator new[] (size_t sz,
-		list_alloc& pa)
+		const list_alloc<Tag>& pa)
 {
   return pa.alloc (sz);
 }
 
-template <class T>
+template <class T, typename Tag>
 inline void
 destroy (T* p,
-	 list_alloc& la)
+	 const list_alloc<Tag>& la)
 {
   if (p != 0) {
     p->~T ();
@@ -71,11 +224,8 @@ destroy (T* p,
   }
 }
 
-template <class T>
+template <class T, typename Tag>
 class list_allocator {
-private:
-  list_alloc& alloc_;
-
 public:
   typedef T value_type;
   typedef size_t size_type;
@@ -87,76 +237,67 @@ public:
   typedef T& reference;
   typedef const T& const_reference;
   
-  pointer
-  address (reference r) const
+  static pointer
+  address (reference r)
   {
     return &r;
   }
 
-  const_pointer
-  address (const_reference r) const
+  static const_pointer
+  address (const_reference r)
   {
     return &r;
   }
   
-  list_allocator (list_alloc& a) :
-    alloc_ (a)
-  { }
+  list_allocator () { }
 
-  list_allocator (const list_allocator& other) :
-    alloc_ (other.alloc_)
+  list_allocator (const list_allocator&)
   { }
 
   ~list_allocator ()
   { }
 
   template <class U>
-  list_allocator (const list_allocator<U>& other) :
-    alloc_ (other.get_alloc ())
+  list_allocator (const list_allocator<U, Tag>&)
   { }
 
-private:
-  void operator= (const list_allocator&);
-  
-public:
-  pointer
+  static pointer
   allocate (size_type n,
-	    std::allocator<void>::const_pointer = 0) {
-    return static_cast<pointer> (alloc_.alloc (n * sizeof (T)));
+	    std::allocator<void>::const_pointer = 0)
+  {
+    return static_cast<pointer> (list_alloc<Tag>::alloc (n * sizeof (T)));
   }
   
-  void
+  static void
   deallocate (pointer p,
-	      size_type) {
-    alloc_.free (p);
+	      size_type)
+  {
+    list_alloc<Tag>::free (p);
   }
   
-  void
+  static void
   construct (pointer p,
-	     const T& val) {
+	     const T& val)
+  {
     new (p) T (val);
   }
 
-  void
-  destroy (pointer p) {
+  static void
+  destroy (pointer p)
+  {
     p->~T ();
   }
   
-  size_type
-  max_size () const {
+  static size_type
+  max_size ()
+  {
     return static_cast<size_type> (-1) / sizeof (T);
   }
   
   template <class U>
   struct rebind {
-    typedef list_allocator<U> other;
+    typedef list_allocator<U, Tag> other;
   };
-
-  list_alloc&
-  get_alloc () const
-  {
-    return alloc_;
-  }
 };
 
 #endif /* __list_allocator_hpp__ */

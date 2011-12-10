@@ -27,22 +27,6 @@
 #define PAGE_RESERVED_ERROR (1 << 3)
 #define PAGE_INSTRUCTION_ERROR (1 << 4)
 
-    // begin_ (align_down (b, PAGE_SIZE)),
-    // end_ (align_up (e, PAGE_SIZE)),
-// kassert (begin_ < end_);
-
-  // inline size_t
-  // size () const
-  // {
-  //   return (reinterpret_cast<size_t> (end_) - reinterpret_cast<size_t> (begin_));
-  // }
-
-  // virtual paging_constants::page_privilege_t
-  // page_privilege () const = 0;
-
-  // virtual bool
-  // merge (const vm_area_base& other) = 0;
-
 class vm_area_interface {
 public:  
   virtual const void*
@@ -68,7 +52,7 @@ public:
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE))
   {
-    kassert ((end_ == 0 && end_ < begin_) || begin_ < end_);
+    kassert (begin_ <= end_);
   }
 
   const void* begin () const
@@ -102,7 +86,7 @@ public:
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE))
   {
-    kassert (begin_ < end_);
+    kassert (begin_ <= end_);
   }
 
   const void* begin () const
@@ -136,7 +120,7 @@ public:
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE))
   {
-    kassert (begin_ < end_);
+    kassert (begin_ <= end_);
   }
 
   const void* begin () const
@@ -170,7 +154,7 @@ public:
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE))
   {
-    kassert (begin_ < end_);
+    kassert (begin_ <= end_);
   }
 
   const void* begin () const
@@ -196,17 +180,13 @@ public:
 class vm_heap_area : public vm_area_interface {
 private:
   const void* begin_;
-  const uint8_t* cursor_;
   const void* end_;
 
 public:
   vm_heap_area (const void* begin) :
     begin_ (align_down (begin, PAGE_SIZE)),
-    cursor_ (reinterpret_cast<const uint8_t*> (begin_)),
-    end_ (static_cast<const uint8_t*> (begin_) + PAGE_SIZE)
-  {
-    kassert (begin_ < end_);
-  }
+    end_ (begin_)
+  { }
 
   const void* begin () const
   {
@@ -218,15 +198,11 @@ public:
     return end_;
   }
 
-  const void*
-  allocate (size_t size)
+  void
+  end (const void* e)
   {
-    const void* retval = cursor_;
-    cursor_ += size;
-    if (cursor_ > end_) {
-      end_ = align_up (cursor_, PAGE_SIZE);
-    }
-    return retval;
+    end_ = e;
+    kassert (begin_ <= end_);
   }
 
   void
@@ -250,7 +226,7 @@ public:
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE))
   {
-    kassert (begin_ < end_);
+    kassert (begin_ <= end_);
   }
 
   const void* begin () const
@@ -426,5 +402,21 @@ public:
 //     return false;
 //   }
 // };
+
+    // begin_ (align_down (b, PAGE_SIZE)),
+    // end_ (align_up (e, PAGE_SIZE)),
+// kassert (begin_ < end_);
+
+  // inline size_t
+  // size () const
+  // {
+  //   return (reinterpret_cast<size_t> (end_) - reinterpret_cast<size_t> (begin_));
+  // }
+
+  // virtual paging_constants::page_privilege_t
+  // page_privilege () const = 0;
+
+  // virtual bool
+  // merge (const vm_area_base& other) = 0;
 
 #endif /* __vm_area_hpp__ */

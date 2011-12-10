@@ -21,7 +21,7 @@
 #include "kassert.hpp"
 #include "action_traits.hpp"
 
-template <class Alloc, template <typename> class Allocator>
+template <template <typename> class Allocator>
 class fifo_scheduler {
 private:
 
@@ -93,11 +93,6 @@ private:
 
 public:
 
-  fifo_scheduler (Alloc& a) :
-    queue_ (typename queue_type::allocator_type (a)),
-    set_ (3, typename set_type::hasher (), typename set_type::key_equal (), typename set_type::allocator_type (a))
-  { }
-
   template <class LocalAction>
   void
   add (void (*action_entry_point) (void))
@@ -120,17 +115,17 @@ public:
   template <class LocalAction>
   class remover {
   private:
-    fifo_scheduler<Alloc, Allocator>& sched_;
+    fifo_scheduler<Allocator>& sched_;
     const void* action_entry_point_;
 
   public:
-    remover (fifo_scheduler<Alloc, Allocator>& sched,
+    remover (fifo_scheduler<Allocator>& sched,
 	     void (*ptr) (void)) :
       sched_ (sched),
       action_entry_point_ (reinterpret_cast<const void*> (ptr))
     { }
 
-    remover (fifo_scheduler<Alloc, Allocator>& sched,
+    remover (fifo_scheduler<Allocator>& sched,
 	     void (*ptr) (typename LocalAction::parameter_type)) :
       sched_ (sched),
       action_entry_point_ (reinterpret_cast<const void*> (ptr))
@@ -167,10 +162,10 @@ public:
 
   class finisher {
   private:
-    fifo_scheduler<Alloc, Allocator>& sched_;
+    fifo_scheduler<Allocator>& sched_;
 
   public:
-    finisher (fifo_scheduler<Alloc, Allocator>& sched) :
+    finisher (fifo_scheduler<Allocator>& sched) :
       sched_ (sched)
     { }
 

@@ -86,19 +86,19 @@ private:
   {
     // Check the output action dynamically.
     kassert (output_automaton != 0);
-    typename automaton::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
+    automaton::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
     kassert (output_pos != output_automaton->action_end () && output_pos->type == OUTPUT);
 
     // Check the input action dynamically.
     kassert (input_automaton != 0);
-    typename automaton::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
+    automaton::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
     kassert (input_pos != input_automaton->action_end () && input_pos->type == INPUT);
 
     // TODO:  All of the bind checks.
     output_action oa (output_automaton, output_action_entry_point, output_parameter_mode, output_parameter);
     input_action ia (input_automaton, input_action_entry_point, input_parameter_mode, input_parameter);
     
-    std::pair<typename bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type ()));
+    std::pair<bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type ()));
     r.first->second.insert (ia);
   }
 
@@ -254,7 +254,7 @@ public:
 		    aid_t parameter)
   {
     output_action oa (automaton, action_entry_point, parameter_mode, parameter);
-    typename bindings_type::const_iterator pos = bindings_.find (oa);
+    bindings_type::const_iterator pos = bindings_.find (oa);
     if (pos != bindings_.end ()) {
       return &pos->second;
     }

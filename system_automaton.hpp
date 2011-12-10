@@ -15,9 +15,9 @@
 */
 
 #include "types.hpp"
-#include "interrupt_descriptor_table.hpp"
 
 class automaton;
+class registers;
 
 namespace system_automaton {
 

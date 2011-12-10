@@ -103,8 +103,8 @@ private:
 
     aid_t parameter_;
 
-    const typename binding_manager::input_action_set_type* input_actions_;
-    typename binding_manager::input_action_set_type::const_iterator input_action_pos_;
+    const binding_manager::input_action_set_type* input_actions_;
+    binding_manager::input_action_set_type::const_iterator input_action_pos_;
 
     void
     exec (uint32_t end_of_stack = -1) const
@@ -170,8 +170,8 @@ private:
       // Push the flags.
       uint32_t eflags;
       asm volatile ("pushf\n"
-		    "pop %%eax"
-		    "mov %%eax, %0" : "=m"(eflags) : : "%eax");
+		    "pop %%eax\n"
+		    "mov %%eax, %0\n" : "=m"(eflags) : : "%eax");
       --*stack_pointer = eflags;
 
       // Push the code segment.
@@ -216,7 +216,7 @@ private:
     {
       action_parameter ap = c->front ();
       c->pop ();
-      typename automaton::const_action_iterator pos = c->automaton->action_find (ap.action_entry_point);
+      automaton::const_action_iterator pos = c->automaton->action_find (ap.action_entry_point);
       if (pos != c->automaton->action_end ()) {
 	automaton_ = c->automaton;
 
@@ -346,7 +346,7 @@ public:
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
     automaton_context* c = new (system_alloc ()) automaton_context (automaton);
-    std::pair<typename context_map_type::iterator, bool> r = context_map_.insert (std::make_pair (automaton, c));
+    std::pair<context_map_type::iterator, bool> r = context_map_.insert (std::make_pair (automaton, c));
     kassert (r.second);
   }
 
@@ -361,7 +361,7 @@ public:
 		   const void* action_entry_point,
 		   aid_t parameter)
   {
-    typename context_map_type::iterator pos = context_map_.find (automaton);
+    context_map_type::iterator pos = context_map_.find (automaton);
     kassert (pos != context_map_.end ());
 
     automaton_context* c = pos->second;

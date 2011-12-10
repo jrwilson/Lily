@@ -44,53 +44,31 @@ public:
   };
 
 private:
-  struct compare_vm_area {
-    bool
-    operator () (const vm_area_interface* const x,
-		 const vm_area_interface* const y) const
-    {
-      return x->begin () < y->begin ();
-    }
-  };
-
-  struct contains_address {
-    const void* address;
-
-    contains_address (const void* a) :
-      address (a)
-    { }
-
-    bool
-    operator () (const vm_area_interface* const x) const
-    {
-      return x->begin () <= address && address < x->end ();
-    }
-  };
-
+  // Automaton identifier.
   aid_t aid_;
-  /* Segments including privilege. */
+  // Segments including privilege.
   uint32_t code_segment_;
   uint32_t stack_segment_;
-
-  /* Table of action descriptors for guiding execution, checking bindings, etc. */
+  // Physical address of the automaton's page directory.
+  physical_address_t const page_directory_;
+  // Table of action descriptors for guiding execution, checking bindings, etc.
   typedef std::unordered_map<const void*, action, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, action> > > action_map_type;
   action_map_type action_map_;
-  // physical_address_t const page_directory_;
-  // /* Stack pointer (constant). */
-  // const void* const stack_pointer_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef std::vector<vm_area_interface*, system_allocator<vm_area_interface*> > memory_map_type;
   memory_map_type memory_map_;
-  // /* Default privilege for new VM_AREA_DATA. */
-  // paging_constants::page_privilege_t const page_privilege_;
+  // Heap area.
+  vm_heap_area* heap_area_;
+  // Stack area.
+  vm_stack_area* stack_area_;
 
 public:
   class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, action> {
   private:
-    typename action_map_type::const_iterator pos_;
+    action_map_type::const_iterator pos_;
     
   public:
-    const_action_iterator (const typename action_map_type::const_iterator& p) :
+    const_action_iterator (const action_map_type::const_iterator& p) :
       pos_ (p)
     { }
 
@@ -116,81 +94,40 @@ private:
     return !(x->end () <= y->begin () || y->end () <= x->begin ());
   }
 
-  typename memory_map_type::const_iterator
+  struct compare_vm_area {
+    bool
+    operator () (const vm_area_interface* const x,
+		 const vm_area_interface* const y) const
+    {
+      return x->begin () < y->begin ();
+    }
+  };
+
+  struct contains_address {
+    const void* address;
+
+    contains_address (const void* a) :
+      address (a)
+    { }
+
+    bool
+    operator () (const vm_area_interface* const x) const
+    {
+      return x->begin () <= address && address < x->end ();
+    }
+  };
+
+  memory_map_type::const_iterator
   find_by_address (const vm_area_interface* area) const
   {
     return std::lower_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
   }
 
-  typename memory_map_type::iterator
+  memory_map_type::iterator
   find_by_address (const vm_area_interface* area)
   {
     return std::lower_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
   }
-
-  // typename memory_map_type::iterator
-  // find_by_size (size_t size)
-  // {
-  //   typename memory_map_type::iterator pos;
-  //   for (pos = memory_map_.begin ();
-  //   	 pos != memory_map_.end ();
-  //   	 ++pos) {
-  //     if ((*pos)->type () == VM_AREA_FREE && size <= (*pos)->size ()) {
-  //   	break;
-  //     }
-  //   }
-    
-  //   return pos;
-  // }
-
-  // typename memory_map_type::iterator
-  // merge (typename memory_map_type::iterator pos)
-  // {
-  //   if (pos != memory_map_.end ()) {
-  //     typename memory_map_type::iterator next (pos);
-  //     ++next;
-  //     if (next != memory_map_.end ()) {
-  //   	vm_area_interface* temp = *next;
-  //   	if ((*pos)->merge (*temp)) {
-  //   	  memory_map_.erase (next);
-  //   	  destroy (temp, alloc_);
-  //   	}
-  //     }
-  //   }
-    
-  //   return pos;
-  // }
-
-  // void
-  // insert_into_free_area (typename memory_map_type::iterator pos,
-  // 			 vm_area_interface* area)
-  // {
-  //   kassert ((*pos)->type () == VM_AREA_FREE);
-  //   kassert (area->size () < (*pos)->size ());
-    
-  //   const void* left_begin = (*pos)->begin ();
-  //   const void* left_end = area->begin ();
-    
-  //   const void* right_begin = area->end ();
-  //   const void* right_end = (*pos)->end ();
-    
-  //   // Take out the old entry.
-  //   destroy (*pos, alloc_);
-  //   pos = memory_map_.erase (pos);
-    
-  //   // Split the area.
-  //   if (right_begin < right_end) {
-  //     pos = merge (memory_map_.insert (pos, new (alloc_) vm_free_area (right_begin, right_end)));
-  //   }
-  //   pos = merge (memory_map_.insert (pos, area));
-  //   if (left_begin < left_end) {
-  //     pos = merge (memory_map_.insert (pos, new (alloc_) vm_free_area (left_begin, left_end)));
-  //   }
-    
-  //   if (pos != memory_map_.begin ()) {
-  //     merge (--pos);
-  //   }
-  // }
 
   template <class Action>
   void
@@ -204,9 +141,15 @@ private:
 public:
 
   automaton (aid_t aid,
-	     descriptor_constants::privilege_t privilege) :
-    aid_ (aid)
+	     descriptor_constants::privilege_t privilege,
+	     physical_address_t page_directory) :
+    aid_ (aid),
+    page_directory_ (page_directory),
+    heap_area_ (0),
+    stack_area_ (0)
   {
+    kassert (is_aligned (page_directory, PAGE_SIZE));
+
     switch (privilege) {
     case descriptor_constants::RING0:
       code_segment_ = KERNEL_CODE_SELECTOR | descriptor_constants::RING0;
@@ -245,15 +188,14 @@ public:
   const void*
   stack_pointer () const
   {
-    kassert (0);
-    //return stack_pointer_;
+    kassert (stack_area_ != 0);
+    return stack_area_->end ();
   }
   
   physical_address_t
   page_directory () const
   {
-    kassert (0);
-    //return page_directory_;
+    return page_directory_;
   }
 
   uint32_t
@@ -261,7 +203,6 @@ public:
   {
     return code_segment_;
   }
-
 
   uint32_t
   stack_segment () const
@@ -276,7 +217,7 @@ public:
     kassert (area != 0);
     
     // Find the location to insert.
-    typename memory_map_type::iterator pos = find_by_address (area);
+    memory_map_type::iterator pos = find_by_address (area);
 
     // Ensure that the areas don't conflict.
     if (pos != memory_map_.begin ()) {
@@ -296,75 +237,103 @@ public:
     return true;
   }
   
-  // void
-  // remove_vm_area (vm_area_interface* area)
-  // {
-  //   kassert (area != 0);
-    
-  //   typename memory_map_type::iterator pos = std::find (memory_map_.begin (), memory_map_.end (), area);
-  //   kassert (pos != memory_map_.end ());
-  //   memory_map_.erase (pos);
-  //   destroy (area, system_alloc ());
-  // }
+  bool
+  insert_heap_area (vm_heap_area* area)
+  {
+    if (insert_vm_area (area)) {
+      heap_area_ = area;
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
+  bool
+  insert_stack_area (vm_stack_area* area)
+  {
+    if (insert_vm_area (area)) {
+      stack_area_ = area;
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
 
   void*
-  alloc (size_t size) __attribute__((warn_unused_result))
+  allocate (size_t size)
   {
-    kassert (0);
-    // kassert (size > 0);
-    
-    // typename memory_map_type::iterator pos = find_by_size (size);
-    // if (pos != memory_map_.end ()) {
-    //   void* retval = const_cast<void*> ((*pos)->begin ());
-    //   insert_into_free_area (pos, new (alloc_) vm_data_area (retval, static_cast<uint8_t*> (retval) + size, page_privilege_));
-    //   return retval;
-    // }
-    // else {
-    //   return 0;
-    // }
+    kassert (heap_area_ != 0);
+
+    if (size != 0) {
+      void* const old_end = const_cast<void*> (heap_area_->end ());
+      const void* const new_end = reinterpret_cast<uint8_t*> (old_end) + size;
+      // Find the heap.
+      memory_map_type::const_iterator pos = std::find (memory_map_.begin (), memory_map_.end (), heap_area_);
+      kassert (pos != memory_map_.end ());
+      // Move to the next.
+      ++pos;
+      if (new_end <= (*pos)->begin ()) {
+	// The allocation does not interfere with next area.  Success.
+	heap_area_->end (new_end);
+	return old_end;
+      }
+      else {
+	// Failure.
+	return 0;
+      }
+    }
+    else {
+      // Return the current end of the heap.
+      return const_cast<void*> (heap_area_->end ());
+    }
   }
 
   void*
   reserve (size_t size)
   {
-    kassert (0);
-    // kassert (size > 0);
-    
-    // typename memory_map_type::iterator pos = find_by_size (size);
-    
-    // if (pos != memory_map_.end ()) {
-    //   void* retval = const_cast<void*> ((*pos)->begin ());
-    //   insert_into_free_area (pos, new (alloc_) vm_reserved_area (retval, static_cast<uint8_t*> (retval) + size));
-    //   return retval;
-    // }
-    // else {
-    //   return 0;
-    // }
+    kassert (is_aligned (size, PAGE_SIZE));
+    kassert (heap_area_ != 0);
+    kassert (stack_area_ != 0);
+    kassert (heap_area_->end () <= stack_area_->begin ());
+
+    // Find the stack.
+    memory_map_type::reverse_iterator high = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
+    kassert (high != memory_map_.rend ());
+
+    // Find the area before the stack.
+    memory_map_type::reverse_iterator low = high + 1;
+    kassert (low != memory_map_.rend ());
+
+    do {
+      // Try to insert between the areas.
+      if (reinterpret_cast<size_t> ((*high)->begin ()) - reinterpret_cast<size_t> ((*low)->end ()) >= size) {
+	void* begin = const_cast<uint8_t*> (reinterpret_cast<const uint8_t*> ((*high)->begin ()) - size);
+	memory_map_.insert (low.base (), new (system_alloc ()) vm_reserved_area (begin, (*high)->begin ()));
+	return begin;
+      }
+      else {
+	// Try again.
+	++high;
+	++low;
+      }
+    } while ((*low) != heap_area_);
+
+    // No space.
+    return 0;
   }
-  
+
   void
   unreserve (const void* address)
   {
-    kassert (0);
-    // kassert (address != 0);
-    // kassert (is_aligned (address, PAGE_SIZE));
-    
-    // vm_reserved_area k (address, static_cast<const uint8_t*> (address) + PAGE_SIZE);
-    
-    // typename memory_map_type::iterator pos = find_by_address (&k);
-    // kassert (pos != memory_map_.end ());
-    // kassert ((*pos)->begin () == address);
-    // kassert ((*pos)->type () == VM_AREA_RESERVED);
-    
-    // vm_free_area* f = new (alloc_) vm_free_area ((*pos)->begin (), (*pos)->end ());
-    
-    // destroy (*pos, alloc_);
-    // pos = memory_map_.insert (memory_map_.erase (pos), f);
-    
-    // merge (pos);
-    // if (pos != memory_map_.begin ()) {
-    //   merge (--pos);
-    // }
+    // TODO: Use binary search.
+    memory_map_type::iterator pos = std::find_if (memory_map_.begin (), memory_map_.end (), contains_address (address));
+    kassert (pos != memory_map_.end ());
+
+    vm_area_interface* area = *pos;
+    memory_map_.erase (pos);
+    destroy (area, system_alloc ());
   }
 
   bool
