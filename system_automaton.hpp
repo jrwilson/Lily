@@ -14,10 +14,17 @@
   Justin R. Wilson
 */
 
+#include "types.hpp"
+#include "interrupt_descriptor_table.hpp"
+
+class automaton;
+
 namespace system_automaton {
+
+  extern automaton* system_automaton;
+
   void
-  run (const void* placement_begin,
-       const void* placement_end);
+  run ();
   
   void
   page_fault (const void* address,

@@ -25,11 +25,8 @@ static const size_t SWITCH_STACK_SIZE = 256;
 // Align the stack when switching and executing.
 static const size_t STACK_ALIGN = 16;
 
-template <class Alloc, template <typename> class Allocator>
 class scheduler {
 private:
-  typedef automaton<Alloc, Allocator> automaton_type;
-
   enum status_t {
     SCHEDULED,
     NOT_SCHEDULED
@@ -54,19 +51,16 @@ private:
 
   class automaton_context {
   private:
-    typedef std::deque<action_parameter, Allocator<action_parameter> > queue_type;
+    typedef std::deque<action_parameter, system_allocator<action_parameter> > queue_type;
     queue_type queue_;
-    typedef std::unordered_set<action_parameter, std::hash<action_parameter>, std::equal_to<action_parameter>, Allocator<action_parameter> > set_type;
+    typedef std::unordered_set<action_parameter, std::hash<action_parameter>, std::equal_to<action_parameter>, system_allocator<action_parameter> > set_type;
     set_type set_;
     
   public:
     status_t status;
-    automaton_type* automaton;
+    ::automaton* automaton;
     
-    automaton_context (Alloc& alloc,
-		       automaton_type* a) :
-      queue_ (typename queue_type::allocator_type (alloc)),
-      set_ (3, typename set_type::hasher (), typename set_type::key_equal (), typename set_type::allocator_type (alloc)),
+    automaton_context (::automaton* a) :
       status (NOT_SCHEDULED),
       automaton (a)
     { }
@@ -97,11 +91,10 @@ private:
   
   class execution_context {
   private:
-    binding_manager<Alloc, Allocator>& binding_manager_;
     uint32_t switch_stack_[SWITCH_STACK_SIZE];
     uint8_t value_buffer_[VALUE_BUFFER_SIZE];
 
-    automaton_type* automaton_;
+    automaton* automaton_;
     
     action_type_t type_;
     const void* action_entry_point_;
@@ -110,8 +103,8 @@ private:
 
     aid_t parameter_;
 
-    const typename binding_manager<Alloc, Allocator>::input_action_set_type* input_actions_;
-    typename binding_manager<Alloc, Allocator>::input_action_set_type::const_iterator input_action_pos_;
+    const typename binding_manager::input_action_set_type* input_actions_;
+    typename binding_manager::input_action_set_type::const_iterator input_action_pos_;
 
     void
     exec (uint32_t end_of_stack = -1) const
@@ -165,19 +158,30 @@ private:
       case PARAMETER:
       case AUTO_PARAMETER:
 	  // Copy the parameter to the stack.
-	  --stack_pointer;
-	  *stack_pointer = static_cast<uint32_t> (parameter_);
+	  --*stack_pointer = static_cast<uint32_t> (parameter_);
 	  break;
       }
 
-      asm volatile ("mov %0, %%eax\n"	// Load the new stack segment.
-		    "mov %%ax, %%ss\n"
-		    "mov %1, %%eax\n"	// Load the new stack pointer.
-		    "mov %%eax, %%esp\n"
-		    "pushl $0x0\n"	// Push a bogus instruction pointer so we can use the cdecl calling convention.
-		    "pushf\n"		// Push flags (EFLAGS).
-		    "pushl %2\n"	// Push the code segment (CS).
-		    "pushl %3\n"	// Push the instruction pointer (EIP).
+      // These instructions are obviously important but also have the side effect of backing the stack with frames if it doesn't exist.
+
+      // Push a bogus instruction pointer so we can use the cdecl calling convention.
+      --*stack_pointer = 0;
+
+      // Push the flags.
+      uint32_t eflags;
+      asm volatile ("pushf\n"
+		    "pop %%eax"
+		    "mov %%eax, %0" : "=m"(eflags) : : "%eax");
+      --*stack_pointer = eflags;
+
+      // Push the code segment.
+      --*stack_pointer = code_segment;
+
+      // Push the instruction pointer.
+      --*stack_pointer = reinterpret_cast<uint32_t> (action_entry_point_);
+
+      asm volatile ("mov %0, %%ss\n"	// Load the new stack segment.
+		    "mov %1, %%esp\n"	// Load the new stack pointer.
 		    "mov $0x0, %%eax\n"	// Clear the registers.
 		    "mov $0x0, %%ebx\n"
 		    "mov $0x0, %%ecx\n"
@@ -185,12 +189,11 @@ private:
 		    "mov $0x0, %%edi\n"
 		    "mov $0x0, %%esi\n"
 		    "mov $0x0, %%ebp\n"
-		    "iret\n" :: "m"(stack_segment), "m"(stack_pointer), "m"(code_segment), "m"(action_entry_point_) : "%eax", "%esp");
+		    "iret\n" :: "r"(stack_segment), "r"(stack_pointer));
     }
     
   public:
-    execution_context (binding_manager<Alloc, Allocator>& bm ) :
-      binding_manager_ (bm)
+    execution_context ()
     {
       clear ();
     }
@@ -201,7 +204,7 @@ private:
       automaton_ = 0;
     }
 
-    automaton_type*
+    automaton*
     current_automaton () const
     {
       kassert (automaton_ != 0);
@@ -213,7 +216,7 @@ private:
     {
       action_parameter ap = c->front ();
       c->pop ();
-      typename automaton_type::const_action_iterator pos = c->automaton->action_find (ap.action_entry_point);
+      typename automaton::const_action_iterator pos = c->automaton->action_find (ap.action_entry_point);
       if (pos != c->automaton->action_end ()) {
 	automaton_ = c->automaton;
 
@@ -259,7 +262,7 @@ private:
 	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
 	  if (output_status) {
 	    if (value_size_ == 0 || automaton_->verify_span (buffer, value_size_)) {
-	      input_actions_ = binding_manager_.get_bound_inputs (automaton_, action_entry_point_, parameter_mode_, parameter_);
+	      input_actions_ = binding_manager::get_bound_inputs (automaton_, action_entry_point_, parameter_mode_, parameter_);
 	      if (input_actions_ != 0) {
 		// Copy the value.
 		memcpy (value_buffer_, buffer, value_size_);
@@ -306,12 +309,11 @@ private:
 
   };
 
-  Alloc& alloc_;
   /* TODO:  Need one per core. */
   execution_context exec_context_;
-  typedef std::deque<automaton_context*, Allocator<automaton_context*> > queue_type;
+  typedef std::deque<automaton_context*, system_allocator<automaton_context*> > queue_type;
   queue_type ready_queue_;
-  typedef std::unordered_map<automaton_type*, automaton_context*, std::hash<automaton_type*>, std::equal_to<automaton_type*>, Allocator<std::pair<automaton_type* const, automaton_context*> > > context_map_type;
+  typedef std::unordered_map<automaton*, automaton_context*, std::hash<automaton*>, std::equal_to<automaton*>, system_allocator<std::pair<automaton* const, automaton_context*> > > context_map_type;
   context_map_type context_map_;
 
   void
@@ -338,32 +340,24 @@ private:
   }
 
 public:
-  scheduler (Alloc& a,
-	     binding_manager<Alloc, Allocator>& bm)  :
-    alloc_ (a),
-    exec_context_ (bm),
-    ready_queue_ (typename queue_type::allocator_type (a)),
-    context_map_ (3, typename context_map_type::hasher (), typename context_map_type::key_equal (), typename context_map_type::allocator_type (a))
-  { }
-
   void
-  add_automaton (automaton_type* automaton)
+  add_automaton (automaton* automaton)
   {
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
-    automaton_context* c = new (alloc_) automaton_context (alloc_, automaton);
+    automaton_context* c = new (system_alloc ()) automaton_context (automaton);
     std::pair<typename context_map_type::iterator, bool> r = context_map_.insert (std::make_pair (automaton, c));
     kassert (r.second);
   }
 
-  automaton_type*
+  automaton*
   current_automaton () const
   {
     return exec_context_.current_automaton ();
   }
 
   void
-  schedule_action (automaton_type* automaton,
+  schedule_action (automaton* automaton,
 		   const void* action_entry_point,
 		   aid_t parameter)
   {

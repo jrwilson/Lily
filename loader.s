@@ -32,7 +32,7 @@
 	PAGE_PRESENT equ (1 << 0)
 	PAGE_WRITABLE equ (1 << 1)
 	
-	PAGE_DIRECTORY_LOW_ENTRY equ (0 >> 2)
+	PAGE_DIRECTORY_LOW_ENTRY equ (0 >> 22)
 	PAGE_DIRECTORY_HIGH_ENTRY equ (KERNEL_VIRTUAL_BASE >> 22)
 	PAGE_TABLE_ENTRY equ ((KERNEL_VIRTUAL_BASE >> 12) & 0x3FF)
 
@@ -65,6 +65,10 @@ start:
 	;; Page table is mapped in both locations.
 	mov [page_directory + 4 * PAGE_DIRECTORY_LOW_ENTRY], ecx
 	mov [page_directory + 4 * PAGE_DIRECTORY_HIGH_ENTRY], ecx
+	;; Map page directory to itself.
+	mov ecx, page_directory
+	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
+	mov [page_directory + 4 * 1023], ecx
 	;; Initialize the page table.  Map the first 4MB.
 	mov eax, 0
 	mov ebx, 0x400000
@@ -93,16 +97,16 @@ highhalf:
 	;; Setup the stack in order to call kmain.
 	mov esp, stack_end
 
-	[extern ctors_begin]
-	[extern ctors_end]
-	mov  ebx, ctors_begin               ; call the constructors
-	jmp  .ctors_until_end
-.call_constructor:
-	call [ebx]
-	add  ebx,4
-.ctors_until_end:
-	cmp  ebx, ctors_end
-	jb   .call_constructor
+;; 	[extern ctors_begin]
+;; 	[extern ctors_end]
+;; 	mov  ebx, ctors_begin               ; call the constructors
+;; 	jmp  .ctors_until_end
+;; .call_constructor:
+;; 	call [ebx]
+;; 	add  ebx,4
+;; .ctors_until_end:
+;; 	cmp  ebx, ctors_end
+;; 	jb   .call_constructor
 	
 	;; Import the kmain symbol.
 	[extern kmain]

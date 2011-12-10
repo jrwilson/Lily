@@ -19,15 +19,14 @@
 
 using namespace std::rel_ops;
 
-size_t frame_manager::stack_allocator_size_;
-stack_allocator** frame_manager::stack_allocator_;
+frame_manager::allocator_list_type frame_manager::allocator_list_;
 
 void
 frame_manager::mark_as_used (frame_t frame)
 {
   stack_allocator** pos = find_allocator (frame);
 
-  if (pos != stack_allocator_ + stack_allocator_size_) {
+  if (pos != allocator_list_.end ()) {
     (*pos)->mark_as_used (frame);
   }
 }
@@ -36,10 +35,10 @@ frame_t
 frame_manager::alloc ()
 {
   /* Find an allocator with a free frame. */
-  stack_allocator** pos = std::find_if (stack_allocator_, stack_allocator_ + stack_allocator_size_, stack_allocator_not_full ());
+  stack_allocator** pos = std::find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
   
   /* Out of frames. */
-  kassert (pos != stack_allocator_ + stack_allocator_size_);
+  kassert (pos != allocator_list_.end ());
   
   return (*pos)->alloc ();
 }
@@ -50,7 +49,7 @@ frame_manager::incref (frame_t frame)
   stack_allocator** pos = find_allocator (frame);
 
   /* No allocator for frame. */
-  kassert (pos != stack_allocator_ + stack_allocator_size_);
+  kassert (pos != allocator_list_.end ());
 
   (*pos)->incref (frame);
 }

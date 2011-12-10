@@ -12,12 +12,12 @@
 */
 
 #include "stack_allocator.hpp"
+#include "system_allocator.hpp"
 
 const size_t stack_allocator::MAX_REGION_SIZE = 0x07FFF000;
 
 stack_allocator::stack_allocator (size_t begin,
-				  size_t end,
-				  placement_alloc& alloc) :
+				  size_t end) :
   begin_ (begin),
   end_ (end),
   free_head_ (0)
@@ -25,7 +25,7 @@ stack_allocator::stack_allocator (size_t begin,
   kassert (begin < end);
   
   const frame_entry_t size = end - begin;
-  entry_  = new (alloc) frame_entry_t[size];
+  entry_  = new (system_alloc ()) frame_entry_t[size];
   for (frame_entry_t k = 0; k < size; ++k) {
     entry_[k] = k + 1;
   }
@@ -56,15 +56,21 @@ stack_allocator::mark_as_used (size_t frame)
   kassert (frame >= begin_ && frame < end_);
   
   frame_entry_t frame_idx = frame - begin_;
-  /* Should be free. */
-  kassert (entry_[frame_idx] >= 0 && entry_[frame_idx] != STACK_ALLOCATOR_EOL);
-  /* Find the one that points to it. */
-  int idx;
-  for (idx = free_head_; idx != STACK_ALLOCATOR_EOL && entry_[idx] != frame_idx; idx = entry_[idx]) ;;
-  kassert (idx != STACK_ALLOCATOR_EOL && entry_[idx] == frame_idx);
-  /* Update the pointers. */
-  entry_[idx] = entry_[frame_idx];
-  entry_[frame_idx] = -1;
+  // Is the frame free?
+  if (entry_[frame_idx] >= 0 && entry_[frame_idx] != STACK_ALLOCATOR_EOL) {
+    /* Find the one that points to it. */
+    if (free_head_ != frame_idx) {
+      int idx;
+      for (idx = free_head_; idx != STACK_ALLOCATOR_EOL && entry_[idx] != frame_idx; idx = entry_[idx]) ;;
+      kassert (idx != STACK_ALLOCATOR_EOL && entry_[idx] == frame_idx);
+      /* Update the pointers. */
+      entry_[idx] = entry_[frame_idx];
+    }
+    else {
+      free_head_ = entry_[frame_idx];
+    }
+    entry_[frame_idx] = -1;
+  }
 }
 
 size_t

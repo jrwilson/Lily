@@ -132,9 +132,6 @@ page_directory::initialize_with_current (physical_address_t address)
   entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (physical_address_to_frame (address), paging_constants::PRESENT);
 }
 
-page_directory vm_manager::kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
-page_table vm_manager::low_page_table __attribute__ ((aligned (PAGE_SIZE)));
-
 void
 vm_manager::switch_to_directory (physical_address_t address)
 {
@@ -158,88 +155,11 @@ vm_manager::get_page_table (const void* address)
   return reinterpret_cast<page_table*> (0xFFC00000 + get_page_directory_entry (address) * PAGE_SIZE);
 }
 
-void
-vm_manager::initialize (const void* placement_begin,
-			const void* placement_end)
-{
-  physical_address_t low_page_table_paddr = logical_to_physical (&low_page_table, KERNEL_VIRTUAL_BASE);
-  physical_address_t kernel_page_directory_paddr = logical_to_physical (&kernel_page_directory, KERNEL_VIRTUAL_BASE);
-
-  /* Clear the page directory and page table. */
-  low_page_table.clear ();
-  kernel_page_directory.clear (kernel_page_directory_paddr);
-
-  /* Insert the page table. */
-  kernel_page_directory.entry[get_page_directory_entry (0)] = page_directory_entry (physical_address_to_frame (low_page_table_paddr), paging_constants::PRESENT);
-  kernel_page_directory.entry[get_page_directory_entry (KERNEL_VIRTUAL_BASE)] = page_directory_entry (physical_address_to_frame (low_page_table_paddr), paging_constants::PRESENT);
-
-  const void* begin;
-  const void* end;
-
-  /* Identity map the first 1MB. */
-  begin = 0;
-  end = ONE_MEGABYTE;
-  kassert (end < INITIAL_LOGICAL_LIMIT);
-  for (; begin < end; begin = static_cast<const uint8_t*> (begin) + PAGE_SIZE) {
-    const frame_t frame = physical_address_to_frame (logical_to_physical (begin, 0));
-    low_page_table.entry[get_page_table_entry (begin)] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
-    frame_manager::mark_as_used (frame);
-  }
-
-  /* Map the kernel text. */
-  begin = align_down (&text_begin, PAGE_SIZE);
-  end = align_up (&text_end, PAGE_SIZE);
-  kassert (end < INITIAL_LOGICAL_LIMIT);
-  for (; begin < end; begin = static_cast<const uint8_t*> (begin) + PAGE_SIZE) {
-    const frame_t frame = physical_address_to_frame (logical_to_physical (begin, KERNEL_VIRTUAL_BASE));
-    low_page_table.entry[get_page_table_entry (begin)] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::PRESENT);
-    frame_manager::mark_as_used (frame);
-  }
-
-  /* Map the kernel read-only data. */
-  begin = align_down (&rodata_begin, PAGE_SIZE);
-  end = align_up (&rodata_end, PAGE_SIZE);
-  kassert (end < INITIAL_LOGICAL_LIMIT);
-  for (; begin < end; begin = static_cast<const uint8_t*> (begin) + PAGE_SIZE) {
-    const frame_t frame = physical_address_to_frame (logical_to_physical (begin, KERNEL_VIRTUAL_BASE));
-    low_page_table.entry[get_page_table_entry (begin)] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::PRESENT);
-    frame_manager::mark_as_used (frame);
-  }
-
-  /* Map the kernel data. */
-  begin = align_down (&data_begin, PAGE_SIZE);
-  end = align_up (&data_end, PAGE_SIZE);
-  kassert (end < INITIAL_LOGICAL_LIMIT);
-  for (; begin < end; begin = static_cast<const uint8_t*> (begin) + PAGE_SIZE) {
-    const frame_t frame = physical_address_to_frame (logical_to_physical (begin, KERNEL_VIRTUAL_BASE));
-    low_page_table.entry[get_page_table_entry (begin)] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
-    frame_manager::mark_as_used (frame);
-  }
-
-  /* Map the memory allocated by placement. */
-  begin = align_down (placement_begin, PAGE_SIZE);
-  end = align_up (placement_end, PAGE_SIZE);
-  kassert (end < INITIAL_LOGICAL_LIMIT);
-  for (; begin < end; begin = static_cast<const uint8_t*> (begin) + PAGE_SIZE) {
-    const frame_t frame = physical_address_to_frame (logical_to_physical (begin, KERNEL_VIRTUAL_BASE));
-    low_page_table.entry[get_page_table_entry (begin)] = page_table_entry (frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE, paging_constants::PRESENT);
-    frame_manager::mark_as_used (frame);
-  }
-
-  switch_to_directory (kernel_page_directory_paddr);
-}
-
 physical_address_t
 vm_manager::page_directory_physical_address (void)
 {
   page_directory* page_directory = get_page_directory ();
   return frame_to_physical_address (page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_);
-}
-
-void*
-vm_manager::page_directory_logical_address (void)
-{
-  return get_page_directory ();
 }
 
 void

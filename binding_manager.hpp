@@ -18,18 +18,16 @@
 #include <unordered_map>
 #include "automaton.hpp"
 
-template <class Alloc, template <typename> class Allocator>
 class binding_manager {
 private:
-  typedef automaton<Alloc, Allocator> automaton_type;
 
   struct output_action {
-    automaton_type* const automaton;
+    ::automaton* const automaton;
     const void* const action_entry_point;
     parameter_mode_t parameter_mode;
     aid_t const parameter;
 
-    output_action (automaton_type* const a,
+    output_action (::automaton* const a,
 		   const void* aep,
 		   parameter_mode_t pm,
 		   aid_t p) :
@@ -47,12 +45,12 @@ private:
   };
 
   struct input_action {
-    automaton_type* const automaton;
+    ::automaton* const automaton;
     const void* const action_entry_point;
     parameter_mode_t parameter_mode;
     aid_t const parameter;
 
-    input_action (automaton_type* const a,
+    input_action (::automaton* const a,
 		  const void* aep,
 		  parameter_mode_t pm,
 		  aid_t p) :
@@ -70,52 +68,46 @@ private:
   };
 
 public:
-  typedef std::unordered_set<input_action, std::hash<input_action>, std::equal_to<input_action>, Allocator<input_action> > input_action_set_type;
+  typedef std::unordered_set<input_action, std::hash<input_action>, std::equal_to<input_action>, system_allocator<input_action> > input_action_set_type;
 
 private:
-  Alloc& alloc_;
-  typedef std::unordered_map<output_action, input_action_set_type, std::hash<output_action>, std::equal_to<output_action>, Allocator<std::pair<const output_action, input_action_set_type> > > bindings_type;
-  bindings_type bindings_;
+  typedef std::unordered_map<output_action, input_action_set_type, std::hash<output_action>, std::equal_to<output_action>, system_allocator<std::pair<const output_action, input_action_set_type> > > bindings_type;
+  static bindings_type bindings_;
 
   void
-  bind_ (automaton_type* output_automaton,
+  bind_ (automaton* output_automaton,
 	 const void* output_action_entry_point,
 	 parameter_mode_t output_parameter_mode,
 	 aid_t output_parameter,
-	 automaton_type* input_automaton,
+	 automaton* input_automaton,
 	 const void* input_action_entry_point,
 	 parameter_mode_t input_parameter_mode,
 	 aid_t input_parameter)
   {
     // Check the output action dynamically.
     kassert (output_automaton != 0);
-    typename automaton_type::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
+    typename automaton::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
     kassert (output_pos != output_automaton->action_end () && output_pos->type == OUTPUT);
 
     // Check the input action dynamically.
     kassert (input_automaton != 0);
-    typename automaton_type::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
+    typename automaton::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
     kassert (input_pos != input_automaton->action_end () && input_pos->type == INPUT);
 
     // TODO:  All of the bind checks.
     output_action oa (output_automaton, output_action_entry_point, output_parameter_mode, output_parameter);
     input_action ia (input_automaton, input_action_entry_point, input_parameter_mode, input_parameter);
     
-    std::pair<typename bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type (3, typename input_action_set_type::hasher (), typename input_action_set_type::key_equal (), typename input_action_set_type::allocator_type (alloc_))));
+    std::pair<typename bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type ()));
     r.first->second.insert (ia);
   }
 
 public:
-  binding_manager (Alloc& a) :
-    alloc_ (a),
-    bindings_ (3, typename bindings_type::hasher (), typename bindings_type::key_equal (), typename bindings_type::allocator_type (a))
-  { }
-
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (void),
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (void))
   {
     // Check both actions statically.
@@ -130,9 +122,9 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (void),
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (typename InputAction::parameter_type),
 	typename InputAction::parameter_type input_parameter)
   {
@@ -148,9 +140,9 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (void),
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (typename InputAction::value_type))
   {
     // Check both actions statically.
@@ -165,9 +157,9 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (void),
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::value_type),
 	typename InputAction::parameter_type input_parameter)
   {
@@ -183,10 +175,10 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (void))
   {
     // Check both actions statically.
@@ -201,10 +193,10 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (typename InputAction::parameter_type),
 	typename InputAction::parameter_type input_parameter)
   {
@@ -220,10 +212,10 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (typename InputAction::value_type))
   {
     // Check both actions statically.
@@ -238,10 +230,10 @@ public:
 
   template <class OutputAction, class InputAction>
   void
-  bind (automaton_type* output_automaton,
+  bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
-	automaton_type* input_automaton,
+	automaton* input_automaton,
 	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::value_type),
 	typename InputAction::parameter_type input_parameter)
   {
@@ -255,8 +247,8 @@ public:
 	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter));
   }
   
-  const binding_manager::input_action_set_type*
-  get_bound_inputs (automaton<Alloc, Allocator>* automaton,
+  static const binding_manager::input_action_set_type*
+  get_bound_inputs (automaton* automaton,
 		    const void* action_entry_point,
 		    parameter_mode_t parameter_mode,
 		    aid_t parameter)

@@ -346,9 +346,41 @@ This will require buffers which is the immediate next order of business.
 On second thought, its easier to delay the initialization of data structures requiring dynamic memory in static objects.
 This simplified the problem tremendously.
 
+2011-12-09
+
+Most of my work recently has been on actions.
+There are three kinds of actions: input, output, and internal.
+Actions have an optional parameter and input and output actions can optionally consume/produce values.
+There are a number of things we would like to do with actions.
+First, we would like to execute them.
+Each action has an action entry point which is basically a function pointer.
+Executing an action effectively calls the function.
+The stack setup for the function will include the associated parameters and values.
+Secone, we would like to bind input actions to output actions.
+To be safe, we would like types of the values to match.
+We can check this at compile time using action traits which define the action category, parameter status and type, and value status and type.
+See action_traits.hpp.
+One important "discovery" was to duplicate the information contained in the traits into static constant member variables.
+The types associated with the action traits allow us to check the properties of the associated types and dispatch on them at compile time.
+The values associated with the action traits also allow us to check certain properties at compile time using static assertions.
+(In my opinion, the checks using the static assertions are cleaner that the same checks with types because we can use the logical operators and they don't require dispatching.)
+The values associated with the action traits are used at run-time to capture the relevant information about actions, i.e., its category, parameter mode, and size of the value.
+Furthermore, the values can be checked to agree with the types so we can have confidence that run-time information reflects the compile-time information.
+
+In the future, we will need to do true reflection and check types at run-time.
+My plan is to associate a type descriptor (perhaps via name mangling) with each action and then check signatures at run-time.
+The checks need only be performed when binding.
+Regardless, the compile-time checks still apply.
+
+
+
+
+
 
 Implement segment selectors.
-Reevaluate logical/physical address.
 Take out page scrub in page_handler.
 Implement a better allocator (or improve existing one).
 Memory alignment.
+
+wasted stacked in loader
+arguments to kmain could be passed through stack

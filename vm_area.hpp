@@ -27,290 +27,404 @@
 #define PAGE_RESERVED_ERROR (1 << 3)
 #define PAGE_INSTRUCTION_ERROR (1 << 4)
 
-enum vm_area_type_t {
-  VM_AREA_TEXT,
-  VM_AREA_RODATA,
-  VM_AREA_DATA,
-  VM_AREA_STACK,
-  VM_AREA_RESERVED,
-  VM_AREA_FREE,
-};
+    // begin_ (align_down (b, PAGE_SIZE)),
+    // end_ (align_up (e, PAGE_SIZE)),
+// kassert (begin_ < end_);
 
-class vm_area_base {
-protected:
-  vm_area_type_t type_;
-  const void* begin_;
-  const void* end_;
-  paging_constants::page_privilege_t page_privilege_;
+  // inline size_t
+  // size () const
+  // {
+  //   return (reinterpret_cast<size_t> (end_) - reinterpret_cast<size_t> (begin_));
+  // }
 
+  // virtual paging_constants::page_privilege_t
+  // page_privilege () const = 0;
+
+  // virtual bool
+  // merge (const vm_area_base& other) = 0;
+
+class vm_area_interface {
 public:  
-
-  vm_area_base (vm_area_type_t t,
-		const void* b,
-		const void* e,
-		paging_constants::page_privilege_t pp) :
-    type_ (t),
-    begin_ (align_down (b, PAGE_SIZE)),
-    end_ (align_up (e, PAGE_SIZE)),
-    page_privilege_ (pp)
-  {
-    kassert (end_ == 0 || begin_ < end_);
-  }
-
-  inline vm_area_type_t 
-  type () const
-  {
-    return type_;
-  }
-
-  inline const void*
-  begin () const
-  {
-    return begin_;
-  }
-
-  inline const void*
-  end () const
-  {
-    return end_;
-  }
-
-  inline size_t
-  size () const
-  {
-    return (reinterpret_cast<size_t> (end_) - reinterpret_cast<size_t> (begin_));
-  }
-
-  inline paging_constants::page_privilege_t
-  page_privilege () const
-  {
-    return page_privilege_;
-  }
-
-  virtual bool
-  merge (const vm_area_base& other) = 0;
+  virtual const void*
+  begin () const = 0;
+  
+  virtual const void*
+  end () const = 0;
 
   virtual void
   page_fault (const void* address,
 	      uint32_t error,
 	      registers*) = 0;
-
-  virtual bool
-  is_data_area () const = 0;
 };
 
-class vm_text_area : public vm_area_base {
-public:
-  vm_text_area (const void* begin,
-		const void* end,
-		paging_constants::page_privilege_t page_privilege) :
-    vm_area_base (VM_AREA_TEXT, begin, end, page_privilege)
-  { }
+class vm_reserved_area : public vm_area_interface {
+private:
+  const void* const begin_;
+  const void* const end_;
 
-  bool
-  merge (const vm_area_base&)
-  {
-    return false;
-  }
-
-  void
-  page_fault (const void*,
-	      uint32_t,
-	      registers*)
-  {
-    // TODO
-    kassert (0);
-  }
-
-  virtual bool
-  is_data_area () const
-  {
-    return false;
-  }
-};
-
-class vm_rodata_area : public vm_area_base {
-public:
-  vm_rodata_area (const void* begin,
-		  const void* end,
-		  paging_constants::page_privilege_t page_privilege) :
-    vm_area_base (VM_AREA_RODATA, begin, end, page_privilege)
-  { }
-
-  bool
-  merge (const vm_area_base&)
-  {
-    return false;
-  }
-
-  void
-  page_fault (const void*,
-	      uint32_t,
-	      registers*)
-  {
-    // TODO
-    kassert (0);
-  }
-
-  virtual bool
-  is_data_area () const
-  {
-    return true;
-  }
-};
-
-class vm_data_area : public vm_area_base {
-public:
-  vm_data_area (const void* begin,
-		const void* end,
-		paging_constants::page_privilege_t page_privilege) :
-    vm_area_base (VM_AREA_DATA, begin, end, page_privilege)
-  { }
-
-  bool
-  merge (const vm_area_base& other)
-  {
-    if (type_ == other.type () &&
-	end_ == other.begin () &&
-	page_privilege_ == other.page_privilege ()) {
-      end_ = other.end ();
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
-
-  void
-  page_fault (const void* address,
-	      uint32_t error,
-	      registers*)
-  {
-    /* Fault should come from not being present. */
-    kassert ((error & PAGE_PROTECTION_ERROR) == 0);
-    /* Fault should come from data. */
-    kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
-    /* Back the request with a frame. */
-    vm_manager::map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
-    /* Clear the frame. */
-    /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
-    memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
-  }
-
-  virtual bool
-  is_data_area () const
-  {
-    return true;
-  }
-};
-
-class vm_stack_area : public vm_area_base {
-public:
-  vm_stack_area (const void* begin,
-		 const void* end,
-		 paging_constants::page_privilege_t page_privilege) :
-    vm_area_base (VM_AREA_STACK, begin, end, page_privilege)
-  { }
-
-  bool
-  merge (const vm_area_base&)
-  {
-    return false;
-  }
-
-  void
-  page_fault (const void*,
-	      uint32_t,
-	      registers*)
-  {
-    // TODO
-    kassert (0);
-  }
-
-  virtual bool
-  is_data_area () const
-  {
-    return true;
-  }
-
-  void
-  back_with_frames () const
-  {
-    const void* ptr;
-    for (ptr = begin_; ptr < end_; ptr = static_cast<const uint8_t*> (ptr) + PAGE_SIZE) {
-      vm_manager::map (ptr, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
-    }
-  }
-};
-
-class vm_reserved_area : public vm_area_base {
 public:
   vm_reserved_area (const void* begin,
 		    const void* end) :
-    vm_area_base (VM_AREA_RESERVED, begin, end, paging_constants::SUPERVISOR)
-  { }
-
-  bool
-  merge (const vm_area_base&)
+    begin_ (align_down (begin, PAGE_SIZE)),
+    end_ (align_up (end, PAGE_SIZE))
   {
-    return false;
+    kassert ((end_ == 0 && end_ < begin_) || begin_ < end_);
+  }
+
+  const void* begin () const
+  {
+    return begin_;
+  }
+
+  const void* end () const
+  {
+    return end_;
   }
 
   void
   page_fault (const void*,
 	      uint32_t,
-	      registers* regs)
-  {
-    // There is a bug in the kernel.  A reserved memory area was not backed.
-    kputs ("EIP = "); kputx32 (regs->eip); kputs ("\n");
-    kassert (0);
-  }
-
-  virtual bool
-  is_data_area () const
-  {
-    return false;
-  }
-};
-
-class vm_free_area : public vm_area_base {
-public:
-  vm_free_area (const void* begin,
-		const void* end) :
-    vm_area_base (VM_AREA_FREE, begin, end, paging_constants::SUPERVISOR)
-  { }
-
-  bool
-  merge (const vm_area_base& other)
-  {
-    if (type_ == other.type () &&
-	end_ == other.begin () &&
-	page_privilege_ == other.page_privilege ()) {
-      end_ = other.end ();
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
-
-  void
-  page_fault (const void* address,
-	      uint32_t,
 	      registers*)
   {
-    kputs ("Page fault in free area\n");
-    kputs ("address = "); kputp (address); kputs ("\n");
-
     // TODO
     kassert (0);
   }
+};
 
-  virtual bool
-  is_data_area () const
+class vm_text_area : public vm_area_interface {
+private:
+  const void* const begin_;
+  const void* const end_;
+
+public:
+  vm_text_area (const void* begin,
+		const void* end) :
+    begin_ (align_down (begin, PAGE_SIZE)),
+    end_ (align_up (end, PAGE_SIZE))
   {
-    return false;
+    kassert (begin_ < end_);
+  }
+
+  const void* begin () const
+  {
+    return begin_;
+  }
+
+  const void* end () const
+  {
+    return end_;
+  }
+
+  void
+  page_fault (const void*,
+	      uint32_t,
+	      registers*)
+  {
+    // TODO
+    kassert (0);
   }
 };
+
+class vm_rodata_area : public vm_area_interface {
+private:
+  const void* const begin_;
+  const void* const end_;
+
+public:
+  vm_rodata_area (const void* begin,
+		const void* end) :
+    begin_ (align_down (begin, PAGE_SIZE)),
+    end_ (align_up (end, PAGE_SIZE))
+  {
+    kassert (begin_ < end_);
+  }
+
+  const void* begin () const
+  {
+    return begin_;
+  }
+
+  const void* end () const
+  {
+    return end_;
+  }
+
+  void
+  page_fault (const void*,
+	      uint32_t,
+	      registers*)
+  {
+    // TODO
+    kassert (0);
+  }
+};
+
+class vm_data_area : public vm_area_interface {
+private:
+  const void* const begin_;
+  const void* const end_;
+
+public:
+  vm_data_area (const void* begin,
+		const void* end) :
+    begin_ (align_down (begin, PAGE_SIZE)),
+    end_ (align_up (end, PAGE_SIZE))
+  {
+    kassert (begin_ < end_);
+  }
+
+  const void* begin () const
+  {
+    return begin_;
+  }
+
+  const void* end () const
+  {
+    return end_;
+  }
+
+  void
+  page_fault (const void*,
+	      uint32_t,
+	      registers*)
+  {
+    // TODO
+    kassert (0);
+  }
+};
+
+class vm_heap_area : public vm_area_interface {
+private:
+  const void* begin_;
+  const uint8_t* cursor_;
+  const void* end_;
+
+public:
+  vm_heap_area (const void* begin) :
+    begin_ (align_down (begin, PAGE_SIZE)),
+    cursor_ (reinterpret_cast<const uint8_t*> (begin_)),
+    end_ (static_cast<const uint8_t*> (begin_) + PAGE_SIZE)
+  {
+    kassert (begin_ < end_);
+  }
+
+  const void* begin () const
+  {
+    return begin_;
+  }
+
+  const void* end () const
+  {
+    return end_;
+  }
+
+  const void*
+  allocate (size_t size)
+  {
+    const void* retval = cursor_;
+    cursor_ += size;
+    if (cursor_ > end_) {
+      end_ = align_up (cursor_, PAGE_SIZE);
+    }
+    return retval;
+  }
+
+  void
+  page_fault (const void*,
+	      uint32_t,
+	      registers*)
+  {
+    // TODO
+    kassert (0);
+  }
+};
+
+class vm_stack_area : public vm_area_interface {
+private:
+  const void* const begin_;
+  const void* const end_;
+
+public:
+  vm_stack_area (const void* begin,
+		const void* end) :
+    begin_ (align_down (begin, PAGE_SIZE)),
+    end_ (align_up (end, PAGE_SIZE))
+  {
+    kassert (begin_ < end_);
+  }
+
+  const void* begin () const
+  {
+    return begin_;
+  }
+
+  const void* end () const
+  {
+    return end_;
+  }
+
+  void
+  page_fault (const void*,
+	      uint32_t,
+	      registers*)
+  {
+    // TODO
+    kassert (0);
+  }
+};
+
+// class vm_data_area : public vm_area_base {
+// public:
+//   vm_data_area (const void* begin,
+// 		const void* end,
+// 		paging_constants::page_privilege_t page_privilege) :
+//     vm_area_base (VM_AREA_DATA, begin, end, page_privilege)
+//   { }
+
+//   bool
+//   merge (const vm_area_base& other)
+//   {
+//     if (type_ == other.type () &&
+// 	end_ == other.begin () &&
+// 	page_privilege_ == other.page_privilege ()) {
+//       end_ = other.end ();
+//       return true;
+//     }
+//     else {
+//       return false;
+//     }
+//   }
+
+//   void
+//   page_fault (const void* address,
+// 	      uint32_t error,
+// 	      registers*)
+//   {
+//     /* Fault should come from not being present. */
+//     kassert ((error & PAGE_PROTECTION_ERROR) == 0);
+//     /* Fault should come from data. */
+//     kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
+//     /* Back the request with a frame. */
+//     vm_manager::map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
+//     /* Clear the frame. */
+//     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
+//     memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+//   }
+
+//   virtual bool
+//   is_data_area () const
+//   {
+//     return true;
+//   }
+// };
+
+// class vm_stack_area : public vm_area_base {
+// public:
+//   vm_stack_area (const void* begin,
+// 		 const void* end,
+// 		 paging_constants::page_privilege_t page_privilege) :
+//     vm_area_base (VM_AREA_STACK, begin, end, page_privilege)
+//   { }
+
+//   bool
+//   merge (const vm_area_base&)
+//   {
+//     return false;
+//   }
+
+//   void
+//   page_fault (const void*,
+// 	      uint32_t,
+// 	      registers*)
+//   {
+//     // TODO
+//     kassert (0);
+//   }
+
+//   virtual bool
+//   is_data_area () const
+//   {
+//     return true;
+//   }
+
+//   void
+//   back_with_frames () const
+//   {
+//     const void* ptr;
+//     for (ptr = begin_; ptr < end_; ptr = static_cast<const uint8_t*> (ptr) + PAGE_SIZE) {
+//       vm_manager::map (ptr, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
+//     }
+//   }
+// };
+
+// class vm_reserved_area : public vm_area_base {
+// public:
+//   vm_reserved_area (const void* begin,
+// 		    const void* end) :
+//     vm_area_base (VM_AREA_RESERVED, begin, end, paging_constants::SUPERVISOR)
+//   { }
+
+//   bool
+//   merge (const vm_area_base&)
+//   {
+//     return false;
+//   }
+
+//   void
+//   page_fault (const void*,
+// 	      uint32_t,
+// 	      registers* regs)
+//   {
+//     // There is a bug in the kernel.  A reserved memory area was not backed.
+//     kputs ("EIP = "); kputx32 (regs->eip); kputs ("\n");
+//     kassert (0);
+//   }
+
+//   virtual bool
+//   is_data_area () const
+//   {
+//     return false;
+//   }
+// };
+
+// class vm_free_area : public vm_area_base {
+// public:
+//   vm_free_area (const void* begin,
+// 		const void* end) :
+//     vm_area_base (VM_AREA_FREE, begin, end, paging_constants::SUPERVISOR)
+//   { }
+
+//   bool
+//   merge (const vm_area_base& other)
+//   {
+//     if (type_ == other.type () &&
+// 	end_ == other.begin () &&
+// 	page_privilege_ == other.page_privilege ()) {
+//       end_ = other.end ();
+//       return true;
+//     }
+//     else {
+//       return false;
+//     }
+//   }
+
+//   void
+//   page_fault (const void* address,
+// 	      uint32_t,
+// 	      registers*)
+//   {
+//     kputs ("Page fault in free area\n");
+//     kputs ("address = "); kputp (address); kputs ("\n");
+
+//     // TODO
+//     kassert (0);
+//   }
+
+//   virtual bool
+//   is_data_area () const
+//   {
+//     return false;
+//   }
+// };
 
 #endif /* __vm_area_hpp__ */

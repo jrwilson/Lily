@@ -15,7 +15,6 @@
 */
 
 #include "kassert.hpp"
-#include "placement_allocator.hpp"
 #include <utility>
 
 using namespace std::rel_ops;
@@ -40,6 +39,8 @@ using namespace std::rel_ops;
   Share a page 32,767 times seems reasonable so I will use the more space-efficient 15-bit entries.
 */
 
+class system_alloc;
+
 class stack_allocator {
 private:
   typedef int16_t frame_entry_t;
@@ -54,8 +55,8 @@ public:
   static const size_t MAX_REGION_SIZE;
 
   stack_allocator (size_t begin,
-		   size_t end,
-		   placement_alloc& alloc);
+		   size_t end);
+
   size_t
   begin () const;
 

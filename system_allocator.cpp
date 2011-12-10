@@ -17,16 +17,7 @@
 #include <new>
 #include "kassert.hpp"
 #include "vm_area.hpp"
-
-// A call to alloc () might call automaton->alloc ().
-// automaton->alloc () might call alloc () to create data structures.
-// The recursive calls must succeed without calling automaton->alloc (), otherwise, infinite recursion.
-// If we can assume an upper bound on the memory allocated by the recursive call, then we can ensure the recursive calls will succeed by having that must extra memory on hand.
-// THE CURRENT IMPLEMENTATION DOES NOT MEET THIS REQUIREMENT.
-// Mainly because it uses a dynamic array.
-// In order to meet this requirement, one needs to use something like a list or tree where inserting can be performed in constant space.
-
-static const size_t RESERVE_AMOUNT = PAGE_SIZE;
+#include "system_automaton.hpp"
 
 static const uint32_t MAGIC = 0x7ACEDEAD;
 
@@ -46,9 +37,13 @@ struct system_alloc::chunk_header {
   { }
 };
 
+system_alloc::chunk_header* system_alloc::first_header_ = 0;
+system_alloc::chunk_header* system_alloc::last_header_ = 0;
+const void* system_alloc::heap_end_ = 0;
+
 system_alloc::chunk_header*
 system_alloc::find_header (chunk_header* start,
-			 size_t size) const
+			 size_t size)
 {
   for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
   return start;
@@ -96,28 +91,40 @@ system_alloc::merge_header (chunk_header* ptr)
 void*
 system_alloc::allocate (size_t size)
 {
-  kassert (is_aligned (size, PAGE_SIZE));
-
-  switch (status_) {
-  case NORMAL:
-    {
-      return automaton_->alloc (size);
-    }
-    break;
-  case BOOTING:
-    {
-      void* retval = const_cast<void*> (static_cast<const void*> (boot_end_));
-      boot_end_ += size;
-      boot_end_ = static_cast<uint8_t*> (const_cast<void*> (align_up (boot_end_, PAGE_SIZE)));
-      // Back the memory with frames to avoid page faults when the memory map is incomplete.
-      // Page faults are okay later.
-      for (uint8_t* address = static_cast<uint8_t*> (retval); address < boot_end_; address += PAGE_SIZE) {
-	vm_manager::map (address, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
-      }
-      return retval;
-    }
-    break;
+  if (system_automaton::system_automaton != 0) {
+    kassert (0);
   }
+  else {
+    void* retval = reinterpret_cast<uint8_t*> (last_header_ + 1) + last_header_->size;
+    // Check to make sure we don't run out of memory.
+    kassert (static_cast<uint8_t*> (retval) + size <= heap_end_);
+    return retval;
+  }
+  // switch (status_) {
+  // case NORMAL:
+  //   {
+  //     void* retval = automaton_->alloc (size);
+  //     kassert (retval != 0);
+  //     // Back with frames.
+  //     for (size_t x = 0; x < size; x += PAGE_SIZE) {
+  // 	vm_manager::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+  //     }
+  //   }
+  //   break;
+  // case BOOTING:
+  //   {
+  //     void* retval = const_cast<void*> (static_cast<const void*> (boot_end_));
+  //     boot_end_ += size;
+  //     boot_end_ = static_cast<uint8_t*> (const_cast<void*> (align_up (boot_end_, PAGE_SIZE)));
+  //     // Back the memory with frames to avoid page faults when the memory map is incomplete.
+  //     // Page faults are okay later.
+  //     for (uint8_t* address = static_cast<uint8_t*> (retval); address < boot_end_; address += PAGE_SIZE) {
+  // 	vm_manager::map (address, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+  //     }
+  //     return retval;
+  //   }
+  //   break;
+  // }
 
   // The system automaton allocated memory during an operation.
   kassert (0);
@@ -125,39 +132,56 @@ system_alloc::allocate (size_t size)
 }
 
 void
-system_alloc::boot (const void* boot_begin,
-		    const void* boot_end)
+system_alloc::initialize (void* begin,
+			  const void* end)
 {
-  status_ = BOOTING;
-  boot_begin_ = static_cast<uint8_t*> (const_cast<void*> (align_down (boot_begin, PAGE_SIZE)));
-  boot_end_ = static_cast<uint8_t*> (const_cast<void*> (align_up (boot_end, PAGE_SIZE)));
-}
+  // We use a page as the initial size of the heap.
+  const size_t request_size = PAGE_SIZE;
+  kassert (begin < end);
+  kassert (reinterpret_cast<size_t> (end) - reinterpret_cast<size_t> (begin) >= request_size);
 
-void
-system_alloc::normal (automaton_interface* a)
-{
-  kassert (a != 0);
-  automaton_ = a;
-  size_t request_size = align_up (sizeof (chunk_header) + RESERVE_AMOUNT, PAGE_SIZE);
-  first_header_ = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+  first_header_ = new (begin) chunk_header (request_size - sizeof (chunk_header));
   last_header_ = first_header_;
-
-  // Finish the memory map for the system automaton with data that has been allocated.
-  // We use a fixed-point style because inserting might cause the end to move.
-  void* boot_end_before;
-  while (true) {
-    boot_end_before = boot_end_;
-    vm_data_area* d = new (alloc (sizeof (vm_data_area))) vm_data_area (boot_begin_, boot_end_, paging_constants::SUPERVISOR);
-    kassert (automaton_->insert_vm_area (d));
-    if (boot_end_before == boot_end_) {
-      break;
-    }
-    else {
-      automaton_->remove_vm_area (d);
-    }
-  }
-  status_ = NORMAL;
+  heap_end_ = end;
 }
+
+const void*
+system_alloc::heap_begin ()
+{
+  return first_header_;
+}
+
+size_t
+system_alloc::heap_size ()
+{
+  return (reinterpret_cast<uint8_t*> (last_header_ + 1) + last_header_->size) - reinterpret_cast<uint8_t*> (first_header_);
+}
+
+// void
+// system_alloc::normal (automaton_interface* a)
+// {
+//   kassert (a != 0);
+//   automaton_ = a;
+//   size_t request_size = align_up (sizeof (chunk_header) + RESERVE_AMOUNT, PAGE_SIZE);
+//   first_header_ = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+//   last_header_ = first_header_;
+
+//   // Finish the memory map for the system automaton with data that has been allocated.
+//   // We use a fixed-point style because inserting might cause the end to move.
+//   void* boot_end_before;
+//   while (true) {
+//     boot_end_before = boot_end_;
+//     vm_data_area* d = new (alloc (sizeof (vm_data_area))) vm_data_area (boot_begin_, boot_end_, paging_constants::SUPERVISOR);
+//     kassert (automaton_->insert_vm_area (d));
+//     if (boot_end_before == boot_end_) {
+//       break;
+//     }
+//     else {
+//       automaton_->remove_vm_area (d);
+//     }
+//   }
+//   status_ = NORMAL;
+// }
 
 void*
 system_alloc::alloc (size_t size)
@@ -170,8 +194,7 @@ system_alloc::alloc (size_t size)
 
   /* Acquire more memory. */
   if (ptr == 0) {
-    size_t request_size = align_up (sizeof (chunk_header) + size + RESERVE_AMOUNT, PAGE_SIZE);
-    ptr = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+    ptr = new (allocate (sizeof (chunk_header) + size)) chunk_header (size);
 
     if (ptr > last_header_) {
       // Append.

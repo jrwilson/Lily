@@ -116,31 +116,19 @@ struct page_directory {
 
 class vm_manager {
 private:
-  static page_directory kernel_page_directory __attribute__ ((aligned (PAGE_SIZE)));
-  static page_table low_page_table __attribute__ ((aligned (PAGE_SIZE)));
+  vm_manager ();
+  vm_manager (const vm_manager&);
+  vm_manager& operator= (const vm_manager&);
 
-  friend class page_directory;
+public:
+  static physical_address_t
+  page_directory_physical_address (void);
 
   static page_directory*
   get_page_directory (void);
   
   static page_table*
   get_page_table (const void* address);
-
-  vm_manager ();
-  vm_manager (const vm_manager&);
-  vm_manager& operator= (const vm_manager&);
-
-public:
-  static void
-  initialize (const void* placement_begin,
-	      const void* placement_end);
-
-  static physical_address_t
-  page_directory_physical_address (void);
-  
-  static void*
-  page_directory_logical_address (void);
 
   static void
   map (const void* address,

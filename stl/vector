@@ -17,6 +17,7 @@
 #include <memory>
 #include <iterator>
 #include <type_traits>
+#include <algorithm>
 
 namespace std {
 

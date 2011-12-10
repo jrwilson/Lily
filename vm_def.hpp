@@ -3,7 +3,12 @@
 
 #include "types.hpp"
 
-#define PAGE_SIZE 0x1000
+typedef size_t frame_t;
+typedef size_t physical_address_t;
+
+/* Don't mess with memory below 1M or above 4G. */
+static const physical_address_t USABLE_MEMORY_BEGIN = 0x00100000;
+static const physical_address_t USABLE_MEMORY_END = 0xFFFFF000;
 
 /* Should agree with loader.s. */
 static const void* KERNEL_VIRTUAL_BASE = reinterpret_cast<const void*> (0xC0000000);
@@ -12,12 +17,14 @@ static const void* KERNEL_VIRTUAL_BASE = reinterpret_cast<const void*> (0xC00000
 static const void* INITIAL_LOGICAL_LIMIT = reinterpret_cast<const void*> (0xC0400000);
 
 /* Memory under one megabyte is not used. */
-static const void* ONE_MEGABYTE = reinterpret_cast<const void*> (0x00100000);
+static const size_t ONE_MEGABYTE = 0x00100000;
+
+/* Logical address above this address are using for page tables. */
+static const void* PAGING_AREA = reinterpret_cast<const void*> (0xFFC00000);
+
+#define PAGE_SIZE 0x1000
 
 static const int FRAME_SHIFT = 12;
-
-typedef size_t frame_t;
-typedef size_t physical_address_t;
 
 inline frame_t
 physical_address_to_frame (physical_address_t address)
@@ -64,6 +71,20 @@ align_up (const void* address,
 	  size_t radix)
 {
   return reinterpret_cast<const void*> ((reinterpret_cast<size_t> (address) + radix - 1) & ~(radix - 1));
+}
+
+inline void*
+align_down (void* address,
+	    size_t radix)
+{
+  return reinterpret_cast<void*> (reinterpret_cast<size_t> (address) & ~(radix - 1));
+}
+
+inline void*
+align_up (void* address,
+	  size_t radix)
+{
+  return reinterpret_cast<void*> ((reinterpret_cast<size_t> (address) + radix - 1) & ~(radix - 1));
 }
 
 inline bool
