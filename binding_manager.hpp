@@ -74,7 +74,7 @@ private:
   typedef std::unordered_map<output_action, input_action_set_type, std::hash<output_action>, std::equal_to<output_action>, system_allocator<std::pair<const output_action, input_action_set_type> > > bindings_type;
   static bindings_type bindings_;
 
-  void
+  static void
   bind_ (automaton* output_automaton,
 	 const void* output_action_entry_point,
 	 parameter_mode_t output_parameter_mode,
@@ -104,7 +104,7 @@ private:
 
 public:
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (void),
 	automaton* input_automaton,
@@ -121,7 +121,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (void),
 	automaton* input_automaton,
@@ -139,7 +139,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (void),
 	automaton* input_automaton,
@@ -156,7 +156,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (void),
 	automaton* input_automaton,
@@ -174,7 +174,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
@@ -192,7 +192,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
@@ -211,7 +211,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
@@ -229,7 +229,7 @@ public:
   }
 
   template <class OutputAction, class InputAction>
-  void
+  static void
   bind (automaton* output_automaton,
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,

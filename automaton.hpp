@@ -87,13 +87,6 @@ public:
 
 private:
 
-  static bool
-  intersect (const vm_area_interface* x,
-	     const vm_area_interface* y)
-  {
-    return !(x->end () <= y->begin () || y->end () <= x->begin ());
-  }
-
   struct compare_vm_area {
     bool
     operator () (const vm_area_interface* const x,
@@ -103,30 +96,38 @@ private:
     }
   };
 
-  struct contains_address {
-    const void* address;
-
-    contains_address (const void* a) :
-      address (a)
-    { }
-
-    bool
-    operator () (const vm_area_interface* const x) const
-    {
-      return x->begin () <= address && address < x->end ();
-    }
-  };
-
   memory_map_type::const_iterator
-  find_by_address (const vm_area_interface* area) const
+  find_address (const void* address) const
   {
-    return std::lower_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
+    vm_reserved_area k (address, address);
+    memory_map_type::const_iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
+    // We know that area->begin () < (*pos)->begin ().
+
+    if (pos != memory_map_.begin ()) {
+      --pos;
+      if (address < (*pos)->end ()) {
+	return pos;
+      }
+    }
+    
+    return memory_map_.end ();
   }
 
   memory_map_type::iterator
-  find_by_address (const vm_area_interface* area)
+  find_address (const void* address)
   {
-    return std::lower_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
+    vm_reserved_area k (address, address);
+    memory_map_type::iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
+    // We know that area->begin () < (*pos)->begin ().
+
+    if (pos != memory_map_.begin ()) {
+      --pos;
+      if (address < (*pos)->end ()) {
+	return pos;
+      }
+    }
+    
+    return memory_map_.end ();
   }
 
   template <class Action>
@@ -171,8 +172,7 @@ public:
   address_in_use (const void* address) const
   {
     if (address < PAGING_AREA) {
-      // TODO: Use binary search.
-      return std::find_if (memory_map_.begin (), memory_map_.end (), contains_address (address)) != memory_map_.end ();
+      return find_address (address) != memory_map_.end ();
     }
     else {
       return true;
@@ -217,22 +217,23 @@ public:
     kassert (area != 0);
     
     // Find the location to insert.
-    memory_map_type::iterator pos = find_by_address (area);
+    memory_map_type::iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
+    // We know that area->begin () < (*pos)->begin ().
 
     // Ensure that the areas don't conflict.
     if (pos != memory_map_.begin ()) {
       memory_map_type::const_iterator prev = pos - 1;
-      if (intersect (*prev, area)) {
+      if (area->begin () < (*prev)->end ()) {
 	return false;
       }
     }
 
     if (pos != memory_map_.end ()) {
-      if (intersect (area, *pos)) {
+      if ((*pos)->begin () < area->end ()) {
 	return false;
       }
     }
-
+    
     memory_map_.insert (pos, area);
     return true;
   }
@@ -290,52 +291,6 @@ public:
     }
   }
 
-  void*
-  reserve (size_t size)
-  {
-    kassert (is_aligned (size, PAGE_SIZE));
-    kassert (heap_area_ != 0);
-    kassert (stack_area_ != 0);
-    kassert (heap_area_->end () <= stack_area_->begin ());
-
-    // Find the stack.
-    memory_map_type::reverse_iterator high = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
-    kassert (high != memory_map_.rend ());
-
-    // Find the area before the stack.
-    memory_map_type::reverse_iterator low = high + 1;
-    kassert (low != memory_map_.rend ());
-
-    do {
-      // Try to insert between the areas.
-      if (reinterpret_cast<size_t> ((*high)->begin ()) - reinterpret_cast<size_t> ((*low)->end ()) >= size) {
-	void* begin = const_cast<uint8_t*> (reinterpret_cast<const uint8_t*> ((*high)->begin ()) - size);
-	memory_map_.insert (low.base (), new (system_alloc ()) vm_reserved_area (begin, (*high)->begin ()));
-	return begin;
-      }
-      else {
-	// Try again.
-	++high;
-	++low;
-      }
-    } while ((*low) != heap_area_);
-
-    // No space.
-    return 0;
-  }
-
-  void
-  unreserve (const void* address)
-  {
-    // TODO: Use binary search.
-    memory_map_type::iterator pos = std::find_if (memory_map_.begin (), memory_map_.end (), contains_address (address));
-    kassert (pos != memory_map_.end ());
-
-    vm_area_interface* area = *pos;
-    memory_map_.erase (pos);
-    destroy (area, system_alloc ());
-  }
-
   bool
   verify_span (const void* ptr,
 	       size_t size) const
@@ -352,11 +307,17 @@ public:
 	      uint32_t error,
 	      registers* regs)
   {
-    kassert (0);
-    // vm_reserved_area k (address, static_cast<const uint8_t*> (address) + 1);
-    // typename memory_map_type::const_iterator pos = find_by_address (&k);
-    // kassert (pos != memory_map_.end ());
-    // (*pos)->page_fault (address, error, regs);
+    memory_map_type::const_iterator pos = find_address (address);
+    if (pos != memory_map_.end ()) {
+      (*pos)->page_fault (address, error, regs);
+    }
+    else {
+      kputs ("aid = "); kputx32 (aid_); kputs ("\n");
+      kputs ("address = "); kputp (address); kputs ("\n");
+      kputs ("eip = "); kputx32 (regs->eip); kputs ("\n");
+      // TODO:  Handle page fault.
+      kassert (0);
+    }
   }
 
   template <class Action>

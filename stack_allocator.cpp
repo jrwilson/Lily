@@ -16,8 +16,8 @@
 
 const size_t stack_allocator::MAX_REGION_SIZE = 0x07FFF000;
 
-stack_allocator::stack_allocator (size_t begin,
-				  size_t end) :
+stack_allocator::stack_allocator (frame_t begin,
+				  frame_t end) :
   begin_ (begin),
   end_ (end),
   free_head_ (0)
@@ -32,13 +32,13 @@ stack_allocator::stack_allocator (size_t begin,
   entry_[size - 1] = STACK_ALLOCATOR_EOL;
 }
 
-size_t
+frame_t
 stack_allocator::begin () const
 {
   return begin_;
 }
 
-size_t
+frame_t
 stack_allocator::end () const
 {
   return end_;
@@ -51,7 +51,7 @@ stack_allocator::full () const
 }
 
 void
-stack_allocator::mark_as_used (size_t frame)
+stack_allocator::mark_as_used (frame_t frame)
 {
   kassert (frame >= begin_ && frame < end_);
   
@@ -73,7 +73,7 @@ stack_allocator::mark_as_used (size_t frame)
   }
 }
 
-size_t
+frame_t
 stack_allocator::alloc ()
 {
   kassert (free_head_ != STACK_ALLOCATOR_EOL);
@@ -81,34 +81,34 @@ stack_allocator::alloc ()
   frame_entry_t idx = free_head_;
   free_head_ = entry_[idx];
   entry_[idx] = -1;
+  kputs (__func__); kputs (" "); kputx32 (begin_ + idx); kputs ("\n");
   return begin_ + idx;
 }
 
-void
-stack_allocator::incref (size_t frame)
+size_t
+stack_allocator::incref (frame_t frame)
 {
   kassert (frame >= begin_ && frame < end_);
   frame_entry_t idx = frame - begin_;
   /* Frame is allocated. */
   kassert (entry_[idx] < 0);
   /* "Increment" the reference count. */
-  --entry_[idx];
+  return -(--entry_[idx]);
 }
 
-// static void
-// stack_allocator_decref (stack_allocator_t* ptr,
-// 			frame frame)
-// {
-//   kassert (ptr != 0);
-//   kassert (frame >= ptr->begin && frame < ptr->end);
-//   frame_entry_t idx = frame - ptr->begin;
-//   /* Frame is allocated. */
-//   kassert (ptr->entry[idx] < 0);
-//   /* "Decrement" the reference count. */
-//   ++ptr->entry[idx];
-//   /* Free the frame. */
-//   if (ptr->entry[idx]) {
-//     ptr->entry[idx] = ptr->free_head;
-//     ptr->free_head = idx;
-//   }
-// }
+size_t
+stack_allocator::decref (frame_t frame)
+{
+  kassert (frame >= begin_ && frame < end_);
+  frame_entry_t idx = frame - begin_;
+  /* Frame is allocated. */
+  kassert (entry_[idx] < 0);
+  /* "Decrement" the reference count. */
+  size_t retval = -(++entry_[idx]);
+  /* Free the frame. */
+  if (entry_[idx] == 0) {
+    entry_[idx] = free_head_;
+    free_head_ = idx;
+  }
+  return retval;
+}

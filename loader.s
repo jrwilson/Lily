@@ -41,7 +41,8 @@
 	[global kernel_page_directory]
 kernel_page_directory:
 	times 1024 dd 0
-page_table:
+	[global kernel_page_table]
+kernel_page_table:
 	times 1024 dd 0
 
 	;; Export the start symbol so the linker can find it.
@@ -56,7 +57,7 @@ start:
 	;; Push the multiboot magic number.
 	push eax
 	;; Initialize the page directory.
-	mov ecx, page_table
+	mov ecx, kernel_page_table
 	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
 	;; Page table is mapped in both locations.
 	mov [kernel_page_directory + 4 * PAGE_DIRECTORY_LOW_ENTRY], ecx
@@ -76,7 +77,7 @@ loop1:
 	and ecx, 0x3FF
 	mov edx, eax
 	or edx, (PAGE_PRESENT | PAGE_WRITABLE)
-	mov [page_table + 4 * ecx], edx
+	mov [kernel_page_table + 4 * ecx], edx
 	add eax, 0x1000
 	jmp loop1
 loop2:

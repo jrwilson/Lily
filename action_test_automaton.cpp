@@ -71,6 +71,7 @@ namespace action_test {
   void
   init ()
   {
+    kputs (__func__); kputs ("\n");
     // Initialize the allocator.
     alloc_type::initialize ();
     // Allocate a scheduler.

@@ -66,7 +66,6 @@ private:
     typename set_type::iterator pos = set_.find (e);
     if (pos != set_.end ()) {
       set_.erase (pos);
-      
       if (queue_.front () == e) {
     	queue_.pop_front ();
       }
@@ -92,7 +91,6 @@ private:
   }
 
 public:
-
   template <class LocalAction>
   void
   add (void (*action_entry_point) (void))

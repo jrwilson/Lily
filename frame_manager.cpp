@@ -24,7 +24,7 @@ frame_manager::allocator_list_type frame_manager::allocator_list_;
 void
 frame_manager::mark_as_used (frame_t frame)
 {
-  stack_allocator** pos = find_allocator (frame);
+  allocator_list_type::iterator pos = find_allocator (frame);
 
   if (pos != allocator_list_.end ()) {
     (*pos)->mark_as_used (frame);
@@ -35,7 +35,7 @@ frame_t
 frame_manager::alloc ()
 {
   /* Find an allocator with a free frame. */
-  stack_allocator** pos = std::find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
+  allocator_list_type::iterator pos = std::find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
   
   /* Out of frames. */
   kassert (pos != allocator_list_.end ());
@@ -43,24 +43,24 @@ frame_manager::alloc ()
   return (*pos)->alloc ();
 }
 
-void
+size_t
 frame_manager::incref (frame_t frame)
 {
-  stack_allocator** pos = find_allocator (frame);
+  allocator_list_type::iterator pos = find_allocator (frame);
 
   /* No allocator for frame. */
   kassert (pos != allocator_list_.end ());
 
-  (*pos)->incref (frame);
+  return (*pos)->incref (frame);
 }
 
-// void
-// frame_manager::decref (const frame& frame)
-// {
-//   stack_allocator_t* ptr = find_allocator (frame);
+size_t
+frame_manager::decref (frame_t frame)
+{
+  allocator_list_type::iterator pos = find_allocator (frame);
 
-//   /* No allocator for frame. */
-//   kassert (ptr != 0);
+  /* No allocator for frame. */
+  kassert (pos != allocator_list_.end ());
 
-//   stack_allocator_decref (ptr, frame);
-// }
+  return (*pos)->decref (frame);
+}

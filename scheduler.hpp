@@ -134,7 +134,7 @@ private:
       // Check that the stack will work.
       kassert (new_stack_begin >= switch_stack_);
 
-      //
+      // Copy.
       for (idx = 0; idx < stack_size; ++idx) {
 	new_stack_begin[idx] = stack_begin[idx];
       }
@@ -143,7 +143,6 @@ private:
       asm volatile ("add %0, %%esp\n"
 		    "add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
 
-      /* Switch page directories. */
       vm_manager::switch_to_directory (automaton_->page_directory ());
 
       if (type_ == INPUT) {
@@ -158,27 +157,28 @@ private:
       case PARAMETER:
       case AUTO_PARAMETER:
 	  // Copy the parameter to the stack.
-	  --*stack_pointer = static_cast<uint32_t> (parameter_);
+	  *--stack_pointer = static_cast<uint32_t> (parameter_);
 	  break;
       }
 
       // These instructions are obviously important but also have the side effect of backing the stack with frames if it doesn't exist.
 
       // Push a bogus instruction pointer so we can use the cdecl calling convention.
-      --*stack_pointer = 0;
+      *--stack_pointer = 0;
 
       // Push the flags.
       uint32_t eflags;
       asm volatile ("pushf\n"
 		    "pop %%eax\n"
 		    "mov %%eax, %0\n" : "=m"(eflags) : : "%eax");
-      --*stack_pointer = eflags;
+      *--stack_pointer = eflags;
+
 
       // Push the code segment.
-      --*stack_pointer = code_segment;
+      *--stack_pointer = code_segment;
 
       // Push the instruction pointer.
-      --*stack_pointer = reinterpret_cast<uint32_t> (action_entry_point_);
+      *--stack_pointer = reinterpret_cast<uint32_t> (action_entry_point_);
 
       asm volatile ("mov %0, %%ss\n"	// Load the new stack segment.
 		    "mov %1, %%esp\n"	// Load the new stack pointer.

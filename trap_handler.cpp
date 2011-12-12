@@ -58,21 +58,14 @@ trap_dispatch (registers regs)
   case SYSCALL_ALLOCATE:
     {
       size_t size = regs.ebx;
-      if (size > 0) {
-      	void* ptr = system_automaton::alloc (size);
-      	if (ptr != 0) {
-      	  regs.eax = SYSERROR_SUCCESS;
-      	  regs.ebx = reinterpret_cast<uint32_t> (ptr);
-      	}
-      	else {
-      	  regs.eax = SYSERROR_OUT_OF_MEMORY;
-      	  regs.ebx = 0;
-      	}
+      void* ptr = system_automaton::alloc (size);
+      if (ptr != 0) {
+	regs.eax = SYSERROR_SUCCESS;
+	regs.ebx = reinterpret_cast<uint32_t> (ptr);
       }
       else {
-      	// Zero size.
-      	regs.eax = SYSERROR_SUCCESS;
-      	regs.ebx = 0;
+	regs.eax = SYSERROR_OUT_OF_MEMORY;
+	regs.ebx = 0;
       }
       return;
     }

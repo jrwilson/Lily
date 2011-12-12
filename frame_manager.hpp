@@ -57,7 +57,7 @@ private:
     }
   };
 
-  static inline stack_allocator**
+  static inline allocator_list_type::iterator
   find_allocator (frame_t frame)
   {
     // TODO:  Sort the stack allocators and use binary search.
@@ -126,12 +126,12 @@ public:
   alloc () __attribute__((warn_unused_result));
   
   /* Increment the reference count for a frame. */
-  static void
+  static size_t
   incref (frame_t frame);
   
-  // /* Decrement the reference count for a frame. */
-  // void
-  // decref (const frame& frame);
+  /* Decrement the reference count for a frame. */
+  static size_t
+  decref (frame_t frame);
 };
 
 

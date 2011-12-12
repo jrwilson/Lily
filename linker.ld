@@ -60,7 +60,7 @@ SECTIONS
 	.bss ALIGN (0x1000) : AT(ADDR(.bss) - 0xC0000000)
 	{
 		*(COMMON)
-		*(.bss)
+		*(.bss*)
 		*(.gnu.linkonce.b*)
 		data_end = .;
 	}

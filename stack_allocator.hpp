@@ -16,6 +16,7 @@
 
 #include "kassert.hpp"
 #include <utility>
+#include "vm_def.hpp"
 
 using namespace std::rel_ops;
 
@@ -46,35 +47,37 @@ private:
   typedef int16_t frame_entry_t;
   static const frame_entry_t STACK_ALLOCATOR_EOL = -32768;
 
-  size_t begin_;
-  size_t end_;
+  frame_t begin_;
+  frame_t end_;
   frame_entry_t free_head_;
   frame_entry_t* entry_;
 
 public:
   static const size_t MAX_REGION_SIZE;
 
-  stack_allocator (size_t begin,
-		   size_t end);
+  stack_allocator (frame_t begin,
+		   frame_t end);
 
-  size_t
+  frame_t
   begin () const;
 
-  size_t
+  frame_t
   end () const;
 
   bool
   full () const;
 
   void
-  mark_as_used (size_t frame);
+  mark_as_used (frame_t frame);
 
-  size_t
+  frame_t
   alloc ();
 
-  void
-  incref (size_t frame);
+  size_t
+  incref (frame_t frame);
 
+  size_t
+  decref (frame_t frame);
 };
 
 #endif /* __stack_allocator_hpp__ */

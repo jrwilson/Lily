@@ -106,20 +106,23 @@ struct page_directory_entry {
 struct page_directory {
   page_directory_entry entry[PAGE_ENTRY_COUNT];
 
-  // void
-  // clear (physical_address_t physical_address);
-
   void
-  initialize_with_current (physical_address_t physical_address);
+  initialize ();
 
 };
 
 namespace vm_manager {
+  void
+  initialize ();
+
   physical_address_t
   page_directory_physical_address (void);
 
   page_directory*
   get_kernel_page_directory (void);
+
+  void*
+  get_stub (void);
 
   page_directory*
   get_page_directory (void);

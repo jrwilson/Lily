@@ -14,8 +14,11 @@
 #include "vm_manager.hpp"
 #include "frame_manager.hpp"
 #include "kassert.hpp"
+#include "system_automaton.hpp"
+#include "automaton.hpp"
 
 extern page_directory kernel_page_directory;
+extern page_table kernel_page_table;
 
 page_table_entry::page_table_entry () :
   present_ (paging_constants::NOT_PRESENT),
@@ -89,31 +92,48 @@ page_directory_entry::page_directory_entry (frame_t frame,
 { }
 
 void
-page_directory::initialize_with_current (physical_address_t address)
+page_directory::initialize ()
 {
   kassert (is_aligned (this, PAGE_SIZE));
-  kassert (is_aligned (address, PAGE_SIZE));
 
-  page_directory* current = vm_manager::get_page_directory ();
+  kputs ("this = "); kputp (this); kputs ("\n");
+  kputs ("stub = "); kputp (vm_manager::get_stub ()); kputs ("\n");
 
-  unsigned int k;
-  for (k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
-    /* Copy. */
-    entry[k] = current->entry[k];
-    /* Increment the reference count. */
-    if (entry[k].present_) {
-      frame_manager::incref (entry[k].frame_);
-    }
-  }
 
-  /* Map the page directory to itself. */
-  entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (physical_address_to_frame (address), paging_constants::PRESENT);
+
+  // // Copy the kernel page directory.
+  // page_directory* kernel_directory = vm_manager::get_kernel_page_directory ();
+  // for (size_t k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
+  //   if (get_address (k, 0) < KERNEL_VIRTUAL_BASE) {
+  //     entry[k] = page_directory_entry (0, paging_constants::NOT_PRESENT);
+  //   }
+  //   else {
+  //     entry[k] = kernel_directory->entry[k];
+  //     if (entry[k].present_) {
+  // 	frame_manager::incref (entry[k].frame_);
+  //     }
+  //   }
+  // }
+
+  // Find the frame corresponding to this page directory.
+  page_table* page_table = vm_manager::get_page_table (this);
+  kputs ("page_table = "); kputp (page_table); kputs ("\n");
+  const size_t table_entry = get_page_table_entry (this);
+  kputs ("table_entry = "); kputx32 (table_entry); kputs ("\n");
+  frame_t frame = page_table->entry[table_entry].frame_;
+  kputs ("frame = "); kputx32 (frame); kputs ("\n");
+
+  // // Map the page directory to itself.
+  kputp (&entry[PAGE_ENTRY_COUNT - 1]); kputs ("\n");
+  entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, paging_constants::PRESENT);
+  frame_manager::incref (frame);
 }
 
 void
 vm_manager::switch_to_directory (physical_address_t address)
 {
   kassert (is_aligned (address, PAGE_SIZE));
+  kputs ("switching from "); kputx32 (page_directory_physical_address ()); kputs (" to "); kputx32 (address); kputs ("\n");
 
   /* Switch to the page directory. */
   asm volatile ("mov %0, %%cr3\n" :: "r"(address));
@@ -125,11 +145,54 @@ vm_manager::page_directory_physical_address (void)
   return frame_to_physical_address (get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_);
 }
 
+void
+vm_manager::initialize ()
+{
+  kassert (system_automaton::system_automaton != 0);
+
+  page_directory* kernel_page_directory = get_kernel_page_directory ();
+
+  // Mark frames that are currently being used and update the logical address space.
+  page_directory* pd = get_page_directory ();
+  for (size_t i = 0; i < PAGE_ENTRY_COUNT; ++i) {
+    if (pd->entry[i].present_) {
+      page_table* pt = get_page_table (reinterpret_cast<const void*> (get_address (i, 0)));
+      for (size_t j = 0; j < PAGE_ENTRY_COUNT; ++j) {
+	if (pt->entry[j].present_) {
+	  const void* address = get_address (i, j);
+	  // The page directory uses the same page table for low and high memory.  Only process high memory.
+	  if (address >= KERNEL_VIRTUAL_BASE) {
+	    if (system_automaton::system_automaton->address_in_use (address) || address == kernel_page_directory) {
+	      // If the address is in the logical address space, mark the frame as being used.
+	      frame_manager::mark_as_used (pt->entry[j].frame_);
+	    }
+	    else {
+	      // Otherwise, unmap it.
+	      pt->entry[j] = page_table_entry (0, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::NOT_PRESENT);
+	    }
+	  }
+	}
+      }
+    }
+  }
+
+  // I don't trust myself.
+  // Consequently, I'm going to flush paging to ensure the subsequent memory accesses are correct.
+  switch_to_directory (page_directory_physical_address ());
+}
+
 page_directory*
 vm_manager::get_kernel_page_directory (void)
 {
   return reinterpret_cast<page_directory*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + reinterpret_cast<size_t> (&kernel_page_directory));
 };
+
+void*
+vm_manager::get_stub (void)
+{
+  // Reuse the address space of the page table.
+  return reinterpret_cast<void*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + reinterpret_cast<size_t> (&kernel_page_table));
+}
 
 page_directory*
 vm_manager::get_page_directory (void)
@@ -156,45 +219,50 @@ vm_manager::map (const void* logical_addr,
   const size_t directory_entry = get_page_directory_entry (logical_addr);
   const size_t table_entry = get_page_table_entry (logical_addr);
 
-  if (!page_directory->entry[get_page_directory_entry (logical_addr)].present_) {
+  // Find or create a page table.
+  if (!page_directory->entry[directory_entry].present_) {
     if (logical_addr < KERNEL_VIRTUAL_BASE ||
   	page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_) {
-      /* Either the address is in user space or we are using the kernel page directory. */
-      /* Allocate a page table. */
+      // The address is in user space or we are using the kernel page directory.
+      // Either way, we can just allocate a page table.
       page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), paging_constants::PRESENT);
-      /* Flush the TLB. */
+      // Flush the TLB.
       asm volatile ("invlpg %0\n" :: "m" (page_table));
-      /* Initialize the page table. */
+      // Initialize the page table.
       page_table->clear ();
     }
     else {
-      /* Using a non-kernel page directory but we need a kernel page table. */
+      // We are using a non-kernel page directory and need a kernel page table.
       if (!kernel_page_directory->entry[directory_entry].present_) {
-  	/* The page table is not present in the kernel. */
-  	/* Allocate a page table and map it in both directories. */
+  	// The page table is not present in the kernel.
+	// Allocate a page table and map it in both directories.
   	kernel_page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), paging_constants::PRESENT);
   	page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
   	frame_manager::incref (page_directory->entry[directory_entry].frame_);
-  	/* Flush the TLB. */
+  	// Flush the TLB.
   	asm volatile ("invlpg %0\n" :: "m" (page_table));
-  	/* Initialize the page table. */
+  	// Initialize the page table.
   	page_table->clear ();
       }
       else {
-  	/* The page table is present in the kernel. */
-  	/* Copy the entry. */
+  	// The page table is present in the kernel.
+  	// Copy the entry.
   	page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
   	frame_manager::incref (page_directory->entry[directory_entry].frame_);
-  	/* Flush the TLB. */
+  	// Flush the TLB.
   	asm volatile ("invlpg %0\n" :: "m" (page_table));
       }
     }
   }
 
+  kassert (page_table->entry[table_entry].present_ == paging_constants::NOT_PRESENT);
   page_table->entry[table_entry] = page_table_entry (fr, privilege, writable, paging_constants::PRESENT);
+  frame_manager::incref (fr);
 
-  /* Flush the TLB. */
+  // Flush the TLB.
   asm volatile ("invlpg %0\n" :: "m" (logical_addr));
+
+  kputs ("map ("); kputp (logical_addr); kputs (", "); kputx32 (fr); kputs (")\n");
 }
 
 void
@@ -205,9 +273,13 @@ vm_manager::unmap (const void* logical_addr)
   const size_t directory_entry = get_page_directory_entry (logical_addr);
   const size_t table_entry = get_page_table_entry (logical_addr);
 
-  if (page_directory->entry[directory_entry].present_) {
-    page_table->entry[table_entry] = page_table_entry (0, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::NOT_PRESENT);
-    /* Flush the TLB. */
-    asm volatile ("invlpg %0\n" :: "m" (logical_addr));
-  }
+  kassert (page_directory->entry[directory_entry].present_);
+  kassert (page_table->entry[table_entry].present_);
+
+  kputs ("unmap ("); kputp (logical_addr); kputs (", "); kputx32 (page_table->entry[table_entry].frame_); kputs (")\n");
+
+  frame_manager::decref (page_table->entry[table_entry].frame_);
+  page_table->entry[table_entry] = page_table_entry (0, paging_constants::SUPERVISOR, paging_constants::NOT_WRITABLE, paging_constants::NOT_PRESENT);
+  /* Flush the TLB. */
+  asm volatile ("invlpg %0\n" :: "m" (logical_addr));
 }
