@@ -18,7 +18,7 @@ void *__dso_handle;
 extern "C" void
 __cxa_pure_virtual (void)
 {
-  kputs ("Pure virtual function called\n");
+  kout << "Pure virtual function called" << endl;
   halt ();
 }
 

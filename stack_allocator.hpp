@@ -17,6 +17,7 @@
 #include "kassert.hpp"
 #include <utility>
 #include "vm_def.hpp"
+#include <stddef.h>
 
 using namespace std::rel_ops;
 

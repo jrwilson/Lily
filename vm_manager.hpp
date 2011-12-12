@@ -16,9 +16,6 @@
 
 #include "vm_def.hpp"
 
-/* Number of entries in a page table or directory. */
-static const size_t PAGE_ENTRY_COUNT = PAGE_SIZE / sizeof (void*);
-
 namespace paging_constants {
 
   enum global_t {

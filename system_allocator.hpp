@@ -14,7 +14,6 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include <memory>
 
 class system_alloc {

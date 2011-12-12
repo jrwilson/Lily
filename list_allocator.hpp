@@ -14,7 +14,6 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include <memory>
 #include "syscall.hpp"
 

@@ -14,7 +14,6 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include <deque>
 #include <unordered_set>
 #include "syscall.hpp"

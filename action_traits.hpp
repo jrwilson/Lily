@@ -15,9 +15,10 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include <type_traits>
 #include "static_assert.hpp"
+#include "sys_types.hpp"
+#include <stddef.h>
 
 // Size of the temporary buffer used to store the values produced by output actions.
 const size_t VALUE_BUFFER_SIZE = 512;

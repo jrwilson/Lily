@@ -18,7 +18,7 @@
 #include "vm_manager.hpp"
 #include "frame_manager.hpp"
 #include "kassert.hpp"
-#include "string.hpp"
+#include <string.h>
 #include "interrupt_descriptor_table.hpp"
 
 #define PAGE_PROTECTION_ERROR (1 << 0)

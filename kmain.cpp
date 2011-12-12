@@ -13,6 +13,7 @@
   Justin R. Wilson
 */
 
+#include "kout.hpp"
 #include "multiboot_parser.hpp"
 #include "system_allocator.hpp"
 #include "vm_def.hpp"
@@ -34,10 +35,6 @@ extern "C" void
 kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
-  // Print a welcome message.
-  clear_console ();
-  kputs ("Lily\n");
-  
   // Parse the multiboot data structure.
   multiboot_parser multiboot_parser (multiboot_magic, multiboot_info);
 
@@ -51,6 +48,9 @@ kmain (uint32_t multiboot_magic,
     ctor ();
   }
 
+  // Print a welcome message.
+  kout << "Lily" << endl;
+
   // Set up segmentation for x86, or rather, ignore it.
   global_descriptor_table::install ();
 
@@ -60,8 +60,12 @@ kmain (uint32_t multiboot_magic,
   irq_handler::install ();
   trap_handler::install ();
 
+  kassert (0);
+
   // Initialize the system that allocates frames (physical pages of memory).
   frame_manager::initialize (multiboot_parser.memory_map_begin (), multiboot_parser.memory_map_end ());
+
+  kassert (0);
 
   system_automaton::run ();
 

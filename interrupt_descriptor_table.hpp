@@ -15,8 +15,8 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include "descriptor.hpp"
+#include <stdint.h>
 
 typedef uint16_t interrupt_number;
 

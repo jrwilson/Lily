@@ -1,10 +1,10 @@
-#ifndef __kassert_h__
-#define __kassert_h__
+#ifndef __kassert_hpp__
+#define __kassert_hpp__
 
 /*
   File
   ----
-  kassert.h
+  kassert.hpp
   
   Description
   -----------
@@ -14,10 +14,10 @@
   Justin R. Wilson
 */
 
-#include "kput.hpp"
+#include "kout.hpp"
 #include "halt.hpp"
 #include "quote.hpp"
 
-#define kassert(expr) do { if (!(expr)) { kputs ("Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr); halt (); } } while (0);
+#define kassert(expr) do { if (!(expr)) { kout << "Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr; halt (); } } while (0);
 
-#endif /* __kassert_h__ */
+#endif /* __kassert_hpp__ */

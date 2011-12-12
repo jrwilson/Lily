@@ -14,6 +14,8 @@
   Justin R. Wilson
 */
 
+#include <stddef.h>
+
 namespace std {
 
   struct input_iterator_tag {};

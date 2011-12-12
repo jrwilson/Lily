@@ -15,7 +15,8 @@
 */
 
 #include "syscall_def.hpp"
-#include "types.hpp"
+#include "sys_types.hpp"
+#include <stddef.h>
 
 // action_entry_point == 0 means do not schedule an action.
 // buffer == 0 means no output was produced.

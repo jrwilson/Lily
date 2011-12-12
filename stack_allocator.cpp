@@ -81,7 +81,7 @@ stack_allocator::alloc ()
   frame_entry_t idx = free_head_;
   free_head_ = entry_[idx];
   entry_[idx] = -1;
-  kputs (__func__); kputs (" "); kputx32 (begin_ + idx); kputs ("\n");
+  kout << __func__ << " " << begin_ + idx << endl;
   return begin_ + idx;
 }
 

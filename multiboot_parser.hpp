@@ -15,7 +15,6 @@
 */
 
 #include "multiboot.hpp"
-#include "types.hpp"
 #include "vm_def.hpp"
 #include <algorithm>
 #include "kassert.hpp"

@@ -15,7 +15,6 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include "kput.hpp"
 #include "multiboot.hpp"
 #include <vector>

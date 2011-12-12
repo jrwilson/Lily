@@ -14,7 +14,8 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
+#include <stddef.h>
+#include "sys_types.hpp"
 
 class automaton;
 class registers;

@@ -12,8 +12,8 @@
 */
 
 #include "global_descriptor_table.hpp"
-#include "types.hpp"
 #include "descriptor.hpp"
+#include <stdint.h>
 
 struct gdt_ptr {
   uint16_t limit;

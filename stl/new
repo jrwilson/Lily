@@ -1,5 +1,5 @@
-#ifndef __new_hpp__
-#define __new_hpp__
+#ifndef __new__
+#define __new__
 
 /*
   File
@@ -14,35 +14,7 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
-
-// #include "list_allocator.hpp"
-
-// extern list_allocator default_allocator;
-
-// inline void*
-// operator new (size_t sz)
-// {
-//   return default_allocator.alloc (sz);
-// }
-
-// inline void
-// operator delete (void* p)
-// {
-//   default_allocator.free (p);
-// }
-
-// inline void*
-// operator new[] (size_t sz)
-// {
-//   return default_allocator.alloc (sz);
-// }
-
-// inline void
-// operator delete[] (void* p)
-// {
-//   default_allocator.free (p);
-// }
+#include <stddef.h>
 
 inline void*
 operator new (size_t,
@@ -76,4 +48,4 @@ operator delete[] (void*,
 /* mode:c++         */
 /* End:             */
 
-#endif /* __new_hpp_ */
+#endif /* __new__ */

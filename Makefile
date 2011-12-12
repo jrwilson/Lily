@@ -2,13 +2,14 @@ AS=nasm
 AFLAGS=-f elf
 CXX=time g++
 # Add -Werror at some point
-CXXFLAGS=-MD -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
+CXXFLAGS=-MD -O2 -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
 cpp_runtime.o \
 string.o \
+kout.o \
 kput.o \
 system_allocator.o \
 global_descriptor_table.o \

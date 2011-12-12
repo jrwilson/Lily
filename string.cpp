@@ -11,20 +11,21 @@
   Justin R. Wilson
 */
 
-#include "string.hpp"
+#include <string.h>
 
-void
+void*
 memset (void* ptr,
-	unsigned char value,
+	int value,
 	size_t size)
 {
   unsigned char* p = static_cast<unsigned char*> (ptr);
   while (size-- > 0) {
     *p++ = value;
   }
+  return ptr;
 }
 
-void
+void*
 memcpy (void* dst,
 	const void* src,
 	size_t size)
@@ -34,4 +35,5 @@ memcpy (void* dst,
   while (size-- > 0) {
     *d++ = *s++;
   }
+  return dst;
 }
