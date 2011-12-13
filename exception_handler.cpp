@@ -169,7 +169,7 @@ exception_dispatch (volatile registers regs)
     {
       // Get the faulting address.
       const void* addr;
-      asm volatile ("mov %%cr2, %0\n" : "=r"(addr));
+      asm ("mov %%cr2, %0\n" : "=g"(addr));
       system_automaton::page_fault (addr, regs.error, &regs);
     }
     break; 

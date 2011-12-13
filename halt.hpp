@@ -1,22 +1,31 @@
-#ifndef __halt_h__
-#define __halt_h__
+#ifndef __halt_hpp__
+#define __halt_hpp__
 
 /*
   File
   ----
-  halt.h
+  halt.hpp
   
   Description
   -----------
-  Declarations for functions to halt the machine.
+  Halt the machine.
 
   Authors:
   Justin R. Wilson
 */
 
-void
-halt (void);
+#include "interrupts.hpp"
 
-#endif /* __halt_h__ */
+inline void
+halt ()
+{
+  for (;;) {
+    interrupts::disable ();
+    asm volatile ("hlt");
+  }
+}
+
+
+#endif /* __halt_hpp__ */
 
 

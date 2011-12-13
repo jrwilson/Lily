@@ -27,7 +27,6 @@ vm_manager.o \
 system_automaton.o \
 binding_manager.o \
 syscall.o \
-halt.o \
 kmain.o \
 action_test_automaton.o
 

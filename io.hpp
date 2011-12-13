@@ -15,11 +15,15 @@
   Justin R. Wilson
 */
 
-inline void
-outb (uint16_t port,
-      uint8_t value)
-{
-  asm volatile ("outb %1, %0" : : "dN" (port), "a" (value));
+namespace io {
+  
+  inline void
+  outb (uint16_t port,
+	uint8_t value)
+  {
+    asm volatile ("outb %1, %0" : : "dN" (port), "a" (value));
+  }
+
 }
 
 #endif /* __io_hpp__ */
