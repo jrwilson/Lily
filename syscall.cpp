@@ -12,46 +12,45 @@
 */
 
 #include "syscall.hpp"
-#include "kput.hpp"
-#include "kassert.hpp"
+#include "syscall_def.hpp"
 
-static syserror_t errno;
-
-void
-sys_finish (const void* action_entry_point,
-	    aid_t parameter,
-	    bool output_status,
-	    const void* output_buffer)
-{
-  asm volatile ("mov %0, %%eax\n"
-  		"mov %1, %%ebx\n"
-  		"mov %2, %%ecx\n"
-  		"mov %3, %%edx\n"
-		"mov %4, %%esi\n"
-  		"int $0x80\n" : : "r"(SYSCALL_FINISH), "m"(action_entry_point), "m"(parameter), "m"(output_status), "m"(output_buffer) : "eax", "ebx", "ecx", "edx", "esi");
+namespace system {
+  
+  void
+  finish (const void* action_entry_point,
+	  aid_t parameter,
+	  bool output_status,
+	  const void* output_buffer)
+  {
+    asm volatile ("mov %0, %%eax\n"
+		  "mov %1, %%ebx\n"
+		  "mov %2, %%ecx\n"
+		  "mov %3, %%edx\n"
+		  "mov %4, %%esi\n"
+		  "int $0x80\n" : : "r"(FINISH), "m"(action_entry_point), "m"(parameter), "m"(output_status), "m"(output_buffer) : "eax", "ebx", "ecx", "edx", "esi");
+  }
+  
+  size_t
+  getpagesize (void)
+  {
+    size_t retval;
+    asm volatile ("mov %1, %%eax\n"
+		  "int $0x80\n"
+		  "mov %%ebx, %0\n" : "=m"(retval) : "r"(GETPAGESIZE) : "eax", "ebx");
+    
+    return retval;
 }
-
-size_t
-sys_get_page_size (void)
-{
-  size_t retval;
-  asm volatile ("mov %2, %%eax\n"
-		"int $0x80\n"
-		"mov %%eax, %0\n"
-		"mov %%ebx, %1\n" : "=m"(errno), "=m"(retval) : "r"(SYSCALL_GET_PAGE_SIZE) : "eax", "ebx");
-
-  return retval;
-}
-
-void*
-sys_allocate (size_t size)
-{
-  void* ptr;
-  asm volatile ("mov %2, %%eax\n"
-		"mov %3, %%ebx\n"
-		"int $0x80\n"
-		"mov %%eax, %0\n"
-		"mov %%ebx, %1\n" : "=m"(errno), "=m"(ptr) : "r"(SYSCALL_ALLOCATE), "m"(size) : "eax", "ebx");
-
-  return ptr;
+  
+  void*
+  sbrk (ptrdiff_t size)
+  {
+    void* ptr;
+    asm volatile ("mov %1, %%eax\n"
+		  "mov %2, %%ebx\n"
+		  "int $0x80\n"
+		  "mov %%ebx, %0\n" : "=m"(ptr) : "r"(SBRK), "m"(size) : "eax", "ebx");
+    
+    return ptr;
+  }
+  
 }

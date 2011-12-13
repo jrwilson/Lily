@@ -32,13 +32,13 @@ namespace system_automaton {
 	      registers* regs);
   
   void
-  finish_action (const void* action_entry_point,
-		 aid_t parameter,
-		 bool output_status,
-		 const void* buffer);
+  finish (const void* action_entry_point,
+	  aid_t parameter,
+	  bool output_status,
+	  const void* buffer);
   
   void*
-  alloc (size_t size);
+  sbrk (ptrdiff_t size);
   
   void
   unknown_system_call (void);

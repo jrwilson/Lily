@@ -106,8 +106,8 @@ public:
   static void
   initialize ()
   {
-    data_.page_size_ = sys_get_page_size ();
-    data_.first_header_ = new (sys_allocate (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
+    data_.page_size_ = system::getpagesize ();
+    data_.first_header_ = new (system::sbrk (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
     data_.last_header_ = data_.first_header_;
   }
 
@@ -123,7 +123,7 @@ public:
     /* Acquire more memory. */
     if (ptr == 0) {
       size_t request_size = align_up (sizeof (chunk_header) + size, data_.page_size_);
-      ptr = new (sys_allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
+      ptr = new (system::sbrk (request_size)) chunk_header (request_size - sizeof (chunk_header));
       
       if (ptr > data_.last_header_) {
 	// Append.

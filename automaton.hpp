@@ -263,31 +263,30 @@ public:
   }
 
   void*
-  allocate (size_t size)
+  sbrk (ptrdiff_t size)
   {
     kassert (heap_area_ != 0);
 
-    if (size != 0) {
-      void* const old_end = const_cast<void*> (heap_area_->end ());
-      const void* const new_end = reinterpret_cast<uint8_t*> (old_end) + size;
-      // Find the heap.
-      memory_map_type::const_iterator pos = std::find (memory_map_.begin (), memory_map_.end (), heap_area_);
-      kassert (pos != memory_map_.end ());
-      // Move to the next.
-      ++pos;
-      if (new_end <= (*pos)->begin ()) {
-	// The allocation does not interfere with next area.  Success.
-	heap_area_->end (new_end);
-	return old_end;
-      }
-      else {
-	// Failure.
-	return 0;
-      }
+    void* const old_end = const_cast<void*> (heap_area_->end ());
+    const void* const new_end = reinterpret_cast<uint8_t*> (old_end) + size;
+    if (new_end < old_end) {
+      // Shrunk too much.
+      // Fail.
+      return reinterpret_cast<void*> (-1);
+    }
+    // Find the heap.
+    memory_map_type::const_iterator pos = std::find (memory_map_.begin (), memory_map_.end (), heap_area_);
+    kassert (pos != memory_map_.end ());
+    // Move to the next.
+    ++pos;
+    if (new_end <= (*pos)->begin ()) {
+      // The allocation does not interfere with next area.  Success.
+      heap_area_->end (new_end);
+      return old_end;
     }
     else {
-      // Return the current end of the heap.
-      return const_cast<void*> (heap_area_->end ());
+      // Failure.
+      return reinterpret_cast<void*> (-1);
     }
   }
 
@@ -295,11 +294,8 @@ public:
   verify_span (const void* ptr,
 	       size_t size) const
   {
-    kassert (0);
-    // vm_reserved_area k (ptr, static_cast<const uint8_t*> (ptr) + size);
-    // typename memory_map_type::const_iterator pos = find_by_address (&k);
-    // kassert (pos != memory_map_.end ());
-    // return (*pos)->is_data_area ();
+    memory_map_type::const_iterator pos = find_address (ptr);
+    return pos != memory_map_.end () && (*pos)->begin () <= ptr && (static_cast<const uint8_t*> (ptr) + size) <= (*pos)->end ();
   }
   
   void

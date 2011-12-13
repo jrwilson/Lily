@@ -108,13 +108,20 @@ public:
       	  size_t size = e - b;
       	  while (size != 0) {
       	    size_t sz = std::min (stack_allocator::MAX_REGION_SIZE, size);
-	    allocator_list_.push_back (new (system_alloc ()) stack_allocator (physical_address_to_frame (b), physical_address_to_frame (b + size)));
+      	    allocator_list_.push_back (new (system_alloc ()) stack_allocator (physical_address_to_frame (b), physical_address_to_frame (b + sz)));
       	    size -= sz;
       	    b += sz;
       	  }
       	}
       }
     }
+
+    for (allocator_list_type::const_iterator pos = allocator_list_.begin ();
+	 pos != allocator_list_.end ();
+	 ++pos) {
+      kputs ("Zone: ["); kputx32 (frame_to_physical_address ((*pos)->begin ())); kputs (", "); kputx32 (frame_to_physical_address ((*pos)->end ())); kputs (")\n");
+    }
+    
   }
   
   /* This function allows a frame to be marked as used when initializing virtual memory. */

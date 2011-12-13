@@ -85,7 +85,7 @@ namespace action_test {
 
   static void
   no_finish () {
-    sys_finish (0, 0, false, 0);
+    system::finish (0, 0, false, 0);
   }
 
   static void
