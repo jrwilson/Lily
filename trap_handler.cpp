@@ -18,7 +18,6 @@
 #include "vm_def.hpp"
 #include "system_automaton.hpp"
 #include <utility>
-#include "kassert.hpp"
 
 using namespace std::rel_ops;
 
@@ -34,7 +33,7 @@ trap_handler::install ()
 }
 
 extern "C" void
-trap_dispatch (registers regs)
+trap_dispatch (volatile registers regs)
 {
   switch (regs.eax) {
   case system::FINISH:

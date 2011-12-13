@@ -152,7 +152,7 @@ irq_handler::install ()
 // }
 
 extern "C" void
-irq_handler (registers regs)
+irq_handler (volatile registers regs)
 {
   // TODO
   kassert (0);

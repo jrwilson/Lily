@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
+#include "interrupt_descriptor_table.hpp"
 
 class console {
 public:
@@ -489,6 +490,19 @@ operator<< (console& c,
   console::fmtflags flags = c.flags ();
   c << hex << showbase << internal << setw (10) << setfill ('0') << hf.value;
   c.flags (flags);
+  return c;
+}
+
+inline console&
+operator<< (console& c,
+	    registers& regs)
+{
+  c << "Number: " << regs.number << " Error: " << hexformat (regs.error) << " EFLAGS: " << hexformat (regs.eflags) << endl;
+  c << "EAX: " << hexformat (regs.eax) << " EBX: " << hexformat (regs.ebx) << " ECX: " << hexformat (regs.ecx) << " EDX: " << hexformat (regs.edx) << endl;
+  c << "ESP: " << hexformat (regs.esp) << " EBP: " << hexformat (regs.ebp) << " ESI: " << hexformat (regs.esi) << " EDI: " << hexformat (regs.edi) << endl;
+  c << " DS: " << hexformat (regs.ds) << "  CS: " << hexformat (regs.cs) << " EIP: " << hexformat (regs.eip) << endl;
+  c << "USERSP: " << hexformat (regs.useresp) << " USERSS: " << hexformat (regs.ss) << endl;
+
   return c;
 }
 

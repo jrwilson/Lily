@@ -364,13 +364,13 @@ namespace std {
 
   public:
     iterator
-    find (const key_type& k)
+    find (const key_type& k) const
     {
       const hash_type hash = Hash::operator() (k);
       const size_type bucket_idx = hash % bucket_count_;
-      
+
       drop_type** ptr = &bucket_[bucket_idx];
-      while (*ptr != 0) {
+       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, k)) {
 	  return iterator (ptr, this);
 	}
@@ -379,9 +379,6 @@ namespace std {
       
       return iterator (0, this);
     }
-
-    const_iterator
-    find (const key_type& k) const;
 
     size_type
     count (const key_type& k) const;

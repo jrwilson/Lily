@@ -13,6 +13,7 @@
 
 #include "syscall.hpp"
 #include "syscall_def.hpp"
+#include "kassert.hpp"
 
 namespace system {
   
@@ -36,7 +37,8 @@ namespace system {
     size_t retval;
     asm volatile ("mov %1, %%eax\n"
 		  "int $0x80\n"
-		  "mov %%ebx, %0\n" : "=m"(retval) : "r"(GETPAGESIZE) : "eax", "ebx");
+		  "mov %%ebx, %0\n" : "=m"(retval) : "i"(GETPAGESIZE) : "eax", "ebx");
+    kassert (retval != 0);
     return retval;
 }
   

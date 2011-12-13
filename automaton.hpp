@@ -308,9 +308,9 @@ public:
       (*pos)->page_fault (address, error, regs);
     }
     else {
-      kout << "aid = " << aid_ << endl;
-      kout << "address = " << address << endl;
-      kout << "eip = " << regs->eip << endl;
+      kout << "Page Fault" << endl;
+      kout << "aid = " << aid_ << " address = " << hexformat (address) << " error = " << hexformat (error) << endl;
+      kout << *regs << endl;
       // TODO:  Handle page fault.
       kassert (0);
     }

@@ -17,7 +17,6 @@
 #include <deque>
 #include <unordered_set>
 #include "syscall.hpp"
-#include "kassert.hpp"
 #include "action_traits.hpp"
 
 template <template <typename> class Allocator>
@@ -48,9 +47,9 @@ private:
 
   void
   add_ (const void* action_entry_point,
-	 aid_t parameter)
+	aid_t parameter)
   {
-    entry e (action_entry_point, parameter);
+    const entry e (action_entry_point, parameter);
     if (set_.find (e) == set_.end ()) {
       set_.insert (e);
       queue_.push_back (e);

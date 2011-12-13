@@ -16,7 +16,6 @@
 
 #include <memory>
 #include "syscall.hpp"
-#include "kout.hpp"
 
 template <typename Tag>
 class list_alloc {
@@ -165,6 +164,7 @@ public:
     }
     /* Mark as used and return. */
     ptr->available = 0;
+
     return (ptr + 1);
   }
   
