@@ -238,8 +238,7 @@ private:
     finish_action (bool output_status,
 		   const void* buffer)
     {
-      if (automaton_ != 0) {
-	
+      if (automaton_ != 0) {	
 	switch (type_) {
 	case INPUT:
 	  /* Move to the next input. */
@@ -375,10 +374,10 @@ public:
   }
   
   void
-  finish_action (const void* action_entry_point,
-		 aid_t parameter,
-		 bool output_status,
-		 const void* buffer)
+  finish (const void* action_entry_point,
+	  aid_t parameter,
+	  bool output_status,
+	  const void* buffer)
   {
     if (action_entry_point != 0) {
       schedule_action (current_automaton (), action_entry_point, parameter);

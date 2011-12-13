@@ -81,11 +81,11 @@ private:
     if (!queue_.empty ()) {
       /* Schedule. */
       const entry& e = queue_.front ();
-      sys_finish (e.action_entry_point, e.parameter, output_status, buffer);
+      system::finish (e.action_entry_point, e.parameter, output_status, buffer);
     }
     else {
       /* Don't schedule. */
-      sys_finish (0, 0, output_status, buffer);
+      system::finish (0, 0, output_status, buffer);
     }
   }
 

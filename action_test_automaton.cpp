@@ -1,7 +1,6 @@
 #include "action_test_automaton.hpp"
 #include "list_allocator.hpp"
 #include "fifo_scheduler.hpp"
-#include "kput.hpp"
 #include "kassert.hpp"
 
 struct allocator_tag { };
@@ -71,7 +70,7 @@ namespace action_test {
   void
   init ()
   {
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
     // Initialize the allocator.
     alloc_type::initialize ();
     // Allocate a scheduler.
@@ -85,7 +84,7 @@ namespace action_test {
 
   static void
   no_finish () {
-    sys_finish (0, 0, false, 0);
+    system::finish (0, 0, false, 0);
   }
 
   static void
@@ -347,7 +346,7 @@ namespace action_test {
   up_uv_output_effect ()
   {
     up_uv_output_flag = false;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -367,7 +366,7 @@ namespace action_test {
   {
     up_v_output_flag = false;
     *v = up_v_output_value;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -388,7 +387,7 @@ namespace action_test {
   {
     kassert (p == p_uv_output_parameter);
     p_uv_output_flag = false;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -411,7 +410,7 @@ namespace action_test {
     kassert (p == p_v_output_parameter);
     p_v_output_flag = false;
     *v = p_v_output_value;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -432,7 +431,7 @@ namespace action_test {
   {
     kassert (p == ap_uv_output_parameter);
     ap_uv_output_flag = false;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -455,7 +454,7 @@ namespace action_test {
     kassert (p == ap_v_output_parameter);
     ap_v_output_flag = false;
     *v = ap_v_output_value;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -474,7 +473,7 @@ namespace action_test {
   up_internal_effect ()
   {
     up_internal_flag = false;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void
@@ -495,7 +494,7 @@ namespace action_test {
   {
     kassert (p == p_internal_parameter);
     p_internal_flag = false;
-    kputs (__func__); kputs ("\n");
+    kout << __func__ << endl;
   }
 
   void

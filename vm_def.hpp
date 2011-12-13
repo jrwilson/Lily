@@ -2,6 +2,7 @@
 #define __vm_def_hpp__
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef uint32_t physical_address_t;
 typedef uint32_t frame_t;
@@ -25,8 +26,11 @@ static const void* const KERNEL_VIRTUAL_BASE = reinterpret_cast<const void*> (0x
 /* Everything must fit into 4MB initialy. */
 static const void* const INITIAL_LOGICAL_LIMIT = reinterpret_cast<const void*> (0xC0400000);
 
-/* Memory under one megabyte is not used. */
-static const unsigned int ONE_MEGABYTE = 0x00100000;
+// One megabyte is important for dealing with low memory.
+static const size_t ONE_MEGABYTE = 0x00100000;
+
+// Four megabytes are important because that is span of one page table or page directory entry.
+static const size_t FOUR_MEGABYTES = 0x00400000;
 
 /* Logical address above this address are using for page tables. */
 static const void* const PAGING_AREA = reinterpret_cast<const void*> (0xFFC00000);

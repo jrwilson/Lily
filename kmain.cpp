@@ -39,7 +39,9 @@ kmain (uint32_t multiboot_magic,
   multiboot_parser multiboot_parser (multiboot_magic, multiboot_info);
 
   // Initialize the system memory allocator so as to not stomp on the multiboot data structures.
-  system_alloc::initialize (align_up (std::max (static_cast<void*> (&data_end), reinterpret_cast<void*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ())), PAGE_SIZE), INITIAL_LOGICAL_LIMIT);
+  void* const heap_begin = align_up (std::max (static_cast<void*> (&data_end), reinterpret_cast<void*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ())), PAGE_SIZE);
+  const void* const heap_end = INITIAL_LOGICAL_LIMIT;
+  system_alloc::initialize (heap_begin, heap_end);
 
   // Call the static constructors.
   // Static objects can use dynamic memory!!
@@ -51,21 +53,28 @@ kmain (uint32_t multiboot_magic,
   // Print a welcome message.
   kout << "Lily" << endl;
 
+  kout << "Multiboot data (physical) [" << hexformat (multiboot_parser.begin ()) << ", " << hexformat (multiboot_parser.end ()) << ")" << endl;
+  kout << "Multiboot data  (logical) [" << hexformat (reinterpret_cast<physical_address_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.begin ()) << ", " << hexformat (reinterpret_cast<physical_address_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ()) << ")" << endl;
+
+  kout << "Initial heap [" << hexformat (heap_begin) << ", " << hexformat (heap_end) << ")" << endl;
+
   // Set up segmentation for x86, or rather, ignore it.
+  kout << "Installing GDT" << endl;
   global_descriptor_table::install ();
 
   // Set up interrupt dispatching.
+  kout << "Installing IDT" << endl;
   interrupt_descriptor_table::install ();  
+  kout << "Installing exception handler" << endl;
   exception_handler::install ();
+  kout << "Installing irq handler" << endl;
   irq_handler::install ();
+  kout << "Installing trap handler" << endl;
   trap_handler::install ();
 
-  kassert (0);
-
   // Initialize the system that allocates frames (physical pages of memory).
+  kout << "Parsing memory map" << endl;
   frame_manager::initialize (multiboot_parser.memory_map_begin (), multiboot_parser.memory_map_end ());
-
-  kassert (0);
 
   system_automaton::run ();
 

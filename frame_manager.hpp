@@ -15,7 +15,6 @@
   Justin R. Wilson
 */
 
-#include "kput.hpp"
 #include "multiboot.hpp"
 #include <vector>
 #include <algorithm>
@@ -82,16 +81,16 @@ public:
 	      InputIterator end)
   {
     for (; begin != end; ++begin) {
-      kputx64 (begin->addr); kputs ("-"); kputx64 (begin->addr + begin->len - 1);
+      kout << hexformat (static_cast<unsigned long> (begin->addr)) << "-" << hexformat (static_cast<unsigned long> (begin->addr + begin->len - 1));
       switch (begin->type) {
       case MULTIBOOT_MEMORY_AVAILABLE:
-	kputs (" AVAILABLE\n");
+	kout << " AVAILABLE" << endl;
 	break;
       case MULTIBOOT_MEMORY_RESERVED:
-	kputs (" RESERVED\n");
+	kout << " RESERVED" << endl;
 	break;
       default:
-	kputs (" UNKNOWN\n");
+	kout << " UNKNOWN" << endl;
 	break;
       }
 
@@ -107,13 +106,20 @@ public:
       	  size_t size = e - b;
       	  while (size != 0) {
       	    size_t sz = std::min (stack_allocator::MAX_REGION_SIZE, size);
-	    allocator_list_.push_back (new (system_alloc ()) stack_allocator (physical_address_to_frame (b), physical_address_to_frame (b + size)));
+      	    allocator_list_.push_back (new (system_alloc ()) stack_allocator (physical_address_to_frame (b), physical_address_to_frame (b + sz)));
       	    size -= sz;
       	    b += sz;
       	  }
       	}
       }
     }
+
+    for (allocator_list_type::const_iterator pos = allocator_list_.begin ();
+	 pos != allocator_list_.end ();
+	 ++pos) {
+      kout << "Zone: [" << hexformat (frame_to_physical_address ((*pos)->begin ())) << ", " << hexformat (frame_to_physical_address ((*pos)->end ())) << ")" << endl;
+    }
+    
   }
   
   /* This function allows a frame to be marked as used when initializing virtual memory. */

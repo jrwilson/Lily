@@ -14,15 +14,14 @@
   Justin R. Wilson
 */
 
-enum syscall_t {
-  SYSCALL_FINISH = 0,
-  SYSCALL_GET_PAGE_SIZE,
-  SYSCALL_ALLOCATE,
-};
+namespace system {
+  
+  enum {
+    FINISH = 0,
+    GETPAGESIZE,
+    SBRK,
+  };
 
-enum syserror_t {
-  SYSERROR_SUCCESS = 0,
-  SYSERROR_OUT_OF_MEMORY,
-};
+}
 
 #endif /* __syscall_def_hpp__ */

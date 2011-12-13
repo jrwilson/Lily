@@ -18,6 +18,7 @@
 #include "vm_def.hpp"
 #include "system_automaton.hpp"
 #include <utility>
+#include "kassert.hpp"
 
 using namespace std::rel_ops;
 
@@ -35,38 +36,27 @@ trap_handler::install ()
 extern "C" void
 trap_dispatch (registers regs)
 {
-  const syscall_t syscall = static_cast<syscall_t> (regs.eax);
-
-  switch (syscall) {
-  case SYSCALL_FINISH:
+  switch (regs.eax) {
+  case system::FINISH:
     {
       const void* action_entry_point = reinterpret_cast<const void*> (regs.ebx);
       aid_t parameter = static_cast<aid_t> (regs.ecx);
       bool output_status = regs.edx;
       const void* buffer = reinterpret_cast<const void*> (regs.esi);
-      system_automaton::finish_action (action_entry_point, parameter, output_status, buffer);
+      system_automaton::finish (action_entry_point, parameter, output_status, buffer);
       return;
     }
     break;
-  case SYSCALL_GET_PAGE_SIZE:
+  case system::GETPAGESIZE:
     {
-      regs.eax = SYSERROR_SUCCESS;
       regs.ebx = PAGE_SIZE;
       return;
     }
     break;
-  case SYSCALL_ALLOCATE:
+  case system::SBRK:
     {
-      size_t size = regs.ebx;
-      void* ptr = system_automaton::alloc (size);
-      if (ptr != 0) {
-	regs.eax = SYSERROR_SUCCESS;
-	regs.ebx = reinterpret_cast<uint32_t> (ptr);
-      }
-      else {
-	regs.eax = SYSERROR_OUT_OF_MEMORY;
-	regs.ebx = 0;
-      }
+      ptrdiff_t size = regs.ebx;
+      regs.ebx = reinterpret_cast<uint32_t> (system_automaton::sbrk (size));
       return;
     }
     break;

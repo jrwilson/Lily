@@ -162,6 +162,18 @@ exception_dispatch (registers regs)
     break; 
   case GENERAL_PROTECTION_FAULT:
     // TODO
+    kout << "General Protection Fault" << endl;
+    kout << "EAX: " << hexformat (regs.eax) << " EBX: " << hexformat (regs.ebx) << " ECX: " << hexformat (regs.ecx) << " EDX: " << hexformat (regs.edx) << endl;
+    kout << "ESP: " << hexformat (regs.esp) << " EBP: " << hexformat (regs.ebp) << " ESI: " << hexformat (regs.esi) << " EDI: " << hexformat (regs.edi) << endl;
+    kout << " DS: " << hexformat (regs.ds) << endl;
+    kout << "NUM: " << hexformat (regs.number) << endl;
+    kout << "ERR: " << hexformat (regs.error) << endl;
+    kout << "EIP: " << hexformat (regs.eip) << endl;
+    kout << " CS: " << hexformat (regs.cs) << endl;
+    kout << "EFLAGS: " << hexformat (regs.eflags) << endl;
+    kout << "USERSP: " << hexformat (regs.useresp) << endl;
+    kout << "USERSS: " << hexformat (regs.ss) << endl;
+
     kassert (0);
     break; 
   case PAGE_FAULT:

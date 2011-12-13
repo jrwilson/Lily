@@ -104,7 +104,7 @@ struct page_directory {
   page_directory_entry entry[PAGE_ENTRY_COUNT];
 
   void
-  initialize ();
+  initialize (bool all);
 
 };
 
