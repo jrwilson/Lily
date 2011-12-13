@@ -103,7 +103,7 @@ namespace system_automaton {
       kassert (count == 1);
 
       // Second, create the automaton.
-      input_automaton = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, frame_to_physical_address (frame));
+      input_automaton = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, frame);
 
       // Third, create the automaton's memory map.
       {
@@ -180,7 +180,7 @@ namespace system_automaton {
       kassert (count == 1);
 
       // Second, create the automaton.
-      output_automaton = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, frame_to_physical_address (frame));
+      output_automaton = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, frame);
       
       // Third, create the automaton's memory map.
       {
@@ -345,7 +345,7 @@ namespace system_automaton {
     vm_area_interface* area;
 
     // Allocate the system automaton.
-    automaton* sa = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, vm_manager::page_directory_physical_address ());
+    automaton* sa = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, vm_manager::page_directory_frame ());
 
     // Build its memory map and mark the frames as already being used.
 
@@ -408,7 +408,7 @@ namespace system_automaton {
   void
   page_fault (const void* address,
 	      uint32_t error,
-	      registers* regs)
+	      volatile registers* regs)
   {
     if (address < KERNEL_VIRTUAL_BASE) {
       // Use the automaton's memory map.

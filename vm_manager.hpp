@@ -112,8 +112,8 @@ namespace vm_manager {
   void
   initialize ();
 
-  physical_address_t
-  page_directory_physical_address (void);
+  frame_t
+  page_directory_frame (void);
 
   page_directory*
   get_kernel_page_directory (void);
@@ -137,7 +137,7 @@ namespace vm_manager {
   unmap (const void* logical_addr);
 
   void
-  switch_to_directory (physical_address_t physical_address);
+  switch_to_directory (frame_t frame);
 };
 
 #endif /* __vm_manager_hpp__ */

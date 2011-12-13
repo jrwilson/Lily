@@ -49,8 +49,8 @@ private:
   // Segments including privilege.
   uint32_t code_segment_;
   uint32_t stack_segment_;
-  // Physical address of the automaton's page directory.
-  physical_address_t const page_directory_;
+  // Frame that contains the automaton's page directory.
+  frame_t const page_directory_frame_;
   // Table of action descriptors for guiding execution, checking bindings, etc.
   typedef std::unordered_map<const void*, action, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, action> > > action_map_type;
   action_map_type action_map_;
@@ -143,14 +143,12 @@ public:
 
   automaton (aid_t aid,
 	     descriptor_constants::privilege_t privilege,
-	     physical_address_t page_directory) :
+	     frame_t page_directory_frame) :
     aid_ (aid),
-    page_directory_ (page_directory),
+    page_directory_frame_ (page_directory_frame),
     heap_area_ (0),
     stack_area_ (0)
   {
-    kassert (is_aligned (page_directory, PAGE_SIZE));
-
     switch (privilege) {
     case descriptor_constants::RING0:
       code_segment_ = KERNEL_CODE_SELECTOR | descriptor_constants::RING0;
@@ -192,10 +190,10 @@ public:
     return stack_area_->end ();
   }
   
-  physical_address_t
-  page_directory () const
+  frame_t
+  page_directory_frame () const
   {
-    return page_directory_;
+    return page_directory_frame_;
   }
 
   uint32_t
@@ -301,7 +299,7 @@ public:
   void
   page_fault (const void* address,
 	      uint32_t error,
-	      registers* regs)
+	      volatile registers* regs)
   {
     memory_map_type::const_iterator pos = find_address (address);
     if (pos != memory_map_.end ()) {

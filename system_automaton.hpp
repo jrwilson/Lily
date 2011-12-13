@@ -30,7 +30,7 @@ namespace system_automaton {
   void
   page_fault (const void* address,
 	      uint32_t error,
-	      registers* regs);
+	      volatile registers* regs);
   
   void
   finish (const void* action_entry_point,

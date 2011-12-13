@@ -495,7 +495,7 @@ operator<< (console& c,
 
 inline console&
 operator<< (console& c,
-	    registers& regs)
+	    volatile registers& regs)
 {
   c << "Number: " << regs.number << " Error: " << hexformat (regs.error) << " EFLAGS: " << hexformat (regs.eflags) << endl;
   c << "EAX: " << hexformat (regs.eax) << " EBX: " << hexformat (regs.ebx) << " ECX: " << hexformat (regs.ecx) << " EDX: " << hexformat (regs.edx) << endl;

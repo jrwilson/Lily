@@ -143,7 +143,7 @@ private:
       asm volatile ("add %0, %%esp\n"
 		    "add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
 
-      vm_manager::switch_to_directory (automaton_->page_directory ());
+      vm_manager::switch_to_directory (automaton_->page_directory_frame ());
 
       if (type_ == INPUT) {
 	// Copy the value to the stack.

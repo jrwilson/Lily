@@ -121,18 +121,16 @@ page_directory::initialize (bool all)
 }
 
 void
-vm_manager::switch_to_directory (physical_address_t address)
+vm_manager::switch_to_directory (frame_t frame)
 {
-  kassert (is_aligned (address, PAGE_SIZE));
-
   /* Switch to the page directory. */
-  asm volatile ("mov %0, %%cr3\n" :: "r"(address));
+  asm volatile ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
 }
 
-physical_address_t
-vm_manager::page_directory_physical_address (void)
+frame_t
+vm_manager::page_directory_frame (void)
 {
-  return frame_to_physical_address (get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_);
+  return get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_;
 }
 
 void
@@ -168,7 +166,7 @@ vm_manager::initialize ()
 
   // I don't trust myself.
   // Consequently, I'm going to flush paging to ensure the subsequent memory accesses are correct.
-  switch_to_directory (page_directory_physical_address ());
+  switch_to_directory (page_directory_frame ());
 }
 
 page_directory*

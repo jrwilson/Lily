@@ -38,7 +38,7 @@ public:
   virtual void
   page_fault (const void* address,
 	      uint32_t error,
-	      registers*) = 0;
+	      volatile registers*) = 0;
 };
 
 class vm_reserved_area : public vm_area_interface {
@@ -68,7 +68,7 @@ public:
   void
   page_fault (const void*,
 	      uint32_t,
-	      registers*)
+	      volatile registers*)
   {
     // TODO
     kassert (0);
@@ -102,7 +102,7 @@ public:
   void
   page_fault (const void*,
 	      uint32_t,
-	      registers*)
+	      volatile registers*)
   {
     // TODO
     kassert (0);
@@ -136,7 +136,7 @@ public:
   void
   page_fault (const void*,
 	      uint32_t,
-	      registers*)
+	      volatile registers*)
   {
     // TODO
     kassert (0);
@@ -170,7 +170,7 @@ public:
   void
   page_fault (const void*,
 	      uint32_t,
-	      registers*)
+	      volatile registers*)
   {
     // TODO
     kassert (0);
@@ -211,7 +211,7 @@ public:
   void
   page_fault (const void* address,
 	      uint32_t error,
-	      registers*)
+	      volatile registers*)
   {
     // Fault should come from not being present.
     kassert ((error & PAGE_PROTECTION_ERROR) == 0);
@@ -255,7 +255,7 @@ public:
   void
   page_fault (const void* address,
 	      uint32_t error,
-	      registers*)
+	      volatile registers*)
   {
     // Fault should come from not being present.
     kassert ((error & PAGE_PROTECTION_ERROR) == 0);
