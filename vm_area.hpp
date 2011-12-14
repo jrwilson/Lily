@@ -19,7 +19,6 @@
 #include "frame_manager.hpp"
 #include "kassert.hpp"
 #include <string.h>
-#include "interrupt_descriptor_table.hpp"
 
 #define PAGE_PROTECTION_ERROR (1 << 0)
 #define PAGE_WRITE_ERROR (1 << 1)

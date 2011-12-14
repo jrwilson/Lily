@@ -18,7 +18,7 @@
 #include "system_allocator.hpp"
 #include "vm_def.hpp"
 #include "gdt.hpp"
-#include "interrupt_descriptor_table.hpp"
+#include "idt.hpp"
 #include "exception_handler.hpp"
 #include "irq_handler.hpp"
 #include "trap_handler.hpp"
@@ -64,7 +64,7 @@ kmain (uint32_t multiboot_magic,
 
   // Set up interrupt dispatching.
   kout << "Installing IDT" << endl;
-  interrupt_descriptor_table::install ();  
+  idt::install ();  
   kout << "Installing exception handler" << endl;
   exception_handler::install ();
   kout << "Installing irq handler" << endl;

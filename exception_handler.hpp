@@ -14,8 +14,10 @@
   Justin R. Wilson
 */
 
-namespace exception_handler {
-  void install ();
-}
+class exception_handler {
+public:
+  static void
+  install ();
+};
 
 #endif /* __exception_handler_hpp__ */

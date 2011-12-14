@@ -44,6 +44,72 @@ using namespace std::rel_ops;
 class system_alloc;
 
 class stack_allocator {
+public:
+  static const size_t MAX_REGION_SIZE = 0x07FFF000;
+
+  stack_allocator (frame_t begin,
+		   frame_t end);
+
+  inline frame_t
+  begin () const
+  {
+    return begin_;
+  }
+
+  inline frame_t
+  end () const
+  {
+    return end_;
+  }
+  
+  inline bool
+  full () const
+  {
+    return free_head_ == STACK_ALLOCATOR_EOL;
+  }
+  
+  void
+  mark_as_used (frame_t frame);
+
+  inline frame_t
+  alloc ()
+  {
+    kassert (free_head_ != STACK_ALLOCATOR_EOL);
+    
+    frame_entry_t idx = free_head_;
+    free_head_ = entry_[idx];
+    entry_[idx] = -1;
+    return begin_ + idx;
+  }
+
+  inline size_t
+  incref (frame_t frame)
+  {
+    kassert (frame >= begin_ && frame < end_);
+    frame_entry_t idx = frame - begin_;
+    /* Frame is allocated. */
+    kassert (entry_[idx] < 0);
+    /* "Increment" the reference count. */
+    return -(--entry_[idx]);
+  }
+
+  inline size_t
+  decref (frame_t frame)
+  {
+    kassert (frame >= begin_ && frame < end_);
+    frame_entry_t idx = frame - begin_;
+    /* Frame is allocated. */
+    kassert (entry_[idx] < 0);
+    /* "Decrement" the reference count. */
+    size_t retval = -(++entry_[idx]);
+    /* Free the frame. */
+    if (entry_[idx] == 0) {
+      entry_[idx] = free_head_;
+      free_head_ = idx;
+    }
+    return retval;
+  }
+
 private:
   typedef int16_t frame_entry_t;
   static const frame_entry_t STACK_ALLOCATOR_EOL = -32768;
@@ -52,33 +118,6 @@ private:
   frame_t end_;
   frame_entry_t free_head_;
   frame_entry_t* entry_;
-
-public:
-  static const size_t MAX_REGION_SIZE;
-
-  stack_allocator (frame_t begin,
-		   frame_t end);
-
-  frame_t
-  begin () const;
-
-  frame_t
-  end () const;
-
-  bool
-  full () const;
-
-  void
-  mark_as_used (frame_t frame);
-
-  frame_t
-  alloc ();
-
-  size_t
-  incref (frame_t frame);
-
-  size_t
-  decref (frame_t frame);
 };
 
 #endif /* __stack_allocator_hpp__ */

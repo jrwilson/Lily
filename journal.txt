@@ -383,3 +383,4 @@ Implement a better allocator (or improve existing one).  Use assumption of conti
 Memory alignment.
 
 wasted stack space in loader -> map like page directory
+optimize memory copying and clearing pages (rep stos)

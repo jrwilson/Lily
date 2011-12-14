@@ -17,13 +17,13 @@
 #include <stdint.h>
 
 class irq_handler {
-private:
-  static uint8_t pic_master_mask_;
-  static uint8_t pic_slave_mask_;
-
 public:
   static void
   install ();
+
+private:
+  static uint8_t pic_master_mask_;
+  static uint8_t pic_slave_mask_;
 };
 
 #endif /* __irq_handler_hpp__ */

@@ -16,9 +16,9 @@
 
 #include <stddef.h>
 #include "sys_types.hpp"
+#include "registers.hpp"
 
 class automaton;
-class registers;
 
 namespace system_automaton {
 

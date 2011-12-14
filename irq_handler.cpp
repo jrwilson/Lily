@@ -12,16 +12,16 @@
 */
 
 #include "irq_handler.hpp"
-#include "interrupt_descriptor_table.hpp"
+#include "idt.hpp"
 #include "gdt.hpp"
 #include "io.hpp"
 #include "kassert.hpp"
 
 /* Remap interrupts to ISR. */
-static const interrupt_number PIC_MASTER_BASE = 32;
-static const interrupt_number PIC_MASTER_LIMIT = 40;
-static const interrupt_number PIC_SLAVE_BASE = 40;
-static const interrupt_number PIC_SLAVE_LIMIT = 48;
+static const unsigned int PIC_MASTER_BASE = 32;
+static const unsigned int PIC_MASTER_LIMIT = 40;
+static const unsigned int PIC_SLAVE_BASE = 40;
+static const unsigned int PIC_SLAVE_LIMIT = 48;
 
 /* Programmable interrupt controllers. */
 static const unsigned char PIC_SLAVE_LOW = 0xA0;
@@ -112,22 +112,22 @@ irq_handler::install ()
   io::outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask_);
   io::outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask_);
 
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 0, make_interrupt_gate (irq0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 1, make_interrupt_gate (irq1, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 2, make_interrupt_gate (irq2, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 3, make_interrupt_gate (irq3, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 4, make_interrupt_gate (irq4, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 5, make_interrupt_gate (irq5, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 6, make_interrupt_gate (irq6, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_MASTER_BASE + 7, make_interrupt_gate (irq7, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 0, make_interrupt_gate (irq8, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 1, make_interrupt_gate (irq9, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 2, make_interrupt_gate (irq10, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 3, make_interrupt_gate (irq11, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 4, make_interrupt_gate (irq12, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 5, make_interrupt_gate (irq13, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 6, make_interrupt_gate (irq14, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 0, make_interrupt_gate (irq0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 1, make_interrupt_gate (irq1, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 2, make_interrupt_gate (irq2, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 3, make_interrupt_gate (irq3, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 4, make_interrupt_gate (irq4, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 5, make_interrupt_gate (irq5, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 6, make_interrupt_gate (irq6, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 7, make_interrupt_gate (irq7, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 0, make_interrupt_gate (irq8, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 1, make_interrupt_gate (irq9, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 2, make_interrupt_gate (irq10, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 3, make_interrupt_gate (irq11, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 4, make_interrupt_gate (irq12, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 5, make_interrupt_gate (irq13, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 6, make_interrupt_gate (irq14, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
 }
 
 // void

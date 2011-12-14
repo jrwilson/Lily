@@ -17,7 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
-#include "interrupt_descriptor_table.hpp"
+#include "registers.hpp"
 
 class console {
 public:

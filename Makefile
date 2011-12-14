@@ -13,7 +13,7 @@ kout.o \
 system_allocator.o \
 gdt.o \
 gdt_flush.o \
-interrupt_descriptor_table.o \
+idt.o \
 idt_flush.o \
 exception_handler.o \
 exception.o \
