@@ -113,13 +113,13 @@ logical_to_physical (const void* address,
 inline page_table_idx_t
 get_page_table_entry (const void* address)
 {
-  return (reinterpret_cast<page_table_idx_t> (address) & 0x3FF000) >> 12;
+  return (reinterpret_cast<uintintptr_t> (address) & 0x3FF000) >> 12;
 }
 
 inline page_table_idx_t
 get_page_directory_entry (const void* address)
 {
-  return (reinterpret_cast<page_table_idx_t> (address) & 0xFFC00000) >> 22;
+  return (reinterpret_cast<uintintptr_t> (address) & 0xFFC00000) >> 22;
 }
 
 inline const void*

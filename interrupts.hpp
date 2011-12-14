@@ -20,13 +20,13 @@ namespace interrupts {
   inline void
   enable ()
   {
-    asm volatile ("sti");
+    asm ("sti");
   }
   
   inline void
   disable ()
   {
-    asm volatile ("cli");
+    asm ("cli");
   }
   
 }

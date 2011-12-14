@@ -124,7 +124,7 @@ void
 vm_manager::switch_to_directory (frame_t frame)
 {
   /* Switch to the page directory. */
-  asm volatile ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
+  asm ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
 }
 
 frame_t
@@ -215,7 +215,7 @@ vm_manager::map (const void* logical_addr,
       // Either way, we can just allocate a page table.
       page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), paging_constants::PRESENT);
       // Flush the TLB.
-      asm volatile ("invlpg %0\n" :: "m" (*page_table));
+      asm ("invlpg %0\n" :: "m" (*page_table));
       // Initialize the page table.
       page_table->clear ();
     }
@@ -228,7 +228,7 @@ vm_manager::map (const void* logical_addr,
   	page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
   	frame_manager::incref (page_directory->entry[directory_entry].frame_);
   	// Flush the TLB.
-  	asm volatile ("invlpg %0\n" :: "m" (*page_table));
+  	asm ("invlpg %0\n" :: "m" (*page_table));
   	// Initialize the page table.
   	page_table->clear ();
       }
@@ -238,7 +238,7 @@ vm_manager::map (const void* logical_addr,
   	page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
   	frame_manager::incref (page_directory->entry[directory_entry].frame_);
   	// Flush the TLB.
-  	asm volatile ("invlpg %0\n" :: "m" (*page_table));
+  	asm ("invlpg %0\n" :: "m" (*page_table));
       }
     }
   }
@@ -248,7 +248,7 @@ vm_manager::map (const void* logical_addr,
   frame_manager::incref (fr);
 
   // Flush the TLB.
-  asm volatile ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+  asm ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
 }
 
 void

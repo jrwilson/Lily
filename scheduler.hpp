@@ -121,7 +121,7 @@ private:
       // Move the stack into an area mapped in all address spaces so that switching page directories doesn't cause a triple fault.
   
       // Determine the beginning of the stack.
-      asm volatile ("mov %%esp, %0\n" : "=m"(stack_begin));
+      asm ("mov %%esp, %0\n" : "=g"(stack_begin));
 
       // Determine the end of the stack.
       stack_end = &end_of_stack + 1;
@@ -140,8 +140,8 @@ private:
       }
   
       /* Update the base and stack pointers. */
-      asm volatile ("add %0, %%esp\n"
-		    "add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
+      asm ("add %0, %%esp\n"
+	   "add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
 
       vm_manager::switch_to_directory (automaton_->page_directory_frame ());
 
@@ -168,11 +168,9 @@ private:
 
       // Push the flags.
       uint32_t eflags;
-      asm volatile ("pushf\n"
-		    "pop %%eax\n"
-		    "mov %%eax, %0\n" : "=m"(eflags) : : "%eax");
+      asm ("pushf\n"
+	   "pop %0\n" : "=g"(eflags) : :);
       *--stack_pointer = eflags;
-
 
       // Push the code segment.
       *--stack_pointer = code_segment;
@@ -180,16 +178,16 @@ private:
       // Push the instruction pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (action_entry_point_);
 
-      asm volatile ("mov %0, %%ss\n"	// Load the new stack segment.
-		    "mov %1, %%esp\n"	// Load the new stack pointer.
-		    "mov $0x0, %%eax\n"	// Clear the registers.
-		    "mov $0x0, %%ebx\n"
-		    "mov $0x0, %%ecx\n"
-		    "mov $0x0, %%edx\n"
-		    "mov $0x0, %%edi\n"
-		    "mov $0x0, %%esi\n"
-		    "mov $0x0, %%ebp\n"
-		    "iret\n" :: "r"(stack_segment), "r"(stack_pointer));
+      asm ("mov %%eax, %%ss\n"	// Load the new stack segment.
+	   "mov %%ebx, %%esp\n"	// Load the new stack pointer.
+	   "xor %%eax, %%eax\n"	// Clear the registers.
+	   "xor %%ebx, %%ebx\n"
+	   "xor %%ecx, %%ecx\n"
+	   "xor %%edx, %%edx\n"
+	   "xor %%edi, %%edi\n"
+	   "xor %%esi, %%esi\n"
+	   "xor %%ebp, %%ebp\n"
+	   "iret\n" :: "a"(stack_segment), "b"(stack_pointer));
     }
     
   public:

@@ -23,22 +23,14 @@ namespace system {
 	  bool output_status,
 	  const void* output_buffer)
   {
-    asm volatile ("mov %0, %%eax\n"
-		  "mov %1, %%ebx\n"
-		  "mov %2, %%ecx\n"
-		  "mov %3, %%edx\n"
-		  "mov %4, %%esi\n"
-		  "int $0x80\n" : : "r"(FINISH), "m"(action_entry_point), "m"(parameter), "m"(output_status), "m"(output_buffer) : "eax", "ebx", "ecx", "edx", "esi");
+    asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(output_status), "S"(output_buffer) :);
   }
   
   size_t
   getpagesize (void)
   {
     size_t retval;
-    asm volatile ("mov %1, %%eax\n"
-		  "int $0x80\n"
-		  "mov %%ebx, %0\n" : "=m"(retval) : "i"(GETPAGESIZE) : "eax", "ebx");
-    kassert (retval != 0);
+    asm ("int $0x80\n" : "=b"(retval) : "a"(GETPAGESIZE) :);
     return retval;
 }
   
@@ -46,11 +38,7 @@ namespace system {
   sbrk (ptrdiff_t size)
   {
     void* ptr;
-    asm volatile ("mov %1, %%eax\n"
-		  "mov %2, %%ebx\n"
-		  "int $0x80\n"
-		  "mov %%ebx, %0\n" : "=m"(ptr) : "r"(SBRK), "m"(size) : "eax", "ebx");
-    
+    asm ("int $0x80\n" : "=b"(ptr) : "a"(SBRK), "b"(size) :);
     return ptr;
   }
   
