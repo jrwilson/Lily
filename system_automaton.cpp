@@ -89,15 +89,15 @@ namespace system_automaton {
       // First, create a new page directory.
 
       // Reserve some logical address space for the page directory.
-      page_directory* pd = static_cast<page_directory*> (vm_manager::get_stub ());
+      vm::page_directory* pd = static_cast<vm::page_directory*> (vm::get_stub ());
       // Allocate a frame.
       frame_t frame = frame_manager::alloc ();
       // Map the page directory.
-      vm_manager::map (pd, frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+      vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
       // Initialize the page directory with a copy of the current page directory.
-      pd->initialize (true);
+      new (pd) vm::page_directory (true);
       // Unmap.
-      vm_manager::unmap (pd);
+      vm::unmap (pd);
       // Drop the reference count from allocation.
       size_t count = frame_manager::decref (frame);
       kassert (count == 1);
@@ -126,12 +126,12 @@ namespace system_automaton {
       	kassert (r);
 
       	// Heap.
-      	vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, paging_constants::SUPERVISOR);
+      	vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
       	r = input_automaton->insert_heap_area (heap_area);
       	kassert (r);
 
       	// Stack.
-      	vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, paging_constants::SUPERVISOR);
+      	vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
       	r = input_automaton->insert_stack_area (stack_area);
       	kassert (r);
       }
@@ -166,15 +166,15 @@ namespace system_automaton {
       // First, create a new page directory.
 
       // Reserve some logical address space for the page directory.
-      page_directory* pd = static_cast<page_directory*> (vm_manager::get_stub ());
+      vm::page_directory* pd = static_cast<vm::page_directory*> (vm::get_stub ());
       // Allocate a frame.
       frame_t frame = frame_manager::alloc ();
       // Map the page directory.
-      vm_manager::map (pd, frame, paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+      vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
       // Initialize the page directory with a copy of the current page directory.
-      pd->initialize (true);
+      new (pd) vm::page_directory (true);
       // Unmap.
-      vm_manager::unmap (pd);
+      vm::unmap (pd);
       // Drop the reference count from allocation.
       size_t count = frame_manager::decref (frame);
       kassert (count == 1);
@@ -203,12 +203,12 @@ namespace system_automaton {
       	kassert (r);
 
       	// Heap.
-      	vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, paging_constants::SUPERVISOR);
+      	vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
       	r = output_automaton->insert_heap_area (heap_area);
       	kassert (r);
 
       	// Stack.
-      	vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, paging_constants::SUPERVISOR);
+      	vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
       	r = output_automaton->insert_stack_area (stack_area);
       	kassert (r);
       }
@@ -345,7 +345,7 @@ namespace system_automaton {
     vm_area_interface* area;
 
     // Allocate the system automaton.
-    automaton* sa = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, vm_manager::page_directory_frame ());
+    automaton* sa = new (system_alloc ()) automaton (aid_manager_.allocate (), descriptor_constants::RING0, vm::page_directory_frame ());
 
     // Build its memory map and mark the frames as already being used.
 
@@ -374,12 +374,12 @@ namespace system_automaton {
     // Stack.
     vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_AUTOMATON_STACK_BEGIN,
 								     SYSTEM_AUTOMATON_STACK_END,
-								     paging_constants::SUPERVISOR);
+								     vm::SUPERVISOR);
     r = sa->insert_stack_area (stack_area);
     kassert (r);
 
     // Heap.
-    vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (system_alloc::heap_begin (), paging_constants::SUPERVISOR);
+    vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (system_alloc::heap_begin (), vm::SUPERVISOR);
     r = sa->insert_heap_area (heap_area);
     kassert (r);
     // Tell the heap about the existing heap.
@@ -391,7 +391,7 @@ namespace system_automaton {
     system_automaton = sa;
 
     // We can't allocate any more memory until the page tables are corrected.
-    vm_manager::initialize ();
+    vm::initialize ();
 
     /* Add the actions. */
     system_automaton->add_action<init_traits> (&init);

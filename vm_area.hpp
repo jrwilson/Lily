@@ -15,7 +15,7 @@
   Justin R. Wilson
 */
 
-#include "vm_manager.hpp"
+#include "vm.hpp"
 #include "frame_manager.hpp"
 #include "kassert.hpp"
 #include <string.h>
@@ -180,11 +180,11 @@ class vm_heap_area : public vm_area_interface {
 private:
   const void* const begin_;
   const void* end_;
-  const paging_constants::page_privilege_t page_privilege_;
+  const vm::page_privilege_t page_privilege_;
 
 public:
   vm_heap_area (const void* begin,
-		paging_constants::page_privilege_t page_privilege) :
+		vm::page_privilege_t page_privilege) :
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (begin_),
     page_privilege_ (page_privilege)
@@ -217,7 +217,7 @@ public:
     // Fault should come from data.
     kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
     // Back the request with a frame.
-    vm_manager::map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
+    vm::map (address, frame_manager::alloc (), page_privilege_, vm::WRITABLE);
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
     memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
@@ -228,12 +228,12 @@ class vm_stack_area : public vm_area_interface {
 private:
   const void* const begin_;
   const void* const end_;
-  const paging_constants::page_privilege_t page_privilege_;
+  const vm::page_privilege_t page_privilege_;
 
 public:
   vm_stack_area (const void* begin,
 		 const void* end,
-		 paging_constants::page_privilege_t page_privilege) :
+		 vm::page_privilege_t page_privilege) :
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE)),
     page_privilege_ (page_privilege)
@@ -261,7 +261,7 @@ public:
     // Fault should come from data.
     kassert ((error & PAGE_INSTRUCTION_ERROR) == 0);
     // Back the request with a frame.
-    vm_manager::map (address, frame_manager::alloc (), page_privilege_, paging_constants::WRITABLE);
+    vm::map (address, frame_manager::alloc (), page_privilege_, vm::WRITABLE);
     /* Clear the frame. */
     /* TODO:  This is a long operation.  Move it out of the interrupt handler. */
     memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);

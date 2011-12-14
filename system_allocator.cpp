@@ -13,7 +13,7 @@
 
 #include "system_allocator.hpp"
 #include "frame_manager.hpp"
-#include "vm_manager.hpp"
+#include "vm.hpp"
 #include <new>
 #include "kassert.hpp"
 #include "system_automaton.hpp"
@@ -98,7 +98,7 @@ system_alloc::allocate (size_t size)
     kassert (retval != 0);
     // Back with frames.
     for (size_t x = 0; x < size; x += PAGE_SIZE) {
-      vm_manager::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), paging_constants::SUPERVISOR, paging_constants::WRITABLE);
+      vm::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), vm::SUPERVISOR, vm::WRITABLE);
     }
     return retval;
   }

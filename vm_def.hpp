@@ -110,23 +110,4 @@ logical_to_physical (const void* address,
   return reinterpret_cast<physical_address_t> (address) - reinterpret_cast<physical_address_t> (offset);
 }
 
-inline page_table_idx_t
-get_page_table_entry (const void* address)
-{
-  return (reinterpret_cast<uintintptr_t> (address) & 0x3FF000) >> 12;
-}
-
-inline page_table_idx_t
-get_page_directory_entry (const void* address)
-{
-  return (reinterpret_cast<uintintptr_t> (address) & 0xFFC00000) >> 22;
-}
-
-inline const void*
-get_address (page_table_idx_t directory_entry,
-	     page_table_idx_t table_entry)
-{
-  return reinterpret_cast<const void*> (directory_entry << 22 | table_entry << 12);
-}
-
 #endif /* __vm_def_hpp__ */

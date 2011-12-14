@@ -100,7 +100,7 @@ kmain (uint32_t multiboot_magic,
     }
   }
 
-  // system_automaton::run ();
+  system_automaton::run ();
 
   kassert (0);
 }

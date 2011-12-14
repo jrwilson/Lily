@@ -23,7 +23,7 @@ trap_handler.o \
 trap.o \
 stack_allocator.o \
 frame_manager.o \
-vm_manager.o \
+vm.o \
 system_automaton.o \
 binding_manager.o \
 syscall.o \
