@@ -11,7 +11,7 @@ cpp_runtime.o \
 string.o \
 kout.o \
 system_allocator.o \
-global_descriptor_table.o \
+gdt.o \
 gdt_flush.o \
 interrupt_descriptor_table.o \
 idt_flush.o \

@@ -13,7 +13,7 @@
 
 #include "exception_handler.hpp"
 #include "interrupt_descriptor_table.hpp"
-#include "global_descriptor_table.hpp"
+#include "gdt.hpp"
 #include "system_automaton.hpp"
 #include "kassert.hpp"
 
@@ -53,38 +53,38 @@ extern "C" void exception31 ();
 void
 exception_handler::install ()
 {
-  interrupt_descriptor_table::set (0, make_interrupt_gate (exception0, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (1, make_interrupt_gate (exception1, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (2, make_interrupt_gate (exception2, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (3, make_interrupt_gate (exception3, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (4, make_interrupt_gate (exception4, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (5, make_interrupt_gate (exception5, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (6, make_interrupt_gate (exception6, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (7, make_interrupt_gate (exception7, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (8, make_interrupt_gate (exception8, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (9, make_interrupt_gate (exception9, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (10, make_interrupt_gate (exception10, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (11, make_interrupt_gate (exception11, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (12, make_interrupt_gate (exception12, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (13, make_interrupt_gate (exception13, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (14, make_interrupt_gate (exception14, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (15, make_interrupt_gate (exception15, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (16, make_interrupt_gate (exception16, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (17, make_interrupt_gate (exception17, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (18, make_interrupt_gate (exception18, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (19, make_interrupt_gate (exception19, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (20, make_interrupt_gate (exception20, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (21, make_interrupt_gate (exception21, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (22, make_interrupt_gate (exception22, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (23, make_interrupt_gate (exception23, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (24, make_interrupt_gate (exception24, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (25, make_interrupt_gate (exception25, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (26, make_interrupt_gate (exception26, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (27, make_interrupt_gate (exception27, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (28, make_interrupt_gate (exception28, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (29, make_interrupt_gate (exception29, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (30, make_interrupt_gate (exception30, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  interrupt_descriptor_table::set (31, make_interrupt_gate (exception31, KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (0, make_interrupt_gate (exception0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (1, make_interrupt_gate (exception1, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (2, make_interrupt_gate (exception2, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (3, make_interrupt_gate (exception3, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (4, make_interrupt_gate (exception4, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (5, make_interrupt_gate (exception5, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (6, make_interrupt_gate (exception6, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (7, make_interrupt_gate (exception7, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (8, make_interrupt_gate (exception8, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (9, make_interrupt_gate (exception9, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (10, make_interrupt_gate (exception10, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (11, make_interrupt_gate (exception11, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (12, make_interrupt_gate (exception12, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (13, make_interrupt_gate (exception13, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (14, make_interrupt_gate (exception14, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (15, make_interrupt_gate (exception15, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (16, make_interrupt_gate (exception16, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (17, make_interrupt_gate (exception17, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (18, make_interrupt_gate (exception18, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (19, make_interrupt_gate (exception19, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (20, make_interrupt_gate (exception20, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (21, make_interrupt_gate (exception21, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (22, make_interrupt_gate (exception22, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (23, make_interrupt_gate (exception23, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (24, make_interrupt_gate (exception24, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (25, make_interrupt_gate (exception25, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (26, make_interrupt_gate (exception26, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (27, make_interrupt_gate (exception27, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (28, make_interrupt_gate (exception28, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (29, make_interrupt_gate (exception29, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (30, make_interrupt_gate (exception30, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  interrupt_descriptor_table::set (31, make_interrupt_gate (exception31, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
 }
 
 static const interrupt_number DIVIDE_ERROR = 0;

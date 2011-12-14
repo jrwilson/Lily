@@ -17,7 +17,7 @@
 #include "multiboot_parser.hpp"
 #include "system_allocator.hpp"
 #include "vm_def.hpp"
-#include "global_descriptor_table.hpp"
+#include "gdt.hpp"
 #include "interrupt_descriptor_table.hpp"
 #include "exception_handler.hpp"
 #include "irq_handler.hpp"
@@ -60,7 +60,7 @@ kmain (uint32_t multiboot_magic,
 
   // Set up segmentation for x86, or rather, ignore it.
   kout << "Installing GDT" << endl;
-  global_descriptor_table::install ();
+  gdt::install ();
 
   // Set up interrupt dispatching.
   kout << "Installing IDT" << endl;

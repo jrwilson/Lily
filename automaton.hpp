@@ -22,7 +22,7 @@
 #include "action_traits.hpp"
 #include "static_assert.hpp"
 #include <type_traits>
-#include "global_descriptor_table.hpp"
+#include "gdt.hpp"
 
 class automaton {
 public:
@@ -151,8 +151,8 @@ public:
   {
     switch (privilege) {
     case descriptor_constants::RING0:
-      code_segment_ = KERNEL_CODE_SELECTOR | descriptor_constants::RING0;
-      stack_segment_ = KERNEL_DATA_SELECTOR | descriptor_constants::RING0;
+      code_segment_ = gdt::KERNEL_CODE_SELECTOR | descriptor_constants::RING0;
+      stack_segment_ = gdt::KERNEL_DATA_SELECTOR | descriptor_constants::RING0;
       break;
     case descriptor_constants::RING1:
     case descriptor_constants::RING2:
