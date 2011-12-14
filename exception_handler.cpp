@@ -14,7 +14,7 @@
 #include "exception_handler.hpp"
 #include "idt.hpp"
 #include "gdt.hpp"
-#include "system_automaton.hpp"
+#include "rts.hpp"
 #include "kassert.hpp"
 
 extern "C" void exception0 ();
@@ -170,7 +170,7 @@ exception_dispatch (volatile registers regs)
       // Get the faulting address.
       const void* addr;
       asm ("mov %%cr2, %0\n" : "=g"(addr));
-      system_automaton::page_fault (addr, regs.error, &regs);
+      rts::page_fault (addr, regs.error, &regs);
     }
     break; 
   case COPROCESSOR_ERROR:

@@ -12,15 +12,14 @@
 */
 
 #include "vm.hpp"
-#include "system_automaton.hpp"
 #include "automaton.hpp"
 
 namespace vm {
 
   void
-  initialize ()
+  initialize (automaton* system_automaton)
   {
-    kassert (system_automaton::system_automaton != 0);
+    kassert (system_automaton != 0);
     
     page_directory* kernel_page_directory = get_kernel_page_directory ();
     
@@ -34,7 +33,7 @@ namespace vm {
 	    const void* address = get_address (i, j);
 	    // The page directory uses the same page table for low and high memory.  Only process high memory.
 	    if (address >= KERNEL_VIRTUAL_BASE) {
-	      if (system_automaton::system_automaton->address_in_use (address) || address == kernel_page_directory) {
+	      if (system_automaton->address_in_use (address) || address == kernel_page_directory || address >= PAGING_AREA) {
 		// If the address is in the logical address space, mark the frame as being used.
 		frame_manager::mark_as_used (pt->entry[j].frame_);
 	      }

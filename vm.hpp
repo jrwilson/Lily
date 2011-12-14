@@ -26,6 +26,8 @@ namespace vm {
 extern vm::page_directory kernel_page_directory;
 extern vm::page_table kernel_page_table;
 
+class automaton;
+
 namespace vm {
 
   enum global_t {
@@ -221,7 +223,7 @@ namespace vm {
   };
   
   void
-  initialize ();
+  initialize (automaton*);
 
   inline page_directory*
   get_page_directory (void)

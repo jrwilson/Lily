@@ -16,7 +16,7 @@
 #include "gdt.hpp"
 #include "syscall_def.hpp"
 #include "vm_def.hpp"
-#include "system_automaton.hpp"
+#include "rts.hpp"
 #include <utility>
 #include "registers.hpp"
 
@@ -43,7 +43,7 @@ trap_dispatch (volatile registers regs)
       aid_t parameter = static_cast<aid_t> (regs.ecx);
       bool output_status = regs.edx;
       const void* buffer = reinterpret_cast<const void*> (regs.esi);
-      system_automaton::finish (action_entry_point, parameter, output_status, buffer);
+      rts::finish (action_entry_point, parameter, output_status, buffer);
       return;
     }
     break;
@@ -56,11 +56,11 @@ trap_dispatch (volatile registers regs)
   case system::SBRK:
     {
       ptrdiff_t size = regs.ebx;
-      regs.ebx = reinterpret_cast<uint32_t> (system_automaton::sbrk (size));
+      regs.ebx = reinterpret_cast<uint32_t> (rts::sbrk (size));
       return;
     }
     break;
   }
   
-  system_automaton::unknown_system_call ();
+  rts::unknown_system_call ();
 }

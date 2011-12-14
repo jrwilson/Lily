@@ -23,26 +23,10 @@
 #include "static_assert.hpp"
 #include <type_traits>
 #include "gdt.hpp"
+#include "aid_manager.hpp"
+#include "action_descriptor.hpp"
 
 class automaton {
-public:
-  struct action {
-    action_type_t type;
-    const void* action_entry_point;
-    parameter_mode_t parameter_mode;
-    size_t value_size;
-
-    action (action_type_t t,
-	    const void* aep,
-	    parameter_mode_t pm,
-	    size_t vs) :
-      type (t),
-      action_entry_point (aep),
-      parameter_mode (pm),
-      value_size (vs)
-    { }
-  };
-
 private:
   // Automaton identifier.
   aid_t aid_;
@@ -83,6 +67,13 @@ public:
     {
       return &(pos_->second);
     }
+
+    const action&
+    operator* () const
+    {
+      return (pos_->second);
+    }
+
   };
 
 private:
@@ -141,10 +132,9 @@ private:
 
 public:
 
-  automaton (aid_t aid,
-	     descriptor_constants::privilege_t privilege,
+  automaton (descriptor_constants::privilege_t privilege,
 	     frame_t page_directory_frame) :
-    aid_ (aid),
+    aid_ (aid_manager::alloc ()),
     page_directory_frame_ (page_directory_frame),
     heap_area_ (0),
     stack_area_ (0)
@@ -166,15 +156,14 @@ public:
     }
   }
 
+  ~automaton () {
+    aid_manager::free (aid_);
+  }
+
   bool
   address_in_use (const void* address) const
   {
-    if (address < PAGING_AREA) {
-      return find_address (address) != memory_map_.end ();
-    }
-    else {
-      return true;
-    }
+    return find_address (address) != memory_map_.end ();
   }
 
   aid_t
@@ -391,7 +380,6 @@ public:
   {
     return const_action_iterator (action_map_.find (action_entry_point));
   }
-
 };
 
 #endif /* __automaton_hpp__ */

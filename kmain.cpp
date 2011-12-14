@@ -23,7 +23,7 @@
 #include "irq_handler.hpp"
 #include "trap_handler.hpp"
 #include "frame_manager.hpp"
-#include "system_automaton.hpp"
+#include "rts.hpp"
 #include "kassert.hpp"
 
 extern int data_end;
@@ -100,7 +100,7 @@ kmain (uint32_t multiboot_magic,
     }
   }
 
-  system_automaton::run ();
+  rts::run ();
 
   kassert (0);
 }
