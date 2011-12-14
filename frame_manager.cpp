@@ -13,13 +13,25 @@
 
 #include "frame_manager.hpp"
 #include "vm_def.hpp"
-#include "kassert.hpp"
-#include <algorithm>
-#include <utility>
 
-using namespace std::rel_ops;
-
-frame_manager::allocator_list_type frame_manager::allocator_list_;
+void
+frame_manager::add (physical_address_t begin,
+		    physical_address_t end)
+{
+  kassert (begin >= USABLE_MEMORY_BEGIN);
+  kassert (end <= USABLE_MEMORY_END);
+  kassert (is_aligned (begin, PAGE_SIZE));
+  kassert (is_aligned (end, PAGE_SIZE));
+  kassert (begin < end);
+  
+  size_t size = end - begin;
+  while (size != 0) {
+    size_t sz = std::min (stack_allocator::MAX_REGION_SIZE, size);
+    allocator_list_.push_back (new (system_alloc ()) stack_allocator (physical_address_to_frame (begin), physical_address_to_frame (begin + sz)));
+    size -= sz;
+    begin += sz;
+  }
+}
 
 void
 frame_manager::mark_as_used (frame_t frame)
@@ -31,36 +43,4 @@ frame_manager::mark_as_used (frame_t frame)
   }
 }
 
-frame_t
-frame_manager::alloc ()
-{
-  /* Find an allocator with a free frame. */
-  allocator_list_type::iterator pos = std::find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
-  
-  /* Out of frames. */
-  kassert (pos != allocator_list_.end ());
-  
-  return (*pos)->alloc ();
-}
-
-size_t
-frame_manager::incref (frame_t frame)
-{
-  allocator_list_type::iterator pos = find_allocator (frame);
-
-  /* No allocator for frame. */
-  kassert (pos != allocator_list_.end ());
-
-  return (*pos)->incref (frame);
-}
-
-size_t
-frame_manager::decref (frame_t frame)
-{
-  allocator_list_type::iterator pos = find_allocator (frame);
-
-  /* No allocator for frame. */
-  kassert (pos != allocator_list_.end ());
-
-  return (*pos)->decref (frame);
-}
+frame_manager::allocator_list_type frame_manager::allocator_list_;

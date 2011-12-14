@@ -15,10 +15,8 @@
   Justin R. Wilson
 */
 
-#include "multiboot.hpp"
 #include <vector>
 #include <algorithm>
-#include "vm_def.hpp"
 #include "stack_allocator.hpp"
 #include "system_allocator.hpp"
 
@@ -37,6 +35,52 @@
  */
 
 class frame_manager {
+public:
+  static void
+  add (physical_address_t begin,
+       physical_address_t end);
+  
+  /* This function allows a frame to be marked as used when initializing virtual memory. */
+  static void
+  mark_as_used (frame_t frame);
+  
+  /* Allocate a frame. */
+  static inline frame_t
+  alloc ()
+  {
+    /* Find an allocator with a free frame. */
+    allocator_list_type::iterator pos = std::find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
+    
+    /* Out of frames. */
+    kassert (pos != allocator_list_.end ());
+  
+    return (*pos)->alloc ();
+  }
+  
+  /* Increment the reference count for a frame. */
+  static inline size_t
+  incref (frame_t frame)
+  {
+    allocator_list_type::iterator pos = find_allocator (frame);
+    
+    /* No allocator for frame. */
+    kassert (pos != allocator_list_.end ());
+    
+    return (*pos)->incref (frame);
+  }
+  
+  /* Decrement the reference count for a frame. */
+  static inline size_t
+  decref (frame_t frame)
+  {
+    allocator_list_type::iterator pos = find_allocator (frame);
+    
+    /* No allocator for frame. */
+    kassert (pos != allocator_list_.end ());
+    
+    return (*pos)->decref (frame);
+  }
+
 private:
   typedef std::vector<stack_allocator*, system_allocator<stack_allocator*> > allocator_list_type;
   static allocator_list_type allocator_list_;
@@ -48,7 +92,7 @@ private:
       f (x)
     { }
 
-    bool
+    inline bool
     operator() (stack_allocator* const & sa) const
     {
       return f >= sa->begin () && f < sa->end ();
@@ -63,81 +107,12 @@ private:
   }
 
   struct stack_allocator_not_full {
-    bool
+    inline bool
     operator() (stack_allocator* const& sa) const
     {
       return !sa->full ();
     }
   };
-
-  frame_manager ();
-  frame_manager (const frame_manager&);
-  frame_manager& operator= (const frame_manager&);
-
-public:
-  template <class InputIterator>
-  static void
-  initialize (InputIterator begin,
-	      InputIterator end)
-  {
-    for (; begin != end; ++begin) {
-      kout << hexformat (static_cast<unsigned long> (begin->addr)) << "-" << hexformat (static_cast<unsigned long> (begin->addr + begin->len - 1));
-      switch (begin->type) {
-      case MULTIBOOT_MEMORY_AVAILABLE:
-	kout << " AVAILABLE" << endl;
-	break;
-      case MULTIBOOT_MEMORY_RESERVED:
-	kout << " RESERVED" << endl;
-	break;
-      default:
-	kout << " UNKNOWN" << endl;
-	break;
-      }
-
-      if (begin->type == MULTIBOOT_MEMORY_AVAILABLE) {
-      	physical_address_t b = std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), begin->addr);
-      	physical_address_t e = std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), begin->addr + begin->len);
-	
-      	// Align to frame boundaries.
-      	b = align_up (b, PAGE_SIZE);
-      	e = align_down (e, PAGE_SIZE);
-
-      	if (b < e) {
-      	  size_t size = e - b;
-      	  while (size != 0) {
-      	    size_t sz = std::min (stack_allocator::MAX_REGION_SIZE, size);
-      	    allocator_list_.push_back (new (system_alloc ()) stack_allocator (physical_address_to_frame (b), physical_address_to_frame (b + sz)));
-      	    size -= sz;
-      	    b += sz;
-      	  }
-      	}
-      }
-    }
-
-    for (allocator_list_type::const_iterator pos = allocator_list_.begin ();
-	 pos != allocator_list_.end ();
-	 ++pos) {
-      kout << "Zone: [" << hexformat (frame_to_physical_address ((*pos)->begin ())) << ", " << hexformat (frame_to_physical_address ((*pos)->end ())) << ")" << endl;
-    }
-    
-  }
-  
-  /* This function allows a frame to be marked as used when initializing virtual memory. */
-  static void
-  mark_as_used (frame_t frame);
-  
-  /* Allocate a frame. */
-  static frame_t
-  alloc () __attribute__((warn_unused_result));
-  
-  /* Increment the reference count for a frame. */
-  static size_t
-  incref (frame_t frame);
-  
-  /* Decrement the reference count for a frame. */
-  static size_t
-  decref (frame_t frame);
 };
-
 
 #endif /* __frame_manager_hpp__ */

@@ -73,10 +73,34 @@ kmain (uint32_t multiboot_magic,
   trap_handler::install ();
 
   // Initialize the system that allocates frames (physical pages of memory).
-  kout << "Parsing memory map" << endl;
-  frame_manager::initialize (multiboot_parser.memory_map_begin (), multiboot_parser.memory_map_end ());
+  kout << "Memory map:" << endl;
+  for (multiboot_parser::memory_map_iterator pos = multiboot_parser.memory_map_begin ();
+       pos != multiboot_parser.memory_map_end ();
+       ++pos) {
+    kout << hexformat (static_cast<unsigned long> (pos->addr)) << "-" << hexformat (static_cast<unsigned long> (pos->addr + pos->len - 1));
+    switch (pos->type) {
+    case MULTIBOOT_MEMORY_AVAILABLE:
+      kout << " AVAILABLE" << endl;
+      {
+	uint64_t begin = std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), pos->addr);
+	uint64_t end = std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), pos->addr + pos->len);
+	begin = align_down (begin, PAGE_SIZE);
+	end = align_up (end, PAGE_SIZE);
+	if (begin < end) {
+	  frame_manager::add (pos->addr, pos->addr + pos->len);
+	}
+      }
+      break;
+    case MULTIBOOT_MEMORY_RESERVED:
+      kout << " RESERVED" << endl;
+      break;
+    default:
+      kout << " UNKNOWN" << endl;
+      break;
+    }
+  }
 
-  system_automaton::run ();
+  // system_automaton::run ();
 
   kassert (0);
 }
