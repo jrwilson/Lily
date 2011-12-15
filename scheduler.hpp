@@ -14,7 +14,7 @@
   Justin R. Wilson
 */
 
-#include "action_descriptor.hpp"
+#include "action.hpp"
 #include <deque>
 #include "binding_manager.hpp"
 
@@ -34,9 +34,8 @@ private:
 
   class automaton_context {
   public:    
-    automaton_context (::automaton* a) :
-      status_ (NOT_SCHEDULED),
-      automaton_ (a)
+    automaton_context () :
+      status_ (NOT_SCHEDULED)
     { }
 
     inline status_t
@@ -51,14 +50,8 @@ private:
       status_ = s;
     }
 
-    inline ::automaton*
-    automaton () const
-    {
-      return automaton_;
-    }
-
     inline void
-    push (const action_descriptor& ap)
+    push (const caction& ap)
     {
       if (set_.find (ap) == set_.end ()) {
   	set_.insert (ap);
@@ -74,7 +67,7 @@ private:
       queue_.pop_front ();
     }
 
-    inline const action_descriptor&
+    inline const caction&
     front () const
     {
       return queue_.front ();
@@ -82,10 +75,9 @@ private:
 
   private:
     status_t status_;
-    ::automaton* automaton_;
-    typedef std::deque<action_descriptor, system_allocator<action_descriptor> > queue_type;
+    typedef std::deque<caction, system_allocator<caction> > queue_type;
     queue_type queue_;
-    typedef std::unordered_set<action_descriptor, std::hash<action_descriptor>, std::equal_to<action_descriptor>, system_allocator<action_descriptor> > set_type;
+    typedef std::unordered_set<caction, std::hash<caction>, std::equal_to<caction>, system_allocator<caction> > set_type;
     set_type set_;
   };
   
@@ -94,9 +86,7 @@ private:
     uint32_t switch_stack_[SWITCH_STACK_SIZE];
     uint8_t value_buffer_[VALUE_BUFFER_SIZE];
 
-    automaton* automaton_;
-    
-    action_descriptor action_;
+    caction action_;
 
     const binding_manager::input_action_set_type* input_actions_;
     binding_manager::input_action_set_type::const_iterator input_action_pos_;
@@ -110,14 +100,14 @@ private:
     inline void
     clear ()
     {
-      automaton_ = 0;
+      action_.automaton = 0;
     }
 
     inline automaton*
     current_automaton () const
     {
-      kassert (automaton_ != 0);
-      return automaton_;
+      kassert (action_.automaton != 0);
+      return action_.automaton;
     }
 
     inline size_t
@@ -127,10 +117,8 @@ private:
     }
 
     inline void
-    load (automaton* a,
-	  const action_descriptor& ad)
+    load (const caction& ad)
     {
-      automaton_ = a;
       action_ = ad;
     }
 
@@ -138,19 +126,14 @@ private:
     finish_action (bool output_status,
 		   const void* buffer)
     {
-      if (automaton_ != 0) {	
+      if (action_.automaton != 0) {	
 	switch (action_.type) {
 	case INPUT:
 	  /* Move to the next input. */
 	  ++input_action_pos_;
 	  if (input_action_pos_ != input_actions_->end ()) {
 	    /* Load the execution context. */
-	    automaton_ = input_action_pos_->automaton;
-	    
-	    action_.action_entry_point = input_action_pos_->action_entry_point;
-	    action_.parameter_mode = input_action_pos_->parameter_mode;
-	    
-	    action_.parameter = input_action_pos_->parameter;
+	    action_ = *input_action_pos_;
 	    /* Execute.  (This does not return). */
 	    execute ();
 	  }
@@ -160,20 +143,14 @@ private:
 	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
 	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
 	  if (output_status) {
-	    input_actions_ = binding_manager::get_bound_inputs (automaton_, action_.action_entry_point, action_.parameter_mode, action_.parameter);
+	    input_actions_ = binding_manager::get_bound_inputs (action_);
 	    if (input_actions_ != 0) {
 	      // Copy the value.
 	      memcpy (value_buffer_, buffer, action_.value_size);
 	      
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
-	      automaton_ = input_action_pos_->automaton;
-	      
-	      action_.type = INPUT;
-	      action_.action_entry_point = input_action_pos_->action_entry_point;
-	      action_.parameter_mode = input_action_pos_->parameter_mode;
-	      
-	      action_.parameter = input_action_pos_->parameter;
+	      action_ = *input_action_pos_;
 	      /* Execute.  (This does not return). */
 	      execute ();
 	    }
@@ -216,9 +193,9 @@ private:
       	   "add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
 
       // We can now switch page directories.
-      vm::switch_to_directory (automaton_->page_directory_frame ());
+      vm::switch_to_directory (action_.automaton->page_directory_frame ());
 
-      uint32_t* stack_pointer = const_cast<uint32_t*> (static_cast<const uint32_t*> (automaton_->stack_pointer ()));
+      uint32_t* stack_pointer = const_cast<uint32_t*> (static_cast<const uint32_t*> (action_.automaton->stack_pointer ()));
 
       if (action_.type == INPUT) {
       	// Copy the value to the stack.
@@ -250,7 +227,7 @@ private:
       *--stack_pointer = eflags;
 
       // Push the code segment.
-      *--stack_pointer = automaton_->code_segment ();
+      *--stack_pointer = action_.automaton->code_segment ();
 
       // Push the instruction pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (action_.action_entry_point);
@@ -264,7 +241,7 @@ private:
       	   "xor %%edi, %%edi\n"
       	   "xor %%esi, %%esi\n"
       	   "xor %%ebp, %%ebp\n"
-      	   "iret\n" :: "a"(automaton_->stack_segment ()), "b"(stack_pointer));
+      	   "iret\n" :: "a"(action_.automaton->stack_segment ()), "b"(stack_pointer));
     }
   };
 
@@ -281,7 +258,7 @@ public:
   {
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
-    automaton_context* c = new (system_alloc ()) automaton_context (automaton);
+    automaton_context* c = new (system_alloc ()) automaton_context ();
     std::pair<context_map_type::iterator, bool> r = context_map_.insert (std::make_pair (automaton, c));
     kassert (r.second);
   }
@@ -299,10 +276,9 @@ public:
   }
 
   inline void
-  schedule (automaton* automaton,
-	    const action_descriptor& ad)
+  schedule (const caction& ad)
   {
-    context_map_type::iterator pos = context_map_.find (automaton);
+    context_map_type::iterator pos = context_map_.find (ad.automaton);
     kassert (pos != context_map_.end ());
     
     automaton_context* c = pos->second;
@@ -328,7 +304,7 @@ public:
       ready_queue_.pop_front ();
       c->status (NOT_SCHEDULED);
     
-      exec_context_.load (c->automaton (), c->front ());
+      exec_context_.load (c->front ());
       c->pop ();
 
       // This call doesn't not return.

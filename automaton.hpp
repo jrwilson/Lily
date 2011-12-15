@@ -24,7 +24,7 @@
 #include <type_traits>
 #include "gdt.hpp"
 #include "aid_manager.hpp"
-#include "action_descriptor.hpp"
+#include "action.hpp"
 
 class automaton {
 private:
@@ -36,7 +36,7 @@ private:
   // Frame that contains the automaton's page directory.
   frame_t const page_directory_frame_;
   // Table of action descriptors for guiding execution, checking bindings, etc.
-  typedef std::unordered_map<const void*, action, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, action> > > action_map_type;
+  typedef std::unordered_map<const void*, paction, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, paction> > > action_map_type;
   action_map_type action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef std::vector<vm_area_interface*, system_allocator<vm_area_interface*> > memory_map_type;
@@ -47,7 +47,7 @@ private:
   vm_stack_area* stack_area_;
 
 public:
-  class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, action> {
+  class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, paction> {
   private:
     action_map_type::const_iterator pos_;
     
@@ -62,13 +62,13 @@ public:
       return pos_ == other.pos_;
     }
 
-    const action*
+    const paction*
     operator-> () const
     {
       return &(pos_->second);
     }
 
-    const action&
+    const paction&
     operator* () const
     {
       return (pos_->second);
@@ -125,7 +125,7 @@ private:
   void
   add_action_ (const void* action_entry_point)
   {
-    action ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::value_size);
+    paction ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::value_size);
     std::pair<typename action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac.action_entry_point, ac));
     kassert (r.second);
   }

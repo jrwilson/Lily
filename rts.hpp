@@ -53,7 +53,7 @@ public:
 	// Check the action that was scheduled.
 	automaton::const_action_iterator pos = current->action_find (action_entry_point);
 	if (pos != current->action_end ()) {
-	  scheduler_.schedule (current, action_descriptor (*pos, parameter));
+	  scheduler_.schedule (caction (current, *pos, parameter));
 	}
 	else {
 	  // TODO:  Automaton scheduled a bad action.
@@ -102,7 +102,7 @@ private:
   {
     automaton::const_action_iterator pos = a->action_find (aep);
     kassert (pos != a->action_end ());
-    scheduler_.schedule (a, action_descriptor (*pos, p));
+    scheduler_.schedule (caction (a, *pos, p));
   }
 
   static void
