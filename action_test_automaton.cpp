@@ -63,10 +63,6 @@ namespace action_test {
   static void
   schedule ();
   
-  static void
-  init_effect ()
-  { }
-
   void
   init ()
   {
@@ -75,8 +71,8 @@ namespace action_test {
     alloc_type::initialize ();
     // Allocate a scheduler.
     scheduler_ = new (alloc_type ()) scheduler_type ();
-
-    input_action <init_traits> (init_effect, schedule, scheduler_->finish ());
+    schedule ();
+    scheduler_->finish<init_traits> ();
   }
 
   static void
@@ -87,253 +83,175 @@ namespace action_test {
     system::finish (0, 0, false, 0);
   }
 
-  static void
-  up_uv_input1_effect ()
-  {
-    up_uv_input1_flag = false;
-  }
-
   void
   up_uv_input1 ()
   {
-    input_action <up_uv_input1_traits> (up_uv_input1_effect, no_schedule, no_finish);
-  }
-
-  static void
-  up_uv_input2_effect ()
-  {
-    up_uv_input2_flag = false;
+    up_uv_input1_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   up_uv_input2 ()
   {
-    input_action <up_uv_input2_traits> (up_uv_input2_effect, no_schedule, no_finish);
-  }
-
-  static void
-  up_uv_input3_effect ()
-  {
-    up_uv_input3_flag = false;
+    up_uv_input2_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   up_uv_input3 ()
   {
-    input_action <up_uv_input3_traits> (up_uv_input3_effect, no_schedule, no_finish);
-  }
-
-  static void
-  up_v_input1_effect (aid_t& v)
-  {
-    kassert (v == up_v_output_value);
-    up_v_input1_flag = false;
+    up_uv_input3_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   up_v_input1 (aid_t v)
   {
-    input_action <up_v_input1_traits> (v, up_v_input1_effect, no_schedule, no_finish);
-  }
-
-  static void
-  up_v_input2_effect (aid_t& v)
-  {
-    kassert (v == p_v_output_value);
-    up_v_input2_flag = false;
+    kassert (v == up_v_output_value);
+    up_v_input1_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   up_v_input2 (aid_t v)
   {
-    input_action <up_v_input2_traits> (v, up_v_input2_effect, no_schedule, no_finish);
-  }
-
-  static void
-  up_v_input3_effect (aid_t& v)
-  {
-    kassert (v == ap_v_output_value);
-    up_v_input3_flag = false;
+    kassert (v == p_v_output_value);
+    up_v_input2_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   up_v_input3 (aid_t v)
   {
-    input_action <up_v_input3_traits> (v, up_v_input3_effect, no_schedule, no_finish);
+    kassert (v == ap_v_output_value);
+    up_v_input3_flag = false;
+    no_schedule ();
+    no_finish ();
   }
-
-  static void
-  p_uv_input1_effect (aid_t p)
-  {
-    kassert (p == p_uv_input1_parameter);
-    p_uv_input1_flag = false;
-  }
-
+  
   void
   p_uv_input1 (aid_t p)
   {
-    input_action <p_uv_input1_traits> (p, p_uv_input1_effect, no_schedule, no_finish);
-  }
-
-  static void
-  p_uv_input2_effect (aid_t p)
-  {
-    kassert (p == p_uv_input2_parameter);
-    p_uv_input2_flag = false;
+    kassert (p == p_uv_input1_parameter);
+    p_uv_input1_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   p_uv_input2 (aid_t p)
   {
-    input_action <p_uv_input2_traits> (p, p_uv_input2_effect, no_schedule, no_finish);
-  }
-
-  static void
-  p_uv_input3_effect (aid_t p)
-  {
-    kassert (p == p_uv_input3_parameter);
-    p_uv_input3_flag = false;
+    kassert (p == p_uv_input2_parameter);
+    p_uv_input2_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   p_uv_input3 (aid_t p)
   {
-    input_action <p_uv_input3_traits> (p, p_uv_input3_effect, no_schedule, no_finish);
-  }
-
-  static void
-  p_v_input1_effect (aid_t p,
-		     aid_t& v)
-  {
-    kassert (p == p_v_input1_parameter);
-    kassert (v == up_v_output_value);
-    p_v_input1_flag = false;
+    kassert (p == p_uv_input3_parameter);
+    p_uv_input3_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   p_v_input1 (aid_t p,
 	      aid_t v)
   {
-    input_action <p_v_input1_traits> (p, v, p_v_input1_effect, no_schedule, no_finish);
-  }
-
-  static void
-  p_v_input2_effect (aid_t p,
-		     aid_t& v)
-  {
-    kassert (p == p_v_input2_parameter);
-    kassert (v == p_v_output_value);
-    p_v_input2_flag = false;
+    kassert (p == p_v_input1_parameter);
+    kassert (v == up_v_output_value);
+    p_v_input1_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   p_v_input2 (aid_t p,
 	      aid_t v)
   {
-    input_action <p_v_input2_traits> (p, v, p_v_input2_effect, no_schedule, no_finish);
-  }
-
-  static void
-  p_v_input3_effect (aid_t p,
-		     aid_t& v)
-  {
-    kassert (p == p_v_input3_parameter);
-    kassert (v == ap_v_output_value);
-    p_v_input3_flag = false;
+    kassert (p == p_v_input2_parameter);
+    kassert (v == p_v_output_value);
+    p_v_input2_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   p_v_input3 (aid_t p,
 	      aid_t v)
   {
-    input_action <p_v_input3_traits> (p, v, p_v_input3_effect, no_schedule, no_finish);
-  }
-
-  static void
-  ap_uv_input1_effect (aid_t p)
-  {
-    kassert (p == ap_uv_input1_parameter);
-    ap_uv_input1_flag = false;
+    kassert (p == p_v_input3_parameter);
+    kassert (v == ap_v_output_value);
+    p_v_input3_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   ap_uv_input1 (aid_t p)
   {
-    input_action <ap_uv_input1_traits> (p, ap_uv_input1_effect, no_schedule, no_finish);
-  }
-
-  static void
-  ap_uv_input2_effect (aid_t p)
-  {
-    kassert (p == ap_uv_input2_parameter);
-    ap_uv_input2_flag = false;
+    kassert (p == ap_uv_input1_parameter);
+    ap_uv_input1_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   ap_uv_input2 (aid_t p)
   {
-    input_action <ap_uv_input2_traits> (p, ap_uv_input2_effect, no_schedule, no_finish);
-  }
-
-  static void
-  ap_uv_input3_effect (aid_t p)
-  {
-    kassert (p == ap_uv_input3_parameter);
-    ap_uv_input3_flag = false;
+    kassert (p == ap_uv_input2_parameter);
+    ap_uv_input2_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   ap_uv_input3 (aid_t p)
   {
-    input_action <ap_uv_input3_traits> (p, ap_uv_input3_effect, no_schedule, no_finish);
-  }
-
-  static void
-  ap_v_input1_effect (aid_t p,
-		     aid_t& v)
-  {
-    kassert (p == ap_v_input1_parameter);
-    kassert (v == up_v_output_value);
-    ap_v_input1_flag = false;
+    kassert (p == ap_uv_input3_parameter);
+    ap_uv_input3_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   ap_v_input1 (aid_t p,
 	      aid_t v)
   {
-    input_action <ap_v_input1_traits> (p, v, ap_v_input1_effect, no_schedule, no_finish);
-  }
-
-  static void
-  ap_v_input2_effect (aid_t p,
-		     aid_t& v)
-  {
-    kassert (p == ap_v_input2_parameter);
-    kassert (v == p_v_output_value);
-    ap_v_input2_flag = false;
+    kassert (p == ap_v_input1_parameter);
+    kassert (v == up_v_output_value);
+    ap_v_input1_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   ap_v_input2 (aid_t p,
 	       aid_t v)
   {
-    input_action <ap_v_input2_traits> (p, v, ap_v_input2_effect, no_schedule, no_finish);
-  }
-
-  static void
-  ap_v_input3_effect (aid_t p,
-		     aid_t& v)
-  {
-    kassert (p == ap_v_input3_parameter);
-    kassert (v == ap_v_output_value);
-    ap_v_input3_flag = false;
+    kassert (p == ap_v_input2_parameter);
+    kassert (v == p_v_output_value);
+    ap_v_input2_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   void
   ap_v_input3 (aid_t p,
 	      aid_t v)
   {
-    input_action <ap_v_input3_traits> (p, v, ap_v_input3_effect, no_schedule, no_finish);
+    kassert (p == ap_v_input3_parameter);
+    kassert (v == ap_v_output_value);
+    ap_v_input3_flag = false;
+    no_schedule ();
+    no_finish ();
   }
 
   static bool
@@ -342,17 +260,20 @@ namespace action_test {
     return up_uv_output_flag;
   }
 
-  static void
-  up_uv_output_effect ()
-  {
-    up_uv_output_flag = false;
-    kout << __func__ << endl;
-  }
-
   void
   up_uv_output ()
   {
-    output_action<up_uv_output_traits> (scheduler_->remove<up_uv_output_traits> (&up_uv_output), up_uv_output_precondition, up_uv_output_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<up_uv_output_traits> (&up_uv_output);
+    if (up_uv_output_precondition ()) {
+      up_uv_output_flag = false;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<up_uv_output_traits> (true);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<up_uv_output_traits> (false);
+    }
   }
 
   static bool
@@ -361,18 +282,21 @@ namespace action_test {
     return up_v_output_flag;
   }
 
-  static void
-  up_v_output_effect (aid_t* v)
-  {
-    up_v_output_flag = false;
-    *v = up_v_output_value;
-    kout << __func__ << endl;
-  }
-
   void
   up_v_output ()
   {
-    output_action<up_v_output_traits> (scheduler_->remove<up_v_output_traits> (&up_v_output), up_v_output_precondition, up_v_output_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<up_v_output_traits> (&up_v_output);
+    if (up_v_output_precondition ()) {
+      up_v_output_flag = false;
+      static aid_t value = up_v_output_value;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<up_v_output_traits> (&value);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<up_v_output_traits> ((void*)0);
+    }
   }
 
   static bool
@@ -382,18 +306,21 @@ namespace action_test {
     return p_uv_output_flag;
   }
 
-  static void
-  p_uv_output_effect (aid_t p)
-  {
-    kassert (p == p_uv_output_parameter);
-    p_uv_output_flag = false;
-    kout << __func__ << endl;
-  }
-
   void
   p_uv_output (aid_t p)
   {
-    output_action<p_uv_output_traits> (p, scheduler_->remove<p_uv_output_traits> (&p_uv_output), p_uv_output_precondition, p_uv_output_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<p_uv_output_traits> (&p_uv_output, p);
+    if (p_uv_output_precondition (p)) {
+      kassert (p == p_uv_output_parameter);
+      p_uv_output_flag = false;
+      schedule ();
+      scheduler_->finish<p_uv_output_traits> (true);
+      kout << __func__ << endl;
+    }
+    else {
+      schedule ();
+      scheduler_->finish<p_uv_output_traits> (false);
+    }
   }
 
   static bool
@@ -403,20 +330,22 @@ namespace action_test {
     return p_v_output_flag;
   }
 
-  static void
-  p_v_output_effect (aid_t p,
-		     aid_t* v)
-  {
-    kassert (p == p_v_output_parameter);
-    p_v_output_flag = false;
-    *v = p_v_output_value;
-    kout << __func__ << endl;
-  }
-
   void
   p_v_output (aid_t p)
   {
-    output_action<p_v_output_traits> (p, scheduler_->remove<p_v_output_traits> (&p_v_output), p_v_output_precondition, p_v_output_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<p_v_output_traits> (&p_v_output, p);
+    if (p_v_output_precondition (p)) {
+      kassert (p == p_v_output_parameter);
+      p_v_output_flag = false;
+      static aid_t value = p_v_output_value;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<p_v_output_traits> (&value);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<p_v_output_traits> ((void*)0);
+    }
   }
 
   static bool
@@ -426,18 +355,21 @@ namespace action_test {
     return ap_uv_output_flag;
   }
 
-  static void
-  ap_uv_output_effect (aid_t p)
-  {
-    kassert (p == ap_uv_output_parameter);
-    ap_uv_output_flag = false;
-    kout << __func__ << endl;
-  }
-
   void
   ap_uv_output (aid_t p)
   {
-    output_action<ap_uv_output_traits> (p, scheduler_->remove<ap_uv_output_traits> (&ap_uv_output), ap_uv_output_precondition, ap_uv_output_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<ap_uv_output_traits> (&ap_uv_output, p);
+    if (ap_uv_output_precondition (p)) {
+      kassert (p == ap_uv_output_parameter);
+      ap_uv_output_flag = false;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<ap_uv_output_traits> (true);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<ap_uv_output_traits> (false);
+    }
   }
 
   static bool
@@ -447,20 +379,22 @@ namespace action_test {
     return ap_v_output_flag;
   }
 
-  static void
-  ap_v_output_effect (aid_t p,
-		      aid_t* v)
-  {
-    kassert (p == ap_v_output_parameter);
-    ap_v_output_flag = false;
-    *v = ap_v_output_value;
-    kout << __func__ << endl;
-  }
-
   void
   ap_v_output (aid_t p)
   {
-    output_action<ap_v_output_traits> (p, scheduler_->remove<ap_v_output_traits> (&ap_v_output), ap_v_output_precondition, ap_v_output_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<ap_v_output_traits> (&ap_v_output, p);
+    if (ap_v_output_precondition (p)) {
+      kassert (p == ap_v_output_parameter);
+      ap_v_output_flag = false;
+      static aid_t value = ap_v_output_value;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<ap_v_output_traits> (&value);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<ap_v_output_traits> ((void*)0);
+    }
   }
 
   static bool
@@ -469,17 +403,16 @@ namespace action_test {
     return up_internal_flag;
   }
 
-  static void
-  up_internal_effect ()
-  {
-    up_internal_flag = false;
-    kout << __func__ << endl;
-  }
-
   void
   up_internal ()
   {
-    internal_action<up_internal_traits> (scheduler_->remove<up_internal_traits> (&up_internal), up_internal_precondition, up_internal_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<up_internal_traits> (&up_internal);
+    if (up_internal_precondition ()) {
+      up_internal_flag = false;
+      kout << __func__ << endl;
+    }
+    schedule ();
+    scheduler_->finish<up_internal_traits> ();
   }
 
   static bool
@@ -489,18 +422,17 @@ namespace action_test {
     return p_internal_flag;
   }
 
-  static void
-  p_internal_effect (aid_t p)
-  {
-    kassert (p == p_internal_parameter);
-    p_internal_flag = false;
-    kout << __func__ << endl;
-  }
-
   void
   p_internal (int p)
   {
-    internal_action<p_internal_traits> (p, scheduler_->remove<p_internal_traits> (&p_internal), p_internal_precondition, p_internal_effect, schedule, scheduler_->finish ());
+    scheduler_->remove<p_internal_traits> (&p_internal, p);
+    if (p_internal_precondition (p)) {
+      kassert (p == p_internal_parameter);
+      p_internal_flag = false;
+      kout << __func__ << endl;
+    }
+    schedule ();
+    scheduler_->finish<p_internal_traits> ();
   }
 
   static void
