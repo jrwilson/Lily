@@ -16,10 +16,13 @@
 */
 
 #include "automaton.hpp"
-#include "scheduler.hpp"
+#include "global_fifo_scheduler.hpp"
 
 class rts {
 public:
+  typedef global_fifo_scheduler scheduler_type;
+  static scheduler_type scheduler;
+
   static automaton* system_automaton;
 
   static void
@@ -32,7 +35,7 @@ public:
   {
     if (address < KERNEL_VIRTUAL_BASE) {
       // Use the automaton's memory map.
-      scheduler_.current_automaton ()->page_fault (address, error, regs);
+      scheduler.current_automaton ()->page_fault (address, error, regs);
     }
     else {
       // Use our memory map.
@@ -47,13 +50,13 @@ public:
   	  const void* buffer)
   {
     if (action_entry_point != 0 || output_status) {
-      automaton* current = scheduler_.current_automaton ();
+      automaton* current = scheduler.current_automaton ();
       
       if (action_entry_point != 0) {
 	// Check the action that was scheduled.
 	automaton::const_action_iterator pos = current->action_find (action_entry_point);
 	if (pos != current->action_end ()) {
-	  scheduler_.schedule (caction (current, *pos, parameter));
+	  scheduler.schedule (caction (current, *pos, parameter));
 	}
 	else {
 	  // TODO:  Automaton scheduled a bad action.
@@ -63,7 +66,7 @@ public:
       
       if (output_status) {
 	// Check the buffer.
-	size_t value_size = scheduler_.current_value_size ();
+	size_t value_size = scheduler.current_value_size ();
 	if (value_size != 0 && !current->verify_span (buffer, value_size)) {
 	  // TODO:  Automaton returned a bad buffer.
 	  kassert (0);
@@ -71,13 +74,13 @@ public:
       }
     }
 
-    scheduler_.finish (output_status, buffer);
+    scheduler.finish (output_status, buffer);
   }
 
   static inline void*
   sbrk (ptrdiff_t size)
   {
-    automaton* current_automaton = scheduler_.current_automaton ();
+    automaton* current_automaton = scheduler.current_automaton ();
     // The system automaton should not use interrupts to acquire logical address space.
     kassert (current_automaton != system_automaton);
 
@@ -92,9 +95,6 @@ public:
   }
  
 private:
-  typedef scheduler scheduler_type;
-  static scheduler_type scheduler_;
-
   inline static void
   checked_schedule (automaton* a,
 		    const void* aep,
@@ -102,7 +102,7 @@ private:
   {
     automaton::const_action_iterator pos = a->action_find (aep);
     kassert (pos != a->action_end ());
-    scheduler_.schedule (caction (a, *pos, p));
+    scheduler.schedule (caction (a, *pos, p));
   }
 
   static void

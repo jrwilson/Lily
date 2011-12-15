@@ -15,6 +15,7 @@
 #include "rts.hpp"
 #include "system_automaton.hpp"
 #include "action_test_automaton.hpp"
+#include "automaton_manager.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -43,7 +44,7 @@ rts::run ()
   vm_area_interface* area;
   
   // Allocate the system automaton.
-  automaton* sa = new (system_alloc ()) automaton (descriptor_constants::RING0, vm::page_directory_frame ());
+  automaton* sa = automaton_manager::create (descriptor_constants::RING0, vm::page_directory_frame ());
   
   // Build its memory map and mark the frames as already being used.
   
@@ -94,16 +95,13 @@ rts::run ()
   /* Add the actions. */
   system_automaton->add_action<system_automaton::init_traits> (&system_automaton::init);
   
-  // Add the system automaton to the system scheduler.
-  scheduler_.add_automaton (system_automaton);
-  
   create_action_test ();
   
   // Start the scheduler.  Doesn't return.
-  scheduler_.finish (false, 0);
+  scheduler.finish (false, 0);
 }
 
-rts::scheduler_type rts::scheduler_;
+rts::scheduler_type rts::scheduler;
 
 void
 rts::create_action_test ()
@@ -130,7 +128,7 @@ rts::create_action_test ()
     kassert (count == 1);
 
     // Second, create the automaton.
-    input_automaton = new (system_alloc ()) automaton (descriptor_constants::RING0, frame);
+    input_automaton = automaton_manager::create (descriptor_constants::RING0, frame);
 
     // Third, create the automaton's memory map.
     {
@@ -182,11 +180,6 @@ rts::create_action_test ()
     input_automaton->add_action<action_test::ap_v_input1_traits> (&action_test::ap_v_input1);
     input_automaton->add_action<action_test::ap_v_input2_traits> (&action_test::ap_v_input2);
     input_automaton->add_action<action_test::ap_v_input3_traits> (&action_test::ap_v_input3);
-
-    // Fifth, add the automaton to the system scheduler.
-    scheduler_.add_automaton (input_automaton);
-      
-    // Sixth, bind.
   }
 
   {
@@ -207,7 +200,7 @@ rts::create_action_test ()
     kassert (count == 1);
 
     // Second, create the automaton.
-    output_automaton = new (system_alloc ()) automaton (descriptor_constants::RING0, frame);
+    output_automaton = automaton_manager::create (descriptor_constants::RING0, frame);
       
     // Third, create the automaton's memory map.
     {
@@ -252,10 +245,7 @@ rts::create_action_test ()
     output_automaton->add_action<action_test::up_internal_traits> (&action_test::up_internal);
     output_automaton->add_action<action_test::p_internal_traits> (&action_test::p_internal);
 
-    // Fifth, add the automaton to the system scheduler.
-    scheduler_.add_automaton (output_automaton);
-      
-    // Sixth, bind.
+    // Bind.
     binding_manager::bind<system_automaton::init_traits,
   			  action_test::init_traits> (system_automaton, &system_automaton::init, output_automaton,
   						     output_automaton, &action_test::init);

@@ -24,7 +24,7 @@ trap.o \
 stack_allocator.o \
 frame_manager.o \
 vm.o \
-aid_manager.o \
+automaton_manager.o \
 binding_manager.o \
 rts.o \
 kmain.o \

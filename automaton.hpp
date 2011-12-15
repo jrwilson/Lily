@@ -23,7 +23,6 @@
 #include "static_assert.hpp"
 #include <type_traits>
 #include "gdt.hpp"
-#include "aid_manager.hpp"
 #include "action.hpp"
 
 class automaton {
@@ -132,9 +131,10 @@ private:
 
 public:
 
-  automaton (descriptor_constants::privilege_t privilege,
+  automaton (aid_t aid,
+	     descriptor_constants::privilege_t privilege,
 	     frame_t page_directory_frame) :
-    aid_ (aid_manager::alloc ()),
+    aid_ (aid),
     page_directory_frame_ (page_directory_frame),
     heap_area_ (0),
     stack_area_ (0)
@@ -154,10 +154,6 @@ public:
       kassert (0);
       break;
     }
-  }
-
-  ~automaton () {
-    aid_manager::free (aid_);
   }
 
   bool

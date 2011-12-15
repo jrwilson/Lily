@@ -1,10 +1,10 @@
-#ifndef __scheduler_hpp__
-#define __scheduler_hpp__
+#ifndef __global_fifo_scheduler_hpp__
+#define __global_fifo_scheduler_hpp__
 
 /*
   File
   ----
-  scheduler.hpp
+  global_fifo_scheduler.hpp
   
   Description
   -----------
@@ -18,7 +18,7 @@
 #include <deque>
 #include "binding_manager.hpp"
 
-class scheduler {
+class global_fifo_scheduler {
 private:
   enum status_t {
     SCHEDULED,
@@ -319,4 +319,4 @@ public:
 
 };
 
-#endif /* __scheduler_hpp__ */
+#endif /* __global_fifo_scheduler_hpp__ */
