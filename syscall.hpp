@@ -15,6 +15,7 @@
 */
 
 #include "aid.hpp"
+#include "bid.hpp"
 #include <stddef.h>
 
 namespace system {
@@ -33,6 +34,17 @@ namespace system {
   void*
   sbrk (ptrdiff_t);
 
+  bid_t
+  buffer_create (size_t size);
+
+  size_t
+  buffer_size (bid_t bid);
+
+  int
+  buffer_incref (bid_t bid);
+
+  int
+  buffer_decref (bid_t bid);
 }
 
 #endif /* __syscall_hpp__ */

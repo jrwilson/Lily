@@ -9,104 +9,225 @@
   Description
   -----------
   The run-time system (rts).
-  Contains the system automaton, the set of bindings, and the scheduler.
 
   Authors:
   Justin R. Wilson
 */
 
-#include "automaton.hpp"
-#include "global_fifo_scheduler.hpp"
+#include "aid.hpp"
+#include "bid.hpp"
+#include "descriptor.hpp"
+#include "vm_def.hpp"
+#include <unordered_set>
+#include <unordered_map>
+#include "system_allocator.hpp"
+#include "action.hpp"
+
+class automaton;
+class buffer;
 
 class rts {
 public:
-  typedef global_fifo_scheduler scheduler_type;
-  static scheduler_type scheduler;
+  typedef std::unordered_set<caction, std::hash<caction>, std::equal_to<caction>, system_allocator<caction> > input_action_set_type;
 
-  static automaton* system_automaton;
+  static automaton*
+  create (descriptor_constants::privilege_t privilege,
+	  frame_t frame);
 
+  template <class OutputAction, class InputAction>
   static void
-  run ();
-
-  static inline void
-  page_fault (const void* address,
-  	      uint32_t error,
-  	      volatile registers* regs)
+  bind (automaton* output_automaton,
+	void (*output_ptr) (void),
+	automaton* input_automaton,
+	void (*input_ptr) (void))
   {
-    if (address < KERNEL_VIRTUAL_BASE) {
-      // Use the automaton's memory map.
-      scheduler.current_automaton ()->page_fault (address, error, regs);
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
+    STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (void),
+	automaton* input_automaton,
+	void (*input_ptr) (typename InputAction::parameter_type),
+	typename InputAction::parameter_type input_parameter)
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
+    STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode == AUTO_PARAMETER));
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast (input_parameter), OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (void),
+	automaton* input_automaton,
+	void (*input_ptr) (typename InputAction::value_type))
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
+    STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (void),
+	automaton* input_automaton,
+	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::value_type),
+	typename InputAction::parameter_type input_parameter)
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
+    STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode == AUTO_PARAMETER));
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast (input_parameter), OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (typename OutputAction::parameter_type),
+	typename OutputAction::parameter_type output_parameter,
+	automaton* input_automaton,
+	void (*input_ptr) (void))
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
+    STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
+    // Value types must be the same.  This implies that the value sizes are the same.
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (typename OutputAction::parameter_type),
+	typename OutputAction::parameter_type output_parameter,
+	automaton* input_automaton,
+	void (*input_ptr) (typename InputAction::parameter_type),
+	typename InputAction::parameter_type input_parameter)
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
+    STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode ==  AUTO_PARAMETER));
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter), OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (typename OutputAction::parameter_type),
+	typename OutputAction::parameter_type output_parameter,
+	automaton* input_automaton,
+	void (*input_ptr) (typename InputAction::value_type))
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
+    STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+  }
+
+  template <class OutputAction, class InputAction>
+  static void
+  bind (automaton* output_automaton,
+	void (*output_ptr) (typename OutputAction::parameter_type),
+	typename OutputAction::parameter_type output_parameter,
+	automaton* input_automaton,
+	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::value_type),
+	typename InputAction::parameter_type input_parameter)
+  {
+    // Check both actions statically.
+    STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
+    STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode ==  AUTO_PARAMETER));
+    // Value types must be the same.    
+    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+
+    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter), OutputAction::value_size);
+  }
+
+  static inline const input_action_set_type*
+  get_bound_inputs (const caction& output_action)
+  {
+    bindings_type::const_iterator pos = bindings_.find (output_action);
+    if (pos != bindings_.end ()) {
+      return &pos->second;
     }
     else {
-      // Use our memory map.
-      system_automaton->page_fault (address, error, regs);
+      return 0;
     }
   }
-  
-  static inline void
-  finish (const void* action_entry_point,
-  	  aid_t parameter,
-  	  bool output_status,
-  	  const void* buffer)
-  {
-    if (action_entry_point != 0 || output_status) {
-      automaton* current = scheduler.current_automaton ();
-      
-      if (action_entry_point != 0) {
-	// Check the action that was scheduled.
-	automaton::const_action_iterator pos = current->action_find (action_entry_point);
-	if (pos != current->action_end ()) {
-	  scheduler.schedule (caction (current, *pos, parameter));
-	}
-	else {
-	  // TODO:  Automaton scheduled a bad action.
-	  kassert (0);
-	}
-      }
-      
-      if (output_status) {
-	// Check the buffer.
-	size_t value_size = scheduler.current_value_size ();
-	if (value_size != 0 && !current->verify_span (buffer, value_size)) {
-	  // TODO:  Automaton returned a bad buffer.
-	  kassert (0);
-	}
-      }
-    }
 
-    scheduler.finish (output_status, buffer);
-  }
+  static bid_t
+  buffer_create (size_t size,
+		 automaton* creator);
 
-  static inline void*
-  sbrk (ptrdiff_t size)
-  {
-    automaton* current_automaton = scheduler.current_automaton ();
-    // The system automaton should not use interrupts to acquire logical address space.
-    kassert (current_automaton != system_automaton);
+  static size_t
+  buffer_size (bid_t bid,
+	       automaton* a);
 
-    return current_automaton->sbrk (size);
-  }
-  
-  static inline void
-  unknown_system_call (void)
-  {
-    // TODO
-    kassert (0);
-  }
- 
+  static int
+  buffer_incref (bid_t bid,
+		 automaton* a);
+
+  static int
+  buffer_decref (bid_t bid,
+		 automaton* a);
+     
 private:
-  inline static void
-  checked_schedule (automaton* a,
-		    const void* aep,
-		    aid_t p = 0)
-  {
-    automaton::const_action_iterator pos = a->action_find (aep);
-    kassert (pos != a->action_end ());
-    scheduler.schedule (caction (a, *pos, p));
-  }
-
   static void
-  create_action_test ();
+  bind_ (automaton* output_automaton,
+	 const void* output_action_entry_point,
+	 parameter_mode_t output_parameter_mode,
+	 aid_t output_parameter,
+	 automaton* input_automaton,
+	 const void* input_action_entry_point,
+	 parameter_mode_t input_parameter_mode,
+	 aid_t input_parameter,
+	 size_t value_size);
+
+  static aid_t current_aid_;
+  typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, system_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
+  static aid_map_type aid_map_;
+
+  typedef std::unordered_map<caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, input_action_set_type> > > bindings_type;
+  static bindings_type bindings_;
+
+  static bid_t current_bid_;
+  typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, system_allocator<std::pair<const bid_t, buffer*> > > bid_map_type;
+  static bid_map_type bid_map_;
 };
 
 #endif /* __rts_hpp__ */

@@ -15,10 +15,11 @@
 */
 
 #include "action_traits.hpp"
-
-class automaton;
+#include "automaton.hpp"
 
 namespace system_automaton {
+
+  extern automaton* system_automaton;
 
   typedef p_uv_output_action_traits<automaton*> init_traits;
   void

@@ -15,8 +15,12 @@
 */
 
 #include "action.hpp"
+#include "rts.hpp"
 #include <deque>
-#include "binding_manager.hpp"
+#include <unordered_set>
+#include <string.h>
+#include "vm.hpp"
+#include "automaton.hpp"
 
 class global_fifo_scheduler {
 private:
@@ -73,6 +77,12 @@ private:
       return queue_.front ();
     }
 
+    inline bool
+    empty () const
+    {
+      return queue_.empty ();
+    }
+
   private:
     status_t status_;
     typedef std::deque<caction, system_allocator<caction> > queue_type;
@@ -88,8 +98,8 @@ private:
 
     caction action_;
 
-    const binding_manager::input_action_set_type* input_actions_;
-    binding_manager::input_action_set_type::const_iterator input_action_pos_;
+    const rts::input_action_set_type* input_actions_;
+    rts::input_action_set_type::const_iterator input_action_pos_;
     
   public:
     execution_context ()
@@ -143,7 +153,7 @@ private:
 	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
 	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
 	  if (output_status) {
-	    input_actions_ = binding_manager::get_bound_inputs (action_);
+	    input_actions_ = rts::get_bound_inputs (action_);
 	    if (input_actions_ != 0) {
 	      // Copy the value.
 	      memcpy (value_buffer_, buffer, action_.value_size);
@@ -246,36 +256,29 @@ private:
   };
 
   /* TODO:  Need one per core. */
-  execution_context exec_context_;
+  static execution_context exec_context_;
   typedef std::deque<automaton_context*, system_allocator<automaton_context*> > queue_type;
-  queue_type ready_queue_;
+  static queue_type ready_queue_;
   typedef std::unordered_map<automaton*, automaton_context*, std::hash<automaton*>, std::equal_to<automaton*>, system_allocator<std::pair<automaton* const, automaton_context*> > > context_map_type;
-  context_map_type context_map_;
+  static context_map_type context_map_;
 
 public:
-  inline void
-  add_automaton (automaton* automaton)
-  {
-    // Allocate a new context and insert it into the map.
-    // Inserting should succeed.
-    automaton_context* c = new (system_alloc ()) automaton_context ();
-    std::pair<context_map_type::iterator, bool> r = context_map_.insert (std::make_pair (automaton, c));
-    kassert (r.second);
-  }
+  static void
+  add_automaton (automaton* automaton);
 
-  inline automaton*
-  current_automaton () const
+  static inline automaton*
+  current_automaton ()
   {
     return exec_context_.current_automaton ();
   }
 
-  inline size_t
-  current_value_size () const
+  static inline size_t
+  current_value_size ()
   {
     return exec_context_.current_value_size ();
   }
 
-  inline void
+  static inline void
   schedule (const caction& ad)
   {
     context_map_type::iterator pos = context_map_.find (ad.automaton);
@@ -291,7 +294,7 @@ public:
     }
   }
   
-  inline void
+  static inline void
   finish (bool output_status,
 	  const void* buffer)
   {
@@ -299,13 +302,22 @@ public:
     exec_context_.finish_action (output_status, buffer);
 
     if (!ready_queue_.empty ()) {
-      /* Load the execution context. */
+      // Get the automaton context and remove it from the ready queue.
       automaton_context* c = ready_queue_.front ();
       ready_queue_.pop_front ();
-      c->status (NOT_SCHEDULED);
     
+      // Load the execution context and remove it from the automaton context.
       exec_context_.load (c->front ());
       c->pop ();
+
+      if (!c->empty ()) {
+	// Automaton has more actions, return to ready queue.
+	ready_queue_.push_back (c);
+      }
+      else {
+	// Leave out.
+	c->status (NOT_SCHEDULED);
+      }
 
       // This call doesn't not return.
       exec_context_.execute ();

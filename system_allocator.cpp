@@ -16,11 +16,7 @@
 #include "vm.hpp"
 #include <new>
 #include "kassert.hpp"
-#include "automaton.hpp"
-
-namespace rts {
-  automaton* system_automaton;
-}
+#include "system_automaton.hpp"
 
 static const uint32_t MAGIC = 0x7ACEDEAD;
 
@@ -96,8 +92,8 @@ system_alloc::allocate (size_t size)
 {
   // Page aligment makes mapping easier.
   kassert (is_aligned (size, PAGE_SIZE));
-  if (rts::system_automaton != 0) {
-    void* retval = rts::system_automaton->sbrk (size);
+  if (system_automaton::system_automaton != 0) {
+    void* retval = system_automaton::system_automaton->sbrk (size);
     kassert (retval != 0);
     // Back with frames.
     for (size_t x = 0; x < size; x += PAGE_SIZE) {

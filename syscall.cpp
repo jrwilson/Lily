@@ -29,17 +29,49 @@ namespace system {
   size_t
   getpagesize (void)
   {
-    size_t retval;
-    asm ("int $0x80\n" : "=b"(retval) : "a"(GETPAGESIZE) :);
-    return retval;
+    size_t size;
+    asm ("int $0x80\n" : "=a"(size) : "0"(GETPAGESIZE) :);
+    return size;
 }
   
   void*
   sbrk (ptrdiff_t size)
   {
     void* ptr;
-    asm ("int $0x80\n" : "=b"(ptr) : "a"(SBRK), "b"(size) :);
+    asm ("int $0x80\n" : "=a"(ptr) : "0"(SBRK), "b"(size) :);
     return ptr;
   }
+
+  bid_t
+  buffer_create (size_t size)
+  {
+    bid_t bid;
+    asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_CREATE), "b"(size) :);
+    return bid;
+  }
   
+  size_t
+  buffer_size (bid_t bid)
+  {
+    size_t size;
+    asm ("int $0x80\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :);
+    return size;
+  }
+
+  int
+  buffer_incref (bid_t bid)
+  {
+    int refcount;
+    asm ("int $0x80\n" : "=a"(refcount) : "0"(BUFFER_INCREF), "b"(bid) :);
+    return refcount;
+  }
+
+  int
+  buffer_decref (bid_t bid)
+  {
+    int refcount;
+    asm ("int $0x80\n" : "=a"(refcount) : "0"(BUFFER_DECREF), "b"(bid) :);
+    return refcount;
+  }
+
 }

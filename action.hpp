@@ -1,6 +1,10 @@
 #ifndef __action_descriptor_hpp__
 #define __action_descriptor_hpp__
 
+#include "action_traits.hpp"
+
+class automaton;
+
 // Partial action.
 struct paction {
   action_type_t type;

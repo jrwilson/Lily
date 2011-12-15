@@ -24,13 +24,13 @@ trap.o \
 stack_allocator.o \
 frame_manager.o \
 vm.o \
-automaton_manager.o \
-binding_manager.o \
 rts.o \
+global_fifo_scheduler.o \
 kmain.o \
 syscall.o \
 system_automaton.o \
-action_test_automaton.o
+action_test_automaton.o \
+buffer_test_automaton.o
 
 # ramdisk_automaton.o \
 # pit.o \

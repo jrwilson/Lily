@@ -16,6 +16,8 @@
 #include "fifo_scheduler.hpp"
 
 namespace system_automaton {
+
+  automaton* system_automaton = 0;
   
   typedef fifo_scheduler<system_allocator> scheduler_type;
   static scheduler_type scheduler_;

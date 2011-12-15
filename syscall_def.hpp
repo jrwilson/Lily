@@ -20,6 +20,14 @@ namespace system {
     FINISH = 0,
     GETPAGESIZE,
     SBRK,
+    BUFFER_CREATE,
+    BUFFER_SIZE,
+    BUFFER_INCREF,
+    BUFFER_DECREF,
+    BUFFER_ADDCHILD,
+    BUFFER_COPY,
+    BUFFER_MAP,
+    BUFFER_UNMAP,
   };
 
 }

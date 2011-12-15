@@ -6,351 +6,137 @@
   Description
   -----------
   The run-time system (rts).
-  Contains the system automaton, the set of bindings, and the scheduler.
 
   Authors:
   Justin R. Wilson
 */
 
 #include "rts.hpp"
-#include "system_automaton.hpp"
-#include "action_test_automaton.hpp"
-#include "automaton_manager.hpp"
+#include <algorithm>
+#include "automaton.hpp"
+#include "buffer.hpp"
+#include "scheduler.hpp"
 
-// Symbols to build the kernel's memory map.
-extern int text_begin;
-extern int text_end;
-extern int rodata_begin;
-extern int rodata_end;
-extern int data_begin;
-extern int data_end;
-
-// Stack for the system automaton.
-static const void* const SYSTEM_AUTOMATON_STACK_BEGIN = reinterpret_cast<const uint8_t*> (PAGING_AREA) - 0x1000;
-static const void* const SYSTEM_AUTOMATON_STACK_END = PAGING_AREA;
-
-// Heap location for system automata.
-// Starting at 4MB allow us to use the low page table of the kernel.
-static const void* const SYSTEM_HEAP_BEGIN = reinterpret_cast<const void*> (FOUR_MEGABYTES);
-
-// Stack range for system automata.
-static const void* const SYSTEM_STACK_BEGIN = reinterpret_cast<const uint8_t*> (KERNEL_VIRTUAL_BASE) - 0x1000;
-static const void* const SYSTEM_STACK_END = KERNEL_VIRTUAL_BASE;
-
-void
-rts::run ()
+automaton*
+rts::create (descriptor_constants::privilege_t privilege,
+	     frame_t frame)
 {
-  bool r;
-  vm_area_interface* area;
+  // Generate an id.
+  aid_t aid = current_aid_;
+  while (aid_map_.find (aid) != aid_map_.end ()) {
+    aid = std::max (aid + 1, 0); // Handles overflow.
+  }
+  current_aid_ = std::max (aid + 1, 0);
   
-  // Allocate the system automaton.
-  automaton* sa = automaton_manager::create (descriptor_constants::RING0, vm::page_directory_frame ());
+  // Create the automaton and insert it into the map.
+  automaton* a = new (system_alloc ()) automaton (aid, privilege, frame);
+  aid_map_.insert (std::make_pair (aid, a));
   
-  // Build its memory map and mark the frames as already being used.
+  // Add to the scheduler.
+  scheduler::add_automaton (a);
   
-  // Low memory.
-  // The page directory uses the same page table for high and low memory.
-  // We only mark the high memory.
-  area = new (system_alloc ()) vm_reserved_area (KERNEL_VIRTUAL_BASE, reinterpret_cast<const uint8_t*> (KERNEL_VIRTUAL_BASE) + ONE_MEGABYTE);
-  r = sa->insert_vm_area (area);
-  kassert (r);
-  
-  // Text.
-  area = new (system_alloc ()) vm_text_area (&text_begin, &text_end);
-  r = sa->insert_vm_area (area);
-  kassert (r);
-  
-  // Read-only data.
-  area = new (system_alloc ()) vm_rodata_area (&rodata_begin, &rodata_end);
-  r = sa->insert_vm_area (area);
-  kassert (r);
-  
-  // Data.
-  area = new (system_alloc ()) vm_data_area (&data_begin, &data_end);
-  r = sa->insert_vm_area (area);
-  kassert (r);
-  
-  // Stack.
-  vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_AUTOMATON_STACK_BEGIN,
-								   SYSTEM_AUTOMATON_STACK_END,
-								   vm::SUPERVISOR);
-  r = sa->insert_stack_area (stack_area);
-  kassert (r);
-  
-  // Heap.
-  vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (system_alloc::heap_begin (), vm::SUPERVISOR);
-  r = sa->insert_heap_area (heap_area);
-  kassert (r);
-  // Tell the heap about the existing heap.
-  void* hb = sa->sbrk (system_alloc::heap_size ());
-  kassert (hb == system_alloc::heap_begin ());
-  
-  // This line instructs the system allocator to start using the system automaton's memory map.
-  // It also makes it available for initializing virtual memory.
-  system_automaton = sa;
-  
-  // We can't allocate any more memory until the page tables are corrected.
-  vm::initialize (system_automaton);
-  
-  /* Add the actions. */
-  system_automaton->add_action<system_automaton::init_traits> (&system_automaton::init);
-  
-  create_action_test ();
-  
-  // Start the scheduler.  Doesn't return.
-  scheduler.finish (false, 0);
+  return a;
 }
 
-rts::scheduler_type rts::scheduler;
-
 void
-rts::create_action_test ()
+rts::bind_ (automaton* output_automaton,
+	    const void* output_action_entry_point,
+	    parameter_mode_t output_parameter_mode,
+	    aid_t output_parameter,
+	    automaton* input_automaton,
+	    const void* input_action_entry_point,
+	    parameter_mode_t input_parameter_mode,
+	    aid_t input_parameter,
+	    size_t value_size)
 {
-  // Create automata to test actions.
-  automaton* input_automaton;
-  automaton* output_automaton;
+  // Check the output action dynamically.
+  kassert (output_automaton != 0);
+  automaton::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
+  kassert (output_pos != output_automaton->action_end () && output_pos->type == OUTPUT);
+  
+  // Check the input action dynamically.
+  kassert (input_automaton != 0);
+  automaton::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
+  kassert (input_pos != input_automaton->action_end () && input_pos->type == INPUT);
+  
+  // TODO:  All of the bind checks.
+  caction oa (output_automaton, OUTPUT, output_action_entry_point, output_parameter_mode, value_size, output_parameter);
+  caction ia (input_automaton, INPUT, input_action_entry_point, input_parameter_mode, value_size, input_parameter);
+  
+  std::pair<bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type ()));
+  r.first->second.insert (ia);
+}
 
-  {    
-    // First, create a new page directory.
-
-    // Reserve some logical address space for the page directory.
-    vm::page_directory* pd = static_cast<vm::page_directory*> (vm::get_stub ());
-    // Allocate a frame.
-    frame_t frame = frame_manager::alloc ();
-    // Map the page directory.
-    vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
-    // Initialize the page directory with a copy of the current page directory.
-    new (pd) vm::page_directory (true);
-    // Unmap.
-    vm::unmap (pd);
-    // Drop the reference count from allocation.
-    size_t count = frame_manager::decref (frame);
-    kassert (count == 1);
-
-    // Second, create the automaton.
-    input_automaton = automaton_manager::create (descriptor_constants::RING0, frame);
-
-    // Third, create the automaton's memory map.
-    {
-      vm_area_interface* area;
-      bool r;
-
-      // Text.
-      area = new (system_alloc ()) vm_text_area (&text_begin, &text_end);
-      r = input_automaton->insert_vm_area (area);
-      kassert (r);
-	
-      // Read-only data.
-      area = new (system_alloc ()) vm_rodata_area (&rodata_begin, &rodata_end);
-      r = input_automaton->insert_vm_area (area);
-      kassert (r);
-	
-      // Data.
-      area = new (system_alloc ()) vm_data_area (&data_begin, &data_end);
-      r = input_automaton->insert_vm_area (area);
-      kassert (r);
-
-      // Heap.
-      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
-      r = input_automaton->insert_heap_area (heap_area);
-      kassert (r);
-
-      // Stack.
-      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
-      r = input_automaton->insert_stack_area (stack_area);
-      kassert (r);
-    }
-      
-    // Fourth, add the actions.
-    input_automaton->add_action<action_test::up_uv_input1_traits> (&action_test::up_uv_input1);
-    input_automaton->add_action<action_test::up_uv_input2_traits> (&action_test::up_uv_input2);
-    input_automaton->add_action<action_test::up_uv_input3_traits> (&action_test::up_uv_input3);
-    input_automaton->add_action<action_test::up_v_input1_traits> (&action_test::up_v_input1);
-    input_automaton->add_action<action_test::up_v_input2_traits> (&action_test::up_v_input2);
-    input_automaton->add_action<action_test::up_v_input3_traits> (&action_test::up_v_input3);
-    input_automaton->add_action<action_test::p_uv_input1_traits> (&action_test::p_uv_input1);
-    input_automaton->add_action<action_test::p_uv_input2_traits> (&action_test::p_uv_input2);
-    input_automaton->add_action<action_test::p_uv_input3_traits> (&action_test::p_uv_input3);
-    input_automaton->add_action<action_test::p_v_input1_traits> (&action_test::p_v_input1);
-    input_automaton->add_action<action_test::p_v_input2_traits> (&action_test::p_v_input2);
-    input_automaton->add_action<action_test::p_v_input3_traits> (&action_test::p_v_input3);
-    input_automaton->add_action<action_test::ap_uv_input1_traits> (&action_test::ap_uv_input1);
-    input_automaton->add_action<action_test::ap_uv_input2_traits> (&action_test::ap_uv_input2);
-    input_automaton->add_action<action_test::ap_uv_input3_traits> (&action_test::ap_uv_input3);
-    input_automaton->add_action<action_test::ap_v_input1_traits> (&action_test::ap_v_input1);
-    input_automaton->add_action<action_test::ap_v_input2_traits> (&action_test::ap_v_input2);
-    input_automaton->add_action<action_test::ap_v_input3_traits> (&action_test::ap_v_input3);
+bid_t
+rts::buffer_create (size_t size,
+		    automaton* a)
+{
+  // Generate an id.
+  bid_t bid = current_bid_;
+  while (bid_map_.find (bid) != bid_map_.end ()) {
+    bid = std::max (bid + 1, 0); // Handles overflow.
   }
+  current_bid_ = std::max (bid + 1, 0);
+  
+  // Create the automaton and insert it into the map.
+  buffer* b = new (system_alloc ()) buffer (size, a);
+  bid_map_.insert (std::make_pair (bid, b));
+  
+  return bid;
+}
 
-  {
-    // First, create a new page directory.
-
-    // Reserve some logical address space for the page directory.
-    vm::page_directory* pd = static_cast<vm::page_directory*> (vm::get_stub ());
-    // Allocate a frame.
-    frame_t frame = frame_manager::alloc ();
-    // Map the page directory.
-    vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
-    // Initialize the page directory with a copy of the current page directory.
-    new (pd) vm::page_directory (true);
-    // Unmap.
-    vm::unmap (pd);
-    // Drop the reference count from allocation.
-    size_t count = frame_manager::decref (frame);
-    kassert (count == 1);
-
-    // Second, create the automaton.
-    output_automaton = automaton_manager::create (descriptor_constants::RING0, frame);
-      
-    // Third, create the automaton's memory map.
-    {
-      vm_area_interface* area;
-      bool r;
-
-      // Text.
-      area = new (system_alloc ()) vm_text_area (&text_begin, &text_end);
-      r = output_automaton->insert_vm_area (area);
-      kassert (r);
-	
-      // Read-only data.
-      area = new (system_alloc ()) vm_rodata_area (&rodata_begin, &rodata_end);
-      r = output_automaton->insert_vm_area (area);
-      kassert (r);
-	
-      // Data.
-      area = new (system_alloc ()) vm_data_area (&data_begin, &data_end);
-      r = output_automaton->insert_vm_area (area);
-      kassert (r);
-
-      // Heap.
-      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
-      r = output_automaton->insert_heap_area (heap_area);
-      kassert (r);
-
-      // Stack.
-      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
-      r = output_automaton->insert_stack_area (stack_area);
-      kassert (r);
-    }
-      
-    // Fourth, add the actions.
-    output_automaton->add_action<action_test::init_traits> (&action_test::init);
-    output_automaton->add_action<action_test::up_uv_output_traits> (&action_test::up_uv_output);
-    output_automaton->add_action<action_test::up_v_output_traits> (&action_test::up_v_output);
-    output_automaton->add_action<action_test::p_uv_output_traits> (&action_test::p_uv_output);
-    output_automaton->add_action<action_test::p_v_output_traits> (&action_test::p_v_output);
-    output_automaton->add_action<action_test::ap_uv_output_traits> (&action_test::ap_uv_output);
-    output_automaton->add_action<action_test::ap_v_output_traits> (&action_test::ap_v_output);
-
-    output_automaton->add_action<action_test::up_internal_traits> (&action_test::up_internal);
-    output_automaton->add_action<action_test::p_internal_traits> (&action_test::p_internal);
-
-    // Bind.
-    binding_manager::bind<system_automaton::init_traits,
-  			  action_test::init_traits> (system_automaton, &system_automaton::init, output_automaton,
-  						     output_automaton, &action_test::init);
-    checked_schedule (system_automaton, reinterpret_cast<const void*> (&system_automaton::init), aid_cast (output_automaton));
-    
-    binding_manager::bind<action_test::up_uv_output_traits,
-  			  action_test::up_uv_input1_traits> (output_automaton, &action_test::up_uv_output,
-  							     input_automaton, &action_test::up_uv_input1);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::up_uv_output));
-    
-    binding_manager::bind<action_test::p_uv_output_traits,
-  			  action_test::up_uv_input2_traits> (output_automaton, &action_test::p_uv_output, action_test::p_uv_output_parameter,
-  							     input_automaton, &action_test::up_uv_input2);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_uv_output), aid_cast (action_test::p_uv_output_parameter));
-    
-    action_test::ap_uv_output_parameter = input_automaton->aid ();
-    binding_manager::bind<action_test::ap_uv_output_traits,
-  			  action_test::up_uv_input3_traits> (output_automaton, &action_test::ap_uv_output, action_test::ap_uv_output_parameter,
-  							     input_automaton, &action_test::up_uv_input3);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_uv_output), aid_cast (action_test::ap_uv_output_parameter));
-
-    binding_manager::bind<action_test::up_v_output_traits,
-  			  action_test::up_v_input1_traits> (output_automaton, &action_test::up_v_output,
-  							    input_automaton, &action_test::up_v_input1);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::up_v_output));
-      
-    binding_manager::bind<action_test::p_v_output_traits,
-  			  action_test::up_v_input2_traits> (output_automaton, &action_test::p_v_output, action_test::p_v_output_parameter,
-  							    input_automaton, &action_test::up_v_input2);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_v_output), aid_cast (action_test::p_v_output_parameter));
-			 
-    action_test::ap_v_output_parameter = input_automaton->aid ();
-    binding_manager::bind<action_test::ap_v_output_traits,
-  			  action_test::up_v_input3_traits> (output_automaton, &action_test::ap_v_output, action_test::ap_v_output_parameter,
-  							    input_automaton, &action_test::up_v_input3);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_v_output), aid_cast (action_test::ap_v_output_parameter));
-
-    binding_manager::bind<action_test::up_uv_output_traits,
-  			  action_test::p_uv_input1_traits> (output_automaton, &action_test::up_uv_output,
-  							    input_automaton, &action_test::p_uv_input1, action_test::p_uv_input1_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::up_uv_output));
-      
-    binding_manager::bind<action_test::p_uv_output_traits,
-  			  action_test::p_uv_input2_traits> (output_automaton, &action_test::p_uv_output, action_test::p_uv_output_parameter,
-  							    input_automaton, &action_test::p_uv_input2, action_test::p_uv_input2_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_uv_output), aid_cast (action_test::p_uv_output_parameter));
-      
-    action_test::ap_uv_output_parameter = input_automaton->aid ();
-    binding_manager::bind<action_test::ap_uv_output_traits,
-  			  action_test::p_uv_input3_traits> (output_automaton, &action_test::ap_uv_output, action_test::ap_uv_output_parameter,
-  							    input_automaton, &action_test::p_uv_input3, action_test::p_uv_input3_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_uv_output), aid_cast (action_test::ap_uv_output_parameter));
-      
-    binding_manager::bind<action_test::up_v_output_traits,
-  			  action_test::p_v_input1_traits> (output_automaton, &action_test::up_v_output,
-  							   input_automaton, &action_test::p_v_input1, action_test::p_v_input1_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::up_v_output));
-      
-    binding_manager::bind<action_test::p_v_output_traits,
-  			  action_test::p_v_input2_traits> (output_automaton, &action_test::p_v_output, action_test::p_v_output_parameter,
-  							   input_automaton, &action_test::p_v_input2, action_test::p_v_input2_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_v_output), aid_cast (action_test::p_v_output_parameter));
-      
-    action_test::ap_v_output_parameter = input_automaton->aid ();
-    binding_manager::bind<action_test::ap_v_output_traits,
-  			  action_test::p_v_input3_traits> (output_automaton, &action_test::ap_v_output, action_test::ap_v_output_parameter,
-  							   input_automaton, &action_test::p_v_input3, action_test::p_v_input3_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_v_output), aid_cast (action_test::ap_v_output_parameter));
-
-    action_test::ap_uv_input1_parameter = output_automaton->aid ();
-    binding_manager::bind<action_test::up_uv_output_traits,
-  			  action_test::ap_uv_input1_traits> (output_automaton, &action_test::up_uv_output,
-  							     input_automaton, &action_test::ap_uv_input1, action_test::ap_uv_input1_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::up_uv_output));
-
-    action_test::ap_uv_input2_parameter = output_automaton->aid ();
-    binding_manager::bind<action_test::p_uv_output_traits,
-  			  action_test::ap_uv_input2_traits> (output_automaton, &action_test::p_uv_output, action_test::p_uv_output_parameter,
-  							     input_automaton, &action_test::ap_uv_input2, action_test::ap_uv_input2_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_uv_output), aid_cast (action_test::p_uv_output_parameter));
-      
-    action_test::ap_uv_input3_parameter = output_automaton->aid ();
-    action_test::ap_uv_output_parameter = input_automaton->aid ();
-    binding_manager::bind<action_test::ap_uv_output_traits,
-  			  action_test::ap_uv_input3_traits> (output_automaton, &action_test::ap_uv_output, action_test::ap_uv_output_parameter,
-  							     input_automaton, &action_test::ap_uv_input3, action_test::ap_uv_input3_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_uv_output), aid_cast (action_test::ap_uv_output_parameter));
-      
-    action_test::ap_v_input1_parameter = output_automaton->aid ();
-    binding_manager::bind<action_test::up_v_output_traits,
-  			  action_test::ap_v_input1_traits> (output_automaton, &action_test::up_v_output,
-  							    input_automaton, &action_test::ap_v_input1, action_test::ap_v_input1_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::up_v_output));
-      
-    action_test::ap_v_input2_parameter = output_automaton->aid ();
-    binding_manager::bind<action_test::p_v_output_traits,
-  			  action_test::ap_v_input2_traits> (output_automaton, &action_test::p_v_output, action_test::p_v_output_parameter,
-  							    input_automaton, &action_test::ap_v_input2, action_test::ap_v_input2_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_v_output), aid_cast (action_test::p_v_output_parameter));
-      
-    action_test::ap_v_input3_parameter = output_automaton->aid ();
-    action_test::ap_v_output_parameter = input_automaton->aid ();
-    binding_manager::bind<action_test::ap_v_output_traits,
-  			  action_test::ap_v_input3_traits> (output_automaton, &action_test::ap_v_output, action_test::ap_v_output_parameter,
-  							    input_automaton, &action_test::ap_v_input3, action_test::ap_v_input3_parameter);
-    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_v_output), aid_cast (action_test::ap_v_output_parameter));
+size_t
+rts::buffer_size (bid_t bid,
+		  automaton* a)
+{
+  bid_map_type::const_iterator pos = bid_map_.find (bid);
+  if (pos != bid_map_.end ()) {
+    return pos->second->size (a);
+  }
+  else {
+    // The buffer does not exist.
+    return -1;
   }
 }
+
+int
+rts::buffer_incref (bid_t bid,
+		    automaton* a)
+{
+  bid_map_type::const_iterator pos = bid_map_.find (bid);
+  if (pos != bid_map_.end ()) {
+    return pos->second->incref (a);
+  }
+  else {
+    // The buffer does not exist.
+    return -1;
+  }  
+}
+
+int
+rts::buffer_decref (bid_t bid,
+		    automaton* a)
+{
+  bid_map_type::const_iterator pos = bid_map_.find (bid);
+  if (pos != bid_map_.end ()) {
+    int retval = pos->second->decref (a);
+    // Remove the buffer if there are not more references.
+    if (pos->second->empty ()) {
+      destroy (pos->second, system_alloc ());
+      bid_map_.erase (pos);
+    }
+    return retval;
+  }
+  else {
+    // The buffer does not exist.
+    return -1;
+  }  
+}
+
+aid_t rts::current_aid_ = 0;
+rts::aid_map_type rts::aid_map_;
+
+rts::bindings_type rts::bindings_;
+
+bid_t rts::current_bid_ = 0;
+rts::bid_map_type rts::bid_map_;
