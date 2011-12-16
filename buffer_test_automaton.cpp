@@ -30,13 +30,17 @@ namespace buffer_test {
     scheduler_ = new (alloc_type ()) scheduler_type ();
 
     bid_t buffer = system::buffer_create (100);
-    kout << "create       " << buffer << endl;
-    kout << "size         " << system::buffer_size (buffer) << endl;
-    kout << "size (bad)   " << system::buffer_size (85) << endl;
-    kout << "incref       " << system::buffer_incref (buffer) << endl;
-    kout << "incref (bad) " << system::buffer_incref (85) << endl;
-    kout << "decref       " << system::buffer_decref (buffer) << endl;
-    kout << "decref (bad) " << system::buffer_decref (85) << endl;
+    kassert (system::buffer_size (buffer) == 100);
+    kassert (system::buffer_size (85) == static_cast<size_t> (-1));
+    kassert (system::buffer_incref (buffer) == 2);
+    kassert (system::buffer_incref (85) == -1);
+    kassert (system::buffer_decref (buffer) == 1);
+    kassert (system::buffer_decref (85) == -1);
+
+    bid_t parent = system::buffer_create (100);
+    kassert (system::buffer_addchild (parent, buffer) == 0);
+    kassert (system::buffer_decref (buffer) == 1);
+    kassert (system::buffer_decref (parent) == 0);
 
     schedule ();
     scheduler_->finish<init_traits> ();

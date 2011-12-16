@@ -156,6 +156,7 @@ exception_dispatch (volatile registers regs)
     break; 
   case SEGMENT_NOT_PRESENT:
     // TODO
+    kout << regs << endl;
     kassert (0);
     break; 
   case STACK_SEGMENT_OVERRUN:

@@ -71,7 +71,7 @@ namespace std {
   private:
     typedef typename Hash::result_type hash_type;
 
-    struct Iterator : public std::iterator<std::forward_iterator_tag, T> {
+    struct Iterator : public std::iterator<std::forward_iterator_tag, const T> {
       drop_type** drop;
       const unordered_set* set;
 
@@ -267,7 +267,7 @@ namespace std {
       return iterator (0, this);
     }
 
-    iterator
+    std::pair<iterator, bool>
     insert (const value_type& v)
     {
       const hash_type hash = Hash::operator() (v);
@@ -276,7 +276,7 @@ namespace std {
       drop_type** ptr = &bucket_[bucket_idx];
       while (*ptr != 0) {
 	if ((*ptr)->hash == hash && Predicate::operator () ((*ptr)->key, v)) {
-	  return iterator (ptr, this);
+	  return std::make_pair (iterator (ptr, this), false);
 	}
 	ptr = &(*ptr)->next;
       }
@@ -287,12 +287,12 @@ namespace std {
       *ptr = drop;
 
       if (drop_count_ <= max_drop_count_) {
-	return iterator (ptr, this);
+	return std::make_pair (iterator (ptr, this), true);
       }
       else {
 	// Rehashing blows away ptr.
 	rehash_n (2 * bucket_count_);
-	return find (v);
+	return std::make_pair (find (v), true);
       }
     }
 

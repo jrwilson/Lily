@@ -53,6 +53,7 @@ namespace std {
 
   public:
     typedef Key key_type;
+    typedef T mapped_type;
     typedef std::pair<const Key, T> value_type;
     typedef Hash hasher;
     typedef Predicate key_equal;
@@ -72,7 +73,7 @@ namespace std {
   private:
     typedef typename Hash::result_type hash_type;
 
-    struct Iterator : public std::iterator<std::forward_iterator_tag, T> {
+    struct Iterator : public std::iterator<std::forward_iterator_tag, value_type> {
       drop_type** drop;
       const unordered_map* map;
 
@@ -101,7 +102,7 @@ namespace std {
       }
     };
 
-    struct ConstIterator : public std::iterator<std::forward_iterator_tag, T> {
+    struct ConstIterator : public std::iterator<std::forward_iterator_tag, const value_type> {
       drop_type** drop;
       const unordered_map* map;
       
@@ -323,7 +324,17 @@ namespace std {
     }
     
     size_type
-    erase (const key_type& k);
+    erase (const key_type& k)
+    {
+      iterator pos = find (k);
+      if (pos != end ()) {
+	erase (pos);
+	return 1;
+      }
+      else {
+	return 0;
+      }
+    }
 
     void
     erase (const_iterator begin,

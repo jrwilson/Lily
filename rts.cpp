@@ -78,10 +78,14 @@ rts::buffer_create (size_t size,
   }
   current_bid_ = std::max (bid + 1, 0);
   
-  // Create the automaton and insert it into the map.
-  buffer* b = new (system_alloc ()) buffer (size, a);
+  // Create the buffer and insert it into the map.
+  buffer* b = new (system_alloc ()) buffer (bid, size);
   bid_map_.insert (std::make_pair (bid, b));
-  
+
+  // Start a reference count.
+  reference_map_.insert (std::make_pair (reference_key (a, b), 1));
+  ++b->reference_count;
+
   return bid;
 }
 
@@ -89,48 +93,131 @@ size_t
 rts::buffer_size (bid_t bid,
 		  automaton* a)
 {
-  bid_map_type::const_iterator pos = bid_map_.find (bid);
-  if (pos != bid_map_.end ()) {
-    return pos->second->size (a);
+  bid_map_type::const_iterator bpos = bid_map_.find (bid);
+  if (bpos != bid_map_.end ()) {
+    buffer* b = bpos->second;
+    if (reference_map_.find (reference_key (a, b)) != reference_map_.end ()) {
+      // The buffer exists and the automaton has a reference.
+      return b->size;
+    }
   }
-  else {
-    // The buffer does not exist.
-    return -1;
-  }
+  // The buffer does not exist or the automaton doesn't have a reference.
+  return -1;
 }
 
+// TODO:  Reference count overflow.
 int
 rts::buffer_incref (bid_t bid,
 		    automaton* a)
 {
-  bid_map_type::const_iterator pos = bid_map_.find (bid);
-  if (pos != bid_map_.end ()) {
-    return pos->second->incref (a);
+  bid_map_type::const_iterator bpos = bid_map_.find (bid);
+  if (bpos != bid_map_.end ()) {
+    buffer* b = bpos->second;
+    if (reference_map_.find (reference_key (a, b)) != reference_map_.end ()) {
+      // The buffer exists and the automaton has a reference.
+
+      // Changing the reference count always closes a buffer.
+      b->status = buffer::CLOSED;
+
+      // Increment the reference count for the implied set.
+      for (buffer::implied_set_type::const_iterator pos = b->implied_set.begin ();
+	   pos != b->implied_set.end ();
+	   ++pos) {
+	++reference_map_.find (reference_key (a, *pos))->second;
+	++(*pos)->reference_count;
+      }
+
+      // Return the reference count for this buffer.     
+      return reference_map_.find (reference_key (a, b))->second;
+    }
   }
-  else {
-    // The buffer does not exist.
-    return -1;
-  }  
+  // The buffer does not exist or the automaton doesn't have a reference.
+  return -1;
 }
 
 int
 rts::buffer_decref (bid_t bid,
 		    automaton* a)
 {
-  bid_map_type::const_iterator pos = bid_map_.find (bid);
-  if (pos != bid_map_.end ()) {
-    int retval = pos->second->decref (a);
-    // Remove the buffer if there are not more references.
-    if (pos->second->empty ()) {
-      destroy (pos->second, system_alloc ());
-      bid_map_.erase (pos);
+  bid_map_type::const_iterator bpos = bid_map_.find (bid);
+  if (bpos != bid_map_.end ()) {
+    buffer* b = bpos->second;
+    if (reference_map_.find (reference_key (a, b)) != reference_map_.end ()) {
+      // The buffer exists and the automaton has a reference.
+
+      // Changing the reference count always closes a buffer.
+      b->status = buffer::CLOSED;
+
+      // Increment the reference count for the implied set.
+      for (buffer::implied_set_type::const_iterator pos = b->implied_set.begin ();
+	   pos != b->implied_set.end ();
+	   ++pos) {
+	// Decrement the reference count for the automaton and clean up.
+	reference_map_type::iterator r = reference_map_.find (reference_key (a, *pos));
+	if (--r->second == 0) {
+	  reference_map_.erase (r);
+	}
+
+	// Decrement the global reference count and clean up if the buffer is not the one we are iterating over.
+	if (--(*pos)->reference_count == 0 && *pos != b) {
+	  bid_map_.erase ((*pos)->bid);
+	  destroy ((*pos), system_alloc ());
+	}
+      }
+
+      if (b->reference_count != 0) {
+	// Return the reference count for this buffer.     
+	return b->reference_count;
+      }
+      else {
+	bid_map_.erase (bpos);
+	destroy (b, system_alloc ());
+	return 0;
+      }
     }
-    return retval;
   }
-  else {
-    // The buffer does not exist.
-    return -1;
-  }  
+  // The buffer does not exist or the automaton doesn't have a reference.
+  return -1;
+}
+
+int
+rts::buffer_addchild (bid_t parent,
+		      bid_t child,
+		      automaton* a)
+{
+  bid_map_type::const_iterator parent_pos = bid_map_.find (parent);
+  bid_map_type::const_iterator child_pos = bid_map_.find (child);
+  if (parent_pos != bid_map_.end () && child_pos != bid_map_.end ()) {
+    // Buffers exist.
+    buffer* parent_buffer = parent_pos->second;
+    buffer* child_buffer = child_pos->second;
+
+    // The parent buffer is open meaning the automaton is the only one with a reference.
+    // The automaton has a reference to both the parent and child.
+    if (parent_buffer->status == buffer::OPEN &&
+	reference_map_.find (reference_key (a, parent_buffer)) != reference_map_.end () &&
+	reference_map_.find (reference_key (a, child_buffer)) != reference_map_.end ()) {
+      // The child buffer is closed if it was open.
+      child_buffer->status = buffer::CLOSED;
+
+      // Iterate over the buffers implied by the child.
+      for (buffer::implied_set_type::iterator pos = child_buffer->implied_set.begin ();
+	   pos != child_buffer->implied_set.end ();
+	   ++pos) {
+	// Insert each one.
+	std::pair<buffer::implied_set_type::iterator, bool> r = parent_buffer->implied_set.insert (*pos);
+	if (r.second) {
+	  // This is a new child.  Transfer a reference to the child.
+	  std::pair<reference_map_type::iterator, bool> s = reference_map_.insert (std::make_pair (reference_key (a, *pos), 0));
+	  ++s.first->second;
+	  ++(*pos)->reference_count;
+	}
+      }
+      
+      return 0;
+    }
+  }
+  return -1;
 }
 
 aid_t rts::current_aid_ = 0;
@@ -140,3 +227,5 @@ rts::bindings_type rts::bindings_;
 
 bid_t rts::current_bid_ = 0;
 rts::bid_map_type rts::bid_map_;
+
+rts::reference_map_type rts::reference_map_;

@@ -43,6 +43,57 @@ namespace std {
   };
 
   template <class T, class U>
+  bool
+  operator== (const pair<T, U>& x,
+	      const pair<T, U>& y)
+  {
+    return x.first == y.first && x.second == y.second;
+  }
+
+  template <class T, class U>
+  bool
+  operator!= (const pair<T, U>& x,
+	      const pair<T, U>& y)
+  {
+    return !(x == y);
+  }
+
+  template <class T, class U>
+  bool
+  operator< (const pair<T, U>& x,
+	     const pair<T, U>& y)
+  {
+    if (!(x.first == y.first)) {
+      return x.first < y.first;
+    }
+    return x.second < y.second;
+  }
+
+  template <class T, class U>
+  bool
+  operator> (const pair<T, U>& x,
+	     const pair<T, U>& y)
+  {
+    return (y < x);
+  }
+
+  template <class T, class U>
+  bool
+  operator<= (const pair<T, U>& x,
+	     const pair<T, U>& y)
+  {
+    return !(y < x);
+  }
+
+  template <class T, class U>
+  bool
+  operator>= (const pair<T, U>& x,
+	     const pair<T, U>& y)
+  {
+    return !(x < y);
+  }
+
+  template <class T, class U>
   pair<T, U>
   make_pair (const T& t,
 	     const U& u)

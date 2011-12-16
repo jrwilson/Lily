@@ -116,6 +116,11 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
+  case system::BUFFER_ADDCHILD:
+    {
+      regs.eax = rts::buffer_addchild (regs.ebx, regs.ecx, scheduler::current_automaton ());
+      return;
+    }
   }
   
   // TODO:  Unknown system call.

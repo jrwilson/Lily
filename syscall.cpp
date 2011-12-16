@@ -74,4 +74,13 @@ namespace system {
     return refcount;
   }
 
+  int
+  buffer_addchild (bid_t parent,
+		   bid_t child)
+  {
+    int result;
+    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_ADDCHILD), "b"(parent), "c"(child) :);
+    return result;
+  }
+
 }

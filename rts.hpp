@@ -190,6 +190,8 @@ public:
     }
   }
 
+  // TODO:  Inline buffer operations.
+
   static bid_t
   buffer_create (size_t size,
 		 automaton* creator);
@@ -205,7 +207,12 @@ public:
   static int
   buffer_decref (bid_t bid,
 		 automaton* a);
-     
+
+  static int
+  buffer_addchild (bid_t parent,
+		   bid_t child,
+		   automaton* a);
+
 private:
   static void
   bind_ (automaton* output_automaton,
@@ -228,6 +235,11 @@ private:
   static bid_t current_bid_;
   typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, system_allocator<std::pair<const bid_t, buffer*> > > bid_map_type;
   static bid_map_type bid_map_;
+
+  // Reference counts.
+  typedef std::pair<automaton*, buffer*> reference_key;
+  typedef std::unordered_map<reference_key, int, std::hash<reference_key>, std::equal_to<reference_key>, system_allocator<std::pair<const reference_key, int> > > reference_map_type;
+  static reference_map_type reference_map_;
 };
 
 #endif /* __rts_hpp__ */

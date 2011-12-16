@@ -45,6 +45,10 @@ namespace system {
 
   int
   buffer_decref (bid_t bid);
+
+  int
+  buffer_addchild (bid_t parent,
+		   bid_t child);
 }
 
 #endif /* __syscall_hpp__ */

@@ -1,73 +1,32 @@
 #ifndef __buffer_hpp__
 #define __buffer_hpp__
 
-class automaton;
+struct buffer {
+  enum status_t {
+    OPEN,
+    CLOSED,
+  };
 
-static const int MAX_REFERENCE_COUNT = 512;
-
-class buffer {
-public:
-  buffer (size_t size,
-	  automaton* creator) :
-    size_ (size)
+  buffer (bid_t b,
+	  size_t size) :
+    bid (b),
+    status (OPEN),
+    size (size),
+    reference_count (0)
   {
-    std::pair<reference_map_type::iterator, bool> r = reference_map_.insert (std::make_pair (creator, 0));
-    ++r.first->second;
+    // We imply ourselves.
+    implied_set.insert (this);
   }
 
-  size_t
-  size (automaton* a) const
-  {
-    if (reference_map_.find (a) != reference_map_.end ()) {
-      // Automaton has a reference.
-      return size_;
-    }
-    // Automaton does not have a reference.  Error.
-    return -1;
-  }
-
-  int
-  incref (automaton* a)
-  {
-    reference_map_type::iterator pos = reference_map_.find (a);
-    if (pos != reference_map_.end ()) {
-      // Automaton has a reference.
-      if (pos->second < MAX_REFERENCE_COUNT) {
-	++pos->second;
-      }
-      return pos->second;
-    }
-    // Automaton does not have a reference.
-    return -1;
-  }
-
-  int
-  decref (automaton* a)
-  {
-    reference_map_type::iterator pos = reference_map_.find (a);
-    if (pos != reference_map_.end ()) {
-      // Automaton has a reference.
-      return --pos->second;
-    }
-    // Automaton does not have a reference.
-    return -1;
-  }
-  
-  bool
-  empty () const
-  {
-    return reference_map_.empty ();
-  }
-
-private:
-  // The size of the buffer.
-  size_t size_;
-  // Reference counts.
-  typedef std::unordered_map<automaton*, int, std::hash<automaton*>, std::equal_to<automaton*>, system_allocator<std::pair<automaton* const, int> > > reference_map_type;
-  reference_map_type reference_map_;
-  // // Child buffers.
-  // typedef std::unordered_set<buffer*, std::hash<buffer*>, std::equal_to<buffer*>, system_allocator<buffer*> > children_set_type;
-  // children_set_type children_set_;
+  bid_t bid;
+  status_t status;
+  // The size of the buffer in bytes.
+  size_t size;
+  // The number of refernces.
+  size_t reference_count;
+  // Implied set of buffers.
+  typedef std::unordered_set<buffer*, std::hash<buffer*>, std::equal_to<buffer*>, system_allocator<buffer*> > implied_set_type;
+  implied_set_type implied_set;
 };
 
 #endif /* __buffer_hpp__ */
