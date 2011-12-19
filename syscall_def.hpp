@@ -24,10 +24,8 @@ namespace system {
     BUFFER_SIZE,
     BUFFER_INCREF,
     BUFFER_DECREF,
-    BUFFER_ADDCHILD,
-    BUFFER_COPY,
     BUFFER_MAP,
-    BUFFER_UNMAP,
+    // BUFFER_UNMAP,
   };
 
 }

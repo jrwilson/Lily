@@ -46,9 +46,8 @@ namespace system {
   int
   buffer_decref (bid_t bid);
 
-  int
-  buffer_addchild (bid_t parent,
-		   bid_t child);
+  void*
+  buffer_map (bid_t bid);
 }
 
 #endif /* __syscall_hpp__ */

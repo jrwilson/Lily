@@ -9,7 +9,7 @@ typedef uint32_t frame_t;
 
 typedef uint_fast16_t page_table_idx_t;
 
-#define PAGE_SIZE 0x1000
+static const size_t PAGE_SIZE = 0x1000;
 
 /* Number of entries in a page table or directory. */
 static const page_table_idx_t PAGE_ENTRY_COUNT = 1024;
@@ -108,6 +108,62 @@ logical_to_physical (const void* address,
 		     const void* offset)
 {
   return reinterpret_cast<physical_address_t> (address) - reinterpret_cast<physical_address_t> (offset);
+}
+
+typedef uint32_t page_fault_error_t;
+
+inline bool
+not_present (page_fault_error_t error)
+{
+  return (error & (1 << 0)) == 0;
+}
+
+inline bool
+protection_violation (page_fault_error_t error)
+{
+  return (error & (1 << 0)) != 0;
+}
+
+inline bool
+read_context (page_fault_error_t error)
+{
+  return (error & (1 << 1)) == 0;
+}
+
+inline bool
+write_context (page_fault_error_t error)
+{
+  return (error & (1 << 1)) != 0;
+}
+
+inline bool
+supervisor_context (page_fault_error_t error)
+{
+  return (error & (1 << 2)) == 0;
+}
+
+inline bool
+user_context (page_fault_error_t error)
+{
+  return (error & (1 << 2)) != 0;
+}
+
+inline bool
+reserved_bit_violation (page_fault_error_t error)
+{
+  return (error & (1 << 3)) != 0;
+}
+
+inline bool
+data_context (page_fault_error_t error)
+{
+  return (error & (1 << 4)) == 0;
+}
+
+inline bool
+instruction_context (page_fault_error_t error)
+{
+  return (error & (1 << 4)) != 0;
 }
 
 #endif /* __vm_def_hpp__ */

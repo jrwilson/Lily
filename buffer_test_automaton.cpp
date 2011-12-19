@@ -2,6 +2,7 @@
 #include "list_allocator.hpp"
 #include "fifo_scheduler.hpp"
 #include "kassert.hpp"
+#include <string.h>
 
 struct allocator_tag { };
 typedef list_alloc<allocator_tag> alloc_type;
@@ -29,18 +30,18 @@ namespace buffer_test {
     // Allocate a scheduler.
     scheduler_ = new (alloc_type ()) scheduler_type ();
 
-    bid_t buffer = system::buffer_create (100);
-    kassert (system::buffer_size (buffer) == 100);
     kassert (system::buffer_size (85) == static_cast<size_t> (-1));
-    kassert (system::buffer_incref (buffer) == 2);
     kassert (system::buffer_incref (85) == -1);
-    kassert (system::buffer_decref (buffer) == 1);
     kassert (system::buffer_decref (85) == -1);
 
-    bid_t parent = system::buffer_create (100);
-    kassert (system::buffer_addchild (parent, buffer) == 0);
+    bid_t buffer = system::buffer_create (2 * system::getpagesize ());
+    kassert (system::buffer_size (buffer) == 2 * system::getpagesize ());
+    char* c = static_cast<char*> (system::buffer_map (buffer));
+    kassert (c != reinterpret_cast<void*> (-1));
+    memset (c, 0xFF, system::getpagesize ());
+    kassert (system::buffer_incref (buffer) == 2);
     kassert (system::buffer_decref (buffer) == 1);
-    kassert (system::buffer_decref (parent) == 0);
+
 
     schedule ();
     scheduler_->finish<init_traits> ();

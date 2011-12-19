@@ -26,6 +26,7 @@ namespace system {
     asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(output_status), "S"(output_buffer) :);
   }
   
+  // TODO:  Eliminate this by passing the page size during initialization.
   size_t
   getpagesize (void)
   {
@@ -49,7 +50,7 @@ namespace system {
     asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_CREATE), "b"(size) :);
     return bid;
   }
-  
+
   size_t
   buffer_size (bid_t bid)
   {
@@ -57,7 +58,7 @@ namespace system {
     asm ("int $0x80\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :);
     return size;
   }
-
+  
   int
   buffer_incref (bid_t bid)
   {
@@ -74,13 +75,11 @@ namespace system {
     return refcount;
   }
 
-  int
-  buffer_addchild (bid_t parent,
-		   bid_t child)
+  void*
+  buffer_map (bid_t bid)
   {
-    int result;
-    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_ADDCHILD), "b"(parent), "c"(child) :);
-    return result;
+    void* ptr;
+    asm ("int $0x80\n" : "=a"(ptr) : "0"(BUFFER_MAP), "b"(bid) :);
+    return ptr;
   }
-
 }

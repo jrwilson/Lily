@@ -38,7 +38,7 @@ private:
   typedef std::unordered_map<const void*, paction, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, paction> > > action_map_type;
   action_map_type action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
-  typedef std::vector<vm_area_interface*, system_allocator<vm_area_interface*> > memory_map_type;
+  typedef std::vector<vm_area_base*, system_allocator<vm_area_base*> > memory_map_type;
   memory_map_type memory_map_;
   // Heap area.
   vm_heap_area* heap_area_;
@@ -79,8 +79,8 @@ private:
 
   struct compare_vm_area {
     bool
-    operator () (const vm_area_interface* const x,
-		 const vm_area_interface* const y) const
+    operator () (const vm_area_base* const x,
+		 const vm_area_base* const y) const
     {
       return x->begin () < y->begin ();
     }
@@ -89,7 +89,7 @@ private:
   memory_map_type::const_iterator
   find_address (const void* address) const
   {
-    vm_reserved_area k (address, address);
+    vm_area_base k (address, address);
     memory_map_type::const_iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
     // We know that area->begin () < (*pos)->begin ().
 
@@ -106,7 +106,7 @@ private:
   memory_map_type::iterator
   find_address (const void* address)
   {
-    vm_reserved_area k (address, address);
+    vm_area_base k (address, address);
     memory_map_type::iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
     // We know that area->begin () < (*pos)->begin ().
 
@@ -195,7 +195,7 @@ public:
 
   // TODO:  Return an iterator.
   bool
-  insert_vm_area (vm_area_interface* area)
+  insert_vm_area (vm_area_base* area)
   {
     kassert (area != 0);
     
@@ -264,13 +264,42 @@ public:
     ++pos;
     if (new_end <= (*pos)->begin ()) {
       // The allocation does not interfere with next area.  Success.
-      heap_area_->end (new_end);
+      heap_area_->set_end (new_end);
       return old_end;
     }
     else {
       // Failure.
       return reinterpret_cast<void*> (-1);
     }
+  }
+
+  void*
+  map (buffer* b)
+  {
+    kassert (heap_area_ != 0);
+    kassert (stack_area_ != 0);
+
+    // Find the heap.
+    memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (std::find (memory_map_.begin (), memory_map_.end (), heap_area_));
+    kassert (heap_pos != memory_map_.rbegin ());
+    --heap_pos;
+    kassert (heap_pos != memory_map_.rend ());
+
+    // Find the stack.
+    memory_map_type::reverse_iterator stack_pos = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
+    kassert (stack_pos != memory_map_.rend ());
+
+    for (; stack_pos != heap_pos; ++stack_pos) {
+      memory_map_type::reverse_iterator prev = stack_pos + 1;
+      size_t size = static_cast<const uint8_t*> ((*stack_pos)->begin ()) - static_cast<const uint8_t*> ((*prev)->end ());
+      if (size >= b->size ()) {
+	vm_buffer_area* area = new (system_alloc ()) vm_buffer_area (static_cast<const uint8_t*> ((*stack_pos)->begin ()) - b->size (), b);
+	memory_map_.insert (prev.base (), area);
+	return const_cast<void*> (area->begin ());
+      }
+    }
+
+    return reinterpret_cast<void*> (-1);
   }
 
   bool
@@ -283,7 +312,7 @@ public:
   
   void
   page_fault (const void* address,
-	      uint32_t error,
+	      page_fault_error_t error,
 	      volatile registers* regs)
   {
     memory_map_type::const_iterator pos = find_address (address);

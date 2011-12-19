@@ -198,20 +198,19 @@ public:
 
   static size_t
   buffer_size (bid_t bid,
-	       automaton* a);
+  	       automaton* a);
 
   static int
   buffer_incref (bid_t bid,
-		 automaton* a);
+  		 automaton* a);
 
   static int
   buffer_decref (bid_t bid,
-		 automaton* a);
+  		 automaton* a);
 
-  static int
-  buffer_addchild (bid_t parent,
-		   bid_t child,
-		   automaton* a);
+  static void*
+  buffer_map (bid_t bid,
+	      automaton* a);
 
 private:
   static void

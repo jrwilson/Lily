@@ -93,7 +93,7 @@ create_action_test ()
 
     // Third, create the automaton's memory map.
     {
-      vm_area_interface* area;
+      vm_area_base* area;
       bool r;
 
       // Text.
@@ -165,7 +165,7 @@ create_action_test ()
       
     // Third, create the automaton's memory map.
     {
-      vm_area_interface* area;
+      vm_area_base* area;
       bool r;
 
       // Text.
@@ -345,7 +345,7 @@ create_buffer_test ()
 
     // Third, create the automaton's memory map.
     {
-      vm_area_interface* area;
+      vm_area_base* area;
       bool r;
 
       // Text.
@@ -417,7 +417,7 @@ create_buffer_test ()
       
     // Third, create the automaton's memory map.
     {
-      vm_area_interface* area;
+      vm_area_base* area;
       bool r;
 
       // Text.
@@ -638,19 +638,12 @@ kmain (uint32_t multiboot_magic,
   }
 
   bool r;
-  vm_area_interface* area;
+  vm_area_base* area;
   
   // Allocate the system automaton.
   automaton* sa = rts::create (descriptor_constants::RING0, vm::page_directory_frame ());
   
   // Build its memory map and mark the frames as already being used.
-  
-  // Low memory.
-  // The page directory uses the same page table for high and low memory.
-  // We only mark the high memory.
-  area = new (system_alloc ()) vm_reserved_area (KERNEL_VIRTUAL_BASE, reinterpret_cast<const uint8_t*> (KERNEL_VIRTUAL_BASE) + ONE_MEGABYTE);
-  r = sa->insert_vm_area (area);
-  kassert (r);
   
   // Text.
   area = new (system_alloc ()) vm_text_area (&text_begin, &text_end);
