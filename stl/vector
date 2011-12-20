@@ -203,24 +203,24 @@ namespace std {
 //       return Allocator::max_size ();
 //     }
 
-//     void
-//     resize (size_type sz,
-// 	    const T& c = T ())
-//     {
-//       if (sz > size ()) {
-// 	reserve (sz);
-// 	pointer end = begin_ + sz;
-// 	while (end_ != end) {
-// 	  construct (end_++, c);
-// 	}
-//       }
-//       else if (sz < size ()) {
-// 	pointer end = begin_ + sz;
-// 	while (end_ != end) {
-// 	  destroy (--end_);
-// 	}
-//       }
-//     }
+    void
+    resize (size_type sz,
+	    const T& c = T ())
+    {
+      if (sz > size ()) {
+	reserve (sz);
+	pointer end = begin_ + sz;
+	while (end_ != end) {
+	  construct (end_++, c);
+	}
+      }
+      else if (sz < size ()) {
+	pointer end = begin_ + sz;
+	while (end_ != end) {
+	  Allocator::destroy (--end_);
+	}
+      }
+    }
 
     size_type
     capacity () const
@@ -440,7 +440,7 @@ namespace std {
       pointer dst = end_ + n;
       while (src != position) {
 	construct (--dst, *--src);
-	destroy (src);
+	Allocator::destroy (src);
       }
       end_ += n;
       // Insert.

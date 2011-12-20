@@ -32,9 +32,10 @@ namespace buffer_test {
 
     kassert (system::buffer_size (85) == static_cast<size_t> (-1));
 
-    bid_t buffer = system::buffer_create (2 * system::getpagesize ());
-    kassert (system::buffer_size (buffer) == 2 * system::getpagesize ());
-    char* c = static_cast<char*> (system::buffer_map (buffer));
+    bid_t b1 = system::buffer_create (2 * system::getpagesize ());
+    kassert (b1 != -1);
+    kassert (system::buffer_size (b1) == 2 * system::getpagesize ());
+    char* c = static_cast<char*> (system::buffer_map (b1));
     kassert (c != reinterpret_cast<void*> (-1));
     memset (c, 0xFF, system::getpagesize ());
 
@@ -48,6 +49,21 @@ namespace buffer_test {
 
     for (size_t i = system::getpagesize (); i < 2 * system::getpagesize (); ++i) {
       c[i] = 0xFF;
+    }
+
+    bid_t b2 = system::buffer_create (system::getpagesize ());
+    kassert (b2 != -1);
+    kassert (system::buffer_append (b2, b1) == 0);
+    char* d = static_cast<char*> (system::buffer_map (b2));
+    kassert (d != reinterpret_cast<void*> (-1));
+    memset (d, 0xAB, system::buffer_size (b2));
+
+    for (size_t i = 0; i < system::buffer_size (b1); ++i) {
+      kassert (c[i] == static_cast<char> (0xFF));
+    }
+
+    for (size_t i = 0; i < system::buffer_size (b2); ++i) {
+      kassert (d[i] == static_cast<char> (0xAB));
     }
 
     schedule ();

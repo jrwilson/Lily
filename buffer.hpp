@@ -53,6 +53,37 @@ public:
     return frame_list_.size () * PAGE_SIZE;
   }
 
+  void
+  make_copy_on_write ()
+  {
+    // The buffer must be mapped to have non-copy-on-write entries.
+    if (begin_ != 0) {
+      for (size_t idx = 0; idx < frame_list_.size (); ++idx) {
+	if (frame_list_[idx].writable_ == vm::WRITABLE) {
+	  // Unmap.
+	  vm::unmap (static_cast<const uint8_t*> (begin_) + PAGE_SIZE * idx);
+	  // Convert to copy-on-write.
+	  frame_list_[idx].writable_ = vm::NOT_WRITABLE;
+	}
+      }
+    }
+  }
+
+  void
+  append (const buffer& other)
+  {
+    // Cannot be mapped.
+    kassert (begin_ == 0);
+    size_t idx = frame_list_.size ();
+    frame_list_.insert (frame_list_.end (), other.frame_list_.begin (), other.frame_list_.end ());
+    for (; idx != frame_list_.size (); ++idx) {
+      // Must be copy-on-write.
+      kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
+      // Increment the reference count.
+      frame_manager::incref (frame_list_[idx].frame_);
+    }
+  }
+
   virtual void
   page_fault (const void* address,
 	      page_fault_error_t error,

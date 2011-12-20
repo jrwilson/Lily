@@ -382,12 +382,31 @@ public:
   }
   
   int
-  buffer_append (bid_t /*dest*/,
-		 bid_t /*src*/)
+  buffer_append (bid_t dst,
+		 bid_t src)
   {
-    // TODO
-    kassert (0);
-    return 0;
+    bid_to_buffer_map_type::const_iterator dst_pos = bid_to_buffer_map_.find (dst);
+    bid_to_buffer_map_type::const_iterator src_pos = bid_to_buffer_map_.find (src);
+    if (dst_pos != bid_to_buffer_map_.end () &&
+	src_pos != bid_to_buffer_map_.end ()) {
+      buffer* dst = dst_pos->second;
+      buffer* src = src_pos->second;
+      if (dst->begin () == 0) {
+	// Make the source copy on write so we won't see subsequent changes.
+	src->make_copy_on_write ();
+	// Append.
+	dst->append (*src);
+	return 0;
+      }
+      else {
+	// The destination is mapped.
+	return -1;
+      }
+    }
+    else {
+      // One of the buffers does not exist.
+      return -1;
+    }
   }
 
   void*
