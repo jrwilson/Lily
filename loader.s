@@ -46,6 +46,7 @@ kernel_page_directory:
 	[global kernel_page_table]
 kernel_page_table:
 	times 1024 dd 0
+	;; A zero frame that we will use for copy on write.
 	[global zero_page]
 zero_page:
 	times 1024 dd 0

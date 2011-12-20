@@ -14,7 +14,6 @@ system_allocator.o \
 gdt.o \
 gdt_flush.o \
 idt.o \
-idt_flush.o \
 exception_handler.o \
 exception.o \
 irq_handler.o \

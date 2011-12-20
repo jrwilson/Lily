@@ -15,9 +15,6 @@
 #include "idt.hpp"
 #include "kassert.hpp"
 
-extern "C" void
-idt_flush (idt::idt_ptr*);
-
 void
 idt::install ()
 {
@@ -27,8 +24,8 @@ idt::install ()
   for (unsigned int k = 0; k < INTERRUPT_COUNT; ++k) {
     idt_entry_[k].interrupt = make_interrupt_gate (0, 0, descriptor_constants::RING0, descriptor_constants::NOT_PRESENT);
   }
-  
-  idt_flush (&ip_);
+
+  asm ("lidt (%0)\n" : : "r"(&ip_));
 }
 
 interrupt_descriptor
@@ -45,7 +42,7 @@ idt::set (unsigned int k,
   kassert (k < INTERRUPT_COUNT);
   kassert (idt_entry_[k].interrupt.present == descriptor_constants::NOT_PRESENT);
   idt_entry_[k].interrupt = id;
-  idt_flush (&ip_);
+  asm ("lidt (%0)\n" : : "r"(&ip_));
 }
 
 idt::idt_ptr idt::ip_;

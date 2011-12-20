@@ -14,7 +14,7 @@
 #include "gdt.hpp"
 #include <string.h>
 
-extern int stack_end;
+extern uint32_t stack_end;
 
 struct tss_entry_t {
    uint32_t prev_tss;   // The previous TSS - if we used hardware task switching this would form a linked list.

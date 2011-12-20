@@ -3,6 +3,7 @@
 
 #include "vm_area.hpp"
 
+// Contains the physical address of a frame containing nothing but zeroes.
 extern int zero_page;
 
 class buffer : public vm_area_base {
@@ -61,15 +62,14 @@ public:
 
     size_t idx = physical_address_to_frame (static_cast<const uint8_t*> (address) - static_cast<const uint8_t*> (begin_));
 
-    if (not_present (error)) {
-      // The source should be copy on write.
-      kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
+    // The frame in question should always be copy on write.
+    kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
 
+    if (not_present (error)) {
       if (read_context (error)) {
 	// The page is not present and we are trying to read.
 	// Map.
 	vm::map (address, frame_list_[idx].frame_, vm::USER, vm::NOT_WRITABLE);
-	kout << "Mapping " << hexformat (address) << " not writable" << endl;
       }
       else {
 	// The page is not present and we are trying to write.
@@ -77,11 +77,10 @@ public:
 	// Setup destination and source frames.
 	frame_t dst = frame_manager::alloc ();
 	frame_t src = frame_list_[idx].frame_;
-	// Map the dst on the address.
-	vm::map (address, dst, vm::USER, vm::WRITABLE);
-	kout << "Mapping " << hexformat (address) << " writable" << endl;
-	// Map the src on the stub.
+	// Map the src to the stub.
 	vm::map (vm::get_stub (), src, vm::USER, vm::NOT_WRITABLE);
+	// Map the dst to the address.
+	vm::map (address, dst, vm::USER, vm::WRITABLE);
 	// Copy.
 	memcpy (const_cast<void*> (align_down (address, PAGE_SIZE)), vm::get_stub (), PAGE_SIZE);
 	// Unmap the src and decrement its reference count.
@@ -93,11 +92,21 @@ public:
       }
     }
     else {
-      // The user tried to write to page mapped read-only.
       kassert (write_context (error));
-      
-      // TODO
-      kassert (0);
+      // The user tried to write to page mapped previously as read-only.
+      // Copy.
+      // Exactly the same as previous copy except...
+      frame_t dst = frame_manager::alloc ();
+      frame_t src = frame_list_[idx].frame_;
+      vm::map (vm::get_stub (), src, vm::USER, vm::NOT_WRITABLE);
+      // we need to unmap the current frame to make room.
+      vm::unmap (address);
+      vm::map (address, dst, vm::USER, vm::WRITABLE);
+      memcpy (const_cast<void*> (align_down (address, PAGE_SIZE)), vm::get_stub (), PAGE_SIZE);
+      vm::unmap (vm::get_stub ());
+      frame_manager::decref (src);
+      frame_list_[idx].frame_ = dst;
+      frame_list_[idx].writable_ = vm::WRITABLE;
     }
   }
 

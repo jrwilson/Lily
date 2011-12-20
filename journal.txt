@@ -375,12 +375,6 @@ Regardless, the compile-time checks still apply.
 
 
 
-
-
-Implement segment selectors.
-Take out page scrub in page_handler.
+Optimize clearing/copying pages (rep stos).
 Implement a better allocator (or improve existing one).  Use assumption of contiguous heap.
 Memory alignment.
-
-wasted stack space in loader -> map like page directory
-optimize memory copying and clearing pages (rep stos)

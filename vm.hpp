@@ -254,7 +254,7 @@ namespace vm {
   {
     page_directory* kernel_page_directory = get_kernel_page_directory ();
     page_directory* page_directory = get_page_directory ();
-    page_table* page_table = get_page_table (logical_addr);
+    page_table* pt = get_page_table (logical_addr);
     const size_t directory_entry = get_page_directory_entry (logical_addr);
     const size_t table_entry = get_page_table_entry (logical_addr);
     
@@ -266,9 +266,9 @@ namespace vm {
 	// Either way, we can just allocate a page table.
 	page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
 	// Flush the TLB.
-	asm ("invlpg %0\n" :: "m" (*page_table));
+	asm ("invlpg (%0)\n" :: "r"(pt));
 	// Initialize the page table.
-	new (page_table) vm::page_table ();
+	new (pt) vm::page_table ();
       }
       else {
 	// We are using a non-kernel page directory and need a kernel page table.
@@ -279,9 +279,9 @@ namespace vm {
 	  page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
 	  frame_manager::incref (page_directory->entry[directory_entry].frame_);
 	  // Flush the TLB.
-	  asm ("invlpg %0\n" :: "m" (*page_table));
+	  asm ("invlpg (%0)\n" :: "r"(pt));
 	  // Initialize the page table.
-	  new (page_table) vm::page_table ();
+	  new (pt) vm::page_table ();
 	}
 	else {
 	  // The page table is present in the kernel.
@@ -289,17 +289,17 @@ namespace vm {
 	  page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
 	  frame_manager::incref (page_directory->entry[directory_entry].frame_);
 	  // Flush the TLB.
-	  asm ("invlpg %0\n" :: "m" (*page_table));
+	  asm ("invlpg (%0)\n" :: "r"(pt));
 	}
       }
     }
     
-    kassert (page_table->entry[table_entry].present_ == NOT_PRESENT);
-    page_table->entry[table_entry] = page_table_entry (fr, privilege, writable, PRESENT);
+    kassert (pt->entry[table_entry].present_ == NOT_PRESENT);
+    pt->entry[table_entry] = page_table_entry (fr, privilege, writable, PRESENT);
     frame_manager::incref (fr);
 
     // Flush the TLB.
-    asm ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+    asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
 
   inline void
@@ -317,7 +317,7 @@ namespace vm {
 
     page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, privilege, writable, PRESENT);
     /* Flush the TLB. */
-    asm volatile ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+    asm ("invlpg (%0)\n" :: "r" (logical_addr));
   }
   
   inline bool
@@ -333,7 +333,7 @@ namespace vm {
       frame_manager::decref (page_table->entry[table_entry].frame_);
       page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
       /* Flush the TLB. */
-      asm volatile ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+      asm ("invlpg (%0)\n" :: "r"(logical_addr));
       return true;
     }
     else {
@@ -345,7 +345,7 @@ namespace vm {
   switch_to_directory (frame_t frame)
   {
     /* Switch to the page directory. */
-    asm volatile ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
+    asm ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
   }
 };
 

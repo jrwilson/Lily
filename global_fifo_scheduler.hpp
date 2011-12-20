@@ -29,11 +29,7 @@ private:
     NOT_SCHEDULED
   };
 
-  // Size of the stack to use when switching between automata.
-  // Note that this is probably not the number of bytes as each element in the array may occupy more than one byte.
-  static const size_t SWITCH_STACK_SIZE = 256;
-  
-  // Align the stack when switching and executing.
+  // Align the stack when switching executing.
   static const size_t STACK_ALIGN = 16;
 
   class automaton_context {
@@ -93,11 +89,8 @@ private:
   
   class execution_context {
   private:
-    uint32_t switch_stack_[SWITCH_STACK_SIZE];
     uint8_t value_buffer_[VALUE_BUFFER_SIZE];
-
     caction action_;
-
     const rts::input_action_set_type* input_actions_;
     rts::input_action_set_type::const_iterator input_action_pos_;
     
@@ -175,37 +168,14 @@ private:
     inline void
     execute () const
     {
-      // Move the stack into an area mapped in all address spaces so that switching page directories doesn't cause a triple fault.
-  
-      // Determine the beginning and end of the stack.
-      uint32_t* stack_begin;
-      uint32_t* stack_end;
-      asm ("mov %%esp, %0\n"
-	   "mov %%ebp, %1\n" : "=g"(stack_begin), "=g"(stack_end));
-      // Follow the pointer to ensure that arguments are brought along in case of inlining.
-      stack_end = reinterpret_cast<uint32_t*> (*stack_end);
-
-      // Compute the size of the stack.
-      size_t stack_size = stack_end - stack_begin;
-
-      uint32_t* new_stack_begin = static_cast<uint32_t*> (const_cast<void*> (align_down (switch_stack_ + SWITCH_STACK_SIZE - stack_size, STACK_ALIGN)));
-
-      // Check that the stack will work.
-      kassert (new_stack_begin >= switch_stack_);
-
-      // Copy.
-      for (size_t idx = 0; idx < stack_size; ++idx) {
-      	new_stack_begin[idx] = stack_begin[idx];
-      }
-
-      // Update the base and stack pointers.
-      asm ("add %0, %%esp\n"
-      	   "add %0, %%ebp\n" :: "r"((new_stack_begin - stack_begin) * sizeof (uint32_t)) : "%esp", "memory");
-
-      // We can now switch page directories.
+      // Switch page directories.
       vm::switch_to_directory (action_.automaton->page_directory_frame ());
 
       uint32_t* stack_pointer = const_cast<uint32_t*> (static_cast<const uint32_t*> (action_.automaton->stack_pointer ()));
+
+      // These instructions serve a dual purpose.
+      // First, they set up the cdecl calling convention for actions.
+      // Second, they force the stack to be created if it is not.
 
       if (action_.type == INPUT) {
       	// Copy the value to the stack.
@@ -222,10 +192,6 @@ private:
 	*--stack_pointer = static_cast<uint32_t> (action_.parameter);
 	break;
       }
-
-      // These instructions serve a dual purpose.
-      // First, they set up the cdecl calling convention for actions.
-      // Second, they force the stack to be created if it is not.
 
       // Push a bogus instruction pointer so we can use the cdecl calling convention.
       *--stack_pointer = 0;
@@ -249,11 +215,11 @@ private:
       // Push the instruction pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (action_.action_entry_point);
       
-      asm ("mov %%ax, %%ds\n"	// Load the data segments.
-	   "mov %%ax, %%es\n"	// Load the data segments.
-	   "mov %%ax, %%fs\n"	// Load the data segments.
-	   "mov %%ax, %%gs\n"	// Load the data segments.
-	   "mov %%ebx, %%esp\n"	// Load the new stack pointer.
+      asm ("mov %0, %%ds\n"	// Load the data segments.
+	   "mov %0, %%es\n"	// Load the data segments.
+	   "mov %0, %%fs\n"	// Load the data segments.
+	   "mov %0, %%gs\n"	// Load the data segments.
+	   "mov %1, %%esp\n"	// Load the new stack pointer.
       	   "xor %%eax, %%eax\n"	// Clear the registers.
       	   "xor %%ebx, %%ebx\n"
       	   "xor %%ecx, %%ecx\n"
@@ -261,7 +227,7 @@ private:
       	   "xor %%edi, %%edi\n"
       	   "xor %%esi, %%esi\n"
       	   "xor %%ebp, %%ebp\n"
-      	   "iret\n" :: "a"(gdt::USER_DATA_SELECTOR | descriptor_constants::RING3), "b"(stack_pointer));
+      	   "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor_constants::RING3), "r"(stack_pointer));
     }
   };
 
