@@ -26,17 +26,18 @@ public:
 
   static const unsigned char KERNEL_CODE_SELECTOR = 0x08;
   static const unsigned char KERNEL_DATA_SELECTOR = 0x10;
+  static const unsigned char USER_CODE_SELECTOR = 0x18;
+  static const unsigned char USER_DATA_SELECTOR = 0x20;
 
   static void
   install ();
 
 private:
   // Should be consistent with selectors.s.
-  static const unsigned char DESCRIPTOR_COUNT = 5;
+  static const unsigned char DESCRIPTOR_COUNT = 6;
   static const unsigned char NULL_SELECTOR = 0x00;
-  static const unsigned char USER_CODE_SELECTOR = 0x18;
-  static const unsigned char USER_DATA_SELECTOR = 0x20;
-
+  static const unsigned char TSS_SELECTOR = 0x28;
+  
   static gdt_ptr gp_;
   static descriptor gdt_entry_[DESCRIPTOR_COUNT];
 };

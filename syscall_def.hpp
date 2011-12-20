@@ -21,11 +21,10 @@ namespace system {
     GETPAGESIZE,
     SBRK,
     BUFFER_CREATE,
-    BUFFER_SIZE,
-    BUFFER_INCREF,
-    BUFFER_DECREF,
+    BUFFER_APPEND,
     BUFFER_MAP,
-    // BUFFER_UNMAP,
+    BUFFER_UNMAP,
+    BUFFER_SIZE,
   };
 
 }

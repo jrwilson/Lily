@@ -166,6 +166,7 @@ exception_dispatch (volatile registers regs)
   case GENERAL_PROTECTION_FAULT:
     // TODO
     kout << "General Protection Fault" << endl;
+    kout << regs << endl;
     kassert (0);
     break; 
   case PAGE_FAULT:

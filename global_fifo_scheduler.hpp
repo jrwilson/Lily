@@ -229,6 +229,13 @@ private:
 
       // Push a bogus instruction pointer so we can use the cdecl calling convention.
       *--stack_pointer = 0;
+      uint32_t* sp = stack_pointer;
+
+      // Push the stack segment.
+      *--stack_pointer = (gdt::USER_DATA_SELECTOR | descriptor_constants::RING3);
+      
+      // Push the stack pointer.
+      *--stack_pointer = reinterpret_cast<uint32_t> (sp);
 
       // Push the flags.
       uint32_t eflags;
@@ -237,13 +244,16 @@ private:
       *--stack_pointer = eflags;
 
       // Push the code segment.
-      *--stack_pointer = action_.automaton->code_segment ();
+      *--stack_pointer = (gdt::USER_CODE_SELECTOR | descriptor_constants::RING3);
 
       // Push the instruction pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (action_.action_entry_point);
       
-      asm ("mov %%eax, %%ss\n"	// Load the new stack segment.
-      	   "mov %%ebx, %%esp\n"	// Load the new stack pointer.
+      asm ("mov %%ax, %%ds\n"	// Load the data segments.
+	   "mov %%ax, %%es\n"	// Load the data segments.
+	   "mov %%ax, %%fs\n"	// Load the data segments.
+	   "mov %%ax, %%gs\n"	// Load the data segments.
+	   "mov %%ebx, %%esp\n"	// Load the new stack pointer.
       	   "xor %%eax, %%eax\n"	// Clear the registers.
       	   "xor %%ebx, %%ebx\n"
       	   "xor %%ecx, %%ecx\n"
@@ -251,7 +261,7 @@ private:
       	   "xor %%edi, %%edi\n"
       	   "xor %%esi, %%esi\n"
       	   "xor %%ebp, %%ebp\n"
-      	   "iret\n" :: "a"(action_.automaton->stack_segment ()), "b"(stack_pointer));
+      	   "iret\n" :: "a"(gdt::USER_DATA_SELECTOR | descriptor_constants::RING3), "b"(stack_pointer));
     }
   };
 

@@ -106,7 +106,16 @@ public:
   operator<< (long double n);
 
   console&
-  operator<< (bool n);
+  operator<< (bool n)
+  {
+    if (n) {
+      put ('1');
+    }
+    else {
+      put ('0');
+    }
+    return *this;
+  }
 
   console&
   operator<< (const void* p)

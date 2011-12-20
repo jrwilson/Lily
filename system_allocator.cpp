@@ -97,7 +97,7 @@ system_alloc::allocate (size_t size)
     kassert (retval != 0);
     // Back with frames.
     for (size_t x = 0; x < size; x += PAGE_SIZE) {
-      vm::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), vm::SUPERVISOR, vm::WRITABLE);
+      vm::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     }
     return retval;
   }
@@ -242,24 +242,6 @@ system_alloc::free (void* p)
 //   kputs ("Node       Magic      Size       Prev       Next\n");
 //   dump_heap_int (la->first_header);
 // }
-
-/* static void */
-/* expand_heap (unsigned int size) */
-/* { */
-/*   while (heap_last->size < size) { */
-/*     /\* Map it. *\/ */
-/*     //insert_mapping (&kernel_page_directory, heap_limit, make_page_table_entry (frame_manager_allocate (), NOT_GLOBAL, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT), make_page_directory_entry (0, PAGE_SIZE_4K, CACHED, WRITE_BACK, SUPERVISOR, WRITABLE, PRESENT)); */
-/*     /\* Update sizes and limits. *\/ */
-/*     heap_limit += PAGE_SIZE; */
-/*     heap_last->size += PAGE_SIZE; */
-
-/*     /\* Replace the spare page table if necessary. *\/ */
-/*     if (spare_page_table == 0) { */
-/*       spare_page_table = allocate_page_table (); */
-/*     } */
-/*   } */
-/* } */
-
 
 /* static chunk_header* */
 /* find_header_pa (chunk_header* start, */

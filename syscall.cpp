@@ -51,28 +51,13 @@ namespace system {
     return bid;
   }
 
-  size_t
-  buffer_size (bid_t bid)
-  {
-    size_t size;
-    asm ("int $0x80\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :);
-    return size;
-  }
-  
   int
-  buffer_incref (bid_t bid)
+  buffer_append (bid_t dest,
+		 bid_t src)
   {
-    int refcount;
-    asm ("int $0x80\n" : "=a"(refcount) : "0"(BUFFER_INCREF), "b"(bid) :);
-    return refcount;
-  }
-
-  int
-  buffer_decref (bid_t bid)
-  {
-    int refcount;
-    asm ("int $0x80\n" : "=a"(refcount) : "0"(BUFFER_DECREF), "b"(bid) :);
-    return refcount;
+    int result;
+    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_APPEND), "b"(dest), "c"(src) :);
+    return result;
   }
 
   void*
@@ -82,4 +67,21 @@ namespace system {
     asm ("int $0x80\n" : "=a"(ptr) : "0"(BUFFER_MAP), "b"(bid) :);
     return ptr;
   }
+
+  int
+  buffer_unmap (bid_t bid)
+  {
+    int result;
+    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_UNMAP), "b"(bid) :);
+    return result;
+  }
+
+  size_t
+  buffer_size (bid_t bid)
+  {
+    size_t size;
+    asm ("int $0x80\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :);
+    return size;
+  }
+
 }

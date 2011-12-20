@@ -33,7 +33,7 @@ extern "C" void trap0 ();
 void
 trap_handler::install ()
 {
-  idt::set (TRAP_BASE + 0, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (TRAP_BASE + 0, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING3, descriptor_constants::PRESENT));
 }
 
 extern "C" void
@@ -94,31 +94,31 @@ trap_dispatch (volatile registers regs)
     break;
   case system::BUFFER_CREATE:
     {
-      regs.eax = rts::buffer_create (regs.ebx, scheduler::current_automaton ());
+      regs.eax = scheduler::current_automaton ()->buffer_create (regs.ebx);
       return;
     }
     break;
-  case system::BUFFER_SIZE:
+  case system::BUFFER_APPEND:
     {
-      regs.eax = rts::buffer_size (regs.ebx, scheduler::current_automaton ());
-      return;
-    }
-    break;
-  case system::BUFFER_INCREF:
-    {
-      regs.eax = rts::buffer_incref (regs.ebx, scheduler::current_automaton ());
-      return;
-    }
-    break;
-  case system::BUFFER_DECREF:
-    {
-      regs.eax = rts::buffer_decref (regs.ebx, scheduler::current_automaton ());
+      regs.eax = scheduler::current_automaton ()->buffer_append (regs.ebx, regs.ecx);
       return;
     }
     break;
   case system::BUFFER_MAP:
     {
-      regs.eax = reinterpret_cast<uint32_t> (rts::buffer_map (regs.ebx, scheduler::current_automaton ()));
+      regs.eax = reinterpret_cast<uint32_t> (scheduler::current_automaton ()->buffer_map (regs.ebx));
+      return;
+    }
+    break;
+  case system::BUFFER_UNMAP:
+    {
+      regs.eax = scheduler::current_automaton ()->buffer_unmap (regs.ebx);
+      return;
+    }
+    break;
+  case system::BUFFER_SIZE:
+    {
+      regs.eax = scheduler::current_automaton ()->buffer_size (regs.ebx);
       return;
     }
     break;

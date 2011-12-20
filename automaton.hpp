@@ -17,6 +17,7 @@
 #include "syscall_def.hpp"
 #include "vm_area.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "descriptor.hpp"
 #include "action_traits.hpp"
@@ -24,14 +25,13 @@
 #include <type_traits>
 #include "gdt.hpp"
 #include "action.hpp"
+#include "bid.hpp"
+#include "buffer.hpp"
 
 class automaton {
 private:
   // Automaton identifier.
   aid_t aid_;
-  // Segments including privilege.
-  uint32_t code_segment_;
-  uint32_t stack_segment_;
   // Frame that contains the automaton's page directory.
   frame_t const page_directory_frame_;
   // Table of action descriptors for guiding execution, checking bindings, etc.
@@ -44,6 +44,11 @@ private:
   vm_heap_area* heap_area_;
   // Stack area.
   vm_stack_area* stack_area_;
+  // Next bid to allocate.
+  bid_t current_bid_;
+  // Map from bid_t to buffer*.
+  typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, system_allocator<std::pair<const bid_t, buffer*> > > bid_to_buffer_map_type;
+  bid_to_buffer_map_type bid_to_buffer_map_;
 
 public:
   class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, paction> {
@@ -132,27 +137,21 @@ private:
 public:
 
   automaton (aid_t aid,
-	     descriptor_constants::privilege_t privilege,
 	     frame_t page_directory_frame) :
     aid_ (aid),
     page_directory_frame_ (page_directory_frame),
     heap_area_ (0),
-    stack_area_ (0)
+    stack_area_ (0),
+    current_bid_ (0)
+  { }
+
+  ~automaton ()
   {
-    switch (privilege) {
-    case descriptor_constants::RING0:
-      code_segment_ = gdt::KERNEL_CODE_SELECTOR | descriptor_constants::RING0;
-      stack_segment_ = gdt::KERNEL_DATA_SELECTOR | descriptor_constants::RING0;
-      break;
-    case descriptor_constants::RING1:
-    case descriptor_constants::RING2:
-      /* These rings are not supported. */
-      kassert (0);
-      break;
-    case descriptor_constants::RING3:
-      /* Not supported yet. */
-      kassert (0);
-      break;
+    // Destroy buffers that have been created but not mapped.
+    for (bid_to_buffer_map_type::iterator pos = bid_to_buffer_map_.begin ();
+	 pos != bid_to_buffer_map_.end ();
+	 ++pos) {
+      destroy (pos->second, system_alloc ());
     }
   }
 
@@ -179,18 +178,6 @@ public:
   page_directory_frame () const
   {
     return page_directory_frame_;
-  }
-
-  uint32_t
-  code_segment () const
-  {
-    return code_segment_;
-  }
-
-  uint32_t
-  stack_segment () const
-  {
-    return stack_segment_;
   }
 
   // TODO:  Return an iterator.
@@ -273,35 +260,6 @@ public:
     }
   }
 
-  void*
-  map (buffer* b)
-  {
-    kassert (heap_area_ != 0);
-    kassert (stack_area_ != 0);
-
-    // Find the heap.
-    memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (std::find (memory_map_.begin (), memory_map_.end (), heap_area_));
-    kassert (heap_pos != memory_map_.rbegin ());
-    --heap_pos;
-    kassert (heap_pos != memory_map_.rend ());
-
-    // Find the stack.
-    memory_map_type::reverse_iterator stack_pos = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
-    kassert (stack_pos != memory_map_.rend ());
-
-    for (; stack_pos != heap_pos; ++stack_pos) {
-      memory_map_type::reverse_iterator prev = stack_pos + 1;
-      size_t size = static_cast<const uint8_t*> ((*stack_pos)->begin ()) - static_cast<const uint8_t*> ((*prev)->end ());
-      if (size >= b->size ()) {
-	vm_buffer_area* area = new (system_alloc ()) vm_buffer_area (static_cast<const uint8_t*> ((*stack_pos)->begin ()) - b->size (), b);
-	memory_map_.insert (prev.base (), area);
-	return const_cast<void*> (area->begin ());
-      }
-    }
-
-    return reinterpret_cast<void*> (-1);
-  }
-
   bool
   verify_span (const void* ptr,
 	       size_t size) const
@@ -323,7 +281,7 @@ public:
       kout << "Page Fault" << endl;
       kout << "aid = " << aid_ << " address = " << hexformat (address) << " error = " << hexformat (error) << endl;
       kout << *regs << endl;
-      // TODO:  Handle page fault.
+      // TODO:  Handle page fault for address not in memory map.
       kassert (0);
     }
   }
@@ -405,6 +363,131 @@ public:
   {
     return const_action_iterator (action_map_.find (action_entry_point));
   }
+
+  bid_t
+  buffer_create (size_t size)
+  {
+    // Generate an id.
+    bid_t bid = current_bid_;
+    while (bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ()) {
+      bid = std::max (bid + 1, 0); // Handles overflow.
+    }
+    current_bid_ = std::max (bid + 1, 0);
+    
+    // Create the buffer and insert it into the map.
+    buffer* b = new (system_alloc ()) buffer (size);
+    bid_to_buffer_map_.insert (std::make_pair (bid, b));
+    
+    return bid;
+  }
+  
+  int
+  buffer_append (bid_t /*dest*/,
+		 bid_t /*src*/)
+  {
+    // TODO
+    kassert (0);
+    return 0;
+  }
+
+  void*
+  buffer_map (bid_t bid)
+  {
+    kassert (heap_area_ != 0);
+    kassert (stack_area_ != 0);
+
+    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
+    if (bpos != bid_to_buffer_map_.end ()) {
+      buffer* b = bpos->second;
+
+      if (b->begin () == 0) {
+	// Map the buffer.
+	
+	// Find the heap.
+	memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (std::find (memory_map_.begin (), memory_map_.end (), heap_area_));
+	kassert (heap_pos != memory_map_.rbegin ());
+	--heap_pos;
+	kassert (heap_pos != memory_map_.rend ());
+	
+	// Find the stack.
+	memory_map_type::reverse_iterator stack_pos = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
+	kassert (stack_pos != memory_map_.rend ());
+	
+	// Find a hole and map.
+	for (; stack_pos != heap_pos; ++stack_pos) {
+	  memory_map_type::reverse_iterator prev = stack_pos + 1;
+	  size_t size = static_cast<const uint8_t*> ((*stack_pos)->begin ()) - static_cast<const uint8_t*> ((*prev)->end ());
+	  if (size >= b->size ()) {
+	    b->set_end ((*stack_pos)->begin ());
+	    memory_map_.insert (prev.base (), b);
+	    return const_cast<void*> (b->begin ());
+	  }
+	}
+	
+	// Couldn't find a big enough hole.
+	return reinterpret_cast<void*> (-1);
+      }
+      else {
+	// The buffer is already mapped.  Return the address.
+	return const_cast<void*> (b->begin ());
+      }
+    }
+    else {
+      // The buffer does not exist.
+      return reinterpret_cast<void*> (-1);
+    }
+  }
+
+  int
+  buffer_unmap (bid_t bid)
+  {
+    bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
+    if (bpos != bid_to_buffer_map_.end ()) {
+      buffer* b = bpos->second;
+
+      if (b->begin () != 0) {
+	// Remove from the bid map.
+	bid_to_buffer_map_.erase (bpos);
+
+	// Remove from the memory map.
+	memory_map_.erase (find_address (b->begin ()));
+
+	// Unmap the buffer.
+	for (const uint8_t* ptr = static_cast<const uint8_t*> (b->begin ());
+	     ptr != b->end ();
+	     ptr += PAGE_SIZE) {
+	  vm::unmap (ptr);
+	}
+
+	// Destroy it.
+	destroy (b, system_alloc ());
+
+	return 0;
+      }
+      else {
+      	// The buffer is not mapped.
+      	return -1;
+      }
+    }
+    else {
+      // The buffer does not exist.
+      return -1;
+    }
+  }
+
+  size_t
+  buffer_size (bid_t bid)
+  {
+    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
+    if (bpos != bid_to_buffer_map_.end ()) {
+      return bpos->second->size ();
+    }
+    else {
+      // The buffer does not exist.
+      return -1;
+    }
+  }
+
 };
 
 #endif /* __automaton_hpp__ */

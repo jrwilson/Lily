@@ -31,6 +31,8 @@
 
 	PAGE_PRESENT equ (1 << 0)
 	PAGE_WRITABLE equ (1 << 1)
+	PAGE_USER equ (1 << 2)
+	PAGE_SUPERVISOR equ (0 << 2)	
 	
 	PAGE_DIRECTORY_LOW_ENTRY equ (0 >> 22)
 	PAGE_DIRECTORY_HIGH_ENTRY equ (KERNEL_VIRTUAL_BASE >> 22)
@@ -44,7 +46,10 @@ kernel_page_directory:
 	[global kernel_page_table]
 kernel_page_table:
 	times 1024 dd 0
-
+	[global zero_page]
+zero_page:
+	times 1024 dd 0
+	
 	;; Export the start symbol so the linker can find it.
 	[global start]
 start:
@@ -58,13 +63,13 @@ start:
 	push eax
 	;; Initialize the page directory.
 	mov ecx, kernel_page_table
-	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
+	or ecx, (PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
 	;; Page table is mapped in both locations.
 	mov [kernel_page_directory + 4 * PAGE_DIRECTORY_LOW_ENTRY], ecx
 	mov [kernel_page_directory + 4 * PAGE_DIRECTORY_HIGH_ENTRY], ecx
 	;; Map page directory to itself.
 	mov ecx, kernel_page_directory
-	or ecx, (PAGE_PRESENT | PAGE_WRITABLE)
+	or ecx, (PAGE_PRESENT | PAGE_SUPERVISOR)
 	mov [kernel_page_directory + 4 * 1023], ecx
 	;; Initialize the page table.  Map the first 4MB.
 	mov eax, 0
@@ -76,7 +81,7 @@ loop1:
 	shr ecx, 12
 	and ecx, 0x3FF
 	mov edx, eax
-	or edx, (PAGE_PRESENT | PAGE_WRITABLE)
+	or edx, (PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
 	mov [kernel_page_table + 4 * ecx], edx
 	add eax, 0x1000
 	jmp loop1
@@ -102,4 +107,5 @@ highhalf:
 	;; Reserve space for the stack.
 	ALIGN STACK_ALIGN
 	resb STACK_SIZE
+	[global stack_end]
 stack_end:	

@@ -100,6 +100,31 @@ namespace std {
       {
 	return !(*this == other);
       }
+
+      Iterator&
+      operator++ ()
+      {
+	if (drop != 0) {
+	  drop_type* ptr = *drop;
+	  if (ptr->next == 0) {
+	    size_type bucket_idx;
+	    for (bucket_idx = (ptr->hash % map->bucket_count_) + 1;
+		 bucket_idx < map->bucket_count_ && map->bucket_[bucket_idx] == 0;
+		 ++bucket_idx) ;;
+	    if (bucket_idx < map->bucket_count_) {
+	      drop = &map->bucket_[bucket_idx];
+	    }
+	    else {
+	      drop = 0;
+	    }
+	  }
+	  else {
+	    drop = &ptr->next;
+	  }
+	}
+
+	return *this;
+      }
     };
 
     struct ConstIterator : public std::iterator<std::forward_iterator_tag, const value_type> {

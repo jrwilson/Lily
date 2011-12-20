@@ -37,17 +37,18 @@ namespace system {
   bid_t
   buffer_create (size_t size);
 
-  size_t
-  buffer_size (bid_t bid);
-
   int
-  buffer_incref (bid_t bid);
-
-  int
-  buffer_decref (bid_t bid);
+  buffer_append (bid_t dest,
+		 bid_t src);
 
   void*
   buffer_map (bid_t bid);
+
+  int
+  buffer_unmap (bid_t bid);
+
+  size_t
+  buffer_size (bid_t bid);
 }
 
 #endif /* __syscall_hpp__ */

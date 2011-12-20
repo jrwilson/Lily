@@ -161,10 +161,11 @@ namespace vm {
     { }
     
     page_directory_entry (frame_t frame,
+			  page_privilege_t privilege,
 			  present_t present) :
       present_ (present),
       writable_ (WRITABLE),
-      user_ (SUPERVISOR),
+      user_ (privilege),
       write_through_ (WRITE_BACK),
       cache_disabled_ (CACHED),
       accessed_ (0),
@@ -207,7 +208,7 @@ namespace vm {
 	  }
 	}
 	else {
-	  entry[k] = page_directory_entry (0, NOT_PRESENT);
+	  entry[k] = page_directory_entry (0, SUPERVISOR, NOT_PRESENT);
 	}
       }
       
@@ -217,7 +218,7 @@ namespace vm {
       frame_t frame = page_table->entry[table_entry].frame_;
       
       // Map the page directory to itself.
-      entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, PRESENT);
+      entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, SUPERVISOR, PRESENT);
       frame_manager::incref (frame);
     }
   };
@@ -263,7 +264,7 @@ namespace vm {
 	  page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_) {
 	// The address is in user space or we are using the kernel page directory.
 	// Either way, we can just allocate a page table.
-	page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), PRESENT);
+	page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
 	// Flush the TLB.
 	asm ("invlpg %0\n" :: "m" (*page_table));
 	// Initialize the page table.
@@ -274,7 +275,7 @@ namespace vm {
 	if (!kernel_page_directory->entry[directory_entry].present_) {
 	  // The page table is not present in the kernel.
 	  // Allocate a page table and map it in both directories.
-	  kernel_page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), PRESENT);
+	  kernel_page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
 	  page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
 	  frame_manager::incref (page_directory->entry[directory_entry].frame_);
 	  // Flush the TLB.
@@ -300,8 +301,26 @@ namespace vm {
     // Flush the TLB.
     asm ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
   }
-  
+
   inline void
+  remap (const void* logical_addr,
+	 page_privilege_t privilege,
+	 writable_t writable)
+  {
+    page_directory* page_directory = get_page_directory ();
+    page_table* page_table = get_page_table (logical_addr);
+    const size_t directory_entry = get_page_directory_entry (logical_addr);
+    const size_t table_entry = get_page_table_entry (logical_addr);
+    
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+    kassert (page_table->entry[table_entry].present_ == PRESENT);
+
+    page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, privilege, writable, PRESENT);
+    /* Flush the TLB. */
+    asm volatile ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+  }
+  
+  inline bool
   unmap (const void* logical_addr)
   {
     page_directory* page_directory = get_page_directory ();
@@ -309,13 +328,17 @@ namespace vm {
     const size_t directory_entry = get_page_directory_entry (logical_addr);
     const size_t table_entry = get_page_table_entry (logical_addr);
     
-    kassert (page_directory->entry[directory_entry].present_);
-    kassert (page_table->entry[table_entry].present_);
-    
-    frame_manager::decref (page_table->entry[table_entry].frame_);
-    page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
-    /* Flush the TLB. */
-    asm volatile ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+    if (page_directory->entry[directory_entry].present_ == PRESENT &&
+	page_table->entry[table_entry].present_ == PRESENT) {
+      frame_manager::decref (page_table->entry[table_entry].frame_);
+      page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
+      /* Flush the TLB. */
+      asm volatile ("invlpg %0\n" :: "m" (*static_cast<const char*> (logical_addr)));
+      return true;
+    }
+    else {
+      return false;
+    }
   }
 
   inline void

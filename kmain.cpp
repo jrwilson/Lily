@@ -79,7 +79,7 @@ create_action_test ()
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
     // Map the page directory.
-    vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
+    vm::map (pd, frame, vm::USER, vm::WRITABLE);
     // Initialize the page directory with a copy of the current page directory.
     new (pd) vm::page_directory (true);
     // Unmap.
@@ -89,7 +89,7 @@ create_action_test ()
     kassert (count == 1);
 
     // Second, create the automaton.
-    input_automaton = rts::create (descriptor_constants::RING0, frame);
+    input_automaton = rts::create (frame);
 
     // Third, create the automaton's memory map.
     {
@@ -112,12 +112,12 @@ create_action_test ()
       kassert (r);
 
       // Heap.
-      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
+      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
       r = input_automaton->insert_heap_area (heap_area);
       kassert (r);
 
       // Stack.
-      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
+      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
       r = input_automaton->insert_stack_area (stack_area);
       kassert (r);
     }
@@ -151,7 +151,7 @@ create_action_test ()
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
     // Map the page directory.
-    vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
+    vm::map (pd, frame, vm::USER, vm::WRITABLE);
     // Initialize the page directory with a copy of the current page directory.
     new (pd) vm::page_directory (true);
     // Unmap.
@@ -161,7 +161,7 @@ create_action_test ()
     kassert (count == 1);
 
     // Second, create the automaton.
-    output_automaton = rts::create (descriptor_constants::RING0, frame);
+    output_automaton = rts::create (frame);
       
     // Third, create the automaton's memory map.
     {
@@ -184,12 +184,12 @@ create_action_test ()
       kassert (r);
 
       // Heap.
-      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
+      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
       r = output_automaton->insert_heap_area (heap_area);
       kassert (r);
 
       // Stack.
-      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
+      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
       r = output_automaton->insert_stack_area (stack_area);
       kassert (r);
     }
@@ -331,7 +331,7 @@ create_buffer_test ()
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
     // Map the page directory.
-    vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
+    vm::map (pd, frame, vm::USER, vm::WRITABLE);
     // Initialize the page directory with a copy of the current page directory.
     new (pd) vm::page_directory (true);
     // Unmap.
@@ -341,7 +341,7 @@ create_buffer_test ()
     kassert (count == 1);
 
     // Second, create the automaton.
-    input_automaton = rts::create (descriptor_constants::RING0, frame);
+    input_automaton = rts::create (frame);
 
     // Third, create the automaton's memory map.
     {
@@ -364,12 +364,12 @@ create_buffer_test ()
       kassert (r);
 
       // Heap.
-      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
+      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
       r = input_automaton->insert_heap_area (heap_area);
       kassert (r);
 
       // Stack.
-      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
+      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
       r = input_automaton->insert_stack_area (stack_area);
       kassert (r);
     }
@@ -403,7 +403,7 @@ create_buffer_test ()
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
     // Map the page directory.
-    vm::map (pd, frame, vm::SUPERVISOR, vm::WRITABLE);
+    vm::map (pd, frame, vm::USER, vm::WRITABLE);
     // Initialize the page directory with a copy of the current page directory.
     new (pd) vm::page_directory (true);
     // Unmap.
@@ -413,7 +413,7 @@ create_buffer_test ()
     kassert (count == 1);
 
     // Second, create the automaton.
-    output_automaton = rts::create (descriptor_constants::RING0, frame);
+    output_automaton = rts::create (frame);
       
     // Third, create the automaton's memory map.
     {
@@ -436,12 +436,12 @@ create_buffer_test ()
       kassert (r);
 
       // Heap.
-      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN, vm::SUPERVISOR);
+      vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
       r = output_automaton->insert_heap_area (heap_area);
       kassert (r);
 
       // Stack.
-      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END, vm::SUPERVISOR);
+      vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
       r = output_automaton->insert_stack_area (stack_area);
       kassert (r);
     }
@@ -641,7 +641,7 @@ kmain (uint32_t multiboot_magic,
   vm_area_base* area;
   
   // Allocate the system automaton.
-  automaton* sa = rts::create (descriptor_constants::RING0, vm::page_directory_frame ());
+  automaton* sa = rts::create (vm::page_directory_frame ());
   
   // Build its memory map and mark the frames as already being used.
   
@@ -649,28 +649,43 @@ kmain (uint32_t multiboot_magic,
   area = new (system_alloc ()) vm_text_area (&text_begin, &text_end);
   r = sa->insert_vm_area (area);
   kassert (r);
-  
+  for (const uint8_t* ptr = static_cast<const uint8_t*> (area->begin ()); ptr != area->end (); ptr += PAGE_SIZE) {
+    vm::remap (ptr, vm::USER, vm::NOT_WRITABLE);
+  }
+
   // Read-only data.
   area = new (system_alloc ()) vm_rodata_area (&rodata_begin, &rodata_end);
   r = sa->insert_vm_area (area);
   kassert (r);
+  for (const uint8_t* ptr = static_cast<const uint8_t*> (area->begin ()); ptr != area->end (); ptr += PAGE_SIZE) {
+    vm::remap (ptr, vm::USER, vm::NOT_WRITABLE);
+  }
   
   // Data.
   area = new (system_alloc ()) vm_data_area (&data_begin, &data_end);
   r = sa->insert_vm_area (area);
   kassert (r);
+  for (const uint8_t* ptr = static_cast<const uint8_t*> (area->begin ()); ptr != area->end (); ptr += PAGE_SIZE) {
+    vm::remap (ptr, vm::USER, vm::WRITABLE);
+  }
   
   // Stack.
   vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_AUTOMATON_STACK_BEGIN,
-								   SYSTEM_AUTOMATON_STACK_END,
-								   vm::SUPERVISOR);
+								   SYSTEM_AUTOMATON_STACK_END);
   r = sa->insert_stack_area (stack_area);
   kassert (r);
+  for (const uint8_t* ptr = static_cast<const uint8_t*> (area->begin ()); ptr != area->end (); ptr += PAGE_SIZE) {
+    vm::remap (ptr, vm::USER, vm::WRITABLE);
+  }
   
   // Heap.
-  vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (system_alloc::heap_begin (), vm::SUPERVISOR);
+  vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (system_alloc::heap_begin ());
   r = sa->insert_heap_area (heap_area);
   kassert (r);
+  for (const uint8_t* ptr = static_cast<const uint8_t*> (area->begin ()); ptr != area->end (); ptr += PAGE_SIZE) {
+    vm::remap (ptr, vm::USER, vm::WRITABLE);
+  }
+
   // Tell the heap about the existing heap.
   void* hb = sa->sbrk (system_alloc::heap_size ());
   kassert (hb == system_alloc::heap_begin ());
@@ -687,7 +702,7 @@ kmain (uint32_t multiboot_magic,
   
   //create_action_test ();
   create_buffer_test ();
-  
+
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, 0);
 

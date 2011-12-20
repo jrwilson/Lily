@@ -31,17 +31,24 @@ namespace buffer_test {
     scheduler_ = new (alloc_type ()) scheduler_type ();
 
     kassert (system::buffer_size (85) == static_cast<size_t> (-1));
-    kassert (system::buffer_incref (85) == -1);
-    kassert (system::buffer_decref (85) == -1);
 
     bid_t buffer = system::buffer_create (2 * system::getpagesize ());
     kassert (system::buffer_size (buffer) == 2 * system::getpagesize ());
     char* c = static_cast<char*> (system::buffer_map (buffer));
     kassert (c != reinterpret_cast<void*> (-1));
     memset (c, 0xFF, system::getpagesize ());
-    kassert (system::buffer_incref (buffer) == 2);
-    kassert (system::buffer_decref (buffer) == 1);
 
+    for (size_t i = 0; i < system::getpagesize (); ++i) {
+      kassert (c[i] == static_cast<char> (0xFF));
+    }
+
+    for (size_t i = system::getpagesize (); i < 2 * system::getpagesize (); ++i) {
+      kassert (c[i] == 0x00);
+    }
+
+    for (size_t i = system::getpagesize (); i < 2 * system::getpagesize (); ++i) {
+      c[i] = 0xFF;
+    }
 
     schedule ();
     scheduler_->finish<init_traits> ();

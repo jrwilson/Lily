@@ -31,8 +31,7 @@ public:
   typedef std::unordered_set<caction, std::hash<caction>, std::equal_to<caction>, system_allocator<caction> > input_action_set_type;
 
   static automaton*
-  create (descriptor_constants::privilege_t privilege,
-	  frame_t frame);
+  create (frame_t frame);
 
   template <class OutputAction, class InputAction>
   static void
@@ -190,28 +189,6 @@ public:
     }
   }
 
-  // TODO:  Inline buffer operations.
-
-  static bid_t
-  buffer_create (size_t size,
-		 automaton* creator);
-
-  static size_t
-  buffer_size (bid_t bid,
-  	       automaton* a);
-
-  static int
-  buffer_incref (bid_t bid,
-  		 automaton* a);
-
-  static int
-  buffer_decref (bid_t bid,
-  		 automaton* a);
-
-  static void*
-  buffer_map (bid_t bid,
-	      automaton* a);
-
 private:
   static void
   bind_ (automaton* output_automaton,
@@ -230,15 +207,6 @@ private:
 
   typedef std::unordered_map<caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, input_action_set_type> > > bindings_type;
   static bindings_type bindings_;
-
-  static bid_t current_bid_;
-  typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, system_allocator<std::pair<const bid_t, buffer*> > > bid_map_type;
-  static bid_map_type bid_map_;
-
-  // Reference counts.
-  typedef std::pair<automaton*, buffer*> reference_key;
-  typedef std::unordered_map<reference_key, int, std::hash<reference_key>, std::equal_to<reference_key>, system_allocator<std::pair<const reference_key, int> > > reference_map_type;
-  static reference_map_type reference_map_;
 };
 
 #endif /* __rts_hpp__ */

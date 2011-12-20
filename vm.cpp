@@ -33,7 +33,10 @@ namespace vm {
 	    const void* address = get_address (i, j);
 	    // The page directory uses the same page table for low and high memory.  Only process high memory.
 	    if (address >= static_cast<const uint8_t*> (KERNEL_VIRTUAL_BASE) + ONE_MEGABYTE) {
-	      if (system_automaton->address_in_use (address) || address == kernel_page_directory || address >= PAGING_AREA) {
+	      if (system_automaton->address_in_use (address) ||
+		  address >= PAGING_AREA ||
+		  address == kernel_page_directory ||
+		  logical_to_physical (address, KERNEL_VIRTUAL_BASE) == reinterpret_cast<physical_address_t> (&zero_page)) {
 		// If the address is in the logical address space, mark the frame as being used.
 		frame_manager::mark_as_used (pt->entry[j].frame_);
 	      }
