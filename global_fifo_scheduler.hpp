@@ -94,6 +94,7 @@ private:
     const rts::input_action_set_type* input_actions_;
     rts::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
+    bid_t input_buffer_;
 
   public:
     execution_context ()
@@ -128,6 +129,10 @@ private:
       if (action_.automaton != 0) {	
 	switch (action_.type) {
 	case INPUT:
+	  if (action_.buffer_value_mode == BUFFER_VALUE) {
+	    // Destroy the buffer.
+	    action_.automaton->buffer_destroy (input_buffer_);
+	  }
 	  /* Move to the next input. */
 	  ++input_action_pos_;
 	  if (input_action_pos_ != input_actions_->end ()) {
@@ -135,6 +140,10 @@ private:
 	    action_ = *input_action_pos_;
 	    /* Execute.  (This does not return). */
 	    execute ();
+	  }
+	  if (action_.buffer_value_mode == BUFFER_VALUE) {
+	    // Destroy the buffer.
+	    destroy (output_buffer_, system_alloc ());
 	  }
 	  break;
 	case OUTPUT:
@@ -172,7 +181,7 @@ private:
     }
 
     inline void
-    execute () const
+    execute ()
     {
       // Switch page directories.
       vm::switch_to_directory (action_.automaton->page_directory_frame ());
@@ -190,8 +199,9 @@ private:
 	  memcpy (stack_pointer, value_buffer_, action_.copy_value_size);
 	}
 	if (action_.buffer_value_mode == BUFFER_VALUE) {
-	  // TODO
-	  kassert (0);
+	  // Copy the buffer to the input automaton.
+	  input_buffer_ = action_.automaton->buffer_create (*output_buffer_);
+	  *--stack_pointer = input_buffer_;
 	}
       }
       

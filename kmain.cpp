@@ -232,148 +232,213 @@ create_action_test ()
 
     // Bind.
     rts::bind<system_automaton::init_traits,
-      action_test::init_traits> (system_automaton::system_automaton, &system_automaton::init, output_automaton,
-				 output_automaton, &action_test::init);
+	      action_test::init_traits> (system_automaton::system_automaton, &system_automaton::init, output_automaton,
+					 output_automaton, &action_test::init);
     checked_schedule (system_automaton::system_automaton, reinterpret_cast<const void*> (&system_automaton::init), aid_cast (output_automaton));
     
     rts::bind<action_test::np_nb_nc_output_traits,
-      action_test::np_nb_nc_input1_traits> (output_automaton, &action_test::np_nb_nc_output,
-    					    input_automaton, &action_test::np_nb_nc_input1);
+	      action_test::np_nb_nc_input1_traits> (output_automaton, &action_test::np_nb_nc_output,
+						    input_automaton, &action_test::np_nb_nc_input1);
     checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_nc_output));
     
     rts::bind<action_test::p_nb_nc_output_traits,
-      action_test::np_nb_nc_input2_traits> (output_automaton, &action_test::p_nb_nc_output, action_test::p_nb_nc_output_parameter,
-					    input_automaton, &action_test::np_nb_nc_input2);
+	      action_test::np_nb_nc_input2_traits> (output_automaton, &action_test::p_nb_nc_output, action_test::p_nb_nc_output_parameter,
+						    input_automaton, &action_test::np_nb_nc_input2);
     checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_nc_output), aid_cast (action_test::p_nb_nc_output_parameter));
     
     action_test::ap_nb_nc_output_parameter = input_automaton->aid ();
     rts::bind<action_test::ap_nb_nc_output_traits,
-      action_test::np_nb_nc_input3_traits> (output_automaton, &action_test::ap_nb_nc_output, action_test::ap_nb_nc_output_parameter,
-    					    input_automaton, &action_test::np_nb_nc_input3);
+	      action_test::np_nb_nc_input3_traits> (output_automaton, &action_test::ap_nb_nc_output, action_test::ap_nb_nc_output_parameter,
+						    input_automaton, &action_test::np_nb_nc_input3);
     checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_nc_output), aid_cast (action_test::ap_nb_nc_output_parameter));
     
     rts::bind<action_test::np_nb_c_output_traits,
-      action_test::np_nb_c_input1_traits> (output_automaton, &action_test::np_nb_c_output,
-    					   input_automaton, &action_test::np_nb_c_input1);
+	      action_test::np_nb_c_input1_traits> (output_automaton, &action_test::np_nb_c_output,
+						   input_automaton, &action_test::np_nb_c_input1);
     checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_c_output));
     
     rts::bind<action_test::p_nb_c_output_traits,
-      action_test::np_nb_c_input2_traits> (output_automaton, &action_test::p_nb_c_output, action_test::p_nb_c_output_parameter,
-    					   input_automaton, &action_test::np_nb_c_input2);
+	      action_test::np_nb_c_input2_traits> (output_automaton, &action_test::p_nb_c_output, action_test::p_nb_c_output_parameter,
+						   input_automaton, &action_test::np_nb_c_input2);
     checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_c_output), aid_cast (action_test::p_nb_c_output_parameter));
     
     action_test::ap_nb_c_output_parameter = input_automaton->aid ();
     rts::bind<action_test::ap_nb_c_output_traits,
-      action_test::np_nb_c_input3_traits> (output_automaton, &action_test::ap_nb_c_output, action_test::ap_nb_c_output_parameter,
-    					   input_automaton, &action_test::np_nb_c_input3);
+	      action_test::np_nb_c_input3_traits> (output_automaton, &action_test::ap_nb_c_output, action_test::ap_nb_c_output_parameter,
+						   input_automaton, &action_test::np_nb_c_input3);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_c_output), aid_cast (action_test::ap_nb_c_output_parameter));
+    
+    rts::bind<action_test::np_b_nc_output_traits,
+	      action_test::np_b_nc_input1_traits> (output_automaton, &action_test::np_b_nc_output,
+						   input_automaton, &action_test::np_b_nc_input1);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_nc_output));
+    
+    rts::bind<action_test::p_b_nc_output_traits,
+    	      action_test::np_b_nc_input2_traits> (output_automaton, &action_test::p_b_nc_output, action_test::p_b_nc_output_parameter,
+						   input_automaton, &action_test::np_b_nc_input2);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_nc_output), aid_cast (action_test::p_b_nc_output_parameter));
+    
+    action_test::ap_b_nc_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_b_nc_output_traits,
+	      action_test::np_b_nc_input3_traits> (output_automaton, &action_test::ap_b_nc_output, action_test::ap_b_nc_output_parameter,
+						   input_automaton, &action_test::np_b_nc_input3);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_nc_output), aid_cast (action_test::ap_b_nc_output_parameter));
+    
+    rts::bind<action_test::np_b_c_output_traits,
+	      action_test::np_b_c_input1_traits> (output_automaton, &action_test::np_b_c_output,
+						  input_automaton, &action_test::np_b_c_input1);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_c_output));
+    
+    rts::bind<action_test::p_b_c_output_traits,
+	      action_test::np_b_c_input2_traits> (output_automaton, &action_test::p_b_c_output, action_test::p_b_c_output_parameter,
+						  input_automaton, &action_test::np_b_c_input2);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_c_output), aid_cast (action_test::p_b_c_output_parameter));
+    
+    action_test::ap_b_c_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_b_c_output_traits,
+	      action_test::np_b_c_input3_traits> (output_automaton, &action_test::ap_b_c_output, action_test::ap_b_c_output_parameter,
+						  input_automaton, &action_test::np_b_c_input3);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_c_output), aid_cast (action_test::ap_b_c_output_parameter));
+    
+    rts::bind<action_test::np_nb_nc_output_traits,
+    	      action_test::p_nb_nc_input1_traits> (output_automaton, &action_test::np_nb_nc_output,
+						   input_automaton, &action_test::p_nb_nc_input1, action_test::p_nb_nc_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_nc_output));
+    
+    rts::bind<action_test::p_nb_nc_output_traits,
+    	      action_test::p_nb_nc_input2_traits> (output_automaton, &action_test::p_nb_nc_output, action_test::p_nb_nc_output_parameter,
+    						input_automaton, &action_test::p_nb_nc_input2, action_test::p_nb_nc_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_nc_output), aid_cast (action_test::p_nb_nc_output_parameter));
+    
+    action_test::ap_nb_nc_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_nb_nc_output_traits,
+    	      action_test::p_nb_nc_input3_traits> (output_automaton, &action_test::ap_nb_nc_output, action_test::ap_nb_nc_output_parameter,
+						   input_automaton, &action_test::p_nb_nc_input3, action_test::p_nb_nc_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_nc_output), aid_cast (action_test::ap_nb_nc_output_parameter));
+    
+    rts::bind<action_test::np_nb_c_output_traits,
+    	      action_test::p_nb_c_input1_traits> (output_automaton, &action_test::np_nb_c_output,
+						  input_automaton, &action_test::p_nb_c_input1, action_test::p_nb_c_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_c_output));
+    
+    rts::bind<action_test::p_nb_c_output_traits,
+    	      action_test::p_nb_c_input2_traits> (output_automaton, &action_test::p_nb_c_output, action_test::p_nb_c_output_parameter,
+						  input_automaton, &action_test::p_nb_c_input2, action_test::p_nb_c_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_c_output), aid_cast (action_test::p_nb_c_output_parameter));
+    
+    action_test::ap_nb_c_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_nb_c_output_traits,
+    	      action_test::p_nb_c_input3_traits> (output_automaton, &action_test::ap_nb_c_output, action_test::ap_nb_c_output_parameter,
+    					       input_automaton, &action_test::p_nb_c_input3, action_test::p_nb_c_input3_parameter);
     checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_c_output), aid_cast (action_test::ap_nb_c_output_parameter));
 
-    // rts::bind<action_test::np_b_nc_output_traits,
-    //   action_test::np_b_nc_input1_traits> (output_automaton, &action_test::np_b_nc_output,
-    // 					    input_automaton, &action_test::np_b_nc_input1);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_nc_output));
+    rts::bind<action_test::np_b_nc_output_traits,
+    	      action_test::p_b_nc_input1_traits> (output_automaton, &action_test::np_b_nc_output,
+						  input_automaton, &action_test::p_b_nc_input1, action_test::p_b_nc_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_nc_output));
     
-    // rts::bind<action_test::p_b_nc_output_traits,
-    // 	      action_test::np_b_nc_input2_traits> (output_automaton, &action_test::p_b_nc_output, action_test::p_b_nc_output_parameter,
-    // 						 input_automaton, &action_test::np_b_nc_input2);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_nc_output), aid_cast (action_test::p_b_nc_output_parameter));
+    rts::bind<action_test::p_b_nc_output_traits,
+    	      action_test::p_b_nc_input2_traits> (output_automaton, &action_test::p_b_nc_output, action_test::p_b_nc_output_parameter,
+						  input_automaton, &action_test::p_b_nc_input2, action_test::p_b_nc_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_nc_output), aid_cast (action_test::p_b_nc_output_parameter));
     
-    // action_test::ap_b_nc_output_parameter = input_automaton->aid ();
-    // rts::bind<action_test::ap_b_nc_output_traits,
-    //   action_test::np_b_nc_input3_traits> (output_automaton, &action_test::ap_b_nc_output, action_test::ap_b_nc_output_parameter,
-    // 					    input_automaton, &action_test::np_b_nc_input3);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_nc_output), aid_cast (action_test::ap_b_nc_output_parameter));
+    action_test::ap_b_nc_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_b_nc_output_traits,
+    	      action_test::p_b_nc_input3_traits> (output_automaton, &action_test::ap_b_nc_output, action_test::ap_b_nc_output_parameter,
+						  input_automaton, &action_test::p_b_nc_input3, action_test::p_b_nc_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_nc_output), aid_cast (action_test::ap_b_nc_output_parameter));
     
-    // rts::bind<action_test::np_b_c_output_traits,
-    //   action_test::np_b_c_input1_traits> (output_automaton, &action_test::np_b_c_output,
-    // 					   input_automaton, &action_test::np_b_c_input1);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_c_output));
+    rts::bind<action_test::np_b_c_output_traits,
+    	      action_test::p_b_c_input1_traits> (output_automaton, &action_test::np_b_c_output,
+						 input_automaton, &action_test::p_b_c_input1, action_test::p_b_c_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_c_output));
     
-    // rts::bind<action_test::p_b_c_output_traits,
-    //   action_test::np_b_c_input2_traits> (output_automaton, &action_test::p_b_c_output, action_test::p_b_c_output_parameter,
-    // 					   input_automaton, &action_test::np_b_c_input2);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_c_output), aid_cast (action_test::p_b_c_output_parameter));
+    rts::bind<action_test::p_b_c_output_traits,
+    	      action_test::p_b_c_input2_traits> (output_automaton, &action_test::p_b_c_output, action_test::p_b_c_output_parameter,
+						 input_automaton, &action_test::p_b_c_input2, action_test::p_b_c_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_c_output), aid_cast (action_test::p_b_c_output_parameter));
     
-    // action_test::ap_b_c_output_parameter = input_automaton->aid ();
-    // rts::bind<action_test::ap_b_c_output_traits,
-    //   action_test::np_b_c_input3_traits> (output_automaton, &action_test::ap_b_c_output, action_test::ap_b_c_output_parameter,
-    // 					   input_automaton, &action_test::np_b_c_input3);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_c_output), aid_cast (action_test::ap_b_c_output_parameter));
+    action_test::ap_b_c_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_b_c_output_traits,
+    	      action_test::p_b_c_input3_traits> (output_automaton, &action_test::ap_b_c_output, action_test::ap_b_c_output_parameter,
+						 input_automaton, &action_test::p_b_c_input3, action_test::p_b_c_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_c_output), aid_cast (action_test::ap_b_c_output_parameter));
+    
+    action_test::ap_nb_nc_input1_parameter = output_automaton->aid ();
+    rts::bind<action_test::np_nb_nc_output_traits,
+    	      action_test::ap_nb_nc_input1_traits> (output_automaton, &action_test::np_nb_nc_output,
+						    input_automaton, &action_test::ap_nb_nc_input1, action_test::ap_nb_nc_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_nc_output));
+    
+    action_test::ap_nb_nc_input2_parameter = output_automaton->aid ();
+    rts::bind<action_test::p_nb_nc_output_traits,
+    	      action_test::ap_nb_nc_input2_traits> (output_automaton, &action_test::p_nb_nc_output, action_test::p_nb_nc_output_parameter,
+						    input_automaton, &action_test::ap_nb_nc_input2, action_test::ap_nb_nc_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_nc_output), aid_cast (action_test::p_nb_nc_output_parameter));
+    
+    action_test::ap_nb_nc_input3_parameter = output_automaton->aid ();
+    action_test::ap_nb_nc_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_nb_nc_output_traits,
+    	      action_test::ap_nb_nc_input3_traits> (output_automaton, &action_test::ap_nb_nc_output, action_test::ap_nb_nc_output_parameter,
+						    input_automaton, &action_test::ap_nb_nc_input3, action_test::ap_nb_nc_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_nc_output), aid_cast (action_test::ap_nb_nc_output_parameter));
+    
+    action_test::ap_nb_c_input1_parameter = output_automaton->aid ();
+    rts::bind<action_test::np_nb_c_output_traits,
+    	      action_test::ap_nb_c_input1_traits> (output_automaton, &action_test::np_nb_c_output,
+						   input_automaton, &action_test::ap_nb_c_input1, action_test::ap_nb_c_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_c_output));
+    
+    action_test::ap_nb_c_input2_parameter = output_automaton->aid ();
+    rts::bind<action_test::p_nb_c_output_traits,
+    	      action_test::ap_nb_c_input2_traits> (output_automaton, &action_test::p_nb_c_output, action_test::p_nb_c_output_parameter,
+						   input_automaton, &action_test::ap_nb_c_input2, action_test::ap_nb_c_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_c_output), aid_cast (action_test::p_nb_c_output_parameter));
+    
+    action_test::ap_nb_c_input3_parameter = output_automaton->aid ();
+    action_test::ap_nb_c_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_nb_c_output_traits,
+    	      action_test::ap_nb_c_input3_traits> (output_automaton, &action_test::ap_nb_c_output, action_test::ap_nb_c_output_parameter,
+						   input_automaton, &action_test::ap_nb_c_input3, action_test::ap_nb_c_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_c_output), aid_cast (action_test::ap_nb_c_output_parameter));
 
-
-
-
-
+    action_test::ap_b_nc_input1_parameter = output_automaton->aid ();
+    rts::bind<action_test::np_b_nc_output_traits,
+    	      action_test::ap_b_nc_input1_traits> (output_automaton, &action_test::np_b_nc_output,
+						    input_automaton, &action_test::ap_b_nc_input1, action_test::ap_b_nc_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_nc_output));
     
-    // rts::bind<action_test::np_nb_nc_output_traits,
-    // 	      action_test::p_nb_nc_input1_traits> (output_automaton, &action_test::np_nb_nc_output,
-    // 						input_automaton, &action_test::p_nb_nc_input1, action_test::p_nb_nc_input1_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_nc_output));
+    action_test::ap_b_nc_input2_parameter = output_automaton->aid ();
+    rts::bind<action_test::p_b_nc_output_traits,
+    	      action_test::ap_b_nc_input2_traits> (output_automaton, &action_test::p_b_nc_output, action_test::p_b_nc_output_parameter,
+						    input_automaton, &action_test::ap_b_nc_input2, action_test::ap_b_nc_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_nc_output), aid_cast (action_test::p_b_nc_output_parameter));
     
-    // rts::bind<action_test::p_nb_nc_output_traits,
-    // 	      action_test::p_nb_nc_input2_traits> (output_automaton, &action_test::p_nb_nc_output, action_test::p_nb_nc_output_parameter,
-    // 						input_automaton, &action_test::p_nb_nc_input2, action_test::p_nb_nc_input2_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_nc_output), aid_cast (action_test::p_nb_nc_output_parameter));
+    action_test::ap_b_nc_input3_parameter = output_automaton->aid ();
+    action_test::ap_b_nc_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_b_nc_output_traits,
+    	      action_test::ap_b_nc_input3_traits> (output_automaton, &action_test::ap_b_nc_output, action_test::ap_b_nc_output_parameter,
+						    input_automaton, &action_test::ap_b_nc_input3, action_test::ap_b_nc_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_nc_output), aid_cast (action_test::ap_b_nc_output_parameter));
     
-    // action_test::ap_nb_nc_output_parameter = input_automaton->aid ();
-    // rts::bind<action_test::ap_nb_nc_output_traits,
-    // 	      action_test::p_nb_nc_input3_traits> (output_automaton, &action_test::ap_nb_nc_output, action_test::ap_nb_nc_output_parameter,
-    // 						input_automaton, &action_test::p_nb_nc_input3, action_test::p_nb_nc_input3_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_nc_output), aid_cast (action_test::ap_nb_nc_output_parameter));
+    action_test::ap_b_c_input1_parameter = output_automaton->aid ();
+    rts::bind<action_test::np_b_c_output_traits,
+    	      action_test::ap_b_c_input1_traits> (output_automaton, &action_test::np_b_c_output,
+						   input_automaton, &action_test::ap_b_c_input1, action_test::ap_b_c_input1_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_b_c_output));
     
-    // rts::bind<action_test::np_nb_c_output_traits,
-    // 	      action_test::p_nb_c_input1_traits> (output_automaton, &action_test::np_nb_c_output,
-    // 					       input_automaton, &action_test::p_nb_c_input1, action_test::p_nb_c_input1_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_c_output));
+    action_test::ap_b_c_input2_parameter = output_automaton->aid ();
+    rts::bind<action_test::p_b_c_output_traits,
+    	      action_test::ap_b_c_input2_traits> (output_automaton, &action_test::p_b_c_output, action_test::p_b_c_output_parameter,
+						   input_automaton, &action_test::ap_b_c_input2, action_test::ap_b_c_input2_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_b_c_output), aid_cast (action_test::p_b_c_output_parameter));
     
-    // rts::bind<action_test::p_nb_c_output_traits,
-    // 	      action_test::p_nb_c_input2_traits> (output_automaton, &action_test::p_nb_c_output, action_test::p_nb_c_output_parameter,
-    // 					       input_automaton, &action_test::p_nb_c_input2, action_test::p_nb_c_input2_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_c_output), aid_cast (action_test::p_nb_c_output_parameter));
-    
-    // action_test::ap_nb_c_output_parameter = input_automaton->aid ();
-    // rts::bind<action_test::ap_nb_c_output_traits,
-    // 	      action_test::p_nb_c_input3_traits> (output_automaton, &action_test::ap_nb_c_output, action_test::ap_nb_c_output_parameter,
-    // 					       input_automaton, &action_test::p_nb_c_input3, action_test::p_nb_c_input3_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_c_output), aid_cast (action_test::ap_nb_c_output_parameter));
-    
-    // action_test::ap_nb_nc_input1_parameter = output_automaton->aid ();
-    // rts::bind<action_test::np_nb_nc_output_traits,
-    // 	      action_test::ap_nb_nc_input1_traits> (output_automaton, &action_test::np_nb_nc_output,
-    // 						 input_automaton, &action_test::ap_nb_nc_input1, action_test::ap_nb_nc_input1_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_nc_output));
-    
-    // action_test::ap_nb_nc_input2_parameter = output_automaton->aid ();
-    // rts::bind<action_test::p_nb_nc_output_traits,
-    // 	      action_test::ap_nb_nc_input2_traits> (output_automaton, &action_test::p_nb_nc_output, action_test::p_nb_nc_output_parameter,
-    // 						 input_automaton, &action_test::ap_nb_nc_input2, action_test::ap_nb_nc_input2_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_nc_output), aid_cast (action_test::p_nb_nc_output_parameter));
-    
-    // action_test::ap_nb_nc_input3_parameter = output_automaton->aid ();
-    // action_test::ap_nb_nc_output_parameter = input_automaton->aid ();
-    // rts::bind<action_test::ap_nb_nc_output_traits,
-    // 	      action_test::ap_nb_nc_input3_traits> (output_automaton, &action_test::ap_nb_nc_output, action_test::ap_nb_nc_output_parameter,
-    // 						 input_automaton, &action_test::ap_nb_nc_input3, action_test::ap_nb_nc_input3_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_nc_output), aid_cast (action_test::ap_nb_nc_output_parameter));
-    
-    // action_test::ap_nb_c_input1_parameter = output_automaton->aid ();
-    // rts::bind<action_test::np_nb_c_output_traits,
-    // 	      action_test::ap_nb_c_input1_traits> (output_automaton, &action_test::np_nb_c_output,
-    // 						input_automaton, &action_test::ap_nb_c_input1, action_test::ap_nb_c_input1_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::np_nb_c_output));
-    
-    // action_test::ap_nb_c_input2_parameter = output_automaton->aid ();
-    // rts::bind<action_test::p_nb_c_output_traits,
-    // 	      action_test::ap_nb_c_input2_traits> (output_automaton, &action_test::p_nb_c_output, action_test::p_nb_c_output_parameter,
-    // 						input_automaton, &action_test::ap_nb_c_input2, action_test::ap_nb_c_input2_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::p_nb_c_output), aid_cast (action_test::p_nb_c_output_parameter));
-    
-    // action_test::ap_nb_c_input3_parameter = output_automaton->aid ();
-    // action_test::ap_nb_c_output_parameter = input_automaton->aid ();
-    // rts::bind<action_test::ap_nb_c_output_traits,
-    // 	      action_test::ap_nb_c_input3_traits> (output_automaton, &action_test::ap_nb_c_output, action_test::ap_nb_c_output_parameter,
-    // 						input_automaton, &action_test::ap_nb_c_input3, action_test::ap_nb_c_input3_parameter);
-    // checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_nb_c_output), aid_cast (action_test::ap_nb_c_output_parameter));
+    action_test::ap_b_c_input3_parameter = output_automaton->aid ();
+    action_test::ap_b_c_output_parameter = input_automaton->aid ();
+    rts::bind<action_test::ap_b_c_output_traits,
+    	      action_test::ap_b_c_input3_traits> (output_automaton, &action_test::ap_b_c_output, action_test::ap_b_c_output_parameter,
+						   input_automaton, &action_test::ap_b_c_input3, action_test::ap_b_c_input3_parameter);
+    checked_schedule (output_automaton, reinterpret_cast<const void*> (&action_test::ap_b_c_output), aid_cast (action_test::ap_b_c_output_parameter));
   }
 }
 

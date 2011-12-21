@@ -709,6 +709,19 @@ public:
     }
   }
 
+  bid_t
+  buffer_create (const buffer& other)
+  {
+    // Generate an id.
+    bid_t bid = generate_bid ();
+    
+    // Create the buffer and insert it into the map.
+    buffer* b = new (system_alloc ()) buffer (other);
+    bid_to_buffer_map_.insert (std::make_pair (bid, b));
+    
+    return bid;
+  }
+
   size_t
   buffer_append (bid_t bid,
 		 size_t size)

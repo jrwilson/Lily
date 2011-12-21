@@ -24,6 +24,14 @@ strlen (const char* p)
   return retval;
 }
 
+int
+strcmp (const char* p,
+	const char* q)
+{
+  while (*p != 0 && *q != 0 && *p++ == *q++);;
+
+  return *p - *q;
+}
 void*
 memset (void* ptr,
 	int value,

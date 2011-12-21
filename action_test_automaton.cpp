@@ -141,6 +141,10 @@ namespace action_test {
   void
   np_b_nc_input1 (bid_t b)
   {
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "np_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -148,6 +152,10 @@ namespace action_test {
   void
   np_b_nc_input2 (bid_t b)
   {
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "p_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -155,30 +163,49 @@ namespace action_test {
   void
   np_b_nc_input3 (bid_t b)
   {
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "ap_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  np_b_c_input1 (bid_t b, aid_t v)
+  np_b_c_input1 (bid_t b,
+		 aid_t v)
   {
     kassert (v == np_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "np_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  np_b_c_input2 (bid_t b, aid_t v)
+  np_b_c_input2 (bid_t b,
+		 aid_t v)
   {
     kassert (v == p_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "p_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  np_b_c_input3 (bid_t b, aid_t v)
+  np_b_c_input3 (bid_t b,
+		 aid_t v)
   {
     kassert (v == ap_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "ap_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -187,6 +214,7 @@ namespace action_test {
   p_nb_nc_input1 (aid_t p)
   {
     kassert (p == p_nb_nc_input1_parameter);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -195,6 +223,7 @@ namespace action_test {
   p_nb_nc_input2 (aid_t p)
   {
     kassert (p == p_nb_nc_input2_parameter);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -203,60 +232,79 @@ namespace action_test {
   p_nb_nc_input3 (aid_t p)
   {
     kassert (p == p_nb_nc_input3_parameter);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
   p_nb_c_input1 (aid_t p,
-	      aid_t v)
+		 aid_t v)
   {
     kassert (p == p_nb_c_input1_parameter);
     kassert (v == np_nb_c_output_value);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
   p_nb_c_input2 (aid_t p,
-	      aid_t v)
+		 aid_t v)
   {
     kassert (p == p_nb_c_input2_parameter);
     kassert (v == p_nb_c_output_value);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
   p_nb_c_input3 (aid_t p,
-	      aid_t v)
+		 aid_t v)
   {
     kassert (p == p_nb_c_input3_parameter);
     kassert (v == ap_nb_c_output_value);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_b_nc_input1 (aid_t p, bid_t b)
+  p_b_nc_input1 (aid_t p,
+		 bid_t b)
   {
     kassert (p == p_b_nc_input1_parameter);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "np_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_b_nc_input2 (aid_t p, bid_t b)
+  p_b_nc_input2 (aid_t p,
+		 bid_t b)
   {
     kassert (p == p_b_nc_input2_parameter);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "p_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_b_nc_input3 (aid_t p, bid_t b)
+  p_b_nc_input3 (aid_t p,
+		 bid_t b)
   {
     kassert (p == p_b_nc_input3_parameter);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "ap_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -268,6 +316,10 @@ namespace action_test {
   {
     kassert (p == p_b_c_input1_parameter);
     kassert (v == np_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "np_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -279,6 +331,10 @@ namespace action_test {
   {
     kassert (p == p_b_c_input2_parameter);
     kassert (v == p_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "p_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -290,6 +346,10 @@ namespace action_test {
   {
     kassert (p == p_b_c_input3_parameter);
     kassert (v == ap_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "ap_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -298,6 +358,7 @@ namespace action_test {
   ap_nb_nc_input1 (aid_t p)
   {
     kassert (p == ap_nb_nc_input1_parameter);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -306,6 +367,7 @@ namespace action_test {
   ap_nb_nc_input2 (aid_t p)
   {
     kassert (p == ap_nb_nc_input2_parameter);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -314,60 +376,79 @@ namespace action_test {
   ap_nb_nc_input3 (aid_t p)
   {
     kassert (p == ap_nb_nc_input3_parameter);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
   ap_nb_c_input1 (aid_t p,
-	      aid_t v)
+		  aid_t v)
   {
     kassert (p == ap_nb_c_input1_parameter);
     kassert (v == np_nb_c_output_value);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
   ap_nb_c_input2 (aid_t p,
-	       aid_t v)
+		  aid_t v)
   {
     kassert (p == ap_nb_c_input2_parameter);
     kassert (v == p_nb_c_output_value);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
   ap_nb_c_input3 (aid_t p,
-	      aid_t v)
+		  aid_t v)
   {
     kassert (p == ap_nb_c_input3_parameter);
     kassert (v == ap_nb_c_output_value);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_b_nc_input1 (aid_t p, bid_t b)
+  ap_b_nc_input1 (aid_t p,
+		  bid_t b)
   {
     kassert (p == ap_b_nc_input1_parameter);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "np_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_b_nc_input2 (aid_t p, bid_t b)
+  ap_b_nc_input2 (aid_t p,
+		  bid_t b)
   {
     kassert (p == ap_b_nc_input2_parameter);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "p_b_nc_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_b_nc_input3 (aid_t p, bid_t b)
+  ap_b_nc_input3 (aid_t p,
+		  bid_t b)
   {
     kassert (p == ap_b_nc_input3_parameter);
+    kout << "\t" << __func__;
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "ap_b_nc_output") == 0);
     no_schedule ();
     no_finish ();
   }
@@ -379,6 +460,10 @@ namespace action_test {
   {
     kassert (p == ap_b_c_input1_parameter);
     kassert (v == np_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "np_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -390,6 +475,10 @@ namespace action_test {
   {
     kassert (p == ap_b_c_input2_parameter);
     kassert (v == p_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "p_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -401,6 +490,10 @@ namespace action_test {
   {
     kassert (p == ap_b_c_input3_parameter);
     kassert (v == ap_b_c_output_value);
+    char* c = static_cast<char*> (system::buffer_map (b));
+    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (strcmp (c, "ap_b_c_output") == 0);
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
