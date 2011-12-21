@@ -286,70 +286,346 @@ public:
     }
   }
 
+private:
   template <class Action>
   void
-  add_action (void (*action_entry_point) (void))
+  add_action_dispatch_ (input_action_tag,
+			no_parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (void))
   {
-    STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == NO_PARAMETER && Action::copy_value_size == 0) ||
-		   (Action::action_type == OUTPUT && Action::parameter_mode == NO_PARAMETER) ||
-		   (Action::action_type == INTERNAL && Action::parameter_mode == NO_PARAMETER));
-    
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
 
   template <class Action>
   void
-  add_action_dispatch_ (no_parameter_tag,
+  add_action_dispatch_ (input_action_tag,
+			no_parameter_tag,
+			no_buffer_value_tag,
+			copy_value_tag,
 			void (*action_entry_point) (typename Action::copy_value_type))
   {
-    STATIC_ASSERT (is_input_action<Action>::value);
-    STATIC_ASSERT (Action::parameter_mode == NO_PARAMETER && Action::copy_value_size != 0);
-    
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
 
   template <class Action>
   void
-  add_action_dispatch_ (parameter_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
+  add_action_dispatch_ (input_action_tag,
+			no_parameter_tag,
+			buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (bid_t))
   {
-    STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == PARAMETER && Action::copy_value_size == 0) ||
-  		   (Action::action_type == OUTPUT && Action::parameter_mode == PARAMETER) ||
-  		   (Action::action_type == INTERNAL && Action::parameter_mode == PARAMETER));
-
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
 
   template <class Action>
   void
-  add_action_dispatch_ (auto_parameter_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
+  add_action_dispatch_ (input_action_tag,
+			no_parameter_tag,
+			buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (bid_t, typename Action::copy_value_type))
   {
-    STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == AUTO_PARAMETER && Action::copy_value_size == 0) ||
-  		   (Action::action_type == OUTPUT && Action::parameter_mode == AUTO_PARAMETER));
-    
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
 
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			parameter_tag,
+			no_buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type, typename Action::copy_value_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			parameter_tag,
+			buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type, bid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			parameter_tag,
+			buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type, bid_t, typename Action::copy_value_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			auto_parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (aid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			auto_parameter_tag,
+			no_buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (aid_t, typename Action::copy_value_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			auto_parameter_tag,
+			buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (aid_t, bid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (input_action_tag,
+			auto_parameter_tag,
+			buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (aid_t, bid_t, typename Action::copy_value_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			no_parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (void))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			no_parameter_tag,
+			no_buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (void))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			no_parameter_tag,
+			buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (void))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			no_parameter_tag,
+			buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (void))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			parameter_tag,
+			no_buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			parameter_tag,
+			buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			parameter_tag,
+			buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			auto_parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (aid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			auto_parameter_tag,
+			no_buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (aid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			auto_parameter_tag,
+			buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (aid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (output_action_tag,
+			auto_parameter_tag,
+			buffer_value_tag,
+			copy_value_tag,
+			void (*action_entry_point) (aid_t))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (internal_action_tag,
+			no_parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (void))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+  template <class Action>
+  void
+  add_action_dispatch_ (internal_action_tag,
+			parameter_tag,
+			no_buffer_value_tag,
+			no_copy_value_tag,
+			void (*action_entry_point) (typename Action::parameter_type))
+  {
+    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  }
+
+public:
+  template <class Action>
+  void
+  add_action (void (*action_entry_point) ())
+  {
+    STATIC_ASSERT (is_action<Action>::value);
+    add_action_dispatch_<Action> (typename Action::action_category (),
+				  typename Action::parameter_category (),
+				  typename Action::buffer_value_category (),
+				  typename Action::copy_value_category (),
+				  action_entry_point);
+  }
+  
   template <class Action,
 	    class T>
   void
   add_action (void (*action_entry_point) (T))
   {
-    add_action_dispatch_<Action> (typename Action::parameter_category (), action_entry_point);
+    STATIC_ASSERT (is_action<Action>::value);
+    add_action_dispatch_<Action> (typename Action::action_category (),
+				  typename Action::parameter_category (),
+				  typename Action::buffer_value_category (),
+				  typename Action::copy_value_category (),
+				  action_entry_point);
   }
 
-  template <class Action>
+  template <class Action,
+	    class T1,
+	    class T2>
   void
-  add_action (void (*action_entry_point) (typename Action::parameter_type, typename Action::copy_value_type))
+  add_action (void (*action_entry_point) (T1, T2))
   {
-    STATIC_ASSERT (is_input_action<Action>::value);
-    STATIC_ASSERT ((Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::copy_value_size != 0);
+    STATIC_ASSERT (is_action<Action>::value);
+    add_action_dispatch_<Action> (typename Action::action_category (),
+				  typename Action::parameter_category (),
+				  typename Action::buffer_value_category (),
+				  typename Action::copy_value_category (),
+				  action_entry_point);
+  }
 
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
+  template <class Action,
+	    class T1,
+	    class T2,
+	    class T3>
+  void
+  add_action (void (*action_entry_point) (T1, T2, T3))
+  {
+    STATIC_ASSERT (is_action<Action>::value);
+    add_action_dispatch_<Action> (typename Action::action_category (),
+				  typename Action::parameter_category (),
+				  typename Action::buffer_value_category (),
+				  typename Action::copy_value_category (),
+				  action_entry_point);
   }
 
   const_action_iterator
@@ -547,6 +823,28 @@ public:
     }
   }
 
+  buffer*
+  buffer_output_destroy (bid_t bid)
+  {
+    bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
+    kassert (bpos != bid_to_buffer_map_.end ());
+
+    buffer* b = bpos->second;
+    
+    if (b->begin () != 0) {
+      // Remove from the memory map.
+      memory_map_.erase (find_address (b->begin ()));
+      
+      // Unmap the buffer.	
+      b->unmap ();
+    }
+    
+    // Remove from the bid map.
+    bid_to_buffer_map_.erase (bpos);
+    
+    return b;
+  }
+
   int
   buffer_destroy (bid_t bid)
   {
@@ -557,13 +855,9 @@ public:
       if (b->begin () != 0) {
 	// Remove from the memory map.
 	memory_map_.erase (find_address (b->begin ()));
-	
-	// Unmap the buffer.
-	for (const uint8_t* ptr = static_cast<const uint8_t*> (b->begin ());
-	     ptr != b->end ();
-	     ptr += PAGE_SIZE) {
-	  vm::unmap (ptr);
-	}
+
+	// Unmap the buffer.	
+	b->unmap ();
       }
 
       // Remove from the bid map.

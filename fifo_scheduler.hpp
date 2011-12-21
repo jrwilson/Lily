@@ -85,7 +85,7 @@ private:
     }
     else {
       /* Don't schedule. */
-      system::finish (0, 0, status, bid, buffer);
+      system::finish (reinterpret_cast<const void*> (-1), -1, status, bid, buffer);
     }
   }
 

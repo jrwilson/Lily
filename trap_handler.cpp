@@ -48,32 +48,30 @@ trap_dispatch (volatile registers regs)
       bid_t bid = regs.esi;
       const void* buffer = reinterpret_cast<const void*> (regs.edi);
 
-      if (action_entry_point != 0 || status) {
-	const caction& current = scheduler::current_action ();
-	
-	if (action_entry_point != 0) {
-	  // Check the action that was scheduled.
-	  automaton::const_action_iterator pos = current.automaton->action_find (action_entry_point);
-	  if (pos != current.automaton->action_end ()) {
-	    scheduler::schedule (caction (current.automaton, *pos, parameter));
-	  }
-	  else {
-	    // TODO:  Automaton scheduled a bad action.
-	    kassert (0);
-	  }
+      const caction& current = scheduler::current_action ();
+      
+      if (action_entry_point != reinterpret_cast<const void*> (-1)) {
+	// Check the action that was scheduled.
+	automaton::const_action_iterator pos = current.automaton->action_find (action_entry_point);
+	if (pos != current.automaton->action_end ()) {
+	  scheduler::schedule (caction (current.automaton, *pos, (pos->parameter_mode == NO_PARAMETER) ? 0 : parameter));
 	}
-
-	if (status &&
-	    current.buffer_value_mode == BUFFER_VALUE &&
-	    !current.automaton->buffer_exists (bid)) {
-	  // TODO:  Automaton returned a bad buffer.
+	else {
+	  // TODO:  Automaton scheduled a bad action.
 	  kassert (0);
 	}
-	
-	if (status &&
-	    current.copy_value_mode == COPY_VALUE &&
+      }
+      
+      if (current.type == OUTPUT &&
+	  status) {
+	if (current.copy_value_mode == COPY_VALUE &&
 	    !current.automaton->verify_span (buffer, current.copy_value_size)) {
 	  // TODO:  Automaton returned a bad copy value.
+	  kassert (0);
+	}
+	else if (current.buffer_value_mode == BUFFER_VALUE &&
+		 !current.automaton->buffer_exists (bid)) {
+	  // TODO:  Automaton returned a bad buffer.
 	  kassert (0);
 	}
       }

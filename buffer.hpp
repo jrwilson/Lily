@@ -7,7 +7,7 @@ class buffer : public vm_area_base {
 public:
   buffer (size_t size) :
     vm_area_base (0, 0),
-    frame_list_ (size / PAGE_SIZE, vm::page_table_entry (zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::PRESENT))
+    frame_list_ (size / PAGE_SIZE, vm::page_table_entry (zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
   {
     frame_t zero_fr = zero_frame ();
     for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
@@ -85,7 +85,7 @@ public:
     frame_list_.resize (idx + size / PAGE_SIZE);
     for (; idx != frame_list_.size (); ++idx) {
       frame_manager::incref (zero_frame);
-      frame_list_[idx] = vm::page_table_entry (zero_frame, vm::USER, vm::NOT_WRITABLE, vm::PRESENT);
+      frame_list_[idx] = vm::page_table_entry (zero_frame, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT);
     }
     return retval;
   }
@@ -126,6 +126,7 @@ public:
 	// The page is not present and we are trying to read.
 	// Map.
 	vm::map (address, frame_list_[idx].frame_, vm::USER, vm::NOT_WRITABLE);
+	frame_list_[idx].present_ = vm::PRESENT;
       }
       else {
 	// The page is not present and we are trying to write.
@@ -145,10 +146,12 @@ public:
 	// Record the dst.
 	frame_list_[idx].frame_ = dst;
 	frame_list_[idx].writable_ = vm::WRITABLE;
+	frame_list_[idx].present_ = vm::PRESENT;
       }
     }
     else {
       kassert (write_context (error));
+      kassert (frame_list_[idx].present_ == vm::PRESENT);
       // The user tried to write to page mapped previously as read-only.
       // Copy.
       // Exactly the same as previous copy except...
@@ -163,6 +166,24 @@ public:
       frame_manager::decref (src);
       frame_list_[idx].frame_ = dst;
       frame_list_[idx].writable_ = vm::WRITABLE;
+    }
+  }
+
+  void
+  unmap ()
+  {
+    if (begin_ != 0) {
+      for (size_t idx = 0; idx < frame_list_.size (); ++idx) {
+	if (frame_list_[idx].present_ == vm::PRESENT) {
+	  vm::unmap (static_cast<const uint8_t*> (begin_) + idx * PAGE_SIZE);
+	  frame_list_[idx].present_ = vm::NOT_PRESENT;
+	  // Convert to copy-on-write as well.
+	  frame_list_[idx].writable_ = vm::NOT_WRITABLE;
+	}
+      }
+
+      begin_ = 0;
+      end_ = 0;
     }
   }
 

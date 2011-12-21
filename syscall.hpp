@@ -20,8 +20,6 @@
 
 namespace system {
   
-  // action_entry_point == 0 means do not schedule an action.
-  // buffer == 0 means no output was produced.
   void
   finish (const void* action_entry_point,
 	  aid_t parameter,

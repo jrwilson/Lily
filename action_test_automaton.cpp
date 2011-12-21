@@ -15,25 +15,6 @@ struct allocator_type : public list_allocator<T, allocator_tag> { };
 
 namespace action_test {
 
-  static bool np_nb_nc_input1_flag = true;
-  static bool np_nb_nc_input2_flag = true;
-  static bool np_nb_nc_input3_flag = true;
-  static bool np_nb_c_input1_flag = true;
-  static bool np_nb_c_input2_flag = true;
-  static bool np_nb_c_input3_flag = true;
-  static bool p_nb_nc_input1_flag = true;
-  static bool p_nb_nc_input2_flag = true;
-  static bool p_nb_nc_input3_flag = true;
-  static bool p_nb_c_input1_flag = true;
-  static bool p_nb_c_input2_flag = true;
-  static bool p_nb_c_input3_flag = true;
-  static bool ap_nb_nc_input1_flag = true;
-  static bool ap_nb_nc_input2_flag = true;
-  static bool ap_nb_nc_input3_flag = true;
-  static bool ap_nb_c_input1_flag = true;
-  static bool ap_nb_c_input2_flag = true;
-  static bool ap_nb_c_input3_flag = true;
-
   aid_t ap_nb_nc_input1_parameter;
   aid_t ap_nb_nc_input2_parameter;
   aid_t ap_nb_nc_input3_parameter;
@@ -41,6 +22,14 @@ namespace action_test {
   aid_t ap_nb_c_input1_parameter;
   aid_t ap_nb_c_input2_parameter;
   aid_t ap_nb_c_input3_parameter;
+
+  aid_t ap_b_nc_input1_parameter;
+  aid_t ap_b_nc_input2_parameter;
+  aid_t ap_b_nc_input3_parameter;
+
+  aid_t ap_b_c_input1_parameter;
+  aid_t ap_b_c_input2_parameter;
+  aid_t ap_b_c_input3_parameter;
 
   typedef fifo_scheduler<allocator_type> scheduler_type;
   static scheduler_type* scheduler_ = 0;
@@ -95,13 +84,13 @@ namespace action_test {
 
   static void
   no_finish () {
-    system::finish (0, 0, false, -1, 0);
+    system::finish (reinterpret_cast<const void*> (-1), -1, false, -1, 0);
   }
 
   void
   np_nb_nc_input1 ()
   {
-    np_nb_nc_input1_flag = false;
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -109,7 +98,7 @@ namespace action_test {
   void
   np_nb_nc_input2 ()
   {
-    np_nb_nc_input2_flag = false;
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -117,7 +106,7 @@ namespace action_test {
   void
   np_nb_nc_input3 ()
   {
-    np_nb_nc_input3_flag = false;
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -126,7 +115,7 @@ namespace action_test {
   np_nb_c_input1 (aid_t v)
   {
     kassert (v == np_nb_c_output_value);
-    np_nb_c_input1_flag = false;
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -135,7 +124,7 @@ namespace action_test {
   np_nb_c_input2 (aid_t v)
   {
     kassert (v == p_nb_c_output_value);
-    np_nb_c_input2_flag = false;
+    kout << "\t" << __func__;
     no_schedule ();
     no_finish ();
   }
@@ -144,7 +133,52 @@ namespace action_test {
   np_nb_c_input3 (aid_t v)
   {
     kassert (v == ap_nb_c_output_value);
-    np_nb_c_input3_flag = false;
+    kout << "\t" << __func__;
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  np_b_nc_input1 (bid_t b)
+  {
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  np_b_nc_input2 (bid_t b)
+  {
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  np_b_nc_input3 (bid_t b)
+  {
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  np_b_c_input1 (bid_t b, aid_t v)
+  {
+    kassert (v == np_b_c_output_value);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  np_b_c_input2 (bid_t b, aid_t v)
+  {
+    kassert (v == p_b_c_output_value);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  np_b_c_input3 (bid_t b, aid_t v)
+  {
+    kassert (v == ap_b_c_output_value);
     no_schedule ();
     no_finish ();
   }
@@ -153,7 +187,6 @@ namespace action_test {
   p_nb_nc_input1 (aid_t p)
   {
     kassert (p == p_nb_nc_input1_parameter);
-    p_nb_nc_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -162,7 +195,6 @@ namespace action_test {
   p_nb_nc_input2 (aid_t p)
   {
     kassert (p == p_nb_nc_input2_parameter);
-    p_nb_nc_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -171,7 +203,6 @@ namespace action_test {
   p_nb_nc_input3 (aid_t p)
   {
     kassert (p == p_nb_nc_input3_parameter);
-    p_nb_nc_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -182,7 +213,6 @@ namespace action_test {
   {
     kassert (p == p_nb_c_input1_parameter);
     kassert (v == np_nb_c_output_value);
-    p_nb_c_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -193,7 +223,6 @@ namespace action_test {
   {
     kassert (p == p_nb_c_input2_parameter);
     kassert (v == p_nb_c_output_value);
-    p_nb_c_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -204,7 +233,63 @@ namespace action_test {
   {
     kassert (p == p_nb_c_input3_parameter);
     kassert (v == ap_nb_c_output_value);
-    p_nb_c_input3_flag = false;
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  p_b_nc_input1 (aid_t p, bid_t b)
+  {
+    kassert (p == p_b_nc_input1_parameter);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  p_b_nc_input2 (aid_t p, bid_t b)
+  {
+    kassert (p == p_b_nc_input2_parameter);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  p_b_nc_input3 (aid_t p, bid_t b)
+  {
+    kassert (p == p_b_nc_input3_parameter);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  p_b_c_input1 (aid_t p,
+		bid_t b,
+		aid_t v)
+  {
+    kassert (p == p_b_c_input1_parameter);
+    kassert (v == np_b_c_output_value);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  p_b_c_input2 (aid_t p,
+		bid_t b,
+		aid_t v)
+  {
+    kassert (p == p_b_c_input2_parameter);
+    kassert (v == p_b_c_output_value);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  p_b_c_input3 (aid_t p,
+		bid_t b,
+		aid_t v)
+  {
+    kassert (p == p_b_c_input3_parameter);
+    kassert (v == ap_b_c_output_value);
     no_schedule ();
     no_finish ();
   }
@@ -213,7 +298,6 @@ namespace action_test {
   ap_nb_nc_input1 (aid_t p)
   {
     kassert (p == ap_nb_nc_input1_parameter);
-    ap_nb_nc_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -222,7 +306,6 @@ namespace action_test {
   ap_nb_nc_input2 (aid_t p)
   {
     kassert (p == ap_nb_nc_input2_parameter);
-    ap_nb_nc_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -231,7 +314,6 @@ namespace action_test {
   ap_nb_nc_input3 (aid_t p)
   {
     kassert (p == ap_nb_nc_input3_parameter);
-    ap_nb_nc_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -242,7 +324,6 @@ namespace action_test {
   {
     kassert (p == ap_nb_c_input1_parameter);
     kassert (v == np_nb_c_output_value);
-    ap_nb_c_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -253,7 +334,6 @@ namespace action_test {
   {
     kassert (p == ap_nb_c_input2_parameter);
     kassert (v == p_nb_c_output_value);
-    ap_nb_c_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
@@ -264,7 +344,63 @@ namespace action_test {
   {
     kassert (p == ap_nb_c_input3_parameter);
     kassert (v == ap_nb_c_output_value);
-    ap_nb_c_input3_flag = false;
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  ap_b_nc_input1 (aid_t p, bid_t b)
+  {
+    kassert (p == ap_b_nc_input1_parameter);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  ap_b_nc_input2 (aid_t p, bid_t b)
+  {
+    kassert (p == ap_b_nc_input2_parameter);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  ap_b_nc_input3 (aid_t p, bid_t b)
+  {
+    kassert (p == ap_b_nc_input3_parameter);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  ap_b_c_input1 (aid_t p,
+		 bid_t b,
+		 aid_t v)
+  {
+    kassert (p == ap_b_c_input1_parameter);
+    kassert (v == np_b_c_output_value);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  ap_b_c_input2 (aid_t p,
+		 bid_t b,
+		 aid_t v)
+  {
+    kassert (p == ap_b_c_input2_parameter);
+    kassert (v == p_b_c_output_value);
+    no_schedule ();
+    no_finish ();
+  }
+
+  void
+  ap_b_c_input3 (aid_t p,
+		 bid_t b,
+		 aid_t v)
+  {
+    kassert (p == ap_b_c_input3_parameter);
+    kassert (v == ap_b_c_output_value);
     no_schedule ();
     no_finish ();
   }
@@ -281,7 +417,7 @@ namespace action_test {
     scheduler_->remove<np_nb_nc_output_traits> (&np_nb_nc_output);
     if (np_nb_nc_output_precondition ()) {
       np_nb_nc_output_flag = false;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<np_nb_nc_output_traits> (true);
     }
@@ -304,7 +440,7 @@ namespace action_test {
     if (np_nb_c_output_precondition ()) {
       np_nb_c_output_flag = false;
       static aid_t value = np_nb_c_output_value;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<np_nb_c_output_traits> (&value);
     }
@@ -337,7 +473,7 @@ namespace action_test {
     if (np_b_nc_output_precondition ()) {
       np_b_nc_output_flag = false;
       bid_t b = string_to_buffer (__func__);
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<np_b_nc_output_traits> (b);
     }
@@ -361,7 +497,7 @@ namespace action_test {
       np_b_c_output_flag = false;
       bid_t b = string_to_buffer (__func__);
       static aid_t value = np_b_c_output_value;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<np_b_c_output_traits> (b, &value);
     }
@@ -385,9 +521,9 @@ namespace action_test {
     if (p_nb_nc_output_precondition (p)) {
       kassert (p == p_nb_nc_output_parameter);
       p_nb_nc_output_flag = false;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<p_nb_nc_output_traits> (true);
-      kout << __func__ << endl;
     }
     else {
       schedule ();
@@ -410,7 +546,7 @@ namespace action_test {
       kassert (p == p_nb_c_output_parameter);
       p_nb_c_output_flag = false;
       static aid_t value = p_nb_c_output_value;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<p_nb_c_output_traits> (&value);
     }
@@ -435,7 +571,7 @@ namespace action_test {
       kassert (p == p_b_nc_output_parameter);
       p_b_nc_output_flag = false;
       bid_t b = string_to_buffer (__func__);
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<p_b_nc_output_traits> (b);
     }
@@ -461,7 +597,7 @@ namespace action_test {
       p_b_c_output_flag = false;
       bid_t b = string_to_buffer (__func__);
       static aid_t value = p_b_c_output_value;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<p_b_c_output_traits> (b, &value);
     }
@@ -485,7 +621,7 @@ namespace action_test {
     if (ap_nb_nc_output_precondition (p)) {
       kassert (p == ap_nb_nc_output_parameter);
       ap_nb_nc_output_flag = false;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<ap_nb_nc_output_traits> (true);
     }
@@ -510,7 +646,7 @@ namespace action_test {
       kassert (p == ap_nb_c_output_parameter);
       ap_nb_c_output_flag = false;
       static aid_t value = ap_nb_c_output_value;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<ap_nb_c_output_traits> (&value);
     }
@@ -535,7 +671,7 @@ namespace action_test {
       kassert (p == ap_b_nc_output_parameter);
       ap_b_nc_output_flag = false;
       bid_t b = string_to_buffer (__func__);
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<ap_b_nc_output_traits> (b);
     }
@@ -561,7 +697,7 @@ namespace action_test {
       ap_b_c_output_flag = false;
       bid_t b = string_to_buffer (__func__);
       static aid_t value = ap_b_c_output_value;
-      kout << __func__ << endl;
+      kout << endl << __func__;
       schedule ();
       scheduler_->finish<ap_b_c_output_traits> (b, &value);
     }
@@ -583,7 +719,7 @@ namespace action_test {
     scheduler_->remove<np_internal_traits> (&np_internal);
     if (np_internal_precondition ()) {
       np_internal_flag = false;
-      kout << __func__ << endl;
+      kout << endl << __func__;
     }
     schedule ();
     scheduler_->finish<np_internal_traits> ();
@@ -603,7 +739,7 @@ namespace action_test {
     if (p_internal_precondition (p)) {
       kassert (p == p_internal_parameter);
       p_internal_flag = false;
-      kout << __func__ << endl;
+      kout << endl << __func__;
     }
     schedule ();
     scheduler_->finish<p_internal_traits> ();

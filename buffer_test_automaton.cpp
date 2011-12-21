@@ -75,7 +75,7 @@ namespace buffer_test {
 
   static void
   no_finish () {
-    system::finish (0, 0, false, -1, 0);
+    system::finish (reinterpret_cast<const void*> (-1), -1, false, -1, 0);
   }
 
   static void

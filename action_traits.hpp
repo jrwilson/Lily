@@ -18,6 +18,7 @@
 #include <type_traits>
 #include "static_assert.hpp"
 #include "aid.hpp"
+#include "bid.hpp"
 #include <stddef.h>
 
 // The absence of a type.

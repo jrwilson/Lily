@@ -93,7 +93,8 @@ private:
     caction action_;
     const rts::input_action_set_type* input_actions_;
     rts::input_action_set_type::const_iterator input_action_pos_;
-    
+    buffer* output_buffer_;
+
   public:
     execution_context ()
     {
@@ -141,19 +142,26 @@ private:
 	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
 	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
 	  if (status) {
+	    if (action_.buffer_value_mode == BUFFER_VALUE) {
+	      // The output action produced a buffer.  Remove it from the automaton.
+	      output_buffer_ = action_.automaton->buffer_output_destroy (bid);
+	    }
+
 	    input_actions_ = rts::get_bound_inputs (action_);
 	    if (input_actions_ != 0) {
-	      // TODO
-	      kassert (0);
-
-	      // Copy the value.
-	      memcpy (value_buffer_, buffer, action_.copy_value_size);
-	      
+	      if (action_.copy_value_mode == COPY_VALUE) {
+		// Copy the value.
+		memcpy (value_buffer_, buffer, action_.copy_value_size);
+	      }
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
 	      action_ = *input_action_pos_;
 	      /* Execute.  (This does not return). */
 	      execute ();
+	    }
+	    if (action_.buffer_value_mode == BUFFER_VALUE) {
+	      // Destroy the buffer.
+	      destroy (output_buffer_, system_alloc ());
 	    }
 	  }
 	  break;
@@ -176,9 +184,15 @@ private:
       // Second, they force the stack to be created if it is not.
 
       if (action_.type == INPUT) {
-      	// Copy the value to the stack.
-      	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.copy_value_size, STACK_ALIGN)));
-      	memcpy (stack_pointer, value_buffer_, action_.copy_value_size);
+	if (action_.copy_value_mode == COPY_VALUE) {
+	  // Copy the value to the stack.
+	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.copy_value_size, STACK_ALIGN)));
+	  memcpy (stack_pointer, value_buffer_, action_.copy_value_size);
+	}
+	if (action_.buffer_value_mode == BUFFER_VALUE) {
+	  // TODO
+	  kassert (0);
+	}
       }
       
       switch (action_.parameter_mode) {
