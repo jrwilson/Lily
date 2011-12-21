@@ -64,7 +64,6 @@ private:
     {
       return *entry;
     }
-    
   };
 
 public:
@@ -77,12 +76,20 @@ public:
     end_ (reinterpret_cast<size_t> (info_) + sizeof (multiboot_info_t))
   {
     kassert (multiboot_magic == MULTIBOOT_BOOTLOADER_MAGIC);
-    
-    if (info_->flags & MULTIBOOT_INFO_MEM_MAP) {
-      begin_ = std::min (begin_, static_cast<physical_address_t> (multiboot_info->mmap_addr));
-      end_ = std::max (end_, static_cast<physical_address_t> (multiboot_info->mmap_addr + multiboot_info->mmap_length));
-    }
+    kassert (info_->flags & MULTIBOOT_INFO_MEM_MAP);
+    kassert (info_->flags & MULTIBOOT_INFO_MODS);
 
+    // Encompass the memory map.
+    begin_ = std::min (begin_, static_cast<physical_address_t> (multiboot_info->mmap_addr));
+    end_ = std::max (end_, static_cast<physical_address_t> (multiboot_info->mmap_addr + multiboot_info->mmap_length));
+
+    // Encompass the modules.
+    for (const multiboot_module_t* pos = module_begin ();
+	 pos != module_end ();
+	 ++pos) {
+      begin_ = std::min (begin_, static_cast<physical_address_t> (pos->mod_start));
+      end_ = std::max (end_, static_cast<physical_address_t> (pos->mod_end));
+    }
   }
 
   inline physical_address_t
@@ -109,6 +116,18 @@ public:
     return memory_map_iterator (reinterpret_cast<multiboot_memory_map_t*> (info_->mmap_addr + info_->mmap_length));
   }
 
+  inline const multiboot_module_t*
+  module_begin () const
+  {
+    return reinterpret_cast<const multiboot_module_t*> (info_->mods_addr);
+  }
+
+  inline const multiboot_module_t*
+  module_end () const
+  {
+    return reinterpret_cast<const multiboot_module_t*> (info_->mods_addr) + info_->mods_count;
+  }
+    
 };
 
 #endif /* __multiboot_parser_hpp__ */

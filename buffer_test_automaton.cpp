@@ -70,13 +70,13 @@ namespace buffer_test {
     scheduler_->finish<init_traits> ();
   }
 
-  static void
-  no_schedule () { }
+  // static void
+  // no_schedule () { }
 
-  static void
-  no_finish () {
-    system::finish (reinterpret_cast<const void*> (-1), -1, false, -1, 0);
-  }
+  // static void
+  // no_finish () {
+  //   system::finish (reinterpret_cast<const void*> (-1), -1, false, -1, 0);
+  // }
 
   static void
   schedule ()

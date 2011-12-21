@@ -29,13 +29,10 @@ kmain.o \
 syscall.o \
 system_automaton.o \
 action_test_automaton.o \
-buffer_test_automaton.o
+buffer_test_automaton.o \
+ramdisk_automaton.o
 
-# ramdisk_automaton.o \
 # pit.o \
-# count_to_ten.o \
-# producer.o \
-# consumer.o
 
 KERNEL=lily
 
@@ -62,6 +59,9 @@ depclean :
 .PHONY : iso
 iso : lily.iso
 
+initrd :
+	echo "This is the initrd!!" > $@
+
 # core.img :
 # 	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh
 
@@ -71,10 +71,12 @@ core.img :
 eltorito.img : core.img
 	cat /usr/lib/grub/i386-pc/cdboot.img $^ > $@
 
-lily.iso : eltorito.img lily
+lily.iso : eltorito.img grub.cfg lily initrd
 	mkdir -p isofiles/boot/grub
 	cp eltorito.img isofiles/boot/grub/
+	cp grub.cfg isofiles/boot/grub/
 	cp lily isofiles/boot/
+	cp initrd isofiles/boot/
 	genisoimage -R -b boot/grub/eltorito.img -no-emul-boot -boot-load-size 4 -boot-info-table -o $@ isofiles
 
 .PHONY : isoclean

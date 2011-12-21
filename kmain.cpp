@@ -30,6 +30,7 @@
 #include "system_automaton.hpp"
 #include "action_test_automaton.hpp"
 #include "buffer_test_automaton.hpp"
+#include "ramdisk_automaton.hpp"
 
 // Stack for the system automaton.
 static const void* const SYSTEM_AUTOMATON_STACK_BEGIN = reinterpret_cast<const uint8_t*> (PAGING_AREA) - 0x1000;
@@ -694,73 +695,160 @@ create_buffer_test ()
   }
 }
 
+static void
+create_ramdisk (physical_address_t begin,
+		physical_address_t end)
+{
+  // First, create a new page directory.
+  
+  // Reserve some logical address space for the page directory.
+  vm::page_directory* pd = static_cast<vm::page_directory*> (vm::get_stub ());
+  // Allocate a frame.
+  frame_t frame = frame_manager::alloc ();
+  // Map the page directory.
+  vm::map (pd, frame, vm::USER, vm::WRITABLE);
+  // Initialize the page directory with a copy of the current page directory.
+  new (pd) vm::page_directory (true);
+  // Unmap.
+  vm::unmap (pd);
+  // Drop the reference count from allocation.
+  size_t count = frame_manager::decref (frame);
+  kassert (count == 1);
+  
+  // Second, create the automaton.
+  automaton* ramdisk_automaton = rts::create (frame);
+  
+  // Third, create the automaton's memory map.
+  {
+    vm_area_base* area;
+    bool r;
+    
+    // Text.
+    area = new (system_alloc ()) vm_text_area (&text_begin, &text_end);
+    r = ramdisk_automaton->insert_vm_area (area);
+    kassert (r);
+    
+    // Read-only data.
+    area = new (system_alloc ()) vm_rodata_area (&rodata_begin, &rodata_end);
+    r = ramdisk_automaton->insert_vm_area (area);
+    kassert (r);
+    
+    // Data.
+    area = new (system_alloc ()) vm_data_area (&data_begin, &data_end);
+    r = ramdisk_automaton->insert_vm_area (area);
+    kassert (r);
+    
+    // Heap.
+    vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
+    r = ramdisk_automaton->insert_heap_area (heap_area);
+    kassert (r);
+    
+    // Stack.
+    vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
+    r = ramdisk_automaton->insert_stack_area (stack_area);
+    kassert (r);
+  }
+  
+  // Fourth, add the actions.
+  ramdisk_automaton->add_action<ramdisk::init_traits> (&ramdisk::init);
+  ramdisk_automaton->add_action<ramdisk::info_request_traits> (&ramdisk::info_request);
+  ramdisk_automaton->add_action<ramdisk::info_response_traits> (&ramdisk::info_response);
+  ramdisk_automaton->add_action<ramdisk::read_request_traits> (&ramdisk::read_request);
+  ramdisk_automaton->add_action<ramdisk::read_response_traits> (&ramdisk::read_response);
+  ramdisk_automaton->add_action<ramdisk::write_request_traits> (&ramdisk::write_request);
+  ramdisk_automaton->add_action<ramdisk::write_response_traits> (&ramdisk::write_response);
+  
+  // Bind.
+  rts::bind<system_automaton::init_traits,
+	    ramdisk::init_traits> (system_automaton::system_automaton, &system_automaton::init, ramdisk_automaton,
+				   ramdisk_automaton, &ramdisk::init);
+  checked_schedule (system_automaton::system_automaton, reinterpret_cast<const void*> (&system_automaton::init), aid_cast (ramdisk_automaton));
+
+  buffer* b = new (system_alloc ()) buffer (physical_address_to_frame (begin), physical_address_to_frame (align_up (end, PAGE_SIZE)));
+  ramdisk::bid = ramdisk_automaton->buffer_create (*b);
+}
+
 extern "C" void
 kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
-  // Parse the multiboot data structure.
-  multiboot_parser multiboot_parser (multiboot_magic, multiboot_info);
-
-  // Initialize the system memory allocator so as to not stomp on the multiboot data structures.
-  void* const heap_begin = align_up (std::max (static_cast<void*> (&data_end), reinterpret_cast<void*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ())), PAGE_SIZE);
-  const void* const heap_end = INITIAL_LOGICAL_LIMIT;
-  system_alloc::initialize (heap_begin, heap_end);
-
-  // Call the static constructors.
-  // Static objects can use dynamic memory!!
-  for (int** ptr = &ctors_begin; ptr != &ctors_end; ++ptr) {
-    void (*ctor) () = reinterpret_cast<void (*) ()> (*ptr);
-    ctor ();
+  physical_address_t initrd_begin;
+  physical_address_t initrd_end;
+  
+  {
+    // Parse the multiboot data structure.
+    multiboot_parser multiboot_parser (multiboot_magic, multiboot_info);
+    
+    // Initialize the system memory allocator so as to not stomp on the multiboot data structures.
+    void* const heap_begin = align_up (std::max (static_cast<void*> (&data_end), reinterpret_cast<void*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ())), PAGE_SIZE);
+    const void* const heap_end = INITIAL_LOGICAL_LIMIT;
+    system_alloc::initialize (heap_begin, heap_end);
+    
+    // Call the static constructors.
+    // Static objects can use dynamic memory!!
+    for (int** ptr = &ctors_begin; ptr != &ctors_end; ++ptr) {
+      void (*ctor) () = reinterpret_cast<void (*) ()> (*ptr);
+      ctor ();
+    }
+    
+    // Print a welcome message.
+    kout << "Lily" << endl;
+    
+    kout << "Multiboot data (physical) [" << hexformat (multiboot_parser.begin ()) << ", " << hexformat (multiboot_parser.end ()) << ")" << endl;
+    kout << "Multiboot data  (logical) [" << hexformat (reinterpret_cast<physical_address_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.begin ()) << ", " << hexformat (reinterpret_cast<physical_address_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ()) << ")" << endl;
+    
+    kout << "Initial heap [" << hexformat (heap_begin) << ", " << hexformat (heap_end) << ")" << endl;
+    
+    // Set up segmentation for x86, or rather, ignore it.
+    kout << "Installing GDT" << endl;
+    gdt::install ();
+    
+    // Set up interrupt dispatching.
+    kout << "Installing IDT" << endl;
+    idt::install ();  
+    kout << "Installing exception handler" << endl;
+    exception_handler::install ();
+    kout << "Installing irq handler" << endl;
+    irq_handler::install ();
+    kout << "Installing trap handler" << endl;
+    trap_handler::install ();
+    
+    // Initialize the system that allocates frames (physical pages of memory).
+    kout << "Memory map:" << endl;
+    for (multiboot_parser::memory_map_iterator pos = multiboot_parser.memory_map_begin ();
+	 pos != multiboot_parser.memory_map_end ();
+	 ++pos) {
+      kout << hexformat (static_cast<unsigned long> (pos->addr)) << "-" << hexformat (static_cast<unsigned long> (pos->addr + pos->len - 1));
+      switch (pos->type) {
+      case MULTIBOOT_MEMORY_AVAILABLE:
+	kout << " AVAILABLE" << endl;
+	{
+	  uint64_t begin = std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), pos->addr);
+	  uint64_t end = std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), pos->addr + pos->len);
+	  begin = align_down (begin, PAGE_SIZE);
+	  end = align_up (end, PAGE_SIZE);
+	  if (begin < end) {
+	    frame_manager::add (pos->addr, pos->addr + pos->len);
+	  }
+	}
+	break;
+      case MULTIBOOT_MEMORY_RESERVED:
+	kout << " RESERVED" << endl;
+	break;
+      default:
+	kout << " UNKNOWN" << endl;
+	break;
+      }
+    }
+    
+    // Prevent the frame manager from allocating frames belonging to the first module.
+    const multiboot_module_t* mod = multiboot_parser.module_begin ();
+    initrd_begin = mod->mod_start;
+    initrd_end = mod->mod_end;
   }
 
-  // Print a welcome message.
-  kout << "Lily" << endl;
-
-  kout << "Multiboot data (physical) [" << hexformat (multiboot_parser.begin ()) << ", " << hexformat (multiboot_parser.end ()) << ")" << endl;
-  kout << "Multiboot data  (logical) [" << hexformat (reinterpret_cast<physical_address_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.begin ()) << ", " << hexformat (reinterpret_cast<physical_address_t> (KERNEL_VIRTUAL_BASE) + multiboot_parser.end ()) << ")" << endl;
-
-  kout << "Initial heap [" << hexformat (heap_begin) << ", " << hexformat (heap_end) << ")" << endl;
-
-  // Set up segmentation for x86, or rather, ignore it.
-  kout << "Installing GDT" << endl;
-  gdt::install ();
-
-  // Set up interrupt dispatching.
-  kout << "Installing IDT" << endl;
-  idt::install ();  
-  kout << "Installing exception handler" << endl;
-  exception_handler::install ();
-  kout << "Installing irq handler" << endl;
-  irq_handler::install ();
-  kout << "Installing trap handler" << endl;
-  trap_handler::install ();
-
-  // Initialize the system that allocates frames (physical pages of memory).
-  kout << "Memory map:" << endl;
-  for (multiboot_parser::memory_map_iterator pos = multiboot_parser.memory_map_begin ();
-       pos != multiboot_parser.memory_map_end ();
-       ++pos) {
-    kout << hexformat (static_cast<unsigned long> (pos->addr)) << "-" << hexformat (static_cast<unsigned long> (pos->addr + pos->len - 1));
-    switch (pos->type) {
-    case MULTIBOOT_MEMORY_AVAILABLE:
-      kout << " AVAILABLE" << endl;
-      {
-	uint64_t begin = std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), pos->addr);
-	uint64_t end = std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), pos->addr + pos->len);
-	begin = align_down (begin, PAGE_SIZE);
-	end = align_up (end, PAGE_SIZE);
-	if (begin < end) {
-	  frame_manager::add (pos->addr, pos->addr + pos->len);
-	}
-      }
-      break;
-    case MULTIBOOT_MEMORY_RESERVED:
-      kout << " RESERVED" << endl;
-      break;
-    default:
-      kout << " UNKNOWN" << endl;
-      break;
-    }
+  for (physical_address_t address = initrd_begin; address < initrd_end; address += PAGE_SIZE) {
+    frame_manager::mark_as_used (physical_address_to_frame (address));
   }
 
   bool r;
@@ -825,9 +913,10 @@ kmain (uint32_t multiboot_magic,
   
   /* Add the actions. */
   system_automaton::system_automaton->add_action<system_automaton::init_traits> (&system_automaton::init);
-  
-  create_action_test ();
+
+  //create_action_test ();
   //create_buffer_test ();
+  create_ramdisk (initrd_begin, initrd_end);
 
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, 0);

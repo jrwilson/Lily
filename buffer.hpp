@@ -37,6 +37,17 @@ public:
     }
   }
 
+  buffer (frame_t begin,
+	  frame_t end) :
+    vm_area_base (0, 0),
+    frame_list_ (end - begin, vm::page_table_entry (0, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
+  {
+    for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+      // Note:  Not incrementing the reference count of the frame.
+      pos->frame_ = begin++;
+    }    
+  }
+
   ~buffer ()
   {
     // Free the frames.

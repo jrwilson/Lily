@@ -74,13 +74,6 @@ public:
   decref (frame_t frame)
   {
     allocator_list_type::iterator pos = find_allocator (frame);
-
-    if (pos == allocator_list_.end ()) {
-      kout << "frame = " << hexformat (frame) << endl;
-      uint32_t* ebp;
-      asm ("mov %%ebp, %0\n" : "=g"(ebp) ::);
-      kout << hexformat (*(ebp + 1)) << endl;
-    }
     
     /* No allocator for frame. */
     kassert (pos != allocator_list_.end ());
