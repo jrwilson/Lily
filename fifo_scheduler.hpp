@@ -74,17 +74,18 @@ private:
   }
 
   void
-  finish_ (bool output_status,
+  finish_ (bool status,
+	   bid_t bid,
 	   const void* buffer)
   {
     if (!queue_.empty ()) {
       /* Schedule. */
       const entry& e = queue_.front ();
-      system::finish (e.action_entry_point, e.parameter, output_status, buffer);
+      system::finish (e.action_entry_point, e.parameter, status, bid, buffer);
     }
     else {
       /* Don't schedule. */
-      system::finish (0, 0, output_status, buffer);
+      system::finish (0, 0, status, bid, buffer);
     }
   }
 
@@ -131,25 +132,43 @@ public:
   void
   finish ()
   {
-    STATIC_ASSERT (is_input_action<Action>::value || is_internal_action<Action>::value);
-    finish_ (false, 0);
+    STATIC_ASSERT (is_action<Action>::value);
+    finish_ (false, -1, 0);
   }
 
   template <class OutputAction>
   void
   finish (bool status)
   {
-    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::value_size == 0);
-    finish_ (status, 0);
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE);
+    finish_ (status, -1, 0);
   }
 
   template <class OutputAction>
   void
-  finish (const void* buffer)
+  finish (bid_t bid)
   {
-    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::value_size != 0);
-    finish_ (buffer != 0, buffer);
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE);
+    finish_ (true, bid, 0);
   }
+
+  template <class OutputAction>
+  void
+  finish (const typename OutputAction::copy_value_type* buffer)
+  {
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE);
+    finish_ (true, -1, buffer);
+  }
+
+  template <class OutputAction>
+  void
+  finish (bid_t bid,
+	  const typename OutputAction::copy_value_type* buffer)
+  {
+    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE);
+    finish_ (true, bid, buffer);
+  }
+
 };
 
 #endif /* __fifo_scheduler_hpp__ */

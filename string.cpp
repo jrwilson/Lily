@@ -13,6 +13,17 @@
 
 #include <string.h>
 
+size_t
+strlen (const char* p)
+{
+  size_t retval = 0;
+  while (*p != 0) {
+    ++retval;
+    ++p;
+  }
+  return retval;
+}
+
 void*
 memset (void* ptr,
 	int value,

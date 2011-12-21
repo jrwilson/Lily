@@ -74,55 +74,55 @@ namespace std {
       }
     }
 
-//     template <class InputIterator>
-//     void
-//     construct_dispatch (InputIterator n,
-// 			InputIterator value,
-// 			true_type)
-//     {
-//       construct_n (n, value);
-//     }
+    template <class InputIterator>
+    void
+    construct_dispatch (InputIterator n,
+			InputIterator value,
+			true_type)
+    {
+      construct_n (n, value);
+    }
 
-//     template <class InputIterator>
-//     void
-//     construct_dispatch (InputIterator begin,
-// 			InputIterator end,
-// 			false_type)
-//     {
-//       const size_type cap = max (static_cast<size_type> (distance (begin, end)), INITIAL_CAPACITY);
-//       begin_ = allocate (cap);
-//       end_ = begin_;
-//       final_ = begin_ + cap;
+    template <class InputIterator>
+    void
+    construct_dispatch (InputIterator begin,
+			InputIterator end,
+			false_type)
+    {
+      const size_type cap = max (static_cast<size_type> (distance (begin, end)), size_type (1));
+      begin_ = allocate (cap);
+      end_ = begin_;
+      final_ = begin_ + cap;
 
-//       while (begin != end) {
-// 	construct (end_++, *begin++);
-//       }
-//     }
+      while (begin != end) {
+	construct (end_++, *begin++);
+      }
+    }
 
   public:
-//     template <class InputIterator>
-//     vector (InputIterator begin,
-// 	    InputIterator end,
-// 	    const Allocator& a = Allocator ()) :
-//       Allocator (a)
-//     {
-//       construct_dispatch (begin, end, typename is_integral<InputIterator>::type ());
-//     }
-
-//     vector (const vector<T, Allocator>& x) :
-//       Allocator (x)
-//     {
-//       const size_type cap = max (x.size (), INITIAL_CAPACITY);
-//       begin_ = allocate (cap);
-//       end_ = begin_;
-//       final_ = begin_ + cap;
-
-//       pointer src = x.begin_;
-//       while (src != x.end_) {
-// 	construct (end_++, *src++);
-//       }
-//     }
-
+    template <class InputIterator>
+    vector (InputIterator begin,
+	    InputIterator end,
+	    const Allocator& a = Allocator ()) :
+      Allocator (a)
+    {
+      construct_dispatch (begin, end, typename is_integral<InputIterator>::type ());
+    }
+    
+    vector (const vector<T, Allocator>& x) :
+      Allocator (x)
+    {
+      const size_type cap = max (x.size (), size_type (1));
+      begin_ = allocate (cap);
+      end_ = begin_;
+      final_ = begin_ + cap;
+      
+      pointer src = x.begin_;
+      while (src != x.end_) {
+	construct (end_++, *src++);
+      }
+    }
+    
     ~vector ()
     {
       clear ();

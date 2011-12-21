@@ -3,20 +3,27 @@
 
 #include "vm_area.hpp"
 
-// Contains the physical address of a frame containing nothing but zeroes.
-extern int zero_page;
-
 class buffer : public vm_area_base {
 public:
   buffer (size_t size) :
-    vm_area_base (0, 0)
+    vm_area_base (0, 0),
+    frame_list_ (size / PAGE_SIZE, vm::page_table_entry (zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::PRESENT))
   {
-    for (size = align_up (size, PAGE_SIZE);
-	 size != 0;
-	 size -= PAGE_SIZE) {
-      // Copy-on-write the zero frame.
-      frame_manager::incref (physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page)));
-      frame_list_.push_back (vm::page_table_entry (physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page)), vm::USER, vm::NOT_WRITABLE, vm::PRESENT));
+    frame_t zero_fr = zero_frame ();
+    for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+      frame_manager::incref (zero_fr);
+    }
+  }
+  
+  buffer (const buffer& other,
+	  size_t offset,
+	  size_t length) :
+    vm_area_base (0, 0),
+    frame_list_ (other.frame_list_.begin () + offset / PAGE_SIZE, other.frame_list_.begin () + (offset + length) / PAGE_SIZE)
+  {
+    for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+      kassert (pos->writable_ == vm::NOT_WRITABLE);
+      frame_manager::incref (pos->frame_);
     }
   }
 
@@ -24,7 +31,7 @@ public:
     vm_area_base (0, 0),
     frame_list_ (other.frame_list_)
   {
-    for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+    for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
       kassert (pos->writable_ == vm::NOT_WRITABLE);
       frame_manager::incref (pos->frame_);
     }
@@ -33,9 +40,7 @@ public:
   ~buffer ()
   {
     // Free the frames.
-    for (frame_list_type::const_iterator pos = frame_list_.begin ();
-	 pos != frame_list_.end ();
-	 ++pos) {
+    for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
       frame_manager::decref (pos->frame_);
     }
   }
@@ -69,19 +74,39 @@ public:
     }
   }
 
-  void
-  append (const buffer& other)
+  size_t
+  append (size_t size)
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
+    const frame_t zero_frame = physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page));
+    size_t retval = this->size ();
     size_t idx = frame_list_.size ();
-    frame_list_.insert (frame_list_.end (), other.frame_list_.begin (), other.frame_list_.end ());
+    frame_list_.resize (idx + size / PAGE_SIZE);
+    for (; idx != frame_list_.size (); ++idx) {
+      frame_manager::incref (zero_frame);
+      frame_list_[idx] = vm::page_table_entry (zero_frame, vm::USER, vm::NOT_WRITABLE, vm::PRESENT);
+    }
+    return retval;
+  }
+
+  size_t
+  append (const buffer& other,
+	  size_t offset,
+	  size_t length)
+  {
+    // Cannot be mapped.
+    kassert (begin_ == 0);
+    size_t retval = this->size ();
+    size_t idx = frame_list_.size ();
+    frame_list_.insert (frame_list_.end (), other.frame_list_.begin () + offset / PAGE_SIZE, other.frame_list_.begin () + (offset + length) / PAGE_SIZE);
     for (; idx != frame_list_.size (); ++idx) {
       // Must be copy-on-write.
       kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
       // Increment the reference count.
       frame_manager::incref (frame_list_[idx].frame_);
     }
+    return retval;
   }
 
   virtual void

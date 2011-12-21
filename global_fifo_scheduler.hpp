@@ -89,7 +89,7 @@ private:
   
   class execution_context {
   private:
-    uint8_t value_buffer_[VALUE_BUFFER_SIZE];
+    uint8_t value_buffer_[MAX_COPY_VALUE_SIZE];
     caction action_;
     const rts::input_action_set_type* input_actions_;
     rts::input_action_set_type::const_iterator input_action_pos_;
@@ -106,17 +106,11 @@ private:
       action_.automaton = 0;
     }
 
-    inline automaton*
-    current_automaton () const
+    inline const caction&
+    current_action () const
     {
       kassert (action_.automaton != 0);
-      return action_.automaton;
-    }
-
-    inline size_t
-    current_value_size () const
-    {
-      return action_.value_size;
+      return action_;
     }
 
     inline void
@@ -126,7 +120,8 @@ private:
     }
 
     inline void
-    finish_action (bool output_status,
+    finish_action (bool status,
+		   bid_t bid,
 		   const void* buffer)
     {
       if (action_.automaton != 0) {	
@@ -145,11 +140,14 @@ private:
 	  // Only proceed if the output executed.
 	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
 	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
-	  if (output_status) {
+	  if (status) {
 	    input_actions_ = rts::get_bound_inputs (action_);
 	    if (input_actions_ != 0) {
+	      // TODO
+	      kassert (0);
+
 	      // Copy the value.
-	      memcpy (value_buffer_, buffer, action_.value_size);
+	      memcpy (value_buffer_, buffer, action_.copy_value_size);
 	      
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
@@ -179,8 +177,8 @@ private:
 
       if (action_.type == INPUT) {
       	// Copy the value to the stack.
-      	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.value_size, STACK_ALIGN)));
-      	memcpy (stack_pointer, value_buffer_, action_.value_size);
+      	stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.copy_value_size, STACK_ALIGN)));
+      	memcpy (stack_pointer, value_buffer_, action_.copy_value_size);
       }
       
       switch (action_.parameter_mode) {
@@ -242,16 +240,10 @@ public:
   static void
   add_automaton (automaton* automaton);
 
-  static inline automaton*
-  current_automaton ()
+  static inline const caction&
+  current_action ()
   {
-    return exec_context_.current_automaton ();
-  }
-
-  static inline size_t
-  current_value_size ()
-  {
-    return exec_context_.current_value_size ();
+    return exec_context_.current_action ();
   }
 
   static inline void
@@ -271,11 +263,12 @@ public:
   }
   
   static inline void
-  finish (bool output_status,
+  finish (bool status,
+	  bid_t bid,
 	  const void* buffer)
   {
     // This call won't return when executing input actions.
-    exec_context_.finish_action (output_status, buffer);
+    exec_context_.finish_action (status, bid, buffer);
 
     if (!ready_queue_.empty ()) {
       // Get the automaton context and remove it from the ready queue.

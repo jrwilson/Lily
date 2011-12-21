@@ -2,6 +2,7 @@
 #include "list_allocator.hpp"
 #include "fifo_scheduler.hpp"
 #include "kassert.hpp"
+#include <string.h>
 
 struct allocator_tag { };
 typedef list_alloc<allocator_tag> alloc_type;
@@ -14,49 +15,63 @@ struct allocator_type : public list_allocator<T, allocator_tag> { };
 
 namespace action_test {
 
-  static bool up_uv_input1_flag = true;
-  static bool up_uv_input2_flag = true;
-  static bool up_uv_input3_flag = true;
-  static bool up_v_input1_flag = true;
-  static bool up_v_input2_flag = true;
-  static bool up_v_input3_flag = true;
-  static bool p_uv_input1_flag = true;
-  static bool p_uv_input2_flag = true;
-  static bool p_uv_input3_flag = true;
-  static bool p_v_input1_flag = true;
-  static bool p_v_input2_flag = true;
-  static bool p_v_input3_flag = true;
-  static bool ap_uv_input1_flag = true;
-  static bool ap_uv_input2_flag = true;
-  static bool ap_uv_input3_flag = true;
-  static bool ap_v_input1_flag = true;
-  static bool ap_v_input2_flag = true;
-  static bool ap_v_input3_flag = true;
+  static bool np_nb_nc_input1_flag = true;
+  static bool np_nb_nc_input2_flag = true;
+  static bool np_nb_nc_input3_flag = true;
+  static bool np_nb_c_input1_flag = true;
+  static bool np_nb_c_input2_flag = true;
+  static bool np_nb_c_input3_flag = true;
+  static bool p_nb_nc_input1_flag = true;
+  static bool p_nb_nc_input2_flag = true;
+  static bool p_nb_nc_input3_flag = true;
+  static bool p_nb_c_input1_flag = true;
+  static bool p_nb_c_input2_flag = true;
+  static bool p_nb_c_input3_flag = true;
+  static bool ap_nb_nc_input1_flag = true;
+  static bool ap_nb_nc_input2_flag = true;
+  static bool ap_nb_nc_input3_flag = true;
+  static bool ap_nb_c_input1_flag = true;
+  static bool ap_nb_c_input2_flag = true;
+  static bool ap_nb_c_input3_flag = true;
 
-  aid_t ap_uv_input1_parameter;
-  aid_t ap_uv_input2_parameter;
-  aid_t ap_uv_input3_parameter;
+  aid_t ap_nb_nc_input1_parameter;
+  aid_t ap_nb_nc_input2_parameter;
+  aid_t ap_nb_nc_input3_parameter;
 
-  aid_t ap_v_input1_parameter;
-  aid_t ap_v_input2_parameter;
-  aid_t ap_v_input3_parameter;
+  aid_t ap_nb_c_input1_parameter;
+  aid_t ap_nb_c_input2_parameter;
+  aid_t ap_nb_c_input3_parameter;
 
   typedef fifo_scheduler<allocator_type> scheduler_type;
   static scheduler_type* scheduler_ = 0;
 
-  static bool up_uv_output_flag = true;
-  static bool up_v_output_flag = true;
-  static const aid_t up_v_output_value = 101;
-  static bool p_uv_output_flag = true;
-  static bool p_v_output_flag = true;
-  static const aid_t p_v_output_value = 104;
-  static bool ap_uv_output_flag = true;
-  aid_t ap_uv_output_parameter;
-  static bool ap_v_output_flag = true;
-  aid_t ap_v_output_parameter;
-  static const aid_t ap_v_output_value = 107;
+  static bool np_nb_nc_output_flag = true;
+  static bool np_nb_c_output_flag = true;
+  static const aid_t np_nb_c_output_value = 101;
+  static bool np_b_nc_output_flag = true;
+  static const aid_t np_b_nc_output_value = 101;
+  static bool np_b_c_output_flag = true;
+  static const aid_t np_b_c_output_value = 101;
+  static bool p_nb_nc_output_flag = true;
+  static bool p_nb_c_output_flag = true;
+  static const aid_t p_nb_c_output_value = 104;
+  static bool p_b_nc_output_flag = true;
+  static const aid_t p_b_nc_output_value = 104;
+  static bool p_b_c_output_flag = true;
+  static const aid_t p_b_c_output_value = 104;
+  static bool ap_nb_nc_output_flag = true;
+  aid_t ap_nb_nc_output_parameter;
+  static bool ap_nb_c_output_flag = true;
+  aid_t ap_nb_c_output_parameter;
+  static const aid_t ap_nb_c_output_value = 107;
+  static bool ap_b_nc_output_flag = true;
+  aid_t ap_b_nc_output_parameter;
+  static const aid_t ap_b_nc_output_value = 107;
+  static bool ap_b_c_output_flag = true;
+  aid_t ap_b_c_output_parameter;
+  static const aid_t ap_b_c_output_value = 107;
 
-  static bool up_internal_flag = true;
+  static bool np_internal_flag = true;
   static const aid_t p_internal_parameter = 108;
   static bool p_internal_flag = true;
     
@@ -80,339 +95,498 @@ namespace action_test {
 
   static void
   no_finish () {
-    system::finish (0, 0, false, 0);
+    system::finish (0, 0, false, -1, 0);
   }
 
   void
-  up_uv_input1 ()
+  np_nb_nc_input1 ()
   {
-    up_uv_input1_flag = false;
+    np_nb_nc_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  up_uv_input2 ()
+  np_nb_nc_input2 ()
   {
-    up_uv_input2_flag = false;
+    np_nb_nc_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  up_uv_input3 ()
+  np_nb_nc_input3 ()
   {
-    up_uv_input3_flag = false;
+    np_nb_nc_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  up_v_input1 (aid_t v)
+  np_nb_c_input1 (aid_t v)
   {
-    kassert (v == up_v_output_value);
-    up_v_input1_flag = false;
+    kassert (v == np_nb_c_output_value);
+    np_nb_c_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  up_v_input2 (aid_t v)
+  np_nb_c_input2 (aid_t v)
   {
-    kassert (v == p_v_output_value);
-    up_v_input2_flag = false;
+    kassert (v == p_nb_c_output_value);
+    np_nb_c_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  up_v_input3 (aid_t v)
+  np_nb_c_input3 (aid_t v)
   {
-    kassert (v == ap_v_output_value);
-    up_v_input3_flag = false;
+    kassert (v == ap_nb_c_output_value);
+    np_nb_c_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
   
   void
-  p_uv_input1 (aid_t p)
+  p_nb_nc_input1 (aid_t p)
   {
-    kassert (p == p_uv_input1_parameter);
-    p_uv_input1_flag = false;
+    kassert (p == p_nb_nc_input1_parameter);
+    p_nb_nc_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_uv_input2 (aid_t p)
+  p_nb_nc_input2 (aid_t p)
   {
-    kassert (p == p_uv_input2_parameter);
-    p_uv_input2_flag = false;
+    kassert (p == p_nb_nc_input2_parameter);
+    p_nb_nc_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_uv_input3 (aid_t p)
+  p_nb_nc_input3 (aid_t p)
   {
-    kassert (p == p_uv_input3_parameter);
-    p_uv_input3_flag = false;
+    kassert (p == p_nb_nc_input3_parameter);
+    p_nb_nc_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_v_input1 (aid_t p,
+  p_nb_c_input1 (aid_t p,
 	      aid_t v)
   {
-    kassert (p == p_v_input1_parameter);
-    kassert (v == up_v_output_value);
-    p_v_input1_flag = false;
+    kassert (p == p_nb_c_input1_parameter);
+    kassert (v == np_nb_c_output_value);
+    p_nb_c_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_v_input2 (aid_t p,
+  p_nb_c_input2 (aid_t p,
 	      aid_t v)
   {
-    kassert (p == p_v_input2_parameter);
-    kassert (v == p_v_output_value);
-    p_v_input2_flag = false;
+    kassert (p == p_nb_c_input2_parameter);
+    kassert (v == p_nb_c_output_value);
+    p_nb_c_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  p_v_input3 (aid_t p,
+  p_nb_c_input3 (aid_t p,
 	      aid_t v)
   {
-    kassert (p == p_v_input3_parameter);
-    kassert (v == ap_v_output_value);
-    p_v_input3_flag = false;
+    kassert (p == p_nb_c_input3_parameter);
+    kassert (v == ap_nb_c_output_value);
+    p_nb_c_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_uv_input1 (aid_t p)
+  ap_nb_nc_input1 (aid_t p)
   {
-    kassert (p == ap_uv_input1_parameter);
-    ap_uv_input1_flag = false;
+    kassert (p == ap_nb_nc_input1_parameter);
+    ap_nb_nc_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_uv_input2 (aid_t p)
+  ap_nb_nc_input2 (aid_t p)
   {
-    kassert (p == ap_uv_input2_parameter);
-    ap_uv_input2_flag = false;
+    kassert (p == ap_nb_nc_input2_parameter);
+    ap_nb_nc_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_uv_input3 (aid_t p)
+  ap_nb_nc_input3 (aid_t p)
   {
-    kassert (p == ap_uv_input3_parameter);
-    ap_uv_input3_flag = false;
+    kassert (p == ap_nb_nc_input3_parameter);
+    ap_nb_nc_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_v_input1 (aid_t p,
+  ap_nb_c_input1 (aid_t p,
 	      aid_t v)
   {
-    kassert (p == ap_v_input1_parameter);
-    kassert (v == up_v_output_value);
-    ap_v_input1_flag = false;
+    kassert (p == ap_nb_c_input1_parameter);
+    kassert (v == np_nb_c_output_value);
+    ap_nb_c_input1_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_v_input2 (aid_t p,
+  ap_nb_c_input2 (aid_t p,
 	       aid_t v)
   {
-    kassert (p == ap_v_input2_parameter);
-    kassert (v == p_v_output_value);
-    ap_v_input2_flag = false;
+    kassert (p == ap_nb_c_input2_parameter);
+    kassert (v == p_nb_c_output_value);
+    ap_nb_c_input2_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   void
-  ap_v_input3 (aid_t p,
+  ap_nb_c_input3 (aid_t p,
 	      aid_t v)
   {
-    kassert (p == ap_v_input3_parameter);
-    kassert (v == ap_v_output_value);
-    ap_v_input3_flag = false;
+    kassert (p == ap_nb_c_input3_parameter);
+    kassert (v == ap_nb_c_output_value);
+    ap_nb_c_input3_flag = false;
     no_schedule ();
     no_finish ();
   }
 
   static bool
-  up_uv_output_precondition ()
+  np_nb_nc_output_precondition ()
   {
-    return up_uv_output_flag;
+    return np_nb_nc_output_flag;
   }
 
   void
-  up_uv_output ()
+  np_nb_nc_output ()
   {
-    scheduler_->remove<up_uv_output_traits> (&up_uv_output);
-    if (up_uv_output_precondition ()) {
-      up_uv_output_flag = false;
+    scheduler_->remove<np_nb_nc_output_traits> (&np_nb_nc_output);
+    if (np_nb_nc_output_precondition ()) {
+      np_nb_nc_output_flag = false;
       kout << __func__ << endl;
       schedule ();
-      scheduler_->finish<up_uv_output_traits> (true);
+      scheduler_->finish<np_nb_nc_output_traits> (true);
     }
     else {
       schedule ();
-      scheduler_->finish<up_uv_output_traits> (false);
+      scheduler_->finish<np_nb_nc_output_traits> (false);
     }
   }
 
   static bool
-  up_v_output_precondition ()
+  np_nb_c_output_precondition ()
   {
-    return up_v_output_flag;
+    return np_nb_c_output_flag;
   }
 
   void
-  up_v_output ()
+  np_nb_c_output ()
   {
-    scheduler_->remove<up_v_output_traits> (&up_v_output);
-    if (up_v_output_precondition ()) {
-      up_v_output_flag = false;
-      static aid_t value = up_v_output_value;
+    scheduler_->remove<np_nb_c_output_traits> (&np_nb_c_output);
+    if (np_nb_c_output_precondition ()) {
+      np_nb_c_output_flag = false;
+      static aid_t value = np_nb_c_output_value;
       kout << __func__ << endl;
       schedule ();
-      scheduler_->finish<up_v_output_traits> (&value);
+      scheduler_->finish<np_nb_c_output_traits> (&value);
     }
     else {
       schedule ();
-      scheduler_->finish<up_v_output_traits> ((void*)0);
+      scheduler_->finish<np_nb_c_output_traits> ();
     }
   }
 
   static bool
-  p_uv_output_precondition (aid_t p)
+  np_b_nc_output_precondition ()
   {
-    kassert (p == p_uv_output_parameter);
-    return p_uv_output_flag;
+    return np_b_nc_output_flag;
+  }
+
+  bid_t
+  string_to_buffer (const char* s)
+  {
+    size_t len = strlen (s);
+    bid_t b = system::buffer_create (strlen (s));
+    char* c = static_cast<char*> (system::buffer_map (b));
+    memcpy (c, s, len);
+    return b;
   }
 
   void
-  p_uv_output (aid_t p)
+  np_b_nc_output ()
   {
-    scheduler_->remove<p_uv_output_traits> (&p_uv_output, p);
-    if (p_uv_output_precondition (p)) {
-      kassert (p == p_uv_output_parameter);
-      p_uv_output_flag = false;
-      schedule ();
-      scheduler_->finish<p_uv_output_traits> (true);
+    scheduler_->remove<np_b_nc_output_traits> (&np_b_nc_output);
+    if (np_b_nc_output_precondition ()) {
+      np_b_nc_output_flag = false;
+      bid_t b = string_to_buffer (__func__);
       kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<np_b_nc_output_traits> (b);
     }
     else {
       schedule ();
-      scheduler_->finish<p_uv_output_traits> (false);
+      scheduler_->finish<np_b_nc_output_traits> ();
     }
   }
 
   static bool
-  p_v_output_precondition (aid_t p)
+  np_b_c_output_precondition ()
   {
-    kassert (p == p_v_output_parameter);
-    return p_v_output_flag;
+    return np_b_c_output_flag;
   }
 
   void
-  p_v_output (aid_t p)
+  np_b_c_output ()
   {
-    scheduler_->remove<p_v_output_traits> (&p_v_output, p);
-    if (p_v_output_precondition (p)) {
-      kassert (p == p_v_output_parameter);
-      p_v_output_flag = false;
-      static aid_t value = p_v_output_value;
+    scheduler_->remove<np_b_c_output_traits> (&np_b_c_output);
+    if (np_b_c_output_precondition ()) {
+      np_b_c_output_flag = false;
+      bid_t b = string_to_buffer (__func__);
+      static aid_t value = np_b_c_output_value;
       kout << __func__ << endl;
       schedule ();
-      scheduler_->finish<p_v_output_traits> (&value);
+      scheduler_->finish<np_b_c_output_traits> (b, &value);
     }
     else {
       schedule ();
-      scheduler_->finish<p_v_output_traits> ((void*)0);
+      scheduler_->finish<np_b_c_output_traits> ();
     }
   }
 
   static bool
-  ap_uv_output_precondition (aid_t p)
+  p_nb_nc_output_precondition (aid_t p)
   {
-    kassert (p == ap_uv_output_parameter);
-    return ap_uv_output_flag;
+    kassert (p == p_nb_nc_output_parameter);
+    return p_nb_nc_output_flag;
   }
 
   void
-  ap_uv_output (aid_t p)
+  p_nb_nc_output (aid_t p)
   {
-    scheduler_->remove<ap_uv_output_traits> (&ap_uv_output, p);
-    if (ap_uv_output_precondition (p)) {
-      kassert (p == ap_uv_output_parameter);
-      ap_uv_output_flag = false;
-      kout << __func__ << endl;
+    scheduler_->remove<p_nb_nc_output_traits> (&p_nb_nc_output, p);
+    if (p_nb_nc_output_precondition (p)) {
+      kassert (p == p_nb_nc_output_parameter);
+      p_nb_nc_output_flag = false;
       schedule ();
-      scheduler_->finish<ap_uv_output_traits> (true);
+      scheduler_->finish<p_nb_nc_output_traits> (true);
+      kout << __func__ << endl;
     }
     else {
       schedule ();
-      scheduler_->finish<ap_uv_output_traits> (false);
+      scheduler_->finish<p_nb_nc_output_traits> (false);
     }
   }
 
   static bool
-  ap_v_output_precondition (aid_t p)
+  p_nb_c_output_precondition (aid_t p)
   {
-    kassert (p == ap_v_output_parameter);
-    return ap_v_output_flag;
+    kassert (p == p_nb_c_output_parameter);
+    return p_nb_c_output_flag;
   }
 
   void
-  ap_v_output (aid_t p)
+  p_nb_c_output (aid_t p)
   {
-    scheduler_->remove<ap_v_output_traits> (&ap_v_output, p);
-    if (ap_v_output_precondition (p)) {
-      kassert (p == ap_v_output_parameter);
-      ap_v_output_flag = false;
-      static aid_t value = ap_v_output_value;
+    scheduler_->remove<p_nb_c_output_traits> (&p_nb_c_output, p);
+    if (p_nb_c_output_precondition (p)) {
+      kassert (p == p_nb_c_output_parameter);
+      p_nb_c_output_flag = false;
+      static aid_t value = p_nb_c_output_value;
       kout << __func__ << endl;
       schedule ();
-      scheduler_->finish<ap_v_output_traits> (&value);
+      scheduler_->finish<p_nb_c_output_traits> (&value);
     }
     else {
       schedule ();
-      scheduler_->finish<ap_v_output_traits> ((void*)0);
+      scheduler_->finish<p_nb_c_output_traits> ();
     }
   }
 
   static bool
-  up_internal_precondition ()
+  p_b_nc_output_precondition (aid_t p)
   {
-    return up_internal_flag;
+    kassert (p == p_b_nc_output_parameter);
+    return p_b_nc_output_flag;
   }
 
   void
-  up_internal ()
+  p_b_nc_output (aid_t p)
   {
-    scheduler_->remove<up_internal_traits> (&up_internal);
-    if (up_internal_precondition ()) {
-      up_internal_flag = false;
+    scheduler_->remove<p_b_nc_output_traits> (&p_b_nc_output, p);
+    if (p_b_nc_output_precondition (p)) {
+      kassert (p == p_b_nc_output_parameter);
+      p_b_nc_output_flag = false;
+      bid_t b = string_to_buffer (__func__);
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<p_b_nc_output_traits> (b);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<p_b_nc_output_traits> ();
+    }
+  }
+
+  static bool
+  p_b_c_output_precondition (aid_t p)
+  {
+    kassert (p == p_b_c_output_parameter);
+    return p_b_c_output_flag;
+  }
+
+  void
+  p_b_c_output (aid_t p)
+  {
+    scheduler_->remove<p_b_c_output_traits> (&p_b_c_output, p);
+    if (p_b_c_output_precondition (p)) {
+      kassert (p == p_b_c_output_parameter);
+      p_b_c_output_flag = false;
+      bid_t b = string_to_buffer (__func__);
+      static aid_t value = p_b_c_output_value;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<p_b_c_output_traits> (b, &value);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<p_b_c_output_traits> ();
+    }
+  }
+
+  static bool
+  ap_nb_nc_output_precondition (aid_t p)
+  {
+    kassert (p == ap_nb_nc_output_parameter);
+    return ap_nb_nc_output_flag;
+  }
+
+  void
+  ap_nb_nc_output (aid_t p)
+  {
+    scheduler_->remove<ap_nb_nc_output_traits> (&ap_nb_nc_output, p);
+    if (ap_nb_nc_output_precondition (p)) {
+      kassert (p == ap_nb_nc_output_parameter);
+      ap_nb_nc_output_flag = false;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<ap_nb_nc_output_traits> (true);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<ap_nb_nc_output_traits> (false);
+    }
+  }
+
+  static bool
+  ap_nb_c_output_precondition (aid_t p)
+  {
+    kassert (p == ap_nb_c_output_parameter);
+    return ap_nb_c_output_flag;
+  }
+
+  void
+  ap_nb_c_output (aid_t p)
+  {
+    scheduler_->remove<ap_nb_c_output_traits> (&ap_nb_c_output, p);
+    if (ap_nb_c_output_precondition (p)) {
+      kassert (p == ap_nb_c_output_parameter);
+      ap_nb_c_output_flag = false;
+      static aid_t value = ap_nb_c_output_value;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<ap_nb_c_output_traits> (&value);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<ap_nb_c_output_traits> ();
+    }
+  }
+
+  static bool
+  ap_b_nc_output_precondition (aid_t p)
+  {
+    kassert (p == ap_b_nc_output_parameter);
+    return ap_b_nc_output_flag;
+  }
+
+  void
+  ap_b_nc_output (aid_t p)
+  {
+    scheduler_->remove<ap_b_nc_output_traits> (&ap_b_nc_output, p);
+    if (ap_b_nc_output_precondition (p)) {
+      kassert (p == ap_b_nc_output_parameter);
+      ap_b_nc_output_flag = false;
+      bid_t b = string_to_buffer (__func__);
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<ap_b_nc_output_traits> (b);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<ap_b_nc_output_traits> ();
+    }
+  }
+
+  static bool
+  ap_b_c_output_precondition (aid_t p)
+  {
+    kassert (p == ap_b_c_output_parameter);
+    return ap_b_c_output_flag;
+  }
+
+  void
+  ap_b_c_output (aid_t p)
+  {
+    scheduler_->remove<ap_b_c_output_traits> (&ap_b_c_output, p);
+    if (ap_b_c_output_precondition (p)) {
+      kassert (p == ap_b_c_output_parameter);
+      ap_b_c_output_flag = false;
+      bid_t b = string_to_buffer (__func__);
+      static aid_t value = ap_b_c_output_value;
+      kout << __func__ << endl;
+      schedule ();
+      scheduler_->finish<ap_b_c_output_traits> (b, &value);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<ap_b_c_output_traits> ();
+    }
+  }
+
+  static bool
+  np_internal_precondition ()
+  {
+    return np_internal_flag;
+  }
+
+  void
+  np_internal ()
+  {
+    scheduler_->remove<np_internal_traits> (&np_internal);
+    if (np_internal_precondition ()) {
+      np_internal_flag = false;
       kout << __func__ << endl;
     }
     schedule ();
-    scheduler_->finish<up_internal_traits> ();
+    scheduler_->finish<np_internal_traits> ();
   }
 
   static bool
@@ -438,26 +612,44 @@ namespace action_test {
   static void
   schedule ()
   {
-    if (up_uv_output_precondition ()) {
-      scheduler_->add<up_uv_output_traits> (&up_uv_output);
+    if (np_nb_nc_output_precondition ()) {
+      scheduler_->add<np_nb_nc_output_traits> (&np_nb_nc_output);
     }
-    if (up_v_output_precondition ()) {
-      scheduler_->add<up_v_output_traits> (&up_v_output);
+    if (np_nb_c_output_precondition ()) {
+      scheduler_->add<np_nb_c_output_traits> (&np_nb_c_output);
     }
-    if (p_uv_output_precondition (p_uv_output_parameter)) {
-      scheduler_->add<p_uv_output_traits> (&p_uv_output, p_uv_output_parameter);
+    if (np_b_nc_output_precondition ()) {
+      scheduler_->add<np_b_nc_output_traits> (&np_b_nc_output);
     }
-    if (p_v_output_precondition (p_v_output_parameter)) {
-      scheduler_->add<p_v_output_traits> (&p_v_output, p_v_output_parameter);
+    if (np_b_c_output_precondition ()) {
+      scheduler_->add<np_b_c_output_traits> (&np_b_c_output);
     }
-    if (ap_uv_output_precondition (ap_uv_output_parameter)) {
-      scheduler_->add<ap_uv_output_traits> (&ap_uv_output, ap_uv_output_parameter);
+    if (p_nb_nc_output_precondition (p_nb_nc_output_parameter)) {
+      scheduler_->add<p_nb_nc_output_traits> (&p_nb_nc_output, p_nb_nc_output_parameter);
     }
-    if (ap_v_output_precondition (ap_v_output_parameter)) {
-      scheduler_->add<ap_v_output_traits> (&ap_v_output, ap_v_output_parameter);
+    if (p_nb_c_output_precondition (p_nb_c_output_parameter)) {
+      scheduler_->add<p_nb_c_output_traits> (&p_nb_c_output, p_nb_c_output_parameter);
     }
-    if (up_internal_precondition ()) {
-      scheduler_->add<up_internal_traits> (&up_internal);
+    if (p_b_nc_output_precondition (p_b_nc_output_parameter)) {
+      scheduler_->add<p_b_nc_output_traits> (&p_b_nc_output, p_b_nc_output_parameter);
+    }
+    if (p_b_c_output_precondition (p_b_c_output_parameter)) {
+      scheduler_->add<p_b_c_output_traits> (&p_b_c_output, p_b_c_output_parameter);
+    }
+    if (ap_nb_nc_output_precondition (ap_nb_nc_output_parameter)) {
+      scheduler_->add<ap_nb_nc_output_traits> (&ap_nb_nc_output, ap_nb_nc_output_parameter);
+    }
+    if (ap_nb_c_output_precondition (ap_nb_c_output_parameter)) {
+      scheduler_->add<ap_nb_c_output_traits> (&ap_nb_c_output, ap_nb_c_output_parameter);
+    }
+    if (ap_b_nc_output_precondition (ap_b_nc_output_parameter)) {
+      scheduler_->add<ap_b_nc_output_traits> (&ap_b_nc_output, ap_b_nc_output_parameter);
+    }
+    if (ap_b_c_output_precondition (ap_b_c_output_parameter)) {
+      scheduler_->add<ap_b_c_output_traits> (&ap_b_c_output, ap_b_c_output_parameter);
+    }
+    if (np_internal_precondition ()) {
+      scheduler_->add<np_internal_traits> (&np_internal);
     }
     if (p_internal_precondition (p_internal_parameter)) {
       scheduler_->add<p_internal_traits> (&p_internal, p_internal_parameter);

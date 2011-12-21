@@ -18,130 +18,174 @@
 
 namespace action_test {
   
-  static const aid_t p_uv_input1_parameter = 500;
-  static const aid_t p_uv_input2_parameter = 501;
-  static const aid_t p_uv_input3_parameter = 502;
+  static const aid_t p_nb_nc_input1_parameter = 500;
+  static const aid_t p_nb_nc_input2_parameter = 501;
+  static const aid_t p_nb_nc_input3_parameter = 502;
 
-  static const aid_t p_v_input1_parameter = 503;
-  static const aid_t p_v_input2_parameter = 504;
-  static const aid_t p_v_input3_parameter = 505;
+  static const aid_t p_nb_c_input1_parameter = 503;
+  static const aid_t p_nb_c_input2_parameter = 504;
+  static const aid_t p_nb_c_input3_parameter = 505;
 
-  extern aid_t ap_uv_input1_parameter;
-  extern aid_t ap_uv_input2_parameter;
-  extern aid_t ap_uv_input3_parameter;
+  static const aid_t p_b_nc_input1_parameter = 506;
+  static const aid_t p_b_nc_input2_parameter = 507;
+  static const aid_t p_b_nc_input3_parameter = 508;
 
-  extern aid_t ap_v_input1_parameter;
-  extern aid_t ap_v_input2_parameter;
-  extern aid_t ap_v_input3_parameter;
+  static const aid_t p_b_c_input1_parameter = 509;
+  static const aid_t p_b_c_input2_parameter = 510;
+  static const aid_t p_b_c_input3_parameter = 511;
 
-  static const aid_t p_uv_output_parameter = 102;
-  extern aid_t ap_uv_output_parameter;
-  static const aid_t p_v_output_parameter = 103;
-  extern aid_t ap_v_output_parameter;
+  extern aid_t ap_nb_nc_input1_parameter;
+  extern aid_t ap_nb_nc_input2_parameter;
+  extern aid_t ap_nb_nc_input3_parameter;
 
-  typedef up_uv_input_action_traits init_traits;
+  extern aid_t ap_nb_c_input1_parameter;
+  extern aid_t ap_nb_c_input2_parameter;
+  extern aid_t ap_nb_c_input3_parameter;
+
+  extern aid_t ap_b_nc_input1_parameter;
+  extern aid_t ap_b_nc_input2_parameter;
+  extern aid_t ap_b_nc_input3_parameter;
+
+  extern aid_t ap_b_c_input1_parameter;
+  extern aid_t ap_b_c_input2_parameter;
+  extern aid_t ap_b_c_input3_parameter;
+
+  static const aid_t p_nb_nc_output_parameter = 512;
+  extern aid_t ap_nb_nc_output_parameter;
+  static const aid_t p_nb_c_output_parameter = 513;
+  extern aid_t ap_nb_c_output_parameter;
+  static const aid_t p_b_nc_output_parameter = 514;
+  extern aid_t ap_b_nc_output_parameter;
+  static const aid_t p_b_c_output_parameter = 515;
+  extern aid_t ap_b_c_output_parameter;
+
+  typedef np_nb_nc_input_action_traits init_traits;
   void
   init ();
 
-  typedef up_uv_input_action_traits up_uv_input1_traits;
+  typedef np_nb_nc_input_action_traits np_nb_nc_input1_traits;
   void
-  up_uv_input1 ();
+  np_nb_nc_input1 ();
 
-  typedef up_uv_input_action_traits up_uv_input2_traits;
+  typedef np_nb_nc_input_action_traits np_nb_nc_input2_traits;
   void
-  up_uv_input2 ();
+  np_nb_nc_input2 ();
 
-  typedef up_uv_input_action_traits up_uv_input3_traits;
+  typedef np_nb_nc_input_action_traits np_nb_nc_input3_traits;
   void
-  up_uv_input3 ();
+  np_nb_nc_input3 ();
 
-  typedef up_v_input_action_traits<aid_t> up_v_input1_traits;
+  typedef np_nb_c_input_action_traits<aid_t> np_nb_c_input1_traits;
   void
-  up_v_input1 (aid_t);
+  np_nb_c_input1 (aid_t);
 
-  typedef up_v_input_action_traits<aid_t> up_v_input2_traits;
+  typedef np_nb_c_input_action_traits<aid_t> np_nb_c_input2_traits;
   void
-  up_v_input2 (aid_t);
+  np_nb_c_input2 (aid_t);
 
-  typedef up_v_input_action_traits<aid_t> up_v_input3_traits;
+  typedef np_nb_c_input_action_traits<aid_t> np_nb_c_input3_traits;
   void
-  up_v_input3 (aid_t);
+  np_nb_c_input3 (aid_t);
 
-  typedef p_uv_input_action_traits<aid_t> p_uv_input1_traits;
+  typedef p_nb_nc_input_action_traits<aid_t> p_nb_nc_input1_traits;
   void
-  p_uv_input1 (aid_t);
+  p_nb_nc_input1 (aid_t);
 
-  typedef p_uv_input_action_traits<aid_t> p_uv_input2_traits;
+  typedef p_nb_nc_input_action_traits<aid_t> p_nb_nc_input2_traits;
   void
-  p_uv_input2 (aid_t);
+  p_nb_nc_input2 (aid_t);
 
-  typedef p_uv_input_action_traits<aid_t> p_uv_input3_traits;
+  typedef p_nb_nc_input_action_traits<aid_t> p_nb_nc_input3_traits;
   void
-  p_uv_input3 (aid_t);
+  p_nb_nc_input3 (aid_t);
 
-  typedef p_v_input_action_traits<aid_t, aid_t> p_v_input1_traits;
+  typedef p_nb_c_input_action_traits<aid_t, aid_t> p_nb_c_input1_traits;
   void
-  p_v_input1 (aid_t, aid_t);
+  p_nb_c_input1 (aid_t, aid_t);
 
-  typedef p_v_input_action_traits<aid_t, aid_t> p_v_input2_traits;
+  typedef p_nb_c_input_action_traits<aid_t, aid_t> p_nb_c_input2_traits;
   void
-  p_v_input2 (aid_t, aid_t);
+  p_nb_c_input2 (aid_t, aid_t);
 
-  typedef p_v_input_action_traits<aid_t, aid_t> p_v_input3_traits;
+  typedef p_nb_c_input_action_traits<aid_t, aid_t> p_nb_c_input3_traits;
   void
-  p_v_input3 (aid_t, aid_t);
+  p_nb_c_input3 (aid_t, aid_t);
 
-  typedef ap_uv_input_action_traits ap_uv_input1_traits;
+  typedef ap_nb_nc_input_action_traits ap_nb_nc_input1_traits;
   void
-  ap_uv_input1 (aid_t);
+  ap_nb_nc_input1 (aid_t);
 
-  typedef ap_uv_input_action_traits ap_uv_input2_traits;
+  typedef ap_nb_nc_input_action_traits ap_nb_nc_input2_traits;
   void
-  ap_uv_input2 (aid_t);
+  ap_nb_nc_input2 (aid_t);
 
-  typedef ap_uv_input_action_traits ap_uv_input3_traits;
+  typedef ap_nb_nc_input_action_traits ap_nb_nc_input3_traits;
   void
-  ap_uv_input3 (aid_t);
+  ap_nb_nc_input3 (aid_t);
 
-  typedef ap_v_input_action_traits<aid_t> ap_v_input1_traits;
+  typedef ap_nb_c_input_action_traits<aid_t> ap_nb_c_input1_traits;
   void
-  ap_v_input1 (aid_t, aid_t);
+  ap_nb_c_input1 (aid_t, aid_t);
 
-  typedef ap_v_input_action_traits<aid_t> ap_v_input2_traits;
+  typedef ap_nb_c_input_action_traits<aid_t> ap_nb_c_input2_traits;
   void
-  ap_v_input2 (aid_t, aid_t);
+  ap_nb_c_input2 (aid_t, aid_t);
 
-  typedef ap_v_input_action_traits<aid_t> ap_v_input3_traits;
+  typedef ap_nb_c_input_action_traits<aid_t> ap_nb_c_input3_traits;
   void
-  ap_v_input3 (aid_t, aid_t);
+  ap_nb_c_input3 (aid_t, aid_t);
 
-  typedef up_uv_output_action_traits up_uv_output_traits;
+  typedef np_nb_nc_output_action_traits np_nb_nc_output_traits;
   void
-  up_uv_output ();
+  np_nb_nc_output ();
 
-  typedef up_v_output_action_traits<aid_t> up_v_output_traits;
+  typedef np_nb_c_output_action_traits<aid_t> np_nb_c_output_traits;
   void
-  up_v_output ();
+  np_nb_c_output ();
 
-  typedef p_uv_output_action_traits<aid_t> p_uv_output_traits;
+  typedef np_b_nc_output_action_traits<char*> np_b_nc_output_traits;
   void
-  p_uv_output (aid_t);
+  np_b_nc_output ();
 
-  typedef p_v_output_action_traits<aid_t, aid_t> p_v_output_traits;
+  typedef np_b_c_output_action_traits<char*, aid_t> np_b_c_output_traits;
   void
-  p_v_output (aid_t);
+  np_b_c_output ();
 
-  typedef ap_uv_output_action_traits ap_uv_output_traits;
+  typedef p_nb_nc_output_action_traits<aid_t> p_nb_nc_output_traits;
   void
-  ap_uv_output (aid_t);
+  p_nb_nc_output (aid_t);
 
-  typedef ap_v_output_action_traits<aid_t> ap_v_output_traits;
+  typedef p_nb_c_output_action_traits<aid_t, aid_t> p_nb_c_output_traits;
   void
-  ap_v_output (aid_t);
+  p_nb_c_output (aid_t);
 
-  typedef up_internal_action_traits up_internal_traits;
+  typedef p_b_nc_output_action_traits<aid_t, char*> p_b_nc_output_traits;
   void
-  up_internal ();
+  p_b_nc_output (aid_t);
+
+  typedef p_b_c_output_action_traits<aid_t, char*, aid_t> p_b_c_output_traits;
+  void
+  p_b_c_output (aid_t);
+
+  typedef ap_nb_nc_output_action_traits ap_nb_nc_output_traits;
+  void
+  ap_nb_nc_output (aid_t);
+
+  typedef ap_nb_c_output_action_traits<aid_t> ap_nb_c_output_traits;
+  void
+  ap_nb_c_output (aid_t);
+
+  typedef ap_b_nc_output_action_traits<char*> ap_b_nc_output_traits;
+  void
+  ap_b_nc_output (aid_t);
+
+  typedef ap_b_c_output_action_traits<char*, aid_t> ap_b_c_output_traits;
+  void
+  ap_b_c_output (aid_t);
+
+  typedef np_internal_action_traits np_internal_traits;
+  void
+  np_internal ();
 
   typedef p_internal_action_traits<aid_t> p_internal_traits;
   void

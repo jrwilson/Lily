@@ -129,7 +129,7 @@ private:
   void
   add_action_ (const void* action_entry_point)
   {
-    paction ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::value_size);
+    paction ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::buffer_value_mode, Action::copy_value_mode, Action::copy_value_size);
     std::pair<typename action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac.action_entry_point, ac));
     kassert (r.second);
   }
@@ -291,7 +291,7 @@ public:
   add_action (void (*action_entry_point) (void))
   {
     STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == NO_PARAMETER && Action::value_size == 0) ||
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == NO_PARAMETER && Action::copy_value_size == 0) ||
 		   (Action::action_type == OUTPUT && Action::parameter_mode == NO_PARAMETER) ||
 		   (Action::action_type == INTERNAL && Action::parameter_mode == NO_PARAMETER));
     
@@ -301,10 +301,10 @@ public:
   template <class Action>
   void
   add_action_dispatch_ (no_parameter_tag,
-			void (*action_entry_point) (typename Action::value_type))
+			void (*action_entry_point) (typename Action::copy_value_type))
   {
     STATIC_ASSERT (is_input_action<Action>::value);
-    STATIC_ASSERT (Action::parameter_mode == NO_PARAMETER && Action::value_size != 0);
+    STATIC_ASSERT (Action::parameter_mode == NO_PARAMETER && Action::copy_value_size != 0);
     
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
@@ -315,7 +315,7 @@ public:
 			void (*action_entry_point) (typename Action::parameter_type))
   {
     STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == PARAMETER && Action::value_size == 0) ||
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == PARAMETER && Action::copy_value_size == 0) ||
   		   (Action::action_type == OUTPUT && Action::parameter_mode == PARAMETER) ||
   		   (Action::action_type == INTERNAL && Action::parameter_mode == PARAMETER));
 
@@ -328,7 +328,7 @@ public:
 			void (*action_entry_point) (typename Action::parameter_type))
   {
     STATIC_ASSERT (is_action<Action>::value);
-    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == AUTO_PARAMETER && Action::value_size == 0) ||
+    STATIC_ASSERT ((Action::action_type == INPUT && Action::parameter_mode == AUTO_PARAMETER && Action::copy_value_size == 0) ||
   		   (Action::action_type == OUTPUT && Action::parameter_mode == AUTO_PARAMETER));
     
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
@@ -344,10 +344,10 @@ public:
 
   template <class Action>
   void
-  add_action (void (*action_entry_point) (typename Action::parameter_type, typename Action::value_type))
+  add_action (void (*action_entry_point) (typename Action::parameter_type, typename Action::copy_value_type))
   {
     STATIC_ASSERT (is_input_action<Action>::value);
-    STATIC_ASSERT ((Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::value_size != 0);
+    STATIC_ASSERT ((Action::parameter_mode == PARAMETER || Action::parameter_mode == AUTO_PARAMETER) && Action::copy_value_size != 0);
 
     add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
   }
@@ -364,8 +364,9 @@ public:
     return const_action_iterator (action_map_.find (action_entry_point));
   }
 
+private:
   bid_t
-  buffer_create (size_t size)
+  generate_bid ()
   {
     // Generate an id.
     bid_t bid = current_bid_;
@@ -373,6 +374,17 @@ public:
       bid = std::max (bid + 1, 0); // Handles overflow.
     }
     current_bid_ = std::max (bid + 1, 0);
+    return bid;
+  }
+
+public:
+  bid_t
+  buffer_create (size_t size)
+  {
+    size = align_up (size, PAGE_SIZE);
+
+    // Generate an id.
+    bid_t bid = generate_bid ();
     
     // Create the buffer and insert it into the map.
     buffer* b = new (system_alloc ()) buffer (size);
@@ -381,25 +393,103 @@ public:
     return bid;
   }
   
-  int
-  buffer_append (bid_t dst,
-		 bid_t src)
+  bid_t
+  buffer_create (bid_t other,
+		 size_t offset,
+		 size_t length)
   {
+    offset = align_down (offset, PAGE_SIZE);
+    length = align_up (length, PAGE_SIZE);
+
+    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (other);
+    if (bpos != bid_to_buffer_map_.end ()) {
+      buffer* b = bpos->second;
+      if (offset + length <= b->size ()) {
+	if (length == 0) {
+	  // Correct the length.
+	  length = b->size () - offset;
+	}
+
+	// Make the source copy-on-write.
+	b->make_copy_on_write ();
+	
+	// Generate an id.
+	bid_t bid = generate_bid ();
+	
+	// Create the buffer and insert it into the map.
+	buffer* b = new (system_alloc ()) buffer (*b, offset, length);
+	bid_to_buffer_map_.insert (std::make_pair (bid, b));
+	
+	return bid;
+      }
+      else {
+	// Offset is past end of buffer.
+	return -1;
+      }
+    }
+    else {
+      // Buffer does not exist.
+      return -1;
+    }
+  }
+
+  size_t
+  buffer_append (bid_t bid,
+		 size_t size)
+  {
+    size = align_up (size, PAGE_SIZE);
+
+    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
+    if (bpos != bid_to_buffer_map_.end ()) {
+      buffer* b = bpos->second;
+      if (b->begin () == 0) {
+	return b->append (size);
+      }
+      else {
+	// Buffer was mapped.
+	return -1;
+      }
+    }
+    else {
+      // Buffer does not exist.
+      return -1;
+    }
+  }
+
+  size_t
+  buffer_append (bid_t dst,
+		 bid_t src,
+		 size_t offset,
+		 size_t length)
+  {
+    offset = align_down (offset, PAGE_SIZE);
+    length = align_up (length, PAGE_SIZE);
+
     bid_to_buffer_map_type::const_iterator dst_pos = bid_to_buffer_map_.find (dst);
     bid_to_buffer_map_type::const_iterator src_pos = bid_to_buffer_map_.find (src);
     if (dst_pos != bid_to_buffer_map_.end () &&
 	src_pos != bid_to_buffer_map_.end ()) {
       buffer* dst = dst_pos->second;
       buffer* src = src_pos->second;
-      if (dst->begin () == 0) {
-	// Make the source copy on write so we won't see subsequent changes.
-	src->make_copy_on_write ();
-	// Append.
-	dst->append (*src);
-	return 0;
+      if (offset + length <= src->size ()) {
+	if (length == 0) {
+	  // Correct the length.
+	  length = src->size () - offset;
+	}
+
+	if (dst->begin () == 0) {
+	  // Make the source copy on write so we won't see subsequent changes.
+	  src->make_copy_on_write ();
+	  // Append.
+	  return dst->append (*src, offset, length);
+	}
+	else {
+	  // The destination is mapped.
+	  return -1;
+	}
       }
       else {
-	// The destination is mapped.
+	// Offset is past end of source.
 	return -1;
       }
     }
@@ -458,35 +548,31 @@ public:
   }
 
   int
-  buffer_unmap (bid_t bid)
+  buffer_destroy (bid_t bid)
   {
     bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
     if (bpos != bid_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
 
       if (b->begin () != 0) {
-	// Remove from the bid map.
-	bid_to_buffer_map_.erase (bpos);
-
 	// Remove from the memory map.
 	memory_map_.erase (find_address (b->begin ()));
-
+	
 	// Unmap the buffer.
 	for (const uint8_t* ptr = static_cast<const uint8_t*> (b->begin ());
 	     ptr != b->end ();
 	     ptr += PAGE_SIZE) {
 	  vm::unmap (ptr);
 	}
-
-	// Destroy it.
-	destroy (b, system_alloc ());
-
-	return 0;
       }
-      else {
-      	// The buffer is not mapped.
-      	return -1;
-      }
+
+      // Remove from the bid map.
+      bid_to_buffer_map_.erase (bpos);
+
+      // Destroy it.
+      destroy (b, system_alloc ());
+
+      return 0;
     }
     else {
       // The buffer does not exist.
@@ -505,6 +591,12 @@ public:
       // The buffer does not exist.
       return -1;
     }
+  }
+
+  bool
+  buffer_exists (bid_t bid)
+  {
+    return bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ();
   }
 
 };

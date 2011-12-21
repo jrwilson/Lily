@@ -20,10 +20,11 @@ namespace system {
   void
   finish (const void* action_entry_point,
 	  aid_t parameter,
-	  bool output_status,
-	  const void* output_buffer)
+	  bool status,
+	  bid_t bid,
+	  const void* buffer)
   {
-    asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(output_status), "S"(output_buffer) :);
+    asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(status), "S"(bid), "D"(buffer) :);
   }
   
   // TODO:  Eliminate this by passing the page size during initialization.
@@ -51,13 +52,34 @@ namespace system {
     return bid;
   }
 
-  int
-  buffer_append (bid_t dest,
-		 bid_t src)
+  bid_t
+  buffer_create (bid_t b,
+		 size_t offset,
+		 size_t length)
   {
-    int result;
-    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_APPEND), "b"(dest), "c"(src) :);
-    return result;
+    bid_t bid;
+    asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_CREATEB), "b"(b), "c"(offset), "d"(length) :);
+    return bid;
+  }
+
+  size_t
+  buffer_append (bid_t bid,
+		 size_t size)
+  {
+    size_t off;
+    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(bid), "c"(size) :);
+    return off;
+  }
+
+  size_t
+  buffer_append (bid_t dest,
+		 bid_t src,
+		 size_t offset,
+		 size_t length)
+  {
+    size_t off;
+    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPENDB), "b"(dest), "c"(src), "d"(offset), "S"(length) :);
+    return off;
   }
 
   void*
@@ -69,10 +91,10 @@ namespace system {
   }
 
   int
-  buffer_unmap (bid_t bid)
+  buffer_destroy (bid_t bid)
   {
     int result;
-    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_UNMAP), "b"(bid) :);
+    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_DESTROY), "b"(bid) :);
     return result;
   }
 

@@ -176,7 +176,7 @@ exception_dispatch (volatile registers regs)
       asm ("mov %%cr2, %0\n" : "=g"(address));
       if (address < KERNEL_VIRTUAL_BASE) {
 	// Use the automaton's memory map.
-	scheduler::current_automaton ()->page_fault (address, regs.error, &regs);
+	scheduler::current_action ().automaton->page_fault (address, regs.error, &regs);
       }
       else {
 	// Use our memory map.

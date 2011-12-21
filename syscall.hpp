@@ -25,8 +25,9 @@ namespace system {
   void
   finish (const void* action_entry_point,
 	  aid_t parameter,
-	  bool output_status,
-	  const void* output_buffer);
+	  bool status,
+	  bid_t bid,
+	  const void* buffer);
   
   size_t
   getpagesize (void);
@@ -35,17 +36,28 @@ namespace system {
   sbrk (ptrdiff_t);
 
   bid_t
-  buffer_create (size_t size);
+  buffer_create (size_t size = 0);
 
-  int
+  bid_t
+  buffer_create (bid_t bid,
+		 size_t offset = 0,
+		 size_t length = 0);
+
+  size_t
+  buffer_append (bid_t bid,
+		 size_t size);
+
+  size_t
   buffer_append (bid_t dest,
-		 bid_t src);
+		 bid_t src,
+		 size_t offset = 0,
+		 size_t length = 0);
 
   void*
   buffer_map (bid_t bid);
 
   int
-  buffer_unmap (bid_t bid);
+  buffer_destroy (bid_t bid);
 
   size_t
   buffer_size (bid_t bid);

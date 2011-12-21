@@ -18,7 +18,7 @@
 
 namespace buffer_test {
   
-  typedef up_uv_input_action_traits init_traits;
+  typedef np_nb_nc_input_action_traits init_traits;
   void
   init ();
 }

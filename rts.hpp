@@ -44,10 +44,11 @@ public:
     STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
     STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -62,10 +63,11 @@ public:
     STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
     STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode == AUTO_PARAMETER));
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast (input_parameter), OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast (input_parameter), OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -73,16 +75,17 @@ public:
   bind (automaton* output_automaton,
 	void (*output_ptr) (void),
 	automaton* input_automaton,
-	void (*input_ptr) (typename InputAction::value_type))
+	void (*input_ptr) (typename InputAction::copy_value_type))
   {
     // Check both actions statically.
     STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
     STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -90,17 +93,18 @@ public:
   bind (automaton* output_automaton,
 	void (*output_ptr) (void),
 	automaton* input_automaton,
-	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::value_type),
+	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
 	typename InputAction::parameter_type input_parameter)
   {
     // Check both actions statically.
     STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::parameter_mode == NO_PARAMETER);
     STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode == AUTO_PARAMETER));
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, 0,
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast (input_parameter), OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast (input_parameter), OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -115,10 +119,11 @@ public:
     STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
     STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
     // Value types must be the same.  This implies that the value sizes are the same.
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -134,10 +139,11 @@ public:
     STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
     STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode ==  AUTO_PARAMETER));
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter), OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter), OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -146,16 +152,17 @@ public:
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
 	automaton* input_automaton,
-	void (*input_ptr) (typename InputAction::value_type))
+	void (*input_ptr) (typename InputAction::copy_value_type))
   {
     // Check both actions statically.
     STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
     STATIC_ASSERT (is_input_action<InputAction>::value && InputAction::parameter_mode == NO_PARAMETER);
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, 0, OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   template <class OutputAction, class InputAction>
@@ -164,17 +171,18 @@ public:
 	void (*output_ptr) (typename OutputAction::parameter_type),
 	typename OutputAction::parameter_type output_parameter,
 	automaton* input_automaton,
-	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::value_type),
+	void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
 	typename InputAction::parameter_type input_parameter)
   {
     // Check both actions statically.
     STATIC_ASSERT (is_output_action<OutputAction>::value && (OutputAction::parameter_mode == PARAMETER || OutputAction::parameter_mode == AUTO_PARAMETER));
     STATIC_ASSERT (is_input_action<InputAction>::value && (InputAction::parameter_mode == PARAMETER || InputAction::parameter_mode ==  AUTO_PARAMETER));
     // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::value_type COMMA typename InputAction::value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
 
     bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), OutputAction::parameter_mode, aid_cast (output_parameter),
-	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter), OutputAction::value_size);
+	   input_automaton, reinterpret_cast<const void*> (input_ptr), InputAction::parameter_mode, aid_cast(input_parameter), OutputAction::buffer_value_mode, OutputAction::copy_value_mode, OutputAction::copy_value_size);
   }
 
   static inline const input_action_set_type*
@@ -199,7 +207,9 @@ private:
 	 const void* input_action_entry_point,
 	 parameter_mode_t input_parameter_mode,
 	 aid_t input_parameter,
-	 size_t value_size);
+	 buffer_value_mode_t buffer_value_mode,
+	 copy_value_mode_t copy_value_mode,
+	 size_t copy_value_size);
 
   static aid_t current_aid_;
   typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, system_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;

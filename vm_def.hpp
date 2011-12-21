@@ -166,4 +166,13 @@ instruction_context (page_fault_error_t error)
   return (error & (1 << 4)) != 0;
 }
 
+// Contains the physical address of a frame containing nothing but zeroes.
+extern int zero_page;
+
+inline frame_t
+zero_frame ()
+{
+  return physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page));
+}
+
 #endif /* __vm_def_hpp__ */

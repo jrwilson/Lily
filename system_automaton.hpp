@@ -21,7 +21,7 @@ namespace system_automaton {
 
   extern automaton* system_automaton;
 
-  typedef p_uv_output_action_traits<automaton*> init_traits;
+  typedef p_nb_nc_output_action_traits<automaton*> init_traits;
   void
   init (automaton* p);
 

@@ -53,7 +53,7 @@ namespace buffer_test {
 
     bid_t b2 = system::buffer_create (system::getpagesize ());
     kassert (b2 != -1);
-    kassert (system::buffer_append (b2, b1) == 0);
+    system::buffer_append (b2, b1);
     char* d = static_cast<char*> (system::buffer_map (b2));
     kassert (d != reinterpret_cast<void*> (-1));
     memset (d, 0xAB, system::buffer_size (b2));
@@ -75,7 +75,7 @@ namespace buffer_test {
 
   static void
   no_finish () {
-    system::finish (0, 0, false, 0);
+    system::finish (0, 0, false, -1, 0);
   }
 
   static void

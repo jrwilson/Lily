@@ -46,7 +46,9 @@ rts::bind_ (automaton* output_automaton,
 	    const void* input_action_entry_point,
 	    parameter_mode_t input_parameter_mode,
 	    aid_t input_parameter,
-	    size_t value_size)
+	    buffer_value_mode_t buffer_value_mode,
+	    copy_value_mode_t copy_value_mode,
+	    size_t copy_value_size)
 {
   // Check the output action dynamically.
   kassert (output_automaton != 0);
@@ -59,8 +61,8 @@ rts::bind_ (automaton* output_automaton,
   kassert (input_pos != input_automaton->action_end () && input_pos->type == INPUT);
   
   // TODO:  All of the bind checks.
-  caction oa (output_automaton, OUTPUT, output_action_entry_point, output_parameter_mode, value_size, output_parameter);
-  caction ia (input_automaton, INPUT, input_action_entry_point, input_parameter_mode, value_size, input_parameter);
+  caction oa (output_automaton, OUTPUT, output_action_entry_point, output_parameter_mode, buffer_value_mode, copy_value_mode, copy_value_size, output_parameter);
+  caction ia (input_automaton, INPUT, input_action_entry_point, input_parameter_mode, buffer_value_mode, copy_value_mode, copy_value_size, input_parameter);
   
   std::pair<bindings_type::iterator, bool> r = bindings_.insert (std::make_pair (oa, input_action_set_type ()));
   r.first->second.insert (ia);
