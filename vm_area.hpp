@@ -22,30 +22,30 @@
 
 class vm_area_base {
 protected:
-  const void* begin_;
-  const void* end_;
+  logical_address_t begin_;
+  logical_address_t end_;
 
 public:  
-  vm_area_base (const void* begin,
-		const void* end) :
+  vm_area_base (logical_address_t begin,
+		logical_address_t end) :
     begin_ (align_down (begin, PAGE_SIZE)),
     end_ (align_up (end, PAGE_SIZE))
   {
     kassert (begin_ <= end_);
   }
   
-  const void* begin () const
+  logical_address_t begin () const
   {
     return begin_;
   }
   
-  const void* end () const
+  logical_address_t end () const
   {
     return end_;
   }
   
   virtual void
-  page_fault (const void*,
+  page_fault (logical_address_t,
 	      page_fault_error_t,
 	      volatile registers*)
   {
@@ -55,53 +55,53 @@ public:
 
 class vm_text_area : public vm_area_base {
 public:
-  vm_text_area (const void* begin,
-		const void* end) :
+  vm_text_area (logical_address_t begin,
+		logical_address_t end) :
     vm_area_base (begin, end)
   { }
 };
 
 class vm_rodata_area : public vm_area_base {
 public:
-  vm_rodata_area (const void* begin,
-		  const void* end) :
+  vm_rodata_area (logical_address_t begin,
+		  logical_address_t end) :
     vm_area_base (begin, end)
   { }
 };
 
 class vm_data_area : public vm_area_base {
 public:
-  vm_data_area (const void* begin,
-		const void* end) :
+  vm_data_area (logical_address_t begin,
+		logical_address_t end) :
     vm_area_base (begin, end)
   { }
 
-  const void* begin () const
-  {
-    return begin_;
-  }
+  // logical_address_t begin () const
+  // {
+  //   return begin_;
+  // }
 
-  const void* end () const
-  {
-    return end_;
-  }
+  // logical_address_t end () const
+  // {
+  //   return end_;
+  // }
 };
 
 class vm_heap_area : public vm_area_base {
 public:
-  vm_heap_area (const void* begin) :
+  vm_heap_area (logical_address_t begin) :
     vm_area_base (align_down (begin, PAGE_SIZE), align_down (begin, PAGE_SIZE))
   { }
 
   void
-  set_end (const void* e)
+  set_end (logical_address_t e)
   {
     end_ = e;
     kassert (begin_ <= end_);
   }
 
   void
-  page_fault (const void* address,
+  page_fault (logical_address_t address,
 	      page_fault_error_t error,
 	      volatile registers*)
   {
@@ -112,19 +112,19 @@ public:
     // Back the request with a frame.
     vm::map (address, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     // Clear the frame.
-    memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+    memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 };
 
 class vm_stack_area : public vm_area_base {
 public:
-  vm_stack_area (const void* begin,
-		 const void* end) :
+  vm_stack_area (logical_address_t begin,
+		 logical_address_t end) :
     vm_area_base (begin, end)
   { }
 
   void
-  page_fault (const void* address,
+  page_fault (logical_address_t address,
 	      page_fault_error_t error,
 	      volatile registers*)
   {
@@ -135,7 +135,7 @@ public:
     // Back the request with a frame.
     vm::map (address, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     // Clear the frame.
-    memset (const_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+    memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 };
 

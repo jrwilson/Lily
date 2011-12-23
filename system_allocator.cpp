@@ -14,209 +14,28 @@
 #include "system_allocator.hpp"
 #include "frame_manager.hpp"
 #include "vm.hpp"
-#include <new>
-#include "kassert.hpp"
-#include "system_automaton.hpp"
-
-static const uint32_t MAGIC = 0x7ACEDEAD;
-
-struct system_alloc::chunk_header {
-  uint32_t available : 1;
-  uint32_t magic : 31;
-  size_t size; /* Does not include header. */
-  chunk_header* prev;
-  chunk_header* next;
-
-  chunk_header (size_t sz) :
-    available (1),
-    magic (MAGIC),
-    size (sz),
-    prev (0),
-    next (0)
-  { }
-};
 
 system_alloc::chunk_header* system_alloc::first_header_ = 0;
 system_alloc::chunk_header* system_alloc::last_header_ = 0;
-const void* system_alloc::heap_end_ = 0;
-
-system_alloc::chunk_header*
-system_alloc::find_header (chunk_header* start,
-			 size_t size)
-{
-  for (; start != 0 && !(start->available && start->size >= size); start = start->next) ;;
-  return start;
-}
-
-void
-system_alloc::split_header (chunk_header* ptr,
-			  size_t size)
-{
-  /* Split the block. */
-  chunk_header* n = new (reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + size) chunk_header (ptr->size - size - sizeof (chunk_header));
-  n->prev = ptr;
-  n->next = ptr->next;
-
-  ptr->size = size;
-  ptr->next = n;
-  
-  if (n->next != 0) {
-    n->next->prev = n;
-  }
-  
-  if (ptr == last_header_) {
-    last_header_ = n;
-  }
-}
-
-// Try to merge with the next chunk.
-bool
-system_alloc::merge_header (chunk_header* ptr)
-{
-  if (ptr->available && ptr->next != 0 && ptr->next->available && ptr->next == reinterpret_cast<chunk_header*>((reinterpret_cast<uint8_t*> (ptr) + sizeof (chunk_header) + ptr->size))) {
-    ptr->size += sizeof (chunk_header) + ptr->next->size;
-    if (ptr->next == last_header_) {
-      last_header_ = ptr;
-    }
-    ptr->next = ptr->next->next;
-    ptr->next->prev = ptr;
-    return true;
-  }
-  else {
-    return false;
-  }
-}
+logical_address_t system_alloc::heap_end_ = 0;
+bool system_alloc::backing_ = false;
 
 void*
 system_alloc::allocate (size_t size)
 {
   // Page aligment makes mapping easier.
   kassert (is_aligned (size, PAGE_SIZE));
-  if (system_automaton::system_automaton != 0) {
-    void* retval = system_automaton::system_automaton->sbrk (size);
-    kassert (retval != 0);
+  logical_address_t retval = reinterpret_cast<logical_address_t> (last_header_ + 1) + last_header_->size;
+  // Check to make sure we don't run out of logical address space.
+  kassert (retval + size <= heap_end_);
+  if (backing_) {
     // Back with frames.
-    for (size_t x = 0; x < size; x += PAGE_SIZE) {
-      vm::map (static_cast<uint8_t*> (retval) + x, frame_manager::alloc (), vm::USER, vm::WRITABLE);
-    }
-    return retval;
-  }
-  else {
-    void* retval = reinterpret_cast<uint8_t*> (last_header_ + 1) + last_header_->size;
-    // Check to make sure we don't run out of memory.
-    kassert (static_cast<uint8_t*> (retval) + size <= heap_end_);
-    return retval;
-  }
-}
-
-void
-system_alloc::initialize (void* begin,
-			  const void* end)
-{
-  // We use a page as the initial size of the heap.
-  const size_t request_size = PAGE_SIZE;
-  kassert (begin < end);
-  kassert (reinterpret_cast<size_t> (end) - reinterpret_cast<size_t> (begin) >= request_size);
-
-  first_header_ = new (begin) chunk_header (request_size - sizeof (chunk_header));
-  last_header_ = first_header_;
-  heap_end_ = end;
-}
-
-const void*
-system_alloc::heap_begin ()
-{
-  return first_header_;
-}
-
-size_t
-system_alloc::heap_size ()
-{
-  return (reinterpret_cast<uint8_t*> (last_header_ + 1) + last_header_->size) - reinterpret_cast<uint8_t*> (first_header_);
-}
-
-void*
-system_alloc::alloc (size_t size)
-{
-  if (size == 0) {
-    return 0;
-  }
-
-  chunk_header* ptr = find_header (first_header_, size);
-
-  /* Acquire more memory. */
-  if (ptr == 0) {
-    const size_t request_size = align_up (size + sizeof (chunk_header), PAGE_SIZE);
-    ptr = new (allocate (request_size)) chunk_header (request_size - sizeof (chunk_header));
-
-    if (ptr > last_header_) {
-      // Append.
-      last_header_->next = ptr;
-      // ptr->next already equals 0.
-      ptr->prev = last_header_;
-      last_header_ = ptr;
-      if (merge_header (last_header_->prev)) {
-	ptr = last_header_;
-      }
-    }
-    else if (ptr < first_header_) {
-      // Prepend.
-      ptr->next = first_header_;
-      // ptr->prev already equals 0.
-      first_header_->prev = ptr;
-      first_header_ = ptr;
-      merge_header (first_header_);
-    }
-    else {
-      // Insert.
-      chunk_header* p;
-      for (p = first_header_; p < ptr; p = p->next) ;;
-      ptr->next = p;
-      ptr->prev = p->prev;
-      p->prev = ptr;
-      ptr->prev->next = ptr;
-      merge_header (ptr);
-      p = ptr->prev;
-      if (merge_header (p)) {
-	ptr = p;
-      }
+    for (size_t x = 0; x != size; x += PAGE_SIZE) {
+      vm::map (retval + x, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     }
   }
-
-  /* Found something we can use. */
-  if ((ptr->size - size) > sizeof (chunk_header)) {
-    split_header (ptr, size);
-  }
-  /* Mark as used and return. */
-  ptr->available = 0;
-  return (ptr + 1);
-}
-
-void
-system_alloc::free (void* p)
-{
-  if (p == 0) {
-    return;
-  }
-
-  chunk_header* ptr = static_cast<chunk_header*> (p);
-  --ptr;
-
-  if (ptr >= first_header_ &&
-      ptr <= last_header_ &&
-      ptr->magic == MAGIC &&
-      ptr->available == 0) {
-
-    ptr->available = 1;
-    
-    // Merge with previous.
-    merge_header (ptr);
-
-    // Merge with previous.
-    if (ptr->prev != 0) {
-      merge_header (ptr->prev);
-    }
-  }
+  
+  return reinterpret_cast<void*> (retval);
 }
 
 // static void

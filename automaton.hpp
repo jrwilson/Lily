@@ -30,10 +30,11 @@
 
 class automaton {
 private:
-  // Automaton identifier.
   aid_t aid_;
   // Frame that contains the automaton's page directory.
   frame_t const page_directory_frame_;
+  // Flag indicating if the automaton can execute privileged instructions.
+  bool privileged_;
   // Table of action descriptors for guiding execution, checking bindings, etc.
   typedef std::unordered_map<const void*, paction, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, paction> > > action_map_type;
   action_map_type action_map_;
@@ -92,7 +93,7 @@ private:
   };
 
   memory_map_type::const_iterator
-  find_address (const void* address) const
+  find_address (logical_address_t address) const
   {
     vm_area_base k (address, address);
     memory_map_type::const_iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
@@ -109,7 +110,7 @@ private:
   }
 
   memory_map_type::iterator
-  find_address (const void* address)
+  find_address (logical_address_t address)
   {
     vm_area_base k (address, address);
     memory_map_type::iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
@@ -137,9 +138,11 @@ private:
 public:
 
   automaton (aid_t aid,
-	     frame_t page_directory_frame) :
+	     frame_t page_directory_frame,
+	     bool privileged) :
     aid_ (aid),
     page_directory_frame_ (page_directory_frame),
+    privileged_ (privileged),
     heap_area_ (0),
     stack_area_ (0),
     current_bid_ (0)
@@ -155,29 +158,29 @@ public:
     }
   }
 
-  bool
-  address_in_use (const void* address) const
-  {
-    return find_address (address) != memory_map_.end ();
-  }
-
   aid_t
   aid () const
   {
     return aid_;
   }
 
-  const void*
-  stack_pointer () const
-  {
-    kassert (stack_area_ != 0);
-    return stack_area_->end ();
-  }
-  
   frame_t
   page_directory_frame () const
   {
     return page_directory_frame_;
+  }
+
+  bool
+  can_execute_privileged () const
+  {
+    return privileged_;
+  }
+
+  logical_address_t
+  stack_pointer () const
+  {
+    kassert (stack_area_ != 0);
+    return stack_area_->end ();
   }
 
   // TODO:  Return an iterator.
@@ -237,8 +240,8 @@ public:
   {
     kassert (heap_area_ != 0);
 
-    void* const old_end = const_cast<void*> (heap_area_->end ());
-    const void* const new_end = reinterpret_cast<uint8_t*> (old_end) + size;
+    logical_address_t const old_end = heap_area_->end ();
+    logical_address_t const new_end = old_end + size;
     if (new_end < old_end) {
       // Shrunk too much.
       // Fail.
@@ -252,7 +255,7 @@ public:
     if (new_end <= (*pos)->begin ()) {
       // The allocation does not interfere with next area.  Success.
       heap_area_->set_end (new_end);
-      return old_end;
+      return reinterpret_cast<void*> (old_end);
     }
     else {
       // Failure.
@@ -264,12 +267,13 @@ public:
   verify_span (const void* ptr,
 	       size_t size) const
   {
-    memory_map_type::const_iterator pos = find_address (ptr);
-    return pos != memory_map_.end () && (*pos)->begin () <= ptr && (static_cast<const uint8_t*> (ptr) + size) <= (*pos)->end ();
+    const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
+    memory_map_type::const_iterator pos = find_address (address);
+    return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();
   }
   
   void
-  page_fault (const void* address,
+  page_fault (logical_address_t address,
 	      page_fault_error_t error,
 	      volatile registers* regs)
   {
@@ -279,7 +283,7 @@ public:
     }
     else {
       kout << "Page Fault" << endl;
-      kout << "aid = " << aid_ << " address = " << hexformat (address) << " error = " << hexformat (error) << endl;
+      kout << "address = " << hexformat (address) << " error = " << hexformat (error) << endl;
       kout << *regs << endl;
       // TODO:  Handle page fault for address not in memory map.
       kassert (0);
@@ -814,11 +818,11 @@ public:
 	// Find a hole and map.
 	for (; stack_pos != heap_pos; ++stack_pos) {
 	  memory_map_type::reverse_iterator prev = stack_pos + 1;
-	  size_t size = static_cast<const uint8_t*> ((*stack_pos)->begin ()) - static_cast<const uint8_t*> ((*prev)->end ());
+	  size_t size = (*stack_pos)->begin () - (*prev)->end ();
 	  if (size >= b->size ()) {
 	    b->set_end ((*stack_pos)->begin ());
 	    memory_map_.insert (prev.base (), b);
-	    return const_cast<void*> (b->begin ());
+	    return reinterpret_cast<void*> (b->begin ());
 	  }
 	}
 	
@@ -827,7 +831,7 @@ public:
       }
       else {
 	// The buffer is already mapped.  Return the address.
-	return const_cast<void*> (b->begin ());
+	return reinterpret_cast<void*> (b->begin ());
       }
     }
     else {

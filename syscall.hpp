@@ -18,7 +18,7 @@
 #include "bid.hpp"
 #include <stddef.h>
 
-namespace system {
+namespace syscall {
   
   void
   finish (const void* action_entry_point,

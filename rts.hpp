@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include "system_allocator.hpp"
 #include "action.hpp"
+#include "automaton.hpp"
 
 #include "kassert.hpp"
 
@@ -29,11 +30,58 @@ class automaton;
 class buffer;
 
 class rts {
+private:
+  typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, system_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
+
 public:
   typedef std::unordered_set<caction, std::hash<caction>, std::equal_to<caction>, system_allocator<caction> > input_action_set_type;
 
+  class const_automaton_iterator : public std::iterator<std::forward_iterator_tag, const automaton> {
+  public:
+
+    const_automaton_iterator (aid_map_type::const_iterator p) :
+      p_ (p)
+    { }
+
+    inline bool
+    operator== (const const_automaton_iterator& other) const
+    {
+      return p_ == other.p_;
+    }
+
+    inline const_automaton_iterator&
+    operator++ ()
+    {
+      ++p_;
+      return *this;
+    }
+
+    inline const automaton*
+    operator-> ()
+    {
+      return p_->second;
+    }
+
+  private:
+    aid_map_type::const_iterator p_;
+  };
+
+  static const_automaton_iterator
+  automaton_begin ()
+  {
+    return const_automaton_iterator (aid_map_.begin ());
+  }
+
+  static const_automaton_iterator
+  automaton_end ()
+  {
+    return const_automaton_iterator (aid_map_.end ());
+  }
+
   static automaton*
-  create (frame_t frame);
+  create (bool privcall,
+	  vm::page_privilege_t map_privilege,
+	  vm::page_privilege_t kernel_privilege);
 
   template <class OutputAction,
 	    class InputAction>
@@ -1166,7 +1214,6 @@ private:
 	 size_t copy_value_size);
 
   static aid_t current_aid_;
-  typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, system_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
   static aid_map_type aid_map_;
 
   typedef std::unordered_map<caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, input_action_set_type> > > bindings_type;

@@ -186,7 +186,7 @@ private:
       // Switch page directories.
       vm::switch_to_directory (action_.automaton->page_directory_frame ());
 
-      uint32_t* stack_pointer = const_cast<uint32_t*> (static_cast<const uint32_t*> (action_.automaton->stack_pointer ()));
+      uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (action_.automaton->stack_pointer ());
 
       // These instructions serve a dual purpose.
       // First, they set up the cdecl calling convention for actions.
@@ -220,7 +220,7 @@ private:
       uint32_t* sp = stack_pointer;
 
       // Push the stack segment.
-      *--stack_pointer = (gdt::USER_DATA_SELECTOR | descriptor_constants::RING3);
+      *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor_constants::RING3;
       
       // Push the stack pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (sp);
@@ -232,7 +232,7 @@ private:
       *--stack_pointer = eflags;
 
       // Push the code segment.
-      *--stack_pointer = (gdt::USER_CODE_SELECTOR | descriptor_constants::RING3);
+      *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor_constants::RING3;
 
       // Push the instruction pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (action_.action_entry_point);

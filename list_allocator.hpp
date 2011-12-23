@@ -17,6 +17,8 @@
 #include <memory>
 #include "syscall.hpp"
 
+// TODO:  Implement a more efficient allocator like Doug Lea's malloc (dlmalloc).
+
 template <typename Tag>
 class list_alloc {
 private:
@@ -105,8 +107,8 @@ public:
   static void
   initialize ()
   {
-    data_.page_size_ = system::getpagesize ();
-    data_.first_header_ = new (system::sbrk (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
+    data_.page_size_ = syscall::getpagesize ();
+    data_.first_header_ = new (syscall::sbrk (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
     data_.last_header_ = data_.first_header_;
   }
 
@@ -122,7 +124,7 @@ public:
     /* Acquire more memory. */
     if (ptr == 0) {
       size_t request_size = align_up (sizeof (chunk_header) + size, data_.page_size_);
-      ptr = new (system::sbrk (request_size)) chunk_header (request_size - sizeof (chunk_header));
+      ptr = new (syscall::sbrk (request_size)) chunk_header (request_size - sizeof (chunk_header));
       
       if (ptr > data_.last_header_) {
 	// Append.

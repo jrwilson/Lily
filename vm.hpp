@@ -17,6 +17,7 @@
 #include "vm_def.hpp"
 #include "kassert.hpp"
 #include "frame_manager.hpp"
+#include "privcall.hpp"
 
 namespace vm {
   struct page_directory;
@@ -25,8 +26,8 @@ namespace vm {
 
 extern vm::page_directory kernel_page_directory;
 extern vm::page_table kernel_page_table;
-
-class automaton;
+// A frame containing nothing but zeroes.
+extern int zero_page;
 
 namespace vm {
 
@@ -66,22 +67,22 @@ namespace vm {
   };
 
   inline page_table_idx_t
-  get_page_table_entry (const void* address)
+  get_page_table_entry (logical_address_t address)
   {
-    return (reinterpret_cast<uintintptr_t> (address) & 0x3FF000) >> 12;
+    return (address & 0x3FF000) >> 12;
   }
   
   inline page_table_idx_t
-  get_page_directory_entry (const void* address)
+  get_page_directory_entry (logical_address_t address)
   {
-    return (reinterpret_cast<uintintptr_t> (address) & 0xFFC00000) >> 22;
+    return (address & 0xFFC00000) >> 22;
   }
   
-  inline const void*
+  inline logical_address_t
   get_address (page_table_idx_t directory_entry,
 	       page_table_idx_t table_entry)
   {
-    return reinterpret_cast<const void*> (directory_entry << 22 | table_entry << 12);
+    return (directory_entry << 22 | table_entry << 12);
   }
 
   struct page_table_entry {
@@ -177,60 +178,50 @@ namespace vm {
     { }
   };
   
-  struct page_directory;
+  struct page_directory {
+    page_directory_entry entry[PAGE_ENTRY_COUNT];
+
+    page_directory (frame_t frame,
+		    page_privilege_t privilege)
+    {
+      // Map the page directory to itself.
+      entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, privilege, PRESENT);
+      frame_manager::incref (frame);
+    }
+  };
+
+  inline void
+  copy_page_directory (page_directory* dst,
+		       page_directory* src,
+		       page_privilege_t privilege)
+  {
+    // Avoid the last entry.
+    for (page_table_idx_t idx = 0; idx != PAGE_ENTRY_COUNT - 1; ++idx) {
+      if (src->entry[idx].present_ == PRESENT && dst->entry[idx].present_ == NOT_PRESENT) {
+	dst->entry[idx] = src->entry[idx];
+	frame_manager::incref (dst->entry[idx].frame_);
+	dst->entry[idx].user_ = privilege;
+      }
+    }
+  }
 
   inline page_directory*
   get_kernel_page_directory (void)
   {
-    return reinterpret_cast<page_directory*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + reinterpret_cast<size_t> (&kernel_page_directory));
+    return reinterpret_cast<page_directory*> (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE);
   };
-
-  inline page_table*
-  get_page_table (const void* address)
-  {
-    return reinterpret_cast<page_table*> (0xFFC00000 + get_page_directory_entry (address) * PAGE_SIZE);
-  }
-
-  struct page_directory {
-    page_directory_entry entry[PAGE_ENTRY_COUNT];
-
-    page_directory (bool all)
-    {
-      kassert (is_aligned (this, PAGE_SIZE));
-      
-      // Copy the kernel page directory.
-      page_directory* kernel_directory = get_kernel_page_directory ();
-      for (size_t k = 0; k < PAGE_ENTRY_COUNT - 1; ++k) {
-	if (all || get_address (k, 0) >= KERNEL_VIRTUAL_BASE) {
-	  entry[k] = kernel_directory->entry[k];
-	  if (entry[k].present_) {
-	    frame_manager::incref (entry[k].frame_);
-	  }
-	}
-	else {
-	  entry[k] = page_directory_entry (0, SUPERVISOR, NOT_PRESENT);
-	}
-      }
-      
-      // Find the frame corresponding to this page directory.
-      page_table* page_table = get_page_table (this);
-      const size_t table_entry = get_page_table_entry (this);
-      frame_t frame = page_table->entry[table_entry].frame_;
-      
-      // Map the page directory to itself.
-      entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, SUPERVISOR, PRESENT);
-      frame_manager::incref (frame);
-    }
-  };
-  
-  void
-  initialize (automaton*);
 
   inline page_directory*
   get_page_directory (void)
   {
     /* Because the page directory is mapped to itself. */
     return reinterpret_cast<page_directory*> (0xFFFFF000);
+  }
+
+  inline page_table*
+  get_page_table (logical_address_t address)
+  {
+    return reinterpret_cast<page_table*> (0xFFC00000 + get_page_directory_entry (address) * PAGE_SIZE);
   }
   
   inline frame_t
@@ -239,106 +230,141 @@ namespace vm {
     return get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_;
   }
     
-  inline void*
-  get_stub (void)
+  inline logical_address_t
+  get_stub1 (void)
   {
     // Reuse the address space of the page table.
-    return reinterpret_cast<void*> (reinterpret_cast<size_t> (KERNEL_VIRTUAL_BASE) + reinterpret_cast<size_t> (&kernel_page_table));
+    return reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE;
   }
 
+  inline frame_t
+  zero_frame ()
+  {
+    return physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page));
+  }
+
+  inline frame_t
+  logical_address_to_frame (logical_address_t logical_addr)
+  {
+    page_directory* pd = get_page_directory ();
+    page_table* pt = get_page_table (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+
+    kassert (pd->entry[directory_entry].present_ == PRESENT);
+    kassert (pt->entry[table_entry].present_ == PRESENT);
+
+    return pt->entry[table_entry].frame_;
+  }
+
+  void
+  expand_kernel (page_table_idx_t directory_entry);
+
   inline void
-  map (const void* logical_addr,
+  map (logical_address_t logical_addr,
        frame_t fr,
        page_privilege_t privilege,
        writable_t writable)
   {
-    page_directory* kernel_page_directory = get_kernel_page_directory ();
     page_directory* page_directory = get_page_directory ();
     page_table* pt = get_page_table (logical_addr);
-    const size_t directory_entry = get_page_directory_entry (logical_addr);
-    const size_t table_entry = get_page_table_entry (logical_addr);
-    
-    // Find or create a page table.
-    if (!page_directory->entry[directory_entry].present_) {
-      if (logical_addr < KERNEL_VIRTUAL_BASE ||
-	  page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_ == kernel_page_directory->entry[PAGE_ENTRY_COUNT - 1].frame_) {
-	// The address is in user space or we are using the kernel page directory.
-	// Either way, we can just allocate a page table.
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+
+    if (page_directory->entry[directory_entry].present_ == NOT_PRESENT) {
+      // We need to allocate a new page table.
+      if (logical_addr < KERNEL_VIRTUAL_BASE) {
+	// User space.
 	page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
-	// Flush the TLB.
-	asm ("invlpg (%0)\n" :: "r"(pt));
-	// Initialize the page table.
-	new (pt) vm::page_table ();
       }
       else {
-	// We are using a non-kernel page directory and need a kernel page table.
-	if (!kernel_page_directory->entry[directory_entry].present_) {
-	  // The page table is not present in the kernel.
-	  // Allocate a page table and map it in both directories.
-	  kernel_page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
-	  page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
-	  frame_manager::incref (page_directory->entry[directory_entry].frame_);
-	  // Flush the TLB.
-	  asm ("invlpg (%0)\n" :: "r"(pt));
-	  // Initialize the page table.
-	  new (pt) vm::page_table ();
-	}
-	else {
-	  // The page table is present in the kernel.
-	  // Copy the entry.
-	  page_directory->entry[directory_entry] = kernel_page_directory->entry[directory_entry];
-	  frame_manager::incref (page_directory->entry[directory_entry].frame_);
-	  // Flush the TLB.
-	  asm ("invlpg (%0)\n" :: "r"(pt));
-	}
+	// Kernel space.
+	// Whenever we allocate a new page table for the kernel, we map it into all page directories.
+	// This prevents page faults in kernel space and seems to simplify the code.
+	// The drawback is that it is proportional to the number of automata in the system.
+	// However, it only occurs for every 4MB of allocation.
+	expand_kernel (directory_entry);
       }
+      
+      // Flush the TLB.
+      privcall::invlpg (reinterpret_cast<logical_address_t> (pt));
+      // Initialize the page table.
+      new (pt) vm::page_table ();
     }
-    
+
+    // The entry shoud not be present.
     kassert (pt->entry[table_entry].present_ == NOT_PRESENT);
+    // Map.
     pt->entry[table_entry] = page_table_entry (fr, privilege, writable, PRESENT);
     frame_manager::incref (fr);
-
     // Flush the TLB.
-    asm ("invlpg (%0)\n" :: "r"(logical_addr));
+    privcall::invlpg (logical_addr);
   }
 
   inline void
-  remap (const void* logical_addr,
+  remap (logical_address_t logical_addr,
 	 page_privilege_t privilege,
 	 writable_t writable)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const size_t directory_entry = get_page_directory_entry (logical_addr);
-    const size_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     kassert (page_table->entry[table_entry].present_ == PRESENT);
 
     page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, privilege, writable, PRESENT);
     /* Flush the TLB. */
-    asm ("invlpg (%0)\n" :: "r" (logical_addr));
+    privcall::invlpg (logical_addr);
   }
-  
-  inline bool
-  unmap (const void* logical_addr)
+
+  inline void
+  set_available (logical_address_t logical_addr,
+		 int available)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const size_t directory_entry = get_page_directory_entry (logical_addr);
-    const size_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
     
-    if (page_directory->entry[directory_entry].present_ == PRESENT &&
-	page_table->entry[table_entry].present_ == PRESENT) {
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+
+    page_table->entry[table_entry].available_ = available;
+    // No flushing required.
+  }
+
+  inline int
+  get_available (logical_address_t logical_addr)
+  {
+    page_directory* page_directory = get_page_directory ();
+    page_table* page_table = get_page_table (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+    
+    return page_table->entry[table_entry].available_;
+  }
+  
+  inline void
+  unmap (logical_address_t logical_addr,
+	 bool decref = true)
+  {
+    page_directory* page_directory = get_page_directory ();
+    page_table* page_table = get_page_table (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+    kassert (page_table->entry[table_entry].present_ == PRESENT);
+
+    if (decref) {
       frame_manager::decref (page_table->entry[table_entry].frame_);
-      page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
-      /* Flush the TLB. */
-      asm ("invlpg (%0)\n" :: "r"(logical_addr));
-      return true;
     }
-    else {
-      return false;
-    }
+    page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
+    /* Flush the TLB. */
+    privcall::invlpg (logical_addr);
   }
 
   inline void

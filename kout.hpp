@@ -20,6 +20,25 @@
 #include "registers.hpp"
 
 class console {
+private:
+  // Colors.
+  static const unsigned char BLACK = 0;
+  static const unsigned char BLUE = 1;
+  static const unsigned char GREEN = 2;
+  static const unsigned char CYAN = 3;
+  static const unsigned char RED = 4;
+  static const unsigned char MAGENTA = 5;
+  static const unsigned char BROWN = 6;
+  static const unsigned char LIGHT_GREY = 7;
+  static const unsigned char DARK_GREY = 8;
+  static const unsigned char LIGHT_BLUE = 9;
+  static const unsigned char LIGHT_GREEN = 10;
+  static const unsigned char LIGHT_CYAN = 11;
+  static const unsigned char LIGHT_RED = 12;
+  static const unsigned char LIGHT_MAGENTA = 13;
+  static const unsigned char LIGHT_BROWN = 14;
+  static const unsigned char WHITE = 15;
+  
 public:
   typedef int streamsize;
   typedef uint_fast16_t fmtflags;
@@ -46,9 +65,17 @@ public:
   static const fmtflags uppercase = (1 << 13);
   static const fmtflags unitbuf = (1 << 14);
 
-  console ();
+  static void
+  initialize ()
+  {
+    for (unsigned int y = 0; y < HEIGHT; ++y) {
+      for (unsigned int x = 0; x < WIDTH; ++x) {
+  	videoram_[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
+      }
+    }
+  }
 
-  console&
+  inline console&
   operator<< (short n)
   {
     print_signed (n);
@@ -56,7 +83,7 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (int n)
   {
     print_signed (n);
@@ -64,7 +91,7 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (long n)
   {
     print_signed (n);
@@ -72,7 +99,7 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (unsigned short n)
   {
     print_integer (n, base ());
@@ -80,7 +107,7 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (unsigned int n)
   {
     print_integer (n, base ());
@@ -88,7 +115,7 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (unsigned long n)
   {
     print_integer (n, base ());
@@ -96,16 +123,16 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (float n);
 
-  console&
+  inline console&
   operator<< (double n);
 
-  console&
+  inline console&
   operator<< (long double n);
 
-  console&
+  inline console&
   operator<< (bool n)
   {
     if (n) {
@@ -117,7 +144,7 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (const void* p)
   {
     *this << reinterpret_cast<uintintptr_t> (p);
@@ -125,76 +152,123 @@ public:
     return *this;
   }
 
-  console&
+  inline console&
   operator<< (console& (*ptr) (console&))
   {
     ptr (*this);
     return *this;
   }
 
-  console&
-  put (char c);
+  inline console&
+  put (char c)
+  {
+    // TODO:  Can we scroll with hardware?
+    /* Scroll if we are at the bottom of the screen. */
+    if (y_location_ == HEIGHT) {
+      unsigned int y;
+      for (y = 0; y < HEIGHT - 1; ++y) {
+	for (unsigned int x = 0; x < WIDTH; ++x) {
+	  videoram_[y * WIDTH + x] = videoram_[(y + 1) * WIDTH + x];
+	}
+      }
+      /* Fill last line with spaces. */
+      for (unsigned int x = 0; x < WIDTH; ++x) {
+	videoram_[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
+      }
+      --y_location_;
+    }
+    
+    switch (c) {
+    case '\b':
+      if (x_location_ > 0) {
+	--x_location_;
+      }
+      break;
+    case '\t':
+      /* A tab is a position divisible by 8. */
+      x_location_ = (x_location_ + 8) & ~(8-1);
+      break;
+    case '\n':
+      x_location_ = 0;
+      ++y_location_;
+      break;
+    case '\r':
+      x_location_ = 0;
+      break;
+    default:
+      /* Print the character using black on white. */
+      videoram_[y_location_ * WIDTH + x_location_] = (BLACK << 12) | (WHITE << 8) | c;
+      /* Advance the cursor. */
+      ++x_location_;
+      if (x_location_ == WIDTH) {
+	++y_location_;
+	x_location_ = 0;
+      }
+    }
+    
+    return *this;
+  }
 
-  console&
+  static inline console&
   write (const char* s,
 	 size_t n);
 
-  fmtflags
-  flags () const
+  static inline fmtflags
+  flags ()
   {
     return flags_;
   }
 
-  fmtflags
+  static inline fmtflags
   flags (fmtflags fmt)
   {
     fmtflags r = flags_; flags_ = fmt; return r;
   }
 
-  fmtflags
+  static inline fmtflags
   setf (fmtflags fmt)
   {
     return flags (flags () | fmt);
   }
 
-  fmtflags
+  static inline fmtflags
   setf (fmtflags fmt, fmtflags mask)
   {
     return flags ((flags () & ~mask) | (fmt & mask));
   }
 
-  void
+  static inline void
   unsetf (fmtflags mask)
   {
     flags (flags () & ~mask);
   }
 
-  void
+  static inline void
   flush ()
   {
     /* Do nothing.  Unbuffered. */
   }
 
-  streamsize
-  width () const
+  static inline streamsize
+  width ()
   {
     return width_;
   }
 
-  streamsize
+  static inline streamsize
   width (streamsize w)
   {
     std::swap (w, width_);
     return w;
   }
 
-  char
-  fill () const
+  static inline char
+  fill ()
   {
     return fill_;
   }
 
-  char
+  static inline char
   fill (char c)
   {
     std::swap (c, fill_);
@@ -206,27 +280,27 @@ private:
   static const unsigned int WIDTH  = 80;
   static const unsigned int HEIGHT = 25;
 
-  unsigned short* const videoram_;
+  static unsigned short* videoram_;
 
-  char left_buffer_[3];
-  size_t left_buffer_size_;
+  static char left_buffer_[3];
+  static size_t left_buffer_size_;
 
-  char right_buffer_[20];
-  size_t right_buffer_size_;
+  static char right_buffer_[20];
+  static size_t right_buffer_size_;
 
-  unsigned int x_location_;
-  unsigned int y_location_;
-  fmtflags flags_;
-  streamsize width_;
-  char fill_;
+  static unsigned int x_location_;
+  static unsigned int y_location_;
+  static fmtflags flags_;
+  static streamsize width_;
+  static char fill_;
 
-  void
+  static inline void
   push_left (char c)
   {
     left_buffer_[left_buffer_size_++] = c;
   }
 
-  void
+  inline void
   print_left ()
   {
     for (size_t idx = 0; idx < left_buffer_size_; ++idx) {
@@ -234,13 +308,13 @@ private:
     }
   }
 
-  void
+  static inline void
   push_right (char c)
   {
     right_buffer_[right_buffer_size_++] = c;
   }
 
-  void
+  inline void
   print_right ()
   {
     size_t x = right_buffer_size_;
@@ -249,7 +323,7 @@ private:
     }
   }
 
-  void
+  inline void
   pad ()
   {
     for (int idx = left_buffer_size_ + right_buffer_size_; idx < width_; ++idx) {
@@ -257,8 +331,8 @@ private:
     }
   }
 
-  int_fast8_t
-  base () const
+  static inline int_fast8_t
+  base ()
   {
     switch (flags_ & basefield) {
     case dec:
@@ -272,7 +346,7 @@ private:
     }
   }
   
-  char
+  static inline char
   digit (int_fast8_t value)
   {
     switch (flags_ & basefield) {
@@ -293,7 +367,7 @@ private:
   }
 
   template <typename T>
-  void
+  inline void
   print_signed (T n)
   {
     if (n < 0) {
@@ -304,7 +378,7 @@ private:
   }
 
   template <typename T>
-  void
+  inline void
   print_integer (T n,
 		 int_fast8_t base)
   {
@@ -353,7 +427,7 @@ private:
   }
 
   template <typename T>
-  void
+  static inline void
   push_digits (T n,
 	       int_fast8_t base)
   {
@@ -378,9 +452,16 @@ console&
 operator<< (console&,
 	    unsigned char);
 
-console&
-operator<< (console&,
-	    const char*);
+inline console&
+operator<< (console& c,
+	    const char* s)
+{
+  for (; *s != 0; ++s) {
+    c.put (*s);
+  }
+  
+  return c;
+}
 
 console&
 operator<< (console&,

@@ -7,9 +7,9 @@ class buffer : public vm_area_base {
 public:
   buffer (size_t size) :
     vm_area_base (0, 0),
-    frame_list_ (size / PAGE_SIZE, vm::page_table_entry (zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
+    frame_list_ (size / PAGE_SIZE, vm::page_table_entry (vm::zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
   {
-    frame_t zero_fr = zero_frame ();
+    frame_t zero_fr = vm::zero_frame ();
     for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
       frame_manager::incref (zero_fr);
     }
@@ -57,10 +57,10 @@ public:
   }
 
   void
-  set_end (const void* end)
+  set_end (logical_address_t end)
   {
     end_ = end;
-    begin_ = static_cast<const uint8_t*> (end) - size ();
+    begin_ = end - size ();
   }
 
   size_t
@@ -77,7 +77,7 @@ public:
       for (size_t idx = 0; idx < frame_list_.size (); ++idx) {
 	if (frame_list_[idx].writable_ == vm::WRITABLE) {
 	  // Unmap.
-	  vm::unmap (static_cast<const uint8_t*> (begin_) + PAGE_SIZE * idx);
+	  vm::unmap (begin_ + PAGE_SIZE * idx);
 	  // Convert to copy-on-write.
 	  frame_list_[idx].writable_ = vm::NOT_WRITABLE;
 	}
@@ -90,7 +90,7 @@ public:
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
-    const frame_t zero_frame = physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page));
+    const frame_t zero_frame = vm::zero_frame ();
     size_t retval = this->size ();
     size_t idx = frame_list_.size ();
     frame_list_.resize (idx + size / PAGE_SIZE);
@@ -121,13 +121,13 @@ public:
   }
 
   virtual void
-  page_fault (const void* address,
+  page_fault (logical_address_t address,
 	      page_fault_error_t error,
 	      volatile registers*)
   {
     kassert (data_context (error));
 
-    size_t idx = physical_address_to_frame (static_cast<const uint8_t*> (address) - static_cast<const uint8_t*> (begin_));
+    size_t idx = physical_address_to_frame (address - begin_);
 
     // The frame in question should always be copy on write.
     kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
@@ -146,13 +146,13 @@ public:
 	frame_t dst = frame_manager::alloc ();
 	frame_t src = frame_list_[idx].frame_;
 	// Map the src to the stub.
-	vm::map (vm::get_stub (), src, vm::USER, vm::NOT_WRITABLE);
+	vm::map (vm::get_stub1 (), src, vm::USER, vm::NOT_WRITABLE);
 	// Map the dst to the address.
 	vm::map (address, dst, vm::USER, vm::WRITABLE);
 	// Copy.
-	memcpy (const_cast<void*> (align_down (address, PAGE_SIZE)), vm::get_stub (), PAGE_SIZE);
+	memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
 	// Unmap the src and decrement its reference count.
-	vm::unmap (vm::get_stub ());
+	vm::unmap (vm::get_stub1 ());
 	frame_manager::decref (src);
 	// Record the dst.
 	frame_list_[idx].frame_ = dst;
@@ -168,12 +168,12 @@ public:
       // Exactly the same as previous copy except...
       frame_t dst = frame_manager::alloc ();
       frame_t src = frame_list_[idx].frame_;
-      vm::map (vm::get_stub (), src, vm::USER, vm::NOT_WRITABLE);
+      vm::map (vm::get_stub1 (), src, vm::USER, vm::NOT_WRITABLE);
       // we need to unmap the current frame to make room.
       vm::unmap (address);
       vm::map (address, dst, vm::USER, vm::WRITABLE);
-      memcpy (const_cast<void*> (align_down (address, PAGE_SIZE)), vm::get_stub (), PAGE_SIZE);
-      vm::unmap (vm::get_stub ());
+      memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
+      vm::unmap (vm::get_stub1 ());
       frame_manager::decref (src);
       frame_list_[idx].frame_ = dst;
       frame_list_[idx].writable_ = vm::WRITABLE;
@@ -186,7 +186,7 @@ public:
     if (begin_ != 0) {
       for (size_t idx = 0; idx < frame_list_.size (); ++idx) {
 	if (frame_list_[idx].present_ == vm::PRESENT) {
-	  vm::unmap (static_cast<const uint8_t*> (begin_) + idx * PAGE_SIZE);
+	  vm::unmap (begin_ + idx * PAGE_SIZE);
 	  frame_list_[idx].present_ = vm::NOT_PRESENT;
 	  // Convert to copy-on-write as well.
 	  frame_list_[idx].writable_ = vm::NOT_WRITABLE;

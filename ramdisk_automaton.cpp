@@ -47,7 +47,7 @@ namespace ramdisk {
     // Allocate a scheduler.
     scheduler_ = new (alloc_type ()) scheduler_type ();
     // Calculate the number of blocks.
-    info_.block_count = system::buffer_size (bid) / system::getpagesize ();
+    info_.block_count = syscall::buffer_size (bid) / syscall::getpagesize ();
     // Allocate the queues.
     info_queue_ = new (alloc_type ()) info_queue_type ();
     read_queue_ = new (alloc_type ()) read_queue_type ();

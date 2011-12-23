@@ -14,7 +14,7 @@
   Justin R. Wilson
 */
 
-namespace system {
+namespace syscall {
   
   enum {
     FINISH = 0,

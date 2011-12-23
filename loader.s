@@ -70,7 +70,7 @@ start:
 	mov [kernel_page_directory + 4 * PAGE_DIRECTORY_HIGH_ENTRY], ecx
 	;; Map page directory to itself.
 	mov ecx, kernel_page_directory
-	or ecx, (PAGE_PRESENT | PAGE_SUPERVISOR)
+	or ecx, (PAGE_PRESENT | PAGE_WRITABLE | PAGE_SUPERVISOR)
 	mov [kernel_page_directory + 4 * 1023], ecx
 	;; Initialize the page table.  Map the first 4MB.
 	mov eax, 0
@@ -106,6 +106,7 @@ highhalf:
 
 	[section .bss]
 	;; Reserve space for the stack.
+	;; TODO:  Should the stack be page-aligned?
 	ALIGN STACK_ALIGN
 	resb STACK_SIZE
 	[global stack_end]

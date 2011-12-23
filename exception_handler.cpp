@@ -17,7 +17,6 @@
 #include "kassert.hpp"
 #include "vm_def.hpp"
 #include "scheduler.hpp"
-#include "system_automaton.hpp"
 
 extern "C" void exception0 ();
 extern "C" void exception1 ();
@@ -172,16 +171,9 @@ exception_dispatch (volatile registers regs)
   case PAGE_FAULT:
     {
       // Get the faulting address.
-      const void* address;
+      logical_address_t address;
       asm ("mov %%cr2, %0\n" : "=g"(address));
-      if (address < KERNEL_VIRTUAL_BASE) {
-	// Use the automaton's memory map.
-	scheduler::current_action ().automaton->page_fault (address, regs.error, &regs);
-      }
-      else {
-	// Use our memory map.
-	system_automaton::system_automaton->page_fault (address, regs.error, &regs);
-      }
+      scheduler::current_action ().automaton->page_fault (address, regs.error, &regs);
     }
     break; 
   case COPROCESSOR_ERROR:

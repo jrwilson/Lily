@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 typedef uint32_t physical_address_t;
+typedef uint32_t logical_address_t;
 typedef uint32_t frame_t;
 
 typedef uint_fast16_t page_table_idx_t;
@@ -21,10 +22,10 @@ static const physical_address_t USABLE_MEMORY_BEGIN = 0x00100000;
 static const physical_address_t USABLE_MEMORY_END = 0xFFFFF000;
 
 /* Should agree with loader.s. */
-static const void* const KERNEL_VIRTUAL_BASE = reinterpret_cast<const void*> (0xC0000000);
+static const logical_address_t KERNEL_VIRTUAL_BASE = 0xC0000000;
 
 /* Everything must fit into 4MB initialy. */
-static const void* const INITIAL_LOGICAL_LIMIT = reinterpret_cast<const void*> (0xC0400000);
+static const logical_address_t INITIAL_LOGICAL_LIMIT = 0xC0400000;
 
 // One megabyte is important for dealing with low memory.
 static const size_t ONE_MEGABYTE = 0x00100000;
@@ -33,7 +34,7 @@ static const size_t ONE_MEGABYTE = 0x00100000;
 static const size_t FOUR_MEGABYTES = 0x00400000;
 
 /* Logical address above this address are using for page tables. */
-static const void* const PAGING_AREA = reinterpret_cast<const void*> (0xFFC00000);
+static const logical_address_t PAGING_AREA = 0xFFC00000;
 
 inline frame_t
 physical_address_to_frame (physical_address_t address)
@@ -103,13 +104,7 @@ is_aligned (const void* address,
   return (reinterpret_cast<physical_address_t> (address) & (radix - 1)) == 0;
 }
 
-inline physical_address_t
-logical_to_physical (const void* address,
-		     const void* offset)
-{
-  return reinterpret_cast<physical_address_t> (address) - reinterpret_cast<physical_address_t> (offset);
-}
-
+// TODO:  Move this to vm.
 typedef uint32_t page_fault_error_t;
 
 inline bool
@@ -164,15 +159,6 @@ inline bool
 instruction_context (page_fault_error_t error)
 {
   return (error & (1 << 4)) != 0;
-}
-
-// Contains the physical address of a frame containing nothing but zeroes.
-extern int zero_page;
-
-inline frame_t
-zero_frame ()
-{
-  return physical_address_to_frame (reinterpret_cast<physical_address_t> (&zero_page));
 }
 
 #endif /* __vm_def_hpp__ */

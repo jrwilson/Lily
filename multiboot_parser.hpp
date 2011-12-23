@@ -21,9 +21,8 @@
 
 class multiboot_parser {
 private:
+  uint32_t magic_;
   multiboot_info* info_;
-  physical_address_t begin_;
-  physical_address_t end_;
 
   class mmap_iter : std::iterator<std::forward_iterator_tag, const multiboot_memory_map_t> {
   private:
@@ -66,42 +65,63 @@ private:
     }
   };
 
+  static inline physical_address_t
+  update_end (physical_address_t temp,
+	      physical_address_t end,
+	      physical_address_t limit)
+  {
+    if (temp < limit) {
+      return std::max (end, temp);
+    }
+    else {
+      return end;
+    }
+  }
+
 public:
   typedef mmap_iter memory_map_iterator;
 
   multiboot_parser (uint32_t multiboot_magic,
 		    multiboot_info_t* multiboot_info) :
-    info_ (multiboot_info),
-    begin_ (reinterpret_cast<size_t> (info_)),
-    end_ (reinterpret_cast<size_t> (info_) + sizeof (multiboot_info_t))
+    magic_ (multiboot_magic),
+    info_ (multiboot_info)
+  { }
+
+  inline physical_address_t
+  physical_end (physical_address_t end,
+		physical_address_t limit) const
   {
-    kassert (multiboot_magic == MULTIBOOT_BOOTLOADER_MAGIC);
-    kassert (info_->flags & MULTIBOOT_INFO_MEM_MAP);
-    kassert (info_->flags & MULTIBOOT_INFO_MODS);
+    // Encompass the multiboot data structure.
+    end = update_end (physical_address_t (info_) + sizeof (multiboot_info_t), end, limit);
 
     // Encompass the memory map.
-    begin_ = std::min (begin_, static_cast<physical_address_t> (multiboot_info->mmap_addr));
-    end_ = std::max (end_, static_cast<physical_address_t> (multiboot_info->mmap_addr + multiboot_info->mmap_length));
+    if (has_memory_map ()) {
+      end = update_end (info_->mmap_addr + info_->mmap_length, end, limit);
+    }
 
     // Encompass the modules.
-    for (const multiboot_module_t* pos = module_begin ();
-	 pos != module_end ();
-	 ++pos) {
-      begin_ = std::min (begin_, static_cast<physical_address_t> (pos->mod_start));
-      end_ = std::max (end_, static_cast<physical_address_t> (pos->mod_end));
+    if (has_module_info ()) {
+      end = update_end (info_->mods_addr + module_count () * sizeof (multiboot_module_t), end, limit);
+      for (const multiboot_module_t* pos = module_begin ();
+      	   pos != module_end ();
+      	   ++pos) {
+      	end = update_end (pos->mod_end, end, limit);
+      }
     }
+
+    return end;
   }
 
-  inline physical_address_t
-  begin () const
+  inline bool
+  okay () const
   {
-    return begin_;
+    return magic_ == MULTIBOOT_BOOTLOADER_MAGIC;
   }
 
-  inline physical_address_t
-  end () const
+  inline bool
+  has_memory_map () const
   {
-    return end_;
+    return (info_->flags & MULTIBOOT_INFO_MEM_MAP);
   }
 
   inline memory_map_iterator
@@ -114,6 +134,18 @@ public:
   memory_map_end () const
   {
     return memory_map_iterator (reinterpret_cast<multiboot_memory_map_t*> (info_->mmap_addr + info_->mmap_length));
+  }
+
+  inline bool
+  has_module_info () const
+  {
+    return (info_->flags & MULTIBOOT_INFO_MODS);
+  }
+
+  inline size_t
+  module_count () const
+  {
+    return info_->mods_count;
   }
 
   inline const multiboot_module_t*

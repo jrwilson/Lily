@@ -43,4 +43,5 @@ trap_common_stub:
 	add esp, 8
 	iret
 
-TRAP 0, 128
+TRAP 0, 0x80
+TRAP 1, 0x81

@@ -1,57 +1,33 @@
-/*
-  File
-  ----
-  vm_manager.c
-  
-  Description
-  -----------
-  The virtual memory manager manages logical memory.
-
-  Authors:
-  Justin R. Wilson
-*/
-
 #include "vm.hpp"
-#include "automaton.hpp"
+#include "rts.hpp"
 
 namespace vm {
+  
+  inline logical_address_t
+  get_stub2 (void)
+  {
+    // Reuse the address space of the zero frame.
+    return reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE;
+  }
 
   void
-  initialize (automaton* system_automaton)
+  expand_kernel (page_table_idx_t directory_entry)
   {
-    kassert (system_automaton != 0);
+    // Allocate a new page table.
+    page_directory_entry e (frame_manager::alloc (), USER, PRESENT);
     
-    page_directory* kernel_page_directory = get_kernel_page_directory ();
+    // Map in the kernel directory.
+    get_kernel_page_directory ()->entry[directory_entry] = e;
     
-    // Mark frames that are currently being used and update the logical address space.
-    page_directory* pd = get_page_directory ();
-    for (size_t i = 0; i < PAGE_ENTRY_COUNT; ++i) {
-      if (pd->entry[i].present_) {
-	page_table* pt = get_page_table (reinterpret_cast<const void*> (get_address (i, 0)));
-	for (size_t j = 0; j < PAGE_ENTRY_COUNT; ++j) {
-	  if (pt->entry[j].present_) {
-	    const void* address = get_address (i, j);
-	    // The page directory uses the same page table for low and high memory.  Only process high memory.
-	    if (address >= static_cast<const uint8_t*> (KERNEL_VIRTUAL_BASE) + ONE_MEGABYTE) {
-	      if (system_automaton->address_in_use (address) ||
-		  address >= PAGING_AREA ||
-		  address == kernel_page_directory ||
-		  logical_to_physical (address, KERNEL_VIRTUAL_BASE) == reinterpret_cast<physical_address_t> (&zero_page)) {
-		// If the address is in the logical address space, mark the frame as being used.
-		frame_manager::mark_as_used (pt->entry[j].frame_);
-	      }
-	      else {
-		// Otherwise, unmap it.
-		pt->entry[j] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
-	      }
-	    }
-	  }
-	}
-      }
+    // Map in all the other directories.
+    for (rts::const_automaton_iterator pos = rts::automaton_begin ();
+         pos != rts::automaton_end ();
+         ++pos) {
+      map (get_stub2 (), pos->page_directory_frame (), USER, WRITABLE);
+      reinterpret_cast<page_directory*> (get_stub2 ())->entry[directory_entry] = e;
+      frame_manager::incref (e.frame_);
+      unmap (get_stub2 ());
     }
-    
-    // I don't trust myself.
-    // Consequently, I'm going to flush paging to ensure the subsequent memory accesses are correct.
-    switch_to_directory (page_directory_frame ());
   }
+
 }

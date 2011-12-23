@@ -81,11 +81,11 @@ private:
     if (!queue_.empty ()) {
       /* Schedule. */
       const entry& e = queue_.front ();
-      system::finish (e.action_entry_point, e.parameter, status, bid, buffer);
+      syscall::finish (e.action_entry_point, e.parameter, status, bid, buffer);
     }
     else {
       /* Don't schedule. */
-      system::finish (reinterpret_cast<const void*> (-1), -1, status, bid, buffer);
+      syscall::finish (reinterpret_cast<const void*> (-1), -1, status, bid, buffer);
     }
   }
 

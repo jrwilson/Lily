@@ -19,69 +19,54 @@ namespace buffer_test {
   static scheduler_type* scheduler_ = 0;
 
   static void
-  schedule ();
+  schedule ()
+  { }
   
   void
   init ()
   {
-    kout << __func__ << endl;
     // Initialize the allocator.
     alloc_type::initialize ();
     // Allocate a scheduler.
     scheduler_ = new (alloc_type ()) scheduler_type ();
 
-    kassert (system::buffer_size (85) == static_cast<size_t> (-1));
+    // kassert (syscall::buffer_size (85) == static_cast<size_t> (-1));
 
-    bid_t b1 = system::buffer_create (2 * system::getpagesize ());
-    kassert (b1 != -1);
-    kassert (system::buffer_size (b1) == 2 * system::getpagesize ());
-    char* c = static_cast<char*> (system::buffer_map (b1));
-    kassert (c != reinterpret_cast<void*> (-1));
-    memset (c, 0xFF, system::getpagesize ());
+    // bid_t b1 = syscall::buffer_create (2 * syscall::getpagesize ());
+    // kassert (b1 != -1);
+    // kassert (syscall::buffer_size (b1) == 2 * syscall::getpagesize ());
+    // char* c = static_cast<char*> (syscall::buffer_map (b1));
+    // kassert (c != reinterpret_cast<void*> (-1));
+    // memset (c, 0xFF, syscall::getpagesize ());
 
-    for (size_t i = 0; i < system::getpagesize (); ++i) {
-      kassert (c[i] == static_cast<char> (0xFF));
-    }
+    // for (size_t i = 0; i < syscall::getpagesize (); ++i) {
+    //   kassert (c[i] == static_cast<char> (0xFF));
+    // }
 
-    for (size_t i = system::getpagesize (); i < 2 * system::getpagesize (); ++i) {
-      kassert (c[i] == 0x00);
-    }
+    // for (size_t i = syscall::getpagesize (); i < 2 * syscall::getpagesize (); ++i) {
+    //   kassert (c[i] == 0x00);
+    // }
 
-    for (size_t i = system::getpagesize (); i < 2 * system::getpagesize (); ++i) {
-      c[i] = 0xFF;
-    }
+    // for (size_t i = syscall::getpagesize (); i < 2 * syscall::getpagesize (); ++i) {
+    //   c[i] = 0xFF;
+    // }
 
-    bid_t b2 = system::buffer_create (system::getpagesize ());
-    kassert (b2 != -1);
-    system::buffer_append (b2, b1);
-    char* d = static_cast<char*> (system::buffer_map (b2));
-    kassert (d != reinterpret_cast<void*> (-1));
-    memset (d, 0xAB, system::buffer_size (b2));
+    // bid_t b2 = syscall::buffer_create (syscall::getpagesize ());
+    // kassert (b2 != -1);
+    // syscall::buffer_append (b2, b1);
+    // char* d = static_cast<char*> (syscall::buffer_map (b2));
+    // kassert (d != reinterpret_cast<void*> (-1));
+    // memset (d, 0xAB, syscall::buffer_size (b2));
 
-    for (size_t i = 0; i < system::buffer_size (b1); ++i) {
-      kassert (c[i] == static_cast<char> (0xFF));
-    }
+    // for (size_t i = 0; i < syscall::buffer_size (b1); ++i) {
+    //   kassert (c[i] == static_cast<char> (0xFF));
+    // }
 
-    for (size_t i = 0; i < system::buffer_size (b2); ++i) {
-      kassert (d[i] == static_cast<char> (0xAB));
-    }
+    // for (size_t i = 0; i < syscall::buffer_size (b2); ++i) {
+    //   kassert (d[i] == static_cast<char> (0xAB));
+    // }
 
     schedule ();
     scheduler_->finish<init_traits> ();
   }
-
-  // static void
-  // no_schedule () { }
-
-  // static void
-  // no_finish () {
-  //   system::finish (reinterpret_cast<const void*> (-1), -1, false, -1, 0);
-  // }
-
-  static void
-  schedule ()
-  {
-
-  }
-
 }

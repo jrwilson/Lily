@@ -62,11 +62,11 @@ iso : lily.iso
 initrd :
 	echo "This is the initrd!!" > $@
 
-# core.img :
-# 	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh
-
 core.img :
-	grub-mkimage -O i386-pc -p /boot/grub -o $@ biosdisk iso9660 multiboot configfile
+	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh
+
+# core.img :
+# 	grub-mkimage -O i386-pc -p /boot/grub -o $@ biosdisk iso9660 multiboot configfile
 
 eltorito.img : core.img
 	cat /usr/lib/grub/i386-pc/cdboot.img $^ > $@
@@ -81,7 +81,7 @@ lily.iso : eltorito.img grub.cfg lily initrd
 
 .PHONY : isoclean
 isoclean :
-	-rm -f core.img eltorito.img lily.iso
+	-rm -f initrd core.img eltorito.img lily.iso
 
 # Include the dependencies
 -include *.d

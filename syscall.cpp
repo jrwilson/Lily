@@ -15,7 +15,7 @@
 #include "syscall_def.hpp"
 #include "kassert.hpp"
 
-namespace system {
+namespace syscall {
   
   void
   finish (const void* action_entry_point,
