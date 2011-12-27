@@ -28,7 +28,7 @@ int
 strcmp (const char* p,
 	const char* q)
 {
-  while (*p != 0 && *q != 0 && *p++ == *q++);;
+  while (*p != 0 && *q != 0 && *(p++) == *(q++));;
 
   return *p - *q;
 }
@@ -42,6 +42,23 @@ memset (void* ptr,
     *p++ = value;
   }
   return ptr;
+}
+
+int
+memcmp (const void* p,
+	const void* q,
+	size_t n)
+{
+  const char* r = static_cast<const char*> (p);
+  const char* s = static_cast<const char*> (q);
+
+  for (; n != 0; --n, ++r, ++s) {
+    if (*r != *s) {
+      return *r - *s;
+    }
+  }
+
+  return 0;
 }
 
 void*

@@ -37,20 +37,20 @@ namespace syscall {
   buffer_create (size_t size = 0);
 
   bid_t
-  buffer_create (bid_t bid,
-		 size_t offset = 0,
-		 size_t length = 0);
-
+  buffer_copy (bid_t bid,
+	       size_t offset = 0,
+	       size_t length = 0);
+  
   size_t
-  buffer_append (bid_t bid,
-		 size_t size);
-
+  buffer_grow (bid_t bid,
+	       size_t size);
+  
   size_t
   buffer_append (bid_t dest,
 		 bid_t src,
 		 size_t offset = 0,
 		 size_t length = 0);
-
+  
   void*
   buffer_map (bid_t bid);
 

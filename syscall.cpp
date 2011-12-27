@@ -53,21 +53,21 @@ namespace syscall {
   }
 
   bid_t
-  buffer_create (bid_t b,
-		 size_t offset,
-		 size_t length)
+  buffer_copy (bid_t b,
+	       size_t offset,
+	       size_t length)
   {
     bid_t bid;
-    asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_CREATEB), "b"(b), "c"(offset), "d"(length) :);
+    asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_COPY), "b"(b), "c"(offset), "d"(length) :);
     return bid;
   }
 
   size_t
-  buffer_append (bid_t bid,
-		 size_t size)
+  buffer_grow (bid_t bid,
+	       size_t size)
   {
     size_t off;
-    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(bid), "c"(size) :);
+    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_GROW), "b"(bid), "c"(size) :);
     return off;
   }
 
@@ -78,7 +78,7 @@ namespace syscall {
 		 size_t length)
   {
     size_t off;
-    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPENDB), "b"(dest), "c"(src), "d"(offset), "S"(length) :);
+    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(dest), "c"(src), "d"(offset), "S"(length) :);
     return off;
   }
 

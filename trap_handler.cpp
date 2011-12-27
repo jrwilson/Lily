@@ -103,19 +103,19 @@ trap_dispatch (volatile registers regs)
 	return;
       }
       break;
-    case syscall::BUFFER_CREATEB:
+    case syscall::BUFFER_COPY:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_create (regs.ebx, regs.ecx, regs.edx);
+	regs.eax = scheduler::current_action ().automaton->buffer_copy (regs.ebx, regs.ecx, regs.edx);
+	return;
+      }
+      break;
+    case syscall::BUFFER_GROW:
+      {
+	regs.eax = scheduler::current_action ().automaton->buffer_grow (regs.ebx, regs.ecx);
 	return;
       }
       break;
     case syscall::BUFFER_APPEND:
-      {
-	regs.eax = scheduler::current_action ().automaton->buffer_append (regs.ebx, regs.ecx);
-	return;
-      }
-      break;
-    case syscall::BUFFER_APPENDB:
       {
 	regs.eax = scheduler::current_action ().automaton->buffer_append (regs.ebx, regs.ecx, regs.edx, regs.esi);
 	return;

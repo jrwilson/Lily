@@ -658,6 +658,8 @@ private:
   }
 
 public:
+  // TODO:  Limit the number of buffers.
+
   bid_t
   buffer_create (size_t size)
   {
@@ -674,9 +676,9 @@ public:
   }
   
   bid_t
-  buffer_create (bid_t other,
-		 size_t offset,
-		 size_t length)
+  buffer_copy (bid_t other,
+	       size_t offset,
+	       size_t length)
   {
     offset = align_down (offset, PAGE_SIZE);
     length = align_up (length, PAGE_SIZE);
@@ -697,8 +699,8 @@ public:
 	bid_t bid = generate_bid ();
 	
 	// Create the buffer and insert it into the map.
-	buffer* b = new (system_alloc ()) buffer (*b, offset, length);
-	bid_to_buffer_map_.insert (std::make_pair (bid, b));
+	buffer* n = new (system_alloc ()) buffer (*b, offset, length);
+	bid_to_buffer_map_.insert (std::make_pair (bid, n));
 	
 	return bid;
       }
@@ -727,8 +729,8 @@ public:
   }
 
   size_t
-  buffer_append (bid_t bid,
-		 size_t size)
+  buffer_grow (bid_t bid,
+	       size_t size)
   {
     size = align_up (size, PAGE_SIZE);
 
@@ -736,7 +738,7 @@ public:
     if (bpos != bid_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
       if (b->begin () == 0) {
-	return b->append (size);
+	return b->grow (size);
       }
       else {
 	// Buffer was mapped.
@@ -802,36 +804,42 @@ public:
     if (bpos != bid_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
 
-      if (b->begin () == 0) {
-	// Map the buffer.
-	
-	// Find the heap.
-	memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (std::find (memory_map_.begin (), memory_map_.end (), heap_area_));
-	kassert (heap_pos != memory_map_.rbegin ());
-	--heap_pos;
-	kassert (heap_pos != memory_map_.rend ());
-	
-	// Find the stack.
-	memory_map_type::reverse_iterator stack_pos = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
-	kassert (stack_pos != memory_map_.rend ());
-	
-	// Find a hole and map.
-	for (; stack_pos != heap_pos; ++stack_pos) {
-	  memory_map_type::reverse_iterator prev = stack_pos + 1;
-	  size_t size = (*stack_pos)->begin () - (*prev)->end ();
-	  if (size >= b->size ()) {
-	    b->set_end ((*stack_pos)->begin ());
-	    memory_map_.insert (prev.base (), b);
-	    return reinterpret_cast<void*> (b->begin ());
+      if (b->size () != 0) {
+	if (b->begin () == 0) {
+	  // Map the buffer.
+	  
+	  // Find the heap.
+	  memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (std::find (memory_map_.begin (), memory_map_.end (), heap_area_));
+	  kassert (heap_pos != memory_map_.rbegin ());
+	  --heap_pos;
+	  kassert (heap_pos != memory_map_.rend ());
+	  
+	  // Find the stack.
+	  memory_map_type::reverse_iterator stack_pos = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
+	  kassert (stack_pos != memory_map_.rend ());
+	  
+	  // Find a hole and map.
+	  for (; stack_pos != heap_pos; ++stack_pos) {
+	    memory_map_type::reverse_iterator prev = stack_pos + 1;
+	    size_t size = (*stack_pos)->begin () - (*prev)->end ();
+	    if (size >= b->size ()) {
+	      b->set_end ((*stack_pos)->begin ());
+	      memory_map_.insert (prev.base (), b);
+	      return reinterpret_cast<void*> (b->begin ());
+	    }
 	  }
+	  
+	  // Couldn't find a big enough hole.
+	  return reinterpret_cast<void*> (-1);
 	}
-	
-	// Couldn't find a big enough hole.
-	return reinterpret_cast<void*> (-1);
+	else {
+	  // The buffer is already mapped.  Return the address.
+	  return reinterpret_cast<void*> (b->begin ());
+	}
       }
       else {
-	// The buffer is already mapped.  Return the address.
-	return reinterpret_cast<void*> (b->begin ());
+	// The buffer has size == 0.
+	return reinterpret_cast<void*> (-1);
       }
     }
     else {

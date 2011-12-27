@@ -440,9 +440,12 @@ private:
 
 };
 
-console&
-operator<< (console&,
-	    char);
+inline console&
+operator<< (console& con,
+	    char c)
+{
+  return con.put (c);
+}
 
 console&
 operator<< (console&,

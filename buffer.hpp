@@ -37,16 +37,16 @@ public:
     }
   }
 
-  buffer (frame_t begin,
-	  frame_t end) :
-    vm_area_base (0, 0),
-    frame_list_ (end - begin, vm::page_table_entry (0, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
-  {
-    for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
-      // Note:  Not incrementing the reference count of the frame.
-      pos->frame_ = begin++;
-    }    
-  }
+  // buffer (frame_t begin,
+  // 	  frame_t end) :
+  //   vm_area_base (0, 0),
+  //   frame_list_ (end - begin, vm::page_table_entry (0, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
+  // {
+  //   for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+  //     // Note:  Not incrementing the reference count of the frame.
+  //     pos->frame_ = begin++;
+  //   }    
+  // }
 
   ~buffer ()
   {
@@ -86,7 +86,7 @@ public:
   }
 
   size_t
-  append (size_t size)
+  grow (size_t size)
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
@@ -114,6 +114,8 @@ public:
     for (; idx != frame_list_.size (); ++idx) {
       // Must be copy-on-write.
       kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
+      // But no longer present.
+      frame_list_[idx].present_ = vm::NOT_PRESENT;
       // Increment the reference count.
       frame_manager::incref (frame_list_[idx].frame_);
     }
