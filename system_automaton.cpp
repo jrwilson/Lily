@@ -30,14 +30,14 @@ extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
-struct allocator_tag { };
-typedef list_alloc<allocator_tag> alloc_type;
+struct system_automaton_allocator_tag { };
+typedef list_alloc<system_automaton_allocator_tag> alloc_type;
 
-template <class T>
-typename list_alloc<T>::data list_alloc<T>::data_;
+template <typename T1, typename T2>
+typename list_alloc<T1, T2>::data list_alloc<T1, T2>::data_;
 
 template <typename T>
-struct allocator_type : public list_allocator<T, allocator_tag> { };
+struct allocator_type : public list_allocator<T, system_automaton_allocator_tag> { };
 
 namespace system_automaton {
 
@@ -526,7 +526,7 @@ namespace system_automaton {
   first (void)
   {
     // Initialize the allocator.
-    alloc_type::initialize ();
+    alloc_type::initialize (syscall::getpagesize ());
     // Allocate a scheduler.
     scheduler_ = new (alloc_type ()) scheduler_type ();
 

@@ -4,14 +4,14 @@
 #include "kassert.hpp"
 #include <string.h>
 
-struct allocator_tag { };
-typedef list_alloc<allocator_tag> alloc_type;
+struct action_test_automaton_allocator_tag { };
+typedef list_alloc<action_test_automaton_allocator_tag> alloc_type;
 
-template <class T>
-typename list_alloc<T>::data list_alloc<T>::data_;
+template <typename T1, typename T2>
+typename list_alloc<T1, T2>::data list_alloc<T1, T2>::data_;
 
 template <typename T>
-struct allocator_type : public list_allocator<T, allocator_tag> { };
+struct allocator_type : public list_allocator<T, action_test_automaton_allocator_tag> { };
 
 namespace action_test {
 
@@ -71,7 +71,7 @@ namespace action_test {
   init ()
   {
     // Initialize the allocator.
-    alloc_type::initialize ();
+    alloc_type::initialize (syscall::getpagesize ());
     // Allocate a scheduler.
     scheduler_ = new (alloc_type ()) scheduler_type ();
     schedule ();

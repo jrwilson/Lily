@@ -19,7 +19,16 @@
 
 // TODO:  Implement a more efficient allocator like Doug Lea's malloc (dlmalloc).
 
-template <typename Tag>
+class syscall_sbrk {
+public:
+  void*
+  operator () (size_t size)
+  {
+    return syscall::sbrk (size);
+  }
+};
+
+template <typename Tag, class Sbrk = syscall_sbrk>
 class list_alloc {
 private:
 
@@ -42,6 +51,7 @@ private:
   };
 
   struct data {
+    Sbrk sbrk_;
     size_t page_size_;
     chunk_header* first_header_;
     chunk_header* last_header_;
@@ -105,10 +115,10 @@ private:
 
 public:
   static void
-  initialize ()
+  initialize (size_t pagesize)
   {
-    data_.page_size_ = syscall::getpagesize ();
-    data_.first_header_ = new (syscall::sbrk (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
+    data_.page_size_ = pagesize;
+    data_.first_header_ = new (data_.sbrk_ (data_.page_size_)) chunk_header (data_.page_size_ - sizeof (chunk_header));
     data_.last_header_ = data_.first_header_;
   }
 
@@ -124,7 +134,7 @@ public:
     /* Acquire more memory. */
     if (ptr == 0) {
       size_t request_size = align_up (sizeof (chunk_header) + size, data_.page_size_);
-      ptr = new (syscall::sbrk (request_size)) chunk_header (request_size - sizeof (chunk_header));
+      ptr = new (data_.sbrk_ (request_size)) chunk_header (request_size - sizeof (chunk_header));
       
       if (ptr > data_.last_header_) {
 	// Append.
@@ -199,26 +209,26 @@ public:
   
 };
 
-template <typename Tag>
+template <typename Tag, class Sbrk>
 inline void*
 operator new (size_t sz,
-	      const list_alloc<Tag>& pa)
+	      const list_alloc<Tag, Sbrk>& pa)
 {
   return pa.alloc (sz);
 }
 
-template <typename Tag>
+template <typename Tag, class Sbrk>
 inline void*
 operator new[] (size_t sz,
-		const list_alloc<Tag>& pa)
+		const list_alloc<Tag, Sbrk>& pa)
 {
   return pa.alloc (sz);
 }
 
-template <class T, typename Tag>
+template <class T, typename Tag, class Sbrk>
 inline void
 destroy (T* p,
-	 const list_alloc<Tag>& la)
+	 const list_alloc<Tag, Sbrk>& la)
 {
   if (p != 0) {
     p->~T ();
@@ -226,7 +236,7 @@ destroy (T* p,
   }
 }
 
-template <class T, typename Tag>
+template <class T, typename Tag, class Sbrk = syscall_sbrk>
 class list_allocator {
 public:
   typedef T value_type;
@@ -260,21 +270,21 @@ public:
   { }
 
   template <class U>
-  list_allocator (const list_allocator<U, Tag>&)
+  list_allocator (const list_allocator<U, Tag, Sbrk>&)
   { }
 
   static pointer
   allocate (size_type n,
 	    std::allocator<void>::const_pointer = 0)
   {
-    return static_cast<pointer> (list_alloc<Tag>::alloc (n * sizeof (T)));
+    return static_cast<pointer> (list_alloc<Tag, Sbrk>::alloc (n * sizeof (T)));
   }
   
   static void
   deallocate (pointer p,
 	      size_type)
   {
-    list_alloc<Tag>::free (p);
+    list_alloc<Tag, Sbrk>::free (p);
   }
   
   static void
@@ -298,7 +308,7 @@ public:
   
   template <class U>
   struct rebind {
-    typedef list_allocator<U, Tag> other;
+    typedef list_allocator<U, Tag, Sbrk> other;
   };
 };
 
