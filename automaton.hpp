@@ -240,26 +240,36 @@ public:
   {
     kassert (heap_area_ != 0);
 
-    logical_address_t const old_end = heap_area_->end ();
-    logical_address_t const new_end = old_end + size;
-    if (new_end < old_end) {
-      // Shrunk too much.
-      // Fail.
-      return reinterpret_cast<void*> (-1);
+    if (size > 0) {
+      logical_address_t const old_end = heap_area_->end ();
+      logical_address_t const new_end = old_end + size;
+      // Find the heap.
+      memory_map_type::const_iterator pos = std::find (memory_map_.begin (), memory_map_.end (), heap_area_);
+      kassert (pos != memory_map_.end ());
+      // Move to the next.
+      ++pos;
+      if (new_end <= (*pos)->begin ()) {
+	// The allocation does not interfere with next area.  Success.
+	heap_area_->set_end (new_end);
+	return reinterpret_cast<void*> (old_end);
+      }
+      else {
+	// Failure.
+	return reinterpret_cast<void*> (-1);
+      }
     }
-    // Find the heap.
-    memory_map_type::const_iterator pos = std::find (memory_map_.begin (), memory_map_.end (), heap_area_);
-    kassert (pos != memory_map_.end ());
-    // Move to the next.
-    ++pos;
-    if (new_end <= (*pos)->begin ()) {
-      // The allocation does not interfere with next area.  Success.
-      heap_area_->set_end (new_end);
-      return reinterpret_cast<void*> (old_end);
+    else if (size < 0) {
+      // if (new_end < heap_area_->begin ()) {
+      // 	// Shrunk too much.
+      // 	// Fail.
+      // 	return reinterpret_cast<void*> (-1);
+      // }
+      // TODO:  Negative sbrk argument.
+      kassert (0);
+      return reinterpret_cast<void*> (-1);
     }
     else {
-      // Failure.
-      return reinterpret_cast<void*> (-1);
+      return reinterpret_cast<void*> (heap_area_->end ());
     }
   }
 
