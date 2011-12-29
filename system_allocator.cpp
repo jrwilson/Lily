@@ -15,16 +15,13 @@
 #include "frame_manager.hpp"
 #include "vm.hpp"
 
-logical_address_t system_sbrk::heap_begin_ = 0;
-logical_address_t system_sbrk::heap_end_ = 0;
-logical_address_t system_sbrk::heap_limit_ = 0;
-bool system_sbrk::backing_ = false;
-
-template <typename T1, typename T2>
-typename list_alloc<T1, T2>::data list_alloc<T1, T2>::data_;
+logical_address_t system_syscall::heap_begin_ = 0;
+logical_address_t system_syscall::heap_end_ = 0;
+logical_address_t system_syscall::heap_limit_ = 0;
+bool system_syscall::backing_ = false;
 
 void*
-system_sbrk::operator() (size_t size)
+system_syscall::sbrk (size_t size)
 {
   // Page aligment makes mapping easier.
   kassert (is_aligned (size, PAGE_SIZE));

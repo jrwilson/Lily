@@ -27,7 +27,6 @@ namespace syscall {
     asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(status), "S"(bid), "D"(buffer) :);
   }
   
-  // TODO:  Eliminate this by passing the page size during initialization.
   size_t
   getpagesize (void)
   {

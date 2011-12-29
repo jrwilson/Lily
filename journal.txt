@@ -372,9 +372,40 @@ My plan is to associate a type descriptor (perhaps via name mangling) with each 
 The checks need only be performed when binding.
 Regardless, the compile-time checks still apply.
 
+2011-12-28
+
+My recent work has focused on implementing buffers and reorganizing the kernel.
+Buffers are copy-on-write regions of memory.
+Each buffer is local to an automaton but can be copied and given to another automata via an output/input action.
+Copying a buffer is fast since the physical frames of memory are shared an only copied when needed.
+In order to make copy-on-write work for all buffers, all automata have to execute in user-mode (ring 3).
+Thus, the kernel was reorganized by creating an internal heap for the system automaton.
+
+The memory map of the kernel is as follows:
+Identity mapped (0x00000000 - 0x00400000)
+~
+KERNEL_VIRTUAL_BASE
+page directory
+page table
+zero page
+~
+text
+rodata
+data (contains the kernel stack)
+heap ("system_alloc")
+~
+paging area (0xffc00000 - 0xffffffff)
+
+The memory map of the system automaton and similar automata is as follows:
+heap (start at 0x00400000 to reuse kernel page table)
+~
+buffers (buffers are memory mapped in this region)
+stack
+KERNEL_VIRTUAL_BASE
+...
+
 
 
 
 Optimize clearing/copying pages (rep stos).
 Implement a better allocator (or improve existing one).  Use assumption of contiguous heap.
-Memory alignment.

@@ -10,6 +10,7 @@ OBJECTS=loader.o \
 cpp_runtime.o \
 string.o \
 kout.o \
+list_allocator.o \
 system_allocator.o \
 gdt.o \
 gdt_flush.o \

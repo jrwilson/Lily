@@ -18,7 +18,7 @@
 #include "vm_def.hpp"
 #include "kassert.hpp"
 
-class system_sbrk {
+class system_syscall {
 private:
   static logical_address_t heap_begin_;
   static logical_address_t heap_end_;
@@ -60,13 +60,19 @@ public:
   }
 
   void*
-  operator() (size_t size);
+  sbrk (size_t size);
+
+  size_t
+  getpagesize () const
+  {
+    return PAGE_SIZE;
+  }
 };
 
 struct system_allocator_tag { };
-class system_alloc : public list_alloc<system_allocator_tag, system_sbrk> { };
+class system_alloc : public list_alloc<system_allocator_tag, system_syscall> { };
 
 template <typename T>
-struct system_allocator : public list_allocator<T, system_allocator_tag, system_sbrk> { };
+struct system_allocator : public list_allocator<T, system_allocator_tag, system_syscall> { };
 
 #endif /* __system_allocator_hpp__ */

@@ -121,8 +121,8 @@ kmain (uint32_t multiboot_magic,
     const logical_address_t heap_end = INITIAL_LOGICAL_LIMIT;
 
     // Initialize the heap.
-    system_sbrk::initialize (heap_begin, heap_end);
-    system_alloc::initialize (PAGE_SIZE);
+    system_syscall::initialize (heap_begin, heap_end);
+    system_alloc::initialize ();
 
     // Call the static constructors.
     // Since heap allocation is working, static objects can use dynamic memory.
@@ -212,8 +212,8 @@ kmain (uint32_t multiboot_magic,
 	true,
 	vm::WRITABLE);
   
-  mark (system_sbrk::heap_begin (),
-	system_sbrk::heap_end (),
+  mark (system_syscall::heap_begin (),
+	system_syscall::heap_end (),
 	true,
 	vm::WRITABLE);
   
@@ -226,7 +226,7 @@ kmain (uint32_t multiboot_magic,
   sweep ();
 
   // Tell the system allocator that is must allocate frames and map them.
-  system_sbrk::engage_vm (PAGING_AREA);
+  system_syscall::engage_vm (PAGING_AREA);
 
   // Create the system automaton.
   system_automaton::create_system_automaton ();

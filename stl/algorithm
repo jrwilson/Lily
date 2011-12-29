@@ -91,7 +91,7 @@ namespace std {
 	       const T& value)
   {
     ForwardIterator iter;
-    typename iterator_traits<ForwardIterator>::distance_type count, step;
+    typename iterator_traits<ForwardIterator>::difference_type count, step;
     count = distance (first, last);
     while (count > 0) {
       iter = first;
