@@ -54,6 +54,10 @@ namespace ext2 {
   typedef np_internal_action_traits generate_read_request_traits;
   void
   generate_read_request ();
+
+  typedef np_internal_action_traits generate_write_request_traits;
+  void
+  generate_write_request ();
 }
 
 #endif /* __ext2_automaton_hpp__ */

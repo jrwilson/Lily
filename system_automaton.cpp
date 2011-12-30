@@ -1921,6 +1921,7 @@ namespace system_automaton {
     ext2_automaton_->add_action<ext2::write_request_traits> (&ext2::write_request);
     ext2_automaton_->add_action<ext2::write_response_traits> (&ext2::write_response);
     ext2_automaton_->add_action<ext2::generate_read_request_traits> (&ext2::generate_read_request);
+    ext2_automaton_->add_action<ext2::generate_write_request_traits> (&ext2::generate_write_request);
 
     // Bind.
     bind<system_automaton::init_traits,

@@ -3,6 +3,7 @@
 #include "fifo_scheduler.hpp"
 #include "kout.hpp"
 #include "kassert.hpp"
+#include <string.h>
 
 namespace ext2 {
 
@@ -36,6 +37,9 @@ namespace ext2 {
   typedef std::deque<ramdisk::block_num_t, allocator_type<ramdisk::block_num_t> > read_queue_type;
   static read_queue_type* read_queue_ = 0;
 
+  typedef std::deque<ramdisk::block_num_t, allocator_type<ramdisk::block_num_t> > write_queue_type;
+  static write_queue_type* write_queue_ = 0;
+
   static bool
   info_request_precondition ()
   {
@@ -53,9 +57,23 @@ namespace ext2 {
   }
 
   static bool
+  write_request_precondition ()
+  {
+    return !write_queue_->empty () &&
+      syscall::binding_count (&write_request) != 0 &&
+      syscall::binding_count (&write_response) != 0;
+  }
+
+  static bool
   generate_read_request_precondition ()
   {
     return info_status_ == RECEIVED && read_queue_->empty ();
+  }
+
+  static bool
+  generate_write_request_precondition ()
+  {
+    return info_status_ == RECEIVED && write_queue_->empty ();
   }
 
   static void
@@ -67,8 +85,14 @@ namespace ext2 {
     if (read_request_precondition ()) {
       scheduler_->add<read_request_traits> (&read_request);
     }
+    if (write_request_precondition ()) {
+      scheduler_->add<write_request_traits> (&write_request);
+    }
     if (generate_read_request_precondition ()) {
       scheduler_->add<generate_read_request_traits> (&generate_read_request);
+    }
+    if (generate_write_request_precondition ()) {
+      scheduler_->add<generate_write_request_traits> (&generate_write_request);
     }
   }
 
@@ -82,6 +106,7 @@ namespace ext2 {
     scheduler_ = new (alloc_type ()) scheduler_type ();
 
     read_queue_ = new (alloc_type ()) read_queue_type ();
+    write_queue_ = new (alloc_type ()) write_queue_type ();
 
     schedule ();
     scheduler_->finish<init_traits> ();
@@ -143,18 +168,29 @@ namespace ext2 {
   void
   write_request ()
   {
-    // TODO
-    // kout << "ext2 " << __func__ << endl;
-    // kassert (0);
-    schedule ();
-    scheduler_->finish<write_request_traits> ();
+    scheduler_->remove<write_request_traits> (&write_request);
+    if (write_request_precondition ()) {
+      ramdisk::write_request_t request (write_queue_->front ());
+      bid_t b = syscall::buffer_create (syscall::getpagesize ());
+      char* c = static_cast<char*> (syscall::buffer_map (b));
+      kassert (c != reinterpret_cast<const void*> (-1));
+      strcpy (c, "HA!!  I wrote the first block");
+      write_queue_->pop_front ();
+      schedule ();
+      scheduler_->finish<write_request_traits> (b, &request);
+    }
+    else {
+      schedule ();
+      scheduler_->finish<write_request_traits> ();
+    }
   }
   
   void
-  write_response (ramdisk::write_response_t)
+  write_response (ramdisk::write_response_t response)
   {
-    kout << "ext2 " << __func__ << endl;
-    kassert (0);
+    kassert (response.error == ramdisk::SUCCESS);
+    schedule ();
+    scheduler_->finish<write_response_traits> ();
   }
 
   void
@@ -167,6 +203,18 @@ namespace ext2 {
     }
     schedule ();
     scheduler_->finish<generate_read_request_traits> ();
+  }
+
+  void
+  generate_write_request ()
+  {
+    scheduler_->remove<generate_write_request_traits> (&generate_write_request);
+    if (generate_write_request_precondition ()) {
+      // Write the first block.
+      write_queue_->push_back (0);
+    }
+    schedule ();
+    scheduler_->finish<generate_write_request_traits> ();
   }
 
 }

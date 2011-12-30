@@ -13,6 +13,17 @@
 
 #include <string.h>
 
+char*
+strcpy (char* p,
+	const char* q)
+{
+  char* retval = p;
+  while (*q != 0) {
+    *p++ = *q++;
+  }
+  return retval;
+}
+
 size_t
 strlen (const char* p)
 {
