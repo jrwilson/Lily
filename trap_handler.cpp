@@ -57,9 +57,9 @@ trap_dispatch (volatile registers regs)
 	
 	if (action_entry_point != reinterpret_cast<const void*> (-1)) {
 	  // Check the action that was scheduled.
-	  automaton::const_action_iterator pos = current.automaton->action_find (action_entry_point);
-	  if (pos != current.automaton->action_end ()) {
-	    scheduler::schedule (caction (current.automaton, *pos, (pos->parameter_mode == NO_PARAMETER) ? 0 : parameter));
+	  automaton::const_action_iterator pos = current.action->automaton->action_find (action_entry_point);
+	  if (pos != current.action->automaton->action_end ()) {
+	    scheduler::schedule (caction (*pos, ((*pos)->parameter_mode == NO_PARAMETER) ? 0 : parameter));
 	  }
 	  else {
 	    // TODO:  Automaton scheduled a bad action.
@@ -67,15 +67,15 @@ trap_dispatch (volatile registers regs)
 	  }
 	}
 	
-	if (current.type == OUTPUT &&
+	if (current.action->type == OUTPUT &&
 	    status) {
-	  if (current.copy_value_mode == COPY_VALUE &&
-	      !current.automaton->verify_span (buffer, current.copy_value_size)) {
+	  if (current.action->copy_value_mode == COPY_VALUE &&
+	      !current.action->automaton->verify_span (buffer, current.action->copy_value_size)) {
 	    // TODO:  Automaton returned a bad copy value.
 	    kassert (0);
 	  }
-	  else if (current.buffer_value_mode == BUFFER_VALUE &&
-		   !current.automaton->buffer_exists (bid)) {
+	  else if (current.action->buffer_value_mode == BUFFER_VALUE &&
+		   !current.action->automaton->buffer_exists (bid)) {
 	    // TODO:  Automaton returned a bad buffer.
 	    kassert (0);
 	  }
@@ -93,56 +93,68 @@ trap_dispatch (volatile registers regs)
       break;
     case syscall::SBRK:
       {
-	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().automaton->sbrk (regs.ebx));
+	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->sbrk (regs.ebx));
+	return;
+      }
+      break;
+    case syscall::BINDING_COUNT:
+      {
+	regs.eax = scheduler::current_action ().action->automaton->binding_count (reinterpret_cast<const void*> (regs.ebx), regs.ecx);
 	return;
       }
       break;
     case syscall::BUFFER_CREATE:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_create (regs.ebx);
+	regs.eax = scheduler::current_action ().action->automaton->buffer_create (regs.ebx);
 	return;
       }
       break;
     case syscall::BUFFER_COPY:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_copy (regs.ebx, regs.ecx, regs.edx);
+	regs.eax = scheduler::current_action ().action->automaton->buffer_copy (regs.ebx, regs.ecx, regs.edx);
 	return;
       }
       break;
     case syscall::BUFFER_GROW:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_grow (regs.ebx, regs.ecx);
+	regs.eax = scheduler::current_action ().action->automaton->buffer_grow (regs.ebx, regs.ecx);
 	return;
       }
       break;
     case syscall::BUFFER_APPEND:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_append (regs.ebx, regs.ecx, regs.edx, regs.esi);
+	regs.eax = scheduler::current_action ().action->automaton->buffer_append (regs.ebx, regs.ecx, regs.edx, regs.esi);
+	return;
+      }
+      break;
+    case syscall::BUFFER_ASSIGN:
+      {
+	regs.eax = scheduler::current_action ().action->automaton->buffer_assign (regs.ebx, regs.ecx, regs.edx, regs.esi, regs.edi);
 	return;
       }
       break;
     case syscall::BUFFER_MAP:
       {
-	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().automaton->buffer_map (regs.ebx));
+	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->buffer_map (regs.ebx));
 	return;
       }
       break;
     case syscall::BUFFER_DESTROY:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_destroy (regs.ebx);
+	regs.eax = scheduler::current_action ().action->automaton->buffer_destroy (regs.ebx);
 	return;
       }
       break;
     case syscall::BUFFER_SIZE:
       {
-	regs.eax = scheduler::current_action ().automaton->buffer_size (regs.ebx);
+	regs.eax = scheduler::current_action ().action->automaton->buffer_size (regs.ebx);
 	return;
       }
       break;
     }
     break;
   case PRIVCALL_INTERRUPT:
-    if (scheduler::current_action ().automaton->can_execute_privileged ()) {
+    if (scheduler::current_action ().action->automaton->can_execute_privileged ()) {
       switch (regs.eax) {
       case privcall::INVLPG:
 	{

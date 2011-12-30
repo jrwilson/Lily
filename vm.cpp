@@ -1,5 +1,6 @@
 #include "vm.hpp"
-#include "rts.hpp"
+#include "automaton.hpp"
+#include "system_automaton.hpp"
 
 namespace vm {
   
@@ -20,8 +21,8 @@ namespace vm {
     get_kernel_page_directory ()->entry[directory_entry] = e;
     
     // Map in all the other directories.
-    for (rts::const_automaton_iterator pos = rts::automaton_begin ();
-         pos != rts::automaton_end ();
+    for (system_automaton::const_automaton_iterator pos = system_automaton::automaton_begin ();
+         pos != system_automaton::automaton_end ();
          ++pos) {
       map (get_stub2 (), pos->page_directory_frame (), USER, WRITABLE);
       reinterpret_cast<page_directory*> (get_stub2 ())->entry[directory_entry] = e;

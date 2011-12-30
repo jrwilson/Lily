@@ -23,6 +23,7 @@ namespace ramdisk {
   enum error_t {
     SUCCESS,	// Request was successful.
     RANGE,	// Block was out of range.
+    BUFFER_SIZE, // Buffer for write was not correct size.
   };
 
   extern bid_t bid;
@@ -49,6 +50,10 @@ namespace ramdisk {
   // Read request.
   struct read_request_t {
     block_num_t block_num;
+
+    read_request_t (block_num_t bn) :
+      block_num (bn)
+    { }
   };
 
   typedef ap_nb_c_input_action_traits<read_request_t> read_request_traits;
@@ -60,6 +65,12 @@ namespace ramdisk {
   struct read_response_t {
     block_num_t block_num;
     error_t error;
+
+    read_response_t (block_num_t bn,
+		     error_t e) :
+      block_num (bn),
+      error (e)
+    { }
   };
 
   typedef ap_b_c_output_action_traits<void, read_response_t> read_response_traits;
@@ -69,6 +80,10 @@ namespace ramdisk {
   // Write request.
   struct write_request_t {
     block_num_t block_num;
+
+    write_request_t (block_num_t bn) :
+      block_num (bn)
+    { }
   };
   
   typedef ap_b_c_input_action_traits<void, write_request_t> write_request_traits;
@@ -81,9 +96,15 @@ namespace ramdisk {
   struct write_response_t {
     block_num_t block_num;
     error_t error;
+
+    write_response_t (block_num_t bn,
+		      error_t e) :
+      block_num (bn),
+      error (e)
+    { }
   };
   
-  typedef ap_b_c_output_action_traits<void, write_response_t> write_response_traits;
+  typedef ap_nb_c_output_action_traits<write_response_t> write_response_traits;
   void
   write_response (aid_t);
 

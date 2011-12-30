@@ -83,14 +83,15 @@ public:
   }
 
   inline size_t
-  incref (frame_t frame)
+  incref (frame_t frame,
+	  size_t count)
   {
     kassert (frame >= begin_ && frame < end_);
     frame_entry_t idx = frame - begin_;
     /* Frame is allocated. */
     kassert (entry_[idx] < 0);
     /* "Increment" the reference count. */
-    return -(--entry_[idx]);
+    return -(entry_[idx] -= count);
   }
 
   inline size_t

@@ -43,6 +43,15 @@ namespace syscall {
     return ptr;
   }
 
+  size_t
+  binding_count (const void* ptr,
+		 aid_t parameter)
+  {
+    size_t count;
+    asm ("int $0x80\n" : "=a"(count) : "0"(BINDING_COUNT), "b"(ptr), "c"(parameter) :);
+    return count;
+  }
+
   bid_t
   buffer_create (size_t size)
   {
@@ -79,6 +88,18 @@ namespace syscall {
     size_t off;
     asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(dest), "c"(src), "d"(offset), "S"(length) :);
     return off;
+  }
+
+  int
+  buffer_assign (bid_t dest,
+		 size_t dest_offset,
+		 bid_t src,
+		 size_t src_offset,
+		 size_t length)
+  {
+    int result;
+    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_ASSIGN), "b"(dest), "c"(dest_offset), "d"(src), "S"(src_offset), "D"(length) :);
+    return result;
   }
 
   void*

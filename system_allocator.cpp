@@ -19,6 +19,7 @@ logical_address_t system_syscall::heap_begin_ = 0;
 logical_address_t system_syscall::heap_end_ = 0;
 logical_address_t system_syscall::heap_limit_ = 0;
 bool system_syscall::backing_ = false;
+list_alloc_state system_syscall::state_;
 
 void*
 system_syscall::sbrk (size_t size)

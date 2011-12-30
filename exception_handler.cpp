@@ -172,8 +172,8 @@ exception_dispatch (volatile registers regs)
     {
       // Get the faulting address.
       logical_address_t address;
-      asm ("mov %%cr2, %0\n" : "=g"(address));
-      scheduler::current_action ().automaton->page_fault (address, regs.error, &regs);
+      asm ("mov %%cr2, %0\n" : "=r"(address));
+      scheduler::current_action ().action->automaton->page_fault (address, regs.error, &regs);
     }
     break; 
   case COPROCESSOR_ERROR:

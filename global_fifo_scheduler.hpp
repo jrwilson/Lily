@@ -15,7 +15,6 @@
 */
 
 #include "action.hpp"
-#include "rts.hpp"
 #include <deque>
 #include <unordered_set>
 #include <string.h>
@@ -91,8 +90,8 @@ private:
   private:
     uint8_t value_buffer_[MAX_COPY_VALUE_SIZE];
     caction action_;
-    const rts::input_action_set_type* input_actions_;
-    rts::input_action_set_type::const_iterator input_action_pos_;
+    const automaton::input_action_set_type* input_actions_;
+    automaton::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
     bid_t input_buffer_;
 
@@ -105,13 +104,14 @@ private:
     inline void
     clear ()
     {
-      action_.automaton = 0;
+      action_.action = 0;
+      action_.parameter = 0;
     }
 
     inline const caction&
     current_action () const
     {
-      kassert (action_.automaton != 0);
+      kassert (action_.action != 0);
       return action_;
     }
 
@@ -126,22 +126,22 @@ private:
 		   bid_t bid,
 		   const void* buffer)
     {
-      if (action_.automaton != 0) {	
-	switch (action_.type) {
+      if (action_.action != 0) {	
+	switch (action_.action->type) {
 	case INPUT:
-	  if (action_.buffer_value_mode == BUFFER_VALUE) {
+	  if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	    // Destroy the buffer.
-	    action_.automaton->buffer_destroy (input_buffer_);
+	    action_.action->automaton->buffer_destroy (input_buffer_);
 	  }
 	  /* Move to the next input. */
 	  ++input_action_pos_;
 	  if (input_action_pos_ != input_actions_->end ()) {
 	    /* Load the execution context. */
-	    action_ = *input_action_pos_;
+	    action_ = input_action_pos_->input;
 	    /* Execute.  (This does not return). */
 	    execute ();
 	  }
-	  if (action_.buffer_value_mode == BUFFER_VALUE) {
+	  if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	    // Destroy the buffer.
 	    destroy (output_buffer_, system_alloc ());
 	  }
@@ -151,24 +151,24 @@ private:
 	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
 	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
 	  if (status) {
-	    if (action_.buffer_value_mode == BUFFER_VALUE) {
+	    if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	      // The output action produced a buffer.  Remove it from the automaton.
-	      output_buffer_ = action_.automaton->buffer_output_destroy (bid);
+	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bid);
 	    }
 
-	    input_actions_ = rts::get_bound_inputs (action_);
+	    input_actions_ = action_.action->automaton->get_bound_inputs (action_);
 	    if (input_actions_ != 0) {
-	      if (action_.copy_value_mode == COPY_VALUE) {
+	      if (action_.action->copy_value_mode == COPY_VALUE) {
 		// Copy the value.
-		memcpy (value_buffer_, buffer, action_.copy_value_size);
+		memcpy (value_buffer_, buffer, action_.action->copy_value_size);
 	      }
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
-	      action_ = *input_action_pos_;
+	      action_ = input_action_pos_->input;
 	      /* Execute.  (This does not return). */
 	      execute ();
 	    }
-	    if (action_.buffer_value_mode == BUFFER_VALUE) {
+	    if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	      // Destroy the buffer.
 	      destroy (output_buffer_, system_alloc ());
 	    }
@@ -184,28 +184,28 @@ private:
     execute ()
     {
       // Switch page directories.
-      vm::switch_to_directory (action_.automaton->page_directory_frame ());
+      vm::switch_to_directory (action_.action->automaton->page_directory_frame ());
 
-      uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (action_.automaton->stack_pointer ());
+      uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (action_.action->automaton->stack_pointer ());
 
       // These instructions serve a dual purpose.
       // First, they set up the cdecl calling convention for actions.
       // Second, they force the stack to be created if it is not.
 
-      if (action_.type == INPUT) {
-	if (action_.copy_value_mode == COPY_VALUE) {
+      if (action_.action->type == INPUT) {
+	if (action_.action->copy_value_mode == COPY_VALUE) {
 	  // Copy the value to the stack.
-	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.copy_value_size, STACK_ALIGN)));
-	  memcpy (stack_pointer, value_buffer_, action_.copy_value_size);
+	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.action->copy_value_size, STACK_ALIGN)));
+	  memcpy (stack_pointer, value_buffer_, action_.action->copy_value_size);
 	}
-	if (action_.buffer_value_mode == BUFFER_VALUE) {
+	if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	  // Copy the buffer to the input automaton.
-	  input_buffer_ = action_.automaton->buffer_create (*output_buffer_);
+	  input_buffer_ = action_.action->automaton->buffer_create (*output_buffer_);
 	  *--stack_pointer = input_buffer_;
 	}
       }
       
-      switch (action_.parameter_mode) {
+      switch (action_.action->parameter_mode) {
       case NO_PARAMETER:
       	break;
       case PARAMETER:
@@ -235,7 +235,7 @@ private:
       *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor_constants::RING3;
 
       // Push the instruction pointer.
-      *--stack_pointer = reinterpret_cast<uint32_t> (action_.action_entry_point);
+      *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
       
       asm ("mov %0, %%ds\n"	// Load the data segments.
 	   "mov %0, %%es\n"	// Load the data segments.
@@ -273,7 +273,7 @@ public:
   static inline void
   schedule (const caction& ad)
   {
-    context_map_type::iterator pos = context_map_.find (ad.automaton);
+    context_map_type::iterator pos = context_map_.find (ad.action->automaton);
     kassert (pos != context_map_.end ());
     
     automaton_context* c = pos->second;

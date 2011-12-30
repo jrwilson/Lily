@@ -2,7 +2,7 @@ AS=nasm
 AFLAGS=-f elf
 CXX=g++
 # Add -Werror at some point	
-CXXFLAGS=-MD -O1 -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
+CXXFLAGS=-MD -O0 -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
 LD=ld
 
 # Loader should be first so the bootloader can find the magic number.
@@ -24,14 +24,14 @@ trap.o \
 stack_allocator.o \
 frame_manager.o \
 vm.o \
-rts.o \
 global_fifo_scheduler.o \
 kmain.o \
 syscall.o \
 system_automaton.o \
 action_test_automaton.o \
 buffer_test_automaton.o \
-ramdisk_automaton.o
+ramdisk_automaton.o \
+ext2_automaton.o
 
 # pit.o \
 

@@ -4,13 +4,22 @@
 #include "kassert.hpp"
 #include <string.h>
 
-struct action_test_automaton_allocator_tag { };
-typedef list_alloc<action_test_automaton_allocator_tag> alloc_type;
-
-template <typename T>
-struct allocator_type : public list_allocator<T, action_test_automaton_allocator_tag> { };
-
 namespace action_test {
+
+  static list_alloc_state state_;
+
+  struct action_test_automaton_syscall : public list_alloc_syscall {
+    static list_alloc_state&
+    state ()
+    {
+      return state_;
+    }
+  };
+  
+  typedef list_alloc<action_test_automaton_syscall> alloc_type;
+  
+  template <typename T>
+  struct allocator_type : public list_allocator<T, action_test_automaton_syscall> { };
 
   aid_t ap_nb_nc_input1_parameter;
   aid_t ap_nb_nc_input2_parameter;
@@ -497,7 +506,7 @@ namespace action_test {
   static bool
   np_nb_nc_output_precondition ()
   {
-    return np_nb_nc_output_flag;
+    return np_nb_nc_output_flag && syscall::binding_count (&np_nb_nc_output) == 3;
   }
 
   void
@@ -519,7 +528,7 @@ namespace action_test {
   static bool
   np_nb_c_output_precondition ()
   {
-    return np_nb_c_output_flag;
+    return np_nb_c_output_flag && syscall::binding_count (&np_nb_c_output) == 3;
   }
 
   void
@@ -542,7 +551,7 @@ namespace action_test {
   static bool
   np_b_nc_output_precondition ()
   {
-    return np_b_nc_output_flag;
+    return np_b_nc_output_flag && syscall::binding_count (&np_b_nc_output) == 3;
   }
 
   bid_t
@@ -575,7 +584,7 @@ namespace action_test {
   static bool
   np_b_c_output_precondition ()
   {
-    return np_b_c_output_flag;
+    return np_b_c_output_flag && syscall::binding_count (&np_b_c_output) == 3;
   }
 
   void
@@ -600,7 +609,7 @@ namespace action_test {
   p_nb_nc_output_precondition (aid_t p)
   {
     kassert (p == p_nb_nc_output_parameter);
-    return p_nb_nc_output_flag;
+    return p_nb_nc_output_flag && syscall::binding_count (&p_nb_nc_output, p) == 3;
   }
 
   void
@@ -624,7 +633,7 @@ namespace action_test {
   p_nb_c_output_precondition (aid_t p)
   {
     kassert (p == p_nb_c_output_parameter);
-    return p_nb_c_output_flag;
+    return p_nb_c_output_flag && syscall::binding_count (&p_nb_c_output, p) == 3;
   }
 
   void
@@ -649,7 +658,7 @@ namespace action_test {
   p_b_nc_output_precondition (aid_t p)
   {
     kassert (p == p_b_nc_output_parameter);
-    return p_b_nc_output_flag;
+    return p_b_nc_output_flag && syscall::binding_count (&p_b_nc_output, p) == 3;
   }
 
   void
@@ -674,7 +683,7 @@ namespace action_test {
   p_b_c_output_precondition (aid_t p)
   {
     kassert (p == p_b_c_output_parameter);
-    return p_b_c_output_flag;
+    return p_b_c_output_flag && syscall::binding_count (&p_b_c_output, p) == 3;
   }
 
   void
@@ -700,7 +709,9 @@ namespace action_test {
   ap_nb_nc_output_precondition (aid_t p)
   {
     kassert (p == ap_nb_nc_output_parameter);
-    return ap_nb_nc_output_flag;
+    // TODO:  Technically, the == 3 can't work as autoparameterized outputs can only be bound to one input.
+    // This will need to be fixed later.
+    return ap_nb_nc_output_flag && syscall::binding_count (&ap_nb_nc_output, p) == 3;
   }
 
   void
@@ -724,7 +735,7 @@ namespace action_test {
   ap_nb_c_output_precondition (aid_t p)
   {
     kassert (p == ap_nb_c_output_parameter);
-    return ap_nb_c_output_flag;
+    return ap_nb_c_output_flag && syscall::binding_count (&ap_nb_c_output, p) == 3;;
   }
 
   void
@@ -749,7 +760,7 @@ namespace action_test {
   ap_b_nc_output_precondition (aid_t p)
   {
     kassert (p == ap_b_nc_output_parameter);
-    return ap_b_nc_output_flag;
+    return ap_b_nc_output_flag && syscall::binding_count (&ap_b_nc_output, p) == 3;
   }
 
   void
@@ -774,7 +785,7 @@ namespace action_test {
   ap_b_c_output_precondition (aid_t p)
   {
     kassert (p == ap_b_c_output_parameter);
-    return ap_b_c_output_flag;
+    return ap_b_c_output_flag && syscall::binding_count (&ap_b_c_output, p) == 3;
   }
 
   void

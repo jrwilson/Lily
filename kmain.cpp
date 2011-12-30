@@ -229,7 +229,7 @@ kmain (uint32_t multiboot_magic,
   system_syscall::engage_vm (PAGING_AREA);
 
   // Create the system automaton.
-  system_automaton::create_system_automaton ();
+  system_automaton::create_system_automaton (initrd_begin, initrd_end);
 
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, 0);

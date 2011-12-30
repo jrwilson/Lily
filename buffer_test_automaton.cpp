@@ -4,14 +4,23 @@
 #include "kassert.hpp"
 #include <string.h>
 
-struct buffer_test_automaton_allocator_tag { };
-typedef list_alloc<buffer_test_automaton_allocator_tag> alloc_type;
-
-template <typename T>
-struct allocator_type : public list_allocator<T, buffer_test_automaton_allocator_tag> { };
-
 namespace buffer_test {
 
+  static list_alloc_state state_;
+
+  struct buffer_test_automaton_syscall : public list_alloc_syscall {
+    static list_alloc_state&
+    state ()
+    {
+      return state_;
+    }
+  };
+  
+  typedef list_alloc<buffer_test_automaton_syscall> alloc_type;
+  
+  template <typename T>
+  struct allocator_type : public list_allocator<T, buffer_test_automaton_syscall> { };
+  
   typedef fifo_scheduler<allocator_type> scheduler_type;
   static scheduler_type* scheduler_ = 0;
 
@@ -22,6 +31,8 @@ namespace buffer_test {
   void
   init ()
   {
+    kout << "buffer_test " << __func__ << endl;
+
     // Initialize the allocator.
     alloc_type::initialize ();
     // Allocate a scheduler.
@@ -32,7 +43,7 @@ namespace buffer_test {
     {
       // Q: Can we create an empty buffer?
       // A: Yes.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
@@ -41,7 +52,7 @@ namespace buffer_test {
     {
       // Q: Can we map an empty buffer?
       // A: No.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
       kassert (syscall::buffer_map (b) == reinterpret_cast<const void*> (-1));
       kassert (syscall::buffer_destroy (b) == 0);
@@ -50,7 +61,7 @@ namespace buffer_test {
     {
       // Q: Can we add bytes at the end of a buffer?
       // A: Yes.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
       kassert (syscall::buffer_grow (b, 0) == 0);
       kassert (syscall::buffer_grow (b, 1) == 0);
@@ -63,7 +74,7 @@ namespace buffer_test {
     {
       // Q: Can we add bytes at the end of a buffer that has been mapped?
       // A: No.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
       kassert (syscall::buffer_grow (b, 0) == 0);
       kassert (syscall::buffer_grow (b, 1) == 0);
@@ -145,7 +156,7 @@ namespace buffer_test {
     {
       // Q: Can I copy a buffer?
       // A: Yes.
-      bid_t b = syscall::buffer_copy (abcd_b);
+      bid_t b = syscall::buffer_copy (abcd_b, 0, abcd_size);
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == abcd_size);
       char* c = static_cast<char*> (syscall::buffer_map (b));
@@ -157,7 +168,7 @@ namespace buffer_test {
     {
       // Q: Can I copy a buffer starting at a certain offset?
       // A: Yes.  The offset will be page aligned.
-      bid_t b = syscall::buffer_copy (abcd_b, pagesize);
+      bid_t b = syscall::buffer_copy (abcd_b, pagesize, abcd_size - pagesize);
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == abcd_size - pagesize);
       char* c = static_cast<char*> (syscall::buffer_map (b));
@@ -181,9 +192,9 @@ namespace buffer_test {
     {
       // Q: Can I append a buffer?
       // A: Yes.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
-      kassert (syscall::buffer_append (b, abcd_b) == 0);
+      kassert (syscall::buffer_append (b, abcd_b, 0, abcd_size) == 0);
       kassert (syscall::buffer_size (b) == abcd_size);
       char* c = static_cast<char*> (syscall::buffer_map (b));
       kassert (c != reinterpret_cast<const void*> (-1));
@@ -194,9 +205,9 @@ namespace buffer_test {
     {
       // Q: Can I append a buffer starting at a certain offset?
       // A: Yes.  The offset will be page aligned.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
-      kassert (syscall::buffer_append (b, abcd_b, pagesize) == 0);
+      kassert (syscall::buffer_append (b, abcd_b, pagesize, abcd_size - pagesize) == 0);
       kassert (syscall::buffer_size (b) == abcd_size - pagesize);
       char* c = static_cast<char*> (syscall::buffer_map (b));
       kassert (c != reinterpret_cast<const void*> (-1));
@@ -207,7 +218,7 @@ namespace buffer_test {
     {
       // Q: Can I append a buffer starting at a certain offset going a certain length?
       // A: Yes.  The offset and length will be page aligned.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
       kassert (syscall::buffer_append (b, abcd_b, pagesize, 1) == 0);
       kassert (syscall::buffer_size (b) == pagesize);
@@ -220,19 +231,19 @@ namespace buffer_test {
     {
       // Q: Can I append to a buffer that is mapped?
       // A: No.
-      bid_t b = syscall::buffer_create ();
+      bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
-      kassert (syscall::buffer_append (b, abcd_b) == 0);
+      kassert (syscall::buffer_append (b, abcd_b, 0, abcd_size) == 0);
       kassert (syscall::buffer_size (b) == abcd_size);
       kassert (syscall::buffer_map (b) != reinterpret_cast<const void*> (-1));
-      kassert (syscall::buffer_append (b, abcd_b) == size_t (-1));
+      kassert (syscall::buffer_append (b, abcd_b, 0, abcd_size) == size_t (-1));
       kassert (syscall::buffer_destroy (b) == 0);
     }
 
     {
       // Q: Can I change the contents of a buffer?
       // A: Yes.
-      bid_t b = syscall::buffer_copy (abcd_b);
+      bid_t b = syscall::buffer_copy (abcd_b, 0, abcd_size);
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == abcd_size);
       char* c = static_cast<char*> (syscall::buffer_map (b));
@@ -245,6 +256,20 @@ namespace buffer_test {
 	kassert (abcd_c[idx + 2 * pagesize] == 'C');
 	kassert (abcd_c[idx + 3 * pagesize] == 'D');
       }
+      kassert (syscall::buffer_destroy (b) == 0);
+    }
+
+    {
+      // Q: Can I assign parts of one buffer to another?
+      // A: Yes.  The source/destination must exist and can be mapped.
+      bid_t b = syscall::buffer_create (4 * pagesize);
+      kassert (b != -1);
+      char* c = static_cast<char*> (syscall::buffer_map (b));
+      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (syscall::buffer_assign (b, pagesize, abcd_b, pagesize, 2 * pagesize) == 0);
+      kassert (syscall::buffer_assign (b, 0, abcd_b, 0, 2 * pagesize) == 0);
+      kassert (syscall::buffer_assign (b, 3 * pagesize, abcd_b, 3 * pagesize, pagesize) == 0);
+      kassert (memcmp (c, abcd_c, abcd_size) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
 

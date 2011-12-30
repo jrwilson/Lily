@@ -30,13 +30,59 @@
 
 class automaton {
 private:
+  struct input_act {
+    caction const input;
+    automaton* const owner;
+
+    input_act (const caction& i,
+	       automaton* own) :
+      input (i),
+      owner (own)
+    { }
+
+    inline bool
+    operator== (const input_act& other) const
+    {
+      // Owner doesn't matter.
+      return input == other.input;
+    }
+  };
+
+  struct output_act {
+    caction const output;
+    automaton* const owner;
+
+    output_act (const caction& o,
+		automaton* own) :
+      output (o),
+      owner (own)
+    { }
+  };
+
+  struct binding {
+    caction const output;
+    caction const input;
+
+    binding (const caction& o,
+	     const caction& i) :
+      output (o),
+      input (i)
+    { }
+
+    inline bool
+    operator== (const binding& other) const
+    {
+      return output == other.output && input == other.input;
+    }
+  };
+
   aid_t aid_;
   // Frame that contains the automaton's page directory.
   frame_t const page_directory_frame_;
   // Flag indicating if the automaton can execute privileged instructions.
   bool privileged_;
   // Table of action descriptors for guiding execution, checking bindings, etc.
-  typedef std::unordered_map<const void*, paction, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, paction> > > action_map_type;
+  typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, const paction* const> > > action_map_type;
   action_map_type action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef std::vector<vm_area_base*, system_allocator<vm_area_base*> > memory_map_type;
@@ -45,6 +91,22 @@ private:
   vm_heap_area* heap_area_;
   // Stack area.
   vm_stack_area* stack_area_;
+
+  // Bound outputs.
+public:
+  typedef std::unordered_set <input_act, std::hash<input_act>, std::equal_to<input_act>, system_allocator<input_act> > input_action_set_type;
+private:
+  typedef std::unordered_map <caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, input_action_set_type> > > bound_outputs_map_type;
+  bound_outputs_map_type bound_outputs_map_;
+
+  // Bound inputs.
+  typedef std::unordered_map<caction, output_act, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, output_act> > > bound_inputs_map_type;
+  bound_inputs_map_type bound_inputs_map_;
+
+  // Bindings.
+  typedef std::unordered_set<binding, std::hash<binding>, std::equal_to<binding>, system_allocator<binding> > bindings_set_type;
+  bindings_set_type bindings_set_;
+
   // Next bid to allocate.
   bid_t current_bid_;
   // Map from bid_t to buffer*.
@@ -52,7 +114,7 @@ private:
   bid_to_buffer_map_type bid_to_buffer_map_;
 
 public:
-  class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, paction> {
+  class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, const paction* const> {
   private:
     action_map_type::const_iterator pos_;
     
@@ -67,13 +129,13 @@ public:
       return pos_ == other.pos_;
     }
 
-    const paction*
+    const paction* const *
     operator-> () const
     {
       return &(pos_->second);
     }
 
-    const paction&
+    const paction*const &
     operator* () const
     {
       return (pos_->second);
@@ -130,8 +192,8 @@ private:
   void
   add_action_ (const void* action_entry_point)
   {
-    paction ac (Action::action_type, action_entry_point, Action::parameter_mode, Action::buffer_value_mode, Action::copy_value_mode, Action::copy_value_size);
-    std::pair<typename action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac.action_entry_point, ac));
+    paction* ac = new (system_alloc ()) paction (this, Action::action_type, action_entry_point, Action::parameter_mode, Action::buffer_value_mode, Action::copy_value_mode, Action::copy_value_size);
+    std::pair<typename action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac->action_entry_point, ac));
     kassert (r.second);
   }
 
@@ -654,6 +716,78 @@ public:
     return const_action_iterator (action_map_.find (action_entry_point));
   }
 
+  void
+  bind_output (const caction& output_action,
+	       const caction& input_action,
+	       automaton* owner)
+  {
+    std::pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (std::make_pair (output_action, input_action_set_type ()));
+    r.first->second.insert (input_act (input_action, owner));
+  }
+  
+  void
+  bind_input (const caction& output_action,
+	      const caction& input_action,
+	      automaton* owner)
+  {
+    bound_inputs_map_.insert (std::make_pair (input_action, output_act (output_action, owner)));
+  }
+
+  void
+  bind (const caction& output_action,
+	const caction& input_action)
+  {
+    bindings_set_.insert (binding (output_action, input_action));
+  }
+
+  const input_action_set_type*
+  get_bound_inputs (const caction& output_action) const
+  {
+    bound_outputs_map_type::const_iterator pos = bound_outputs_map_.find (output_action);
+    if (pos != bound_outputs_map_.end ()) {
+      return &pos->second;
+    }
+    else {
+      return 0;
+    }
+  }
+
+  size_t
+  binding_count (const void* aep,
+		 aid_t parameter) const
+  {
+    action_map_type::const_iterator pos = action_map_.find (aep);
+    if (pos != action_map_.end ()) {
+      const caction act (pos->second, parameter);
+      switch (pos->second->type) {
+      case OUTPUT:
+	{
+	  bound_outputs_map_type::const_iterator pos2 = bound_outputs_map_.find (act);
+	  if (pos2 != bound_outputs_map_.end ()) {
+	    return pos2->second.size ();
+	  }
+	  else {
+	    return 0;
+	  }
+	}
+	break;
+      case INPUT:
+	if (bound_inputs_map_.find (act) != bound_inputs_map_.end ()) {
+	  return 1;
+	}
+	else {
+	  return 0;
+	}
+	break;
+      case INTERNAL:
+	return 0;
+	break;
+      }
+    }
+    // Action does not exist.
+    return -1;
+  }
+
 private:
   bid_t
   generate_bid ()
@@ -697,14 +831,6 @@ public:
     if (bpos != bid_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
       if (offset + length <= b->size ()) {
-	if (length == 0) {
-	  // Correct the length.
-	  length = b->size () - offset;
-	}
-
-	// Make the source copy-on-write.
-	b->make_copy_on_write ();
-	
 	// Generate an id.
 	bid_t bid = generate_bid ();
 	
@@ -777,14 +903,7 @@ public:
       buffer* dst = dst_pos->second;
       buffer* src = src_pos->second;
       if (offset + length <= src->size ()) {
-	if (length == 0) {
-	  // Correct the length.
-	  length = src->size () - offset;
-	}
-
 	if (dst->begin () == 0) {
-	  // Make the source copy on write so we won't see subsequent changes.
-	  src->make_copy_on_write ();
 	  // Append.
 	  return dst->append (*src, offset, length);
 	}
@@ -795,6 +914,36 @@ public:
       }
       else {
 	// Offset is past end of source.
+	return -1;
+      }
+    }
+    else {
+      // One of the buffers does not exist.
+      return -1;
+    }
+  }
+
+  int
+  buffer_assign (bid_t dest,
+		 size_t dest_offset,
+		 bid_t src,
+		 size_t src_offset,
+		 size_t length)
+  {
+    bid_to_buffer_map_type::const_iterator dest_pos = bid_to_buffer_map_.find (dest);
+    bid_to_buffer_map_type::const_iterator src_pos = bid_to_buffer_map_.find (src);
+    if (dest_pos != bid_to_buffer_map_.end () &&
+	src_pos != bid_to_buffer_map_.end ()) {
+      buffer* dest_b = dest_pos->second;
+      buffer* src_b = src_pos->second;
+      if (dest_offset + length <= dest_b->size () &&
+	  src_offset + length <= src_b->size ()) {
+	// Assign.
+	dest_b->assign (dest_offset, *src_b, src_offset, length);
+	return 0;
+      }
+      else {
+	// Would got outside of range.
 	return -1;
       }
     }

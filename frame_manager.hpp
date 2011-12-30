@@ -59,14 +59,15 @@ public:
   
   /* Increment the reference count for a frame. */
   static inline size_t
-  incref (frame_t frame)
+  incref (frame_t frame,
+	  size_t count = 1)
   {
     allocator_list_type::iterator pos = find_allocator (frame);
     
     /* No allocator for frame. */
     kassert (pos != allocator_list_.end ());
     
-    return (*pos)->incref (frame);
+    return (*pos)->incref (frame, count);
   }
   
   /* Decrement the reference count for a frame. */

@@ -5,23 +5,26 @@
 
 class automaton;
 
+// TODO:  Can we make these smaller?
+
 // Partial action.
 struct paction {
-  action_type_t type;
-  const void* action_entry_point;
-  parameter_mode_t parameter_mode;
-  buffer_value_mode_t buffer_value_mode;
-  copy_value_mode_t copy_value_mode;
-  size_t copy_value_size;
+  ::automaton* const automaton;
+  action_type_t const type;
+  const void* const action_entry_point;
+  parameter_mode_t const parameter_mode;
+  buffer_value_mode_t const buffer_value_mode;
+  copy_value_mode_t const copy_value_mode;
+  size_t const copy_value_size;
 
-  paction () { }
-
-  paction (action_type_t t,
+  paction (::automaton* a,
+	   action_type_t t,
 	   const void* aep,
 	   parameter_mode_t pm,
 	   buffer_value_mode_t bvm,
 	   copy_value_mode_t cvm,
 	   size_t vs) :
+    automaton (a),
     type (t),
     action_entry_point (aep),
     parameter_mode (pm),
@@ -29,40 +32,32 @@ struct paction {
     copy_value_mode (cvm),
     copy_value_size (vs)
   { }
+
+private:
+  paction (const paction&);
+  paction& operator= (const paction&);
 };
 
 // Complete action.
-struct caction : public paction {
-  ::automaton* automaton;
+struct caction {
+  const paction* action;
   aid_t parameter;
 
-  caction () { }
-  
-  caction (::automaton* a,
-	   const paction& act,
-	   aid_t p) :
-    paction (act),
-    automaton (a),
-    parameter (p)
+  caction () :
+    action (0),
+    parameter (0)
   { }
 
-  caction (::automaton* a,
-	   action_type_t t,
-	   const void* aep,
-	   parameter_mode_t pm,
-	   buffer_value_mode_t bvm,
-	   copy_value_mode_t cvm,
-	   size_t vs,
+  caction (const paction* act,
 	   aid_t p) :
-    paction (t, aep, pm, bvm, cvm, vs),
-    automaton (a),
+    action (act),
     parameter (p)
   { }
   
   inline bool
   operator== (const caction& other) const
   {
-    return automaton == other.automaton && action_entry_point == other.action_entry_point && parameter == other.parameter;
+    return action == other.action && parameter == other.parameter;
   }
 };
 

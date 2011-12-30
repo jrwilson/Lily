@@ -404,8 +404,12 @@ stack
 KERNEL_VIRTUAL_BASE
 ...
 
+2011-12-29
+
+Implemented a memory allocator similar to Doug Lea's malloc.
+I'm sure its not as good.
 
 
 
 Optimize clearing/copying pages (rep stos).
-Implement a better allocator (or improve existing one).  Use assumption of contiguous heap.
+

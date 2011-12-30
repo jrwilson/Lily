@@ -3,50 +3,50 @@
 
 #include "vm_area.hpp"
 
+// TODO:  The zero frame might be over-referenced.  Consider allocating a new one to keep the reference count in range.
+
 class buffer : public vm_area_base {
 public:
   buffer (size_t size) :
     vm_area_base (0, 0),
     frame_list_ (size / PAGE_SIZE, vm::page_table_entry (vm::zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
   {
-    frame_t zero_fr = vm::zero_frame ();
-    for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
-      frame_manager::incref (zero_fr);
-    }
+    frame_manager::incref (vm::zero_frame (), frame_list_.size ());
   }
   
-  buffer (const buffer& other,
+  buffer (buffer& other,
 	  size_t offset,
 	  size_t length) :
     vm_area_base (0, 0),
-    frame_list_ (other.frame_list_.begin () + offset / PAGE_SIZE, other.frame_list_.begin () + (offset + length) / PAGE_SIZE)
+    frame_list_ (length / PAGE_SIZE, vm::page_table_entry (vm::zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
   {
-    for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
-      kassert (pos->writable_ == vm::NOT_WRITABLE);
-      frame_manager::incref (pos->frame_);
-    }
+    frame_manager::incref (vm::zero_frame (), frame_list_.size ());
+    assign_ (0, frame_list_.size (), other, offset / PAGE_SIZE);
   }
 
   buffer (const buffer& other) :
     vm_area_base (0, 0),
     frame_list_ (other.frame_list_)
   {
+    // This is used when copying between automata.
+    // The source must be unmapped, i.e., not present and not writable.
     for (frame_list_type::const_iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+      kassert (pos->present_ == vm::NOT_PRESENT);
       kassert (pos->writable_ == vm::NOT_WRITABLE);
       frame_manager::incref (pos->frame_);
     }
   }
 
-  // buffer (frame_t begin,
-  // 	  frame_t end) :
-  //   vm_area_base (0, 0),
-  //   frame_list_ (end - begin, vm::page_table_entry (0, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
-  // {
-  //   for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
-  //     // Note:  Not incrementing the reference count of the frame.
-  //     pos->frame_ = begin++;
-  //   }    
-  // }
+  buffer (frame_t begin,
+  	  frame_t end) :
+    vm_area_base (0, 0),
+    frame_list_ (end - begin, vm::page_table_entry (0, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT))
+  {
+    for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
+      // Note:  Not incrementing the reference count of the frame.
+      pos->frame_ = begin++;
+    }    
+  }
 
   ~buffer ()
   {
@@ -69,57 +69,40 @@ public:
     return frame_list_.size () * PAGE_SIZE;
   }
 
-  void
-  make_copy_on_write ()
-  {
-    // The buffer must be mapped to have non-copy-on-write entries.
-    if (begin_ != 0) {
-      for (size_t idx = 0; idx < frame_list_.size (); ++idx) {
-	if (frame_list_[idx].writable_ == vm::WRITABLE) {
-	  // Unmap.
-	  vm::unmap (begin_ + PAGE_SIZE * idx);
-	  // Convert to copy-on-write.
-	  frame_list_[idx].writable_ = vm::NOT_WRITABLE;
-	}
-      }
-    }
-  }
-
   size_t
   grow (size_t size)
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
-    const frame_t zero_frame = vm::zero_frame ();
     size_t retval = this->size ();
-    size_t idx = frame_list_.size ();
-    frame_list_.resize (idx + size / PAGE_SIZE);
-    for (; idx != frame_list_.size (); ++idx) {
-      frame_manager::incref (zero_frame);
-      frame_list_[idx] = vm::page_table_entry (zero_frame, vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT);
-    }
+    size_t begin = frame_list_.size ();
+    frame_list_.resize (begin + size / PAGE_SIZE, vm::page_table_entry (vm::zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT));
+    frame_manager::incref (vm::zero_frame (), frame_list_.size () - begin);
     return retval;
   }
 
   size_t
-  append (const buffer& other,
+  append (buffer& other,
 	  size_t offset,
 	  size_t length)
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
     size_t retval = this->size ();
-    size_t idx = frame_list_.size ();
-    frame_list_.insert (frame_list_.end (), other.frame_list_.begin () + offset / PAGE_SIZE, other.frame_list_.begin () + (offset + length) / PAGE_SIZE);
-    for (; idx != frame_list_.size (); ++idx) {
-      // Must be copy-on-write.
-      kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
-      // But no longer present.
-      frame_list_[idx].present_ = vm::NOT_PRESENT;
-      // Increment the reference count.
-      frame_manager::incref (frame_list_[idx].frame_);
-    }
+    size_t begin = frame_list_.size ();
+    frame_list_.resize (begin + length / PAGE_SIZE, vm::page_table_entry (vm::zero_frame (), vm::USER, vm::NOT_WRITABLE, vm::NOT_PRESENT));
+    frame_manager::incref (vm::zero_frame (), frame_list_.size () - begin);
+    assign_ (begin, frame_list_.size (), other, offset / PAGE_SIZE);
     return retval;
+  }
+
+  void
+  assign (size_t offset,
+	  buffer& src,
+	  size_t src_offset,
+	  size_t length)
+  {
+    assign_ (offset / PAGE_SIZE, (offset + length) / PAGE_SIZE, src, src_offset / PAGE_SIZE);
   }
 
   virtual void
@@ -204,6 +187,37 @@ private:
   // The frames.
   typedef std::vector<vm::page_table_entry, system_allocator<vm::page_table_entry> > frame_list_type;
   frame_list_type frame_list_;
+
+  // Assigns and (1) unmaps/decrefs overwritten frames and (2) makes the source buffer copy-on-write.
+  void
+  assign_ (size_t begin,
+	   size_t end,
+	   buffer& src,
+	   size_t src_begin)
+  {
+    for (; begin != end; ++begin, ++src_begin) {
+      // Make the source copy on write.
+      if (src.frame_list_[src_begin].writable_ == vm::WRITABLE) {
+	// Should be present.
+	kassert (src.frame_list_[src_begin].present_ == vm::PRESENT);
+	// Remap copy-on-write.
+	vm::remap (src.begin_ + PAGE_SIZE * (src_begin), vm::USER, vm::NOT_WRITABLE);
+	src.frame_list_[src_begin].writable_ = vm::NOT_WRITABLE;
+      }
+
+      // Dispense with old frame.
+      if (frame_list_[begin].present_ == vm::PRESENT) {
+	// Unmap.
+	vm::unmap (begin_ + PAGE_SIZE * begin);
+      }
+      frame_manager::decref (frame_list_[begin].frame_);
+
+      // Copy.
+      frame_list_[begin].frame_ = src.frame_list_[src_begin].frame_;
+      frame_manager::incref (frame_list_[begin].frame_);
+    }
+  }
+
 };
 
 #endif /* __buffer_hpp__ */

@@ -24,6 +24,7 @@ private:
   static logical_address_t heap_end_;
   static logical_address_t heap_limit_;
   static bool backing_;
+  static list_alloc_state state_;
 
 public:
   static void
@@ -59,20 +60,25 @@ public:
     backing_ = true;
   }
 
-  void*
+  static void*
   sbrk (size_t size);
 
-  size_t
-  getpagesize () const
+  static size_t
+  getpagesize ()
   {
     return PAGE_SIZE;
   }
+
+  static inline list_alloc_state&
+  state ()
+  {
+    return state_;
+  }
 };
 
-struct system_allocator_tag { };
-class system_alloc : public list_alloc<system_allocator_tag, system_syscall> { };
+class system_alloc : public list_alloc<system_syscall> { };
 
 template <typename T>
-struct system_allocator : public list_allocator<T, system_allocator_tag, system_syscall> { };
+struct system_allocator : public list_allocator<T, system_syscall> { };
 
 #endif /* __system_allocator_hpp__ */
