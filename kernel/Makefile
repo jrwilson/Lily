@@ -3,7 +3,7 @@ AFLAGS=-f elf
 CXX=g++
 OFLAG=-O0
 # Add -Werror at some point	
-CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
+CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl -I../include
 LD=ld
 LDFLAGS=$(OFLAG) -T linker.ld
 
@@ -28,7 +28,6 @@ frame_manager.o \
 vm.o \
 global_fifo_scheduler.o \
 kmain.o \
-syscall.o \
 system_automaton.o \
 note.o
 

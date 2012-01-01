@@ -1,7 +1,10 @@
+#ifndef __syscall_hpp__
+#define __syscall_hpp__
+
 /*
   File
   ----
-  syscall.c
+  syscall.hpp
   
   Description
   -----------
@@ -11,14 +14,14 @@
   Justin R. Wilson
 */
 
-#include "syscall.hpp"
+#include "aid.hpp"
+#include "bid.hpp"
+#include <stddef.h>
 #include "syscall_def.hpp"
-#include "kassert.hpp"
 
 namespace syscall {
 
-  // TODO:  Inline system calls.
-  void
+  inline void
   finish (const void* action_entry_point,
 	  aid_t parameter,
 	  bool status,
@@ -28,7 +31,7 @@ namespace syscall {
     asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(status), "S"(bid), "D"(buffer) :);
   }
   
-  size_t
+  inline size_t
   getpagesize (void)
   {
     size_t size;
@@ -36,7 +39,7 @@ namespace syscall {
     return size;
 }
   
-  void*
+  inline void*
   sbrk (ptrdiff_t size)
   {
     void* ptr;
@@ -44,7 +47,8 @@ namespace syscall {
     return ptr;
   }
 
-  size_t
+  // TODO:  Use action traits to enforce parameter vs. no parameter.
+  inline size_t
   binding_count (const void* ptr,
 		 aid_t parameter)
   {
@@ -53,7 +57,51 @@ namespace syscall {
     return count;
   }
 
-  bid_t
+  inline size_t
+  binding_count (void (*ptr) (void))
+  {
+    return binding_count (reinterpret_cast<const void*> (ptr), 0);
+  }
+
+  template <typename T1>
+  inline size_t
+  binding_count (void (*ptr) (T1))
+  {
+    return binding_count (reinterpret_cast<const void*> (ptr), 0);
+  }
+
+  template <typename P>
+  inline size_t
+  binding_count (void (*ptr) (P),
+		 P parameter)
+  {
+    return binding_count (reinterpret_cast<const void*> (ptr), aid_cast (parameter));
+  }
+
+  template <typename T1, typename T2>
+  inline size_t
+  binding_count (void (*ptr) (T1, T2))
+  {
+    return binding_count (reinterpret_cast<const void*> (ptr), 0);
+  }
+
+  template <typename P, typename T2>
+  inline size_t
+  binding_count (void (*ptr) (P, T2),
+		 P parameter)
+  {
+    return binding_count (reinterpret_cast<const void*> (ptr), aid_cast (parameter));
+  }
+
+  template <typename T1, typename T2, typename T3>
+  inline size_t
+  binding_count (void (*ptr) (T1, T2, T3),
+		 T1 parameter)
+  {
+    return binding_count (reinterpret_cast<const void*> (ptr), aid_cast (parameter));
+  }
+
+  inline bid_t
   buffer_create (size_t size)
   {
     bid_t bid;
@@ -61,7 +109,7 @@ namespace syscall {
     return bid;
   }
 
-  bid_t
+  inline bid_t
   buffer_copy (bid_t b,
 	       size_t offset,
 	       size_t length)
@@ -71,7 +119,7 @@ namespace syscall {
     return bid;
   }
 
-  size_t
+  inline size_t
   buffer_grow (bid_t bid,
 	       size_t size)
   {
@@ -80,7 +128,7 @@ namespace syscall {
     return off;
   }
 
-  size_t
+  inline size_t
   buffer_append (bid_t dest,
 		 bid_t src,
 		 size_t offset,
@@ -91,7 +139,7 @@ namespace syscall {
     return off;
   }
 
-  int
+  inline int
   buffer_assign (bid_t dest,
 		 size_t dest_offset,
 		 bid_t src,
@@ -103,7 +151,8 @@ namespace syscall {
     return result;
   }
 
-  void*
+  // TODO:  Use action traits to map the buffer with the correct type.
+  inline void*
   buffer_map (bid_t bid)
   {
     void* ptr;
@@ -111,7 +160,7 @@ namespace syscall {
     return ptr;
   }
 
-  int
+  inline int
   buffer_destroy (bid_t bid)
   {
     int result;
@@ -119,7 +168,7 @@ namespace syscall {
     return result;
   }
 
-  size_t
+  inline size_t
   buffer_size (bid_t bid)
   {
     size_t size;
@@ -128,3 +177,5 @@ namespace syscall {
   }
 
 }
+
+#endif /* __syscall_hpp__ */
