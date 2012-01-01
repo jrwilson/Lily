@@ -212,6 +212,8 @@ public:
 
   ~automaton ()
   {
+    // TODO
+    kassert (0);
     // Destroy buffers that have been created but not mapped.
     for (bid_to_buffer_map_type::iterator pos = bid_to_buffer_map_.begin ();
 	 pos != bid_to_buffer_map_.end ();
@@ -317,18 +319,18 @@ public:
       }
       else {
 	// Failure.
-	return reinterpret_cast<void*> (-1);
+	return 0;
       }
     }
     else if (size < 0) {
       // if (new_end < heap_area_->begin ()) {
       // 	// Shrunk too much.
       // 	// Fail.
-      // 	return reinterpret_cast<void*> (-1);
+      // 	return 0;
       // }
       // TODO:  Negative sbrk argument.
       kassert (0);
-      return reinterpret_cast<void*> (-1);
+      return 0;
     }
     else {
       return reinterpret_cast<void*> (heap_area_->end ());
@@ -650,6 +652,7 @@ private:
   }
 
 public:
+  // TODO:  Remove template code.
   template <class Action>
   void
   add_action (void (*action_entry_point) ())
@@ -989,7 +992,7 @@ public:
 	  }
 	  
 	  // Couldn't find a big enough hole.
-	  return reinterpret_cast<void*> (-1);
+	  return 0;
 	}
 	else {
 	  // The buffer is already mapped.  Return the address.
@@ -998,12 +1001,12 @@ public:
       }
       else {
 	// The buffer has size == 0.
-	return reinterpret_cast<void*> (-1);
+	return 0;
       }
     }
     else {
       // The buffer does not exist.
-      return reinterpret_cast<void*> (-1);
+      return 0;
     }
   }
 

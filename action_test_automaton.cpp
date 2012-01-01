@@ -89,7 +89,7 @@ namespace action_test {
 
   static void
   no_finish () {
-    syscall::finish (reinterpret_cast<const void*> (-1), -1, false, -1, 0);
+    syscall::finish (0, -1, false, -1, 0);
   }
 
   void
@@ -147,7 +147,7 @@ namespace action_test {
   np_b_nc_input1 (bid_t b)
   {
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "np_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -158,7 +158,7 @@ namespace action_test {
   np_b_nc_input2 (bid_t b)
   {
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "p_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -169,7 +169,7 @@ namespace action_test {
   np_b_nc_input3 (bid_t b)
   {
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "ap_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -182,7 +182,7 @@ namespace action_test {
   {
     kassert (v == np_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "np_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -195,7 +195,7 @@ namespace action_test {
   {
     kassert (v == p_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "p_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -208,7 +208,7 @@ namespace action_test {
   {
     kassert (v == ap_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "ap_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -281,7 +281,7 @@ namespace action_test {
   {
     kassert (p == p_b_nc_input1_parameter);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "np_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -294,7 +294,7 @@ namespace action_test {
   {
     kassert (p == p_b_nc_input2_parameter);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "p_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -307,7 +307,7 @@ namespace action_test {
   {
     kassert (p == p_b_nc_input3_parameter);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "ap_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -322,7 +322,7 @@ namespace action_test {
     kassert (p == p_b_c_input1_parameter);
     kassert (v == np_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "np_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -337,7 +337,7 @@ namespace action_test {
     kassert (p == p_b_c_input2_parameter);
     kassert (v == p_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "p_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -352,7 +352,7 @@ namespace action_test {
     kassert (p == p_b_c_input3_parameter);
     kassert (v == ap_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "ap_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -425,7 +425,7 @@ namespace action_test {
   {
     kassert (p == ap_b_nc_input1_parameter);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "np_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -438,7 +438,7 @@ namespace action_test {
   {
     kassert (p == ap_b_nc_input2_parameter);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "p_b_nc_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -452,7 +452,7 @@ namespace action_test {
     kassert (p == ap_b_nc_input3_parameter);
     kout << "\t" << __func__;
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "ap_b_nc_output") == 0);
     no_schedule ();
     no_finish ();
@@ -466,7 +466,7 @@ namespace action_test {
     kassert (p == ap_b_c_input1_parameter);
     kassert (v == np_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "np_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -481,7 +481,7 @@ namespace action_test {
     kassert (p == ap_b_c_input2_parameter);
     kassert (v == p_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "p_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();
@@ -496,7 +496,7 @@ namespace action_test {
     kassert (p == ap_b_c_input3_parameter);
     kassert (v == ap_b_c_output_value);
     char* c = static_cast<char*> (syscall::buffer_map (b));
-    kassert (c != reinterpret_cast<const void*> (-1));
+    kassert (c != 0);
     kassert (strcmp (c, "ap_b_c_output") == 0);
     kout << "\t" << __func__;
     no_schedule ();

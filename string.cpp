@@ -43,6 +43,21 @@ strcmp (const char* p,
 
   return *p - *q;
 }
+
+int
+strncmp (const char* p,
+	 const char* q,
+	 int n)
+{
+  while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
+    ++p;
+    ++q;
+    --n;
+  }
+
+  return (n == 0) ? 0 : *p - *q;
+}
+
 void*
 memset (void* ptr,
 	int value,

@@ -67,13 +67,13 @@ namespace ext2 {
   static bool
   generate_read_request_precondition ()
   {
-    return info_status_ == RECEIVED && read_queue_->empty ();
+    return false; //return info_status_ == RECEIVED && read_queue_->empty ();
   }
 
   static bool
   generate_write_request_precondition ()
   {
-    return info_status_ == RECEIVED && write_queue_->empty ();
+    return false; //return info_status_ == RECEIVED && write_queue_->empty ();
   }
 
   static void
@@ -158,7 +158,7 @@ namespace ext2 {
   {
     if (response.error == ramdisk::SUCCESS) {
       const char* c = static_cast<const char*> (syscall::buffer_map (bid));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kout << c << endl;
     }
     schedule ();
@@ -173,7 +173,7 @@ namespace ext2 {
       ramdisk::write_request_t request (write_queue_->front ());
       bid_t b = syscall::buffer_create (syscall::getpagesize ());
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       strcpy (c, "HA!!  I wrote the first block");
       write_queue_->pop_front ();
       schedule ();

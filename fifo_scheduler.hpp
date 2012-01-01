@@ -85,7 +85,7 @@ private:
     }
     else {
       /* Don't schedule. */
-      syscall::finish (reinterpret_cast<const void*> (-1), -1, status, bid, buffer);
+      syscall::finish (0, -1, status, bid, buffer);
     }
   }
 

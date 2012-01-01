@@ -93,12 +93,15 @@ extern "C" void irq13 ();
 extern "C" void irq14 ();
 extern "C" void irq15 ();
 
-uint8_t irq_handler::pic_master_mask_ = ~(1 << PIC_SLAVE_PIN);
-uint8_t irq_handler::pic_slave_mask_ = 0xFF;
+uint8_t irq_handler::pic_master_mask_;
+uint8_t irq_handler::pic_slave_mask_;
 
 void
 irq_handler::install ()
 {
+  pic_master_mask_ = ~(1 << PIC_SLAVE_PIN);
+  pic_slave_mask_ = 0xFF;
+
   /* Remap IRQ 0-15 to ISR 32-47. */
   io::outb (PIC_MASTER_LOW, PIC_ICW1_LOW | PIC_ICW1_NEED_ICW4);
   io::outb (PIC_SLAVE_LOW, PIC_ICW1_LOW | PIC_ICW1_NEED_ICW4);

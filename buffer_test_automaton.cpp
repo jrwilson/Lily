@@ -54,7 +54,7 @@ namespace buffer_test {
       // A: No.
       bid_t b = syscall::buffer_create (0);
       kassert (b != -1);
-      kassert (syscall::buffer_map (b) == reinterpret_cast<const void*> (-1));
+      kassert (syscall::buffer_map (b) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
 
@@ -79,7 +79,7 @@ namespace buffer_test {
       kassert (syscall::buffer_grow (b, 0) == 0);
       kassert (syscall::buffer_grow (b, 1) == 0);
       kassert (syscall::buffer_size (b) == pagesize);
-      kassert (syscall::buffer_map (b) != reinterpret_cast<const void*> (-1));
+      kassert (syscall::buffer_map (b) != 0);
       kassert (syscall::buffer_grow (b, 1) == size_t (-1));
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -99,7 +99,7 @@ namespace buffer_test {
       bid_t b = syscall::buffer_create (1);
       kassert (b != -1);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       memset (c, 'A', pagesize);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -110,7 +110,7 @@ namespace buffer_test {
       bid_t b = syscall::buffer_create (1);
       kassert (b != -1);
       char* c1 = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c1 != reinterpret_cast<const void*> (-1));
+      kassert (c1 != 0);
       char* c2 = static_cast<char*> (syscall::buffer_map (b));
       kassert (c1 == c2);
       kassert (syscall::buffer_destroy (b) == 0);
@@ -140,7 +140,7 @@ namespace buffer_test {
       bid_t b = syscall::buffer_create (1);
       kassert (b != -1);
       kassert (syscall::buffer_destroy (b) == 0);
-      kassert (syscall::buffer_map (b) == reinterpret_cast<const void*> (-1));
+      kassert (syscall::buffer_map (b) == 0);
     }
 
     // Create a buffer for testing.
@@ -160,7 +160,7 @@ namespace buffer_test {
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == abcd_size);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (memcmp (abcd_c, c, abcd_size) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -172,7 +172,7 @@ namespace buffer_test {
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == abcd_size - pagesize);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (memcmp (abcd_c + pagesize, c, abcd_size - pagesize) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -184,7 +184,7 @@ namespace buffer_test {
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == pagesize);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (memcmp (abcd_c + pagesize, c, pagesize) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -197,7 +197,7 @@ namespace buffer_test {
       kassert (syscall::buffer_append (b, abcd_b, 0, abcd_size) == 0);
       kassert (syscall::buffer_size (b) == abcd_size);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (memcmp (abcd_c, c, abcd_size) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -210,7 +210,7 @@ namespace buffer_test {
       kassert (syscall::buffer_append (b, abcd_b, pagesize, abcd_size - pagesize) == 0);
       kassert (syscall::buffer_size (b) == abcd_size - pagesize);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (memcmp (abcd_c + pagesize, c, abcd_size - pagesize) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -223,7 +223,7 @@ namespace buffer_test {
       kassert (syscall::buffer_append (b, abcd_b, pagesize, 1) == 0);
       kassert (syscall::buffer_size (b) == pagesize);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (memcmp (abcd_c + pagesize, c, pagesize) == 0);
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -235,7 +235,7 @@ namespace buffer_test {
       kassert (b != -1);
       kassert (syscall::buffer_append (b, abcd_b, 0, abcd_size) == 0);
       kassert (syscall::buffer_size (b) == abcd_size);
-      kassert (syscall::buffer_map (b) != reinterpret_cast<const void*> (-1));
+      kassert (syscall::buffer_map (b) != 0);
       kassert (syscall::buffer_append (b, abcd_b, 0, abcd_size) == size_t (-1));
       kassert (syscall::buffer_destroy (b) == 0);
     }
@@ -247,7 +247,7 @@ namespace buffer_test {
       kassert (b != -1);
       kassert (syscall::buffer_size (b) == abcd_size);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       memset (c, 'E', abcd_size);
       // The copied buffer doesn't change.
       for (size_t idx = 0; idx < pagesize; ++idx) {
@@ -265,7 +265,7 @@ namespace buffer_test {
       bid_t b = syscall::buffer_create (4 * pagesize);
       kassert (b != -1);
       char* c = static_cast<char*> (syscall::buffer_map (b));
-      kassert (c != reinterpret_cast<const void*> (-1));
+      kassert (c != 0);
       kassert (syscall::buffer_assign (b, pagesize, abcd_b, pagesize, 2 * pagesize) == 0);
       kassert (syscall::buffer_assign (b, 0, abcd_b, 0, 2 * pagesize) == 0);
       kassert (syscall::buffer_assign (b, 3 * pagesize, abcd_b, 3 * pagesize, pagesize) == 0);

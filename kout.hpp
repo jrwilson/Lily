@@ -19,6 +19,12 @@
 #include <algorithm>
 #include "registers.hpp"
 
+// TODO:  This could be simpler to match its intended use.
+
+#define VIDEORAM ((unsigned short*)0xB8000)
+
+//unsigned short* console::videoram_ = reinterpret_cast<unsigned short*> (0xB8000);
+
 class console {
 private:
   // Colors.
@@ -68,9 +74,11 @@ public:
   static void
   initialize ()
   {
+    flags_ = (right | dec | skipws);
+    fill_ = ' ';
     for (unsigned int y = 0; y < HEIGHT; ++y) {
       for (unsigned int x = 0; x < WIDTH; ++x) {
-  	videoram_[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
+  	VIDEORAM[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
       }
     }
   }
@@ -168,12 +176,12 @@ public:
       unsigned int y;
       for (y = 0; y < HEIGHT - 1; ++y) {
 	for (unsigned int x = 0; x < WIDTH; ++x) {
-	  videoram_[y * WIDTH + x] = videoram_[(y + 1) * WIDTH + x];
+	  VIDEORAM[y * WIDTH + x] = VIDEORAM[(y + 1) * WIDTH + x];
 	}
       }
       /* Fill last line with spaces. */
       for (unsigned int x = 0; x < WIDTH; ++x) {
-	videoram_[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
+	VIDEORAM[y * WIDTH + x] = (BLACK << 12) | (WHITE << 8) | ' ';
       }
       --y_location_;
     }
@@ -197,7 +205,7 @@ public:
       break;
     default:
       /* Print the character using black on white. */
-      videoram_[y_location_ * WIDTH + x_location_] = (BLACK << 12) | (WHITE << 8) | c;
+      VIDEORAM[y_location_ * WIDTH + x_location_] = (BLACK << 12) | (WHITE << 8) | c;
       /* Advance the cursor. */
       ++x_location_;
       if (x_location_ == WIDTH) {
@@ -279,8 +287,6 @@ private:
   // Width and height of the framebuffer.
   static const unsigned int WIDTH  = 80;
   static const unsigned int HEIGHT = 25;
-
-  static unsigned short* videoram_;
 
   static char left_buffer_[3];
   static size_t left_buffer_size_;

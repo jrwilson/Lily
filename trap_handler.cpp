@@ -55,10 +55,11 @@ trap_dispatch (volatile registers regs)
 	
 	const caction& current = scheduler::current_action ();
 	
-	if (action_entry_point != reinterpret_cast<const void*> (-1)) {
+	if (action_entry_point != 0) {
 	  // Check the action that was scheduled.
 	  automaton::const_action_iterator pos = current.action->automaton->action_find (action_entry_point);
 	  if (pos != current.action->automaton->action_end ()) {
+	    // Ignore the parameter if NO_PARAMETER.
 	    scheduler::schedule (caction (*pos, ((*pos)->parameter_mode == NO_PARAMETER) ? 0 : parameter));
 	  }
 	  else {

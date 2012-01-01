@@ -18,6 +18,7 @@
 #include "vm_def.hpp"
 #include <algorithm>
 #include "kassert.hpp"
+#include <string.h>
 
 class multiboot_parser {
 private:
@@ -106,6 +107,8 @@ public:
       	   pos != module_end ();
       	   ++pos) {
       	end = update_end (pos->mod_end, end, limit);
+	const char* cmdline = reinterpret_cast<const char*> (pos->cmdline);
+	end = update_end (reinterpret_cast<physical_address_t> (cmdline + strlen (cmdline) + 1), end, limit);
       }
     }
 

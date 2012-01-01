@@ -1,9 +1,11 @@
 AS=nasm
 AFLAGS=-f elf
 CXX=g++
+OFLAG=-O0
 # Add -Werror at some point	
-CXXFLAGS=-MD -O0 -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
+CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl
 LD=ld
+LDFLAGS=$(OFLAG) -T linker.ld
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
@@ -28,11 +30,13 @@ global_fifo_scheduler.o \
 kmain.o \
 syscall.o \
 system_automaton.o \
-action_test_automaton.o \
-buffer_test_automaton.o \
-ramdisk_automaton.o \
-ext2_automaton.o
+note.o
 
+#action_test_automaton.o \
+#buffer_test_automaton.o \
+#ramdisk_automaton.o \
+#ext2_automaton.o \
+#boot_automaton.o
 # pit.o \
 
 KERNEL=lily
@@ -41,7 +45,7 @@ KERNEL=lily
 all : $(KERNEL)
 
 $(KERNEL) : $(OBJECTS)
-	$(LD) -T linker.ld -o $@ $^
+	$(LD) $(LDFLAGS) -o $@ $^
 
 %.o : %.s
 	$(AS) $(AFLAGS) -o $@ $<
@@ -60,8 +64,13 @@ depclean :
 .PHONY : iso
 iso : lily.iso
 
-initrd :
-	echo "This is the initrd!!" > $@
+initautomaton : lily
+	strip lily -o $@
+
+#	echo "This is the initial automaton!!" > $@
+
+initdata :
+	echo "This is the initial data!!" > $@
 
 core.img :
 	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh
@@ -72,17 +81,18 @@ core.img :
 eltorito.img : core.img
 	cat /usr/lib/grub/i386-pc/cdboot.img $^ > $@
 
-lily.iso : eltorito.img grub.cfg lily initrd
+lily.iso : eltorito.img grub.cfg lily initautomaton initdata
 	mkdir -p isofiles/boot/grub
 	cp eltorito.img isofiles/boot/grub/
 	cp grub.cfg isofiles/boot/grub/
 	cp lily isofiles/boot/
-	cp initrd isofiles/boot/
+	cp initautomaton isofiles/boot/
+	cp initdata isofiles/boot/
 	genisoimage -R -b boot/grub/eltorito.img -no-emul-boot -boot-load-size 4 -boot-info-table -o $@ isofiles
 
 .PHONY : isoclean
 isoclean :
-	-rm -f initrd core.img eltorito.img lily.iso
+	-rm -f initautomaton initdata core.img eltorito.img lily.iso
 
 # Include the dependencies
 -include *.d

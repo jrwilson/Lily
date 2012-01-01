@@ -409,7 +409,55 @@ KERNEL_VIRTUAL_BASE
 Implemented a memory allocator similar to Doug Lea's malloc.
 I'm sure its not as good.
 
+2011-12-31
+
+The question that has bugged me recently is how to bootstrap the system, i.e., transferring control to a user automaton.
+My original idea was to have a initial ramdisk (initrd).
+The contents of the disk would be loaded as a multiboot module.
+I would then need to write an automaton to serve the contents of the disk.
+On top of that, I would need a filesystem, perhaps ext2.
+On top of that, I would need a virtual file system (VFS).
+Finally, I would need an automaton that loads another automaton from the file system.
+Sounds like a lot of work.
+
+Then I started thinking about the interface of the system automaton.
+The interface for the system automaton consists of request/response pairs for creating an automaton, binding output/input actions, unbinding, and destroying.
+There is also a init output action that is used to initialize automata as part of the creation process.
+The arguments for binding, unbinding, and destroying are straightforward and consist of various combinations of automaton identitifiers (aids), action entry points, and parameters.
+However, what does the create request action take for arguments?
+Initially, I thought create should accept the name of a file containing the image of the automaton to create a la the exec () family of functions in Unix.
+Hence, the need for a filesystem at boot.
+By the way, a ramdisk is not the only way to go if you want a filesystem at boot, one could use an in-memory filesystem like ramfs, tempfs, etc.
+
+Assuming create takes a filename, the sytem automaton would use the VFS to read the contents of the file.
+Let's assume that we don't have demand paging from disk so the contents of the file must be read into memory.
+We want the resulting interaction to look like:
+
+system automaton    VFS automaton
+----------------    -------------
+read file (path) -> 
+                 <- read file (bid)
+
+The system automaton tells the VFS automaton to return the contents of a file as a buffer.
+Aha!  Why not let the create request action of the system automaton take a buffer containing the image of an automaton?
+This means that all filesystem code can be factored out of the kernel and obviously obviates the need for a filesystem at boot.
+
+Let's consider again the problem of bootstrapping the system.
+What we would like is to have the image of the first user automaton contained in a buffer as this is compatible with our decision to create automata from a buffer containing their image.
+I already have code that creates a buffer from a multiboot module as my strategy when using a ramdisk was to store the contents of the disk as a buffer.
+Thus, the image of the first user automaton will be loaded as a multiboot module.
+Furthermore, we expect the user automaton to require some data, perhaps, the user automaton creates the VFS and requires the contents of the VFS.
+We can use the same technique of loading the data as a multiboot module and converting it to a buffer.
+This implies the create action should take two arguments:  a buffer for the automaton and a buffer for its data.
+This presents a problem because we can only pass one buffer at a time.
+However, we can concatenate buffers so we can pass a single buffer containing the image and data and map showing where each one is located.
+The system automaton can then split the buffer and proceed.
 
 
 Optimize clearing/copying pages (rep stos).
 
+
+
+http://www.netbsd.org/docs/kernel/elf-notes.html
+
+http://sco.com/developers/gabi/1998-04-29/ch5.pheader.html

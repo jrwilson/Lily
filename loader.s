@@ -108,6 +108,8 @@ highhalf:
 	;; Reserve space for the stack.
 	;; TODO:  Should the stack be page-aligned?
 	ALIGN STACK_ALIGN
+	[global stack_begin]
+stack_begin:	
 	resb STACK_SIZE
 	[global stack_end]
 stack_end:	

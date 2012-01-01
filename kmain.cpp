@@ -34,6 +34,12 @@ extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
+extern char bss_begin;
+extern char bss_end;
+
+extern char stack_begin;
+extern char stack_end;
+
 extern int* ctors_begin;
 extern int* ctors_end;
 
@@ -75,14 +81,20 @@ extern "C" void
 kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
+  // Zero uninitialized memory avoiding the stack.
+  memset (&bss_begin, 0, &stack_begin - &bss_begin);
+  memset (&stack_end, 0, &bss_end - &stack_end);
+
   kout.initialize ();
 
   // Print a welcome message.
   kout << "Lily" << endl;
-
-  physical_address_t initrd_begin;
-  physical_address_t initrd_end;
   
+  buffer* automaton_buffer;
+  size_t automaton_size;
+  buffer* data_buffer;
+  size_t data_size;
+
   {
     // A wrapper around multiboot_info_t.
     // It is scoped to prevent using it after frames are reclaimed when correcting the virtual memory map.
@@ -99,15 +111,34 @@ kmain (uint32_t multiboot_magic,
       kout << "Multiboot did not provide module info.  Halting." << endl;
       halt ();
     }
-    if (multiboot_parser.module_count () != 1) {
-      kout << "Exactly one module is required for an initial ramdisk.  Halting." << endl;
+    if (multiboot_parser.module_count () != 2) {
+      kout << "Exactly two modules are required for booting.  Halting." << endl;
       halt ();
     }
 
-    // Record the physical beginning and end of the module.
-    const multiboot_module_t* mod = multiboot_parser.module_begin ();
-    initrd_begin = mod->mod_start;
-    initrd_end = mod->mod_end;
+    const multiboot_module_t* automaton_module = 0;
+    const multiboot_module_t* data_module = 0;
+
+    for (const multiboot_module_t* mod = multiboot_parser.module_begin ();
+	 mod != multiboot_parser.module_end ();
+	 ++mod) {
+      if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
+	automaton_module = mod;
+      }
+      else if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
+	data_module = mod;
+      }
+    }
+
+    if (automaton_module == 0) {
+      kout << "No automaton module.  Halting." << endl;
+      halt ();
+    }
+
+    if (data_module == 0) {
+      kout << "No data module.  Halting." << endl;
+      halt ();
+    }
 
     // Calculate the beginning of the heap.
     // The multiboot_parser operates on physical addresses, hence, the conversion from logical to physical.
@@ -174,62 +205,77 @@ kmain (uint32_t multiboot_magic,
   	break;
       }
     }
+
+    // Mark frames and logical addresses that are in use.
+    mark (KERNEL_VIRTUAL_BASE,
+	  KERNEL_VIRTUAL_BASE + ONE_MEGABYTE,
+	  true,
+	  vm::WRITABLE);
+
+    mark (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE,
+	  reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_directory),
+	  true,
+	  vm::WRITABLE);
+  
+    mark (reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE,
+	  reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_table),
+	  false,
+	  vm::WRITABLE);
+  
+    mark (reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE,
+	  reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE + PAGE_SIZE,
+	  false,
+	  vm::NOT_WRITABLE);
+  
+    mark (reinterpret_cast<logical_address_t> (&text_begin),
+	  reinterpret_cast<logical_address_t> (&text_end),
+	  true,
+	  vm::NOT_WRITABLE);
+  
+    mark (reinterpret_cast<logical_address_t> (&rodata_begin),
+	  reinterpret_cast<logical_address_t> (&rodata_end),
+	  true,
+	  vm::NOT_WRITABLE);
+  
+    mark (reinterpret_cast<logical_address_t> (&data_begin),
+	  reinterpret_cast<logical_address_t> (&data_end),
+	  true,
+	  vm::WRITABLE);
+  
+    mark (system_syscall::heap_begin (),
+	  system_syscall::heap_end (),
+	  true,
+	  vm::WRITABLE);
+
+    mark (automaton_module->mod_start + KERNEL_VIRTUAL_BASE,
+	  automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
+	  false,
+	  vm::NOT_WRITABLE);
+
+    mark (data_module->mod_start + KERNEL_VIRTUAL_BASE,
+	  data_module->mod_end + KERNEL_VIRTUAL_BASE,
+	  false,
+	  vm::NOT_WRITABLE);
+    
+    // Convert the modules into buffers.
+    automaton_buffer = new (system_alloc ()) buffer (physical_address_to_frame (automaton_module->mod_start), physical_address_to_frame (align_up (automaton_module->mod_end, PAGE_SIZE)));
+    automaton_size = automaton_module->mod_end - automaton_module->mod_start;
+    data_buffer = new (system_alloc ()) buffer (physical_address_to_frame (data_module->mod_start), physical_address_to_frame (align_up (data_module->mod_end, PAGE_SIZE)));
+    data_size = data_module->mod_end - data_module->mod_start;
+
+    // Sweep away logical addresses that aren't in use.
+    sweep ();
   }
 
-  // Mark frames and logical addresses that are in use.
-  mark (KERNEL_VIRTUAL_BASE,
-	KERNEL_VIRTUAL_BASE + ONE_MEGABYTE,
-	true,
-	vm::WRITABLE);
-
-  mark (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE,
-	reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_directory),
-	true,
-	vm::WRITABLE);
-  
-  mark (reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE,
-	reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_table),
-	false,
-	vm::WRITABLE);
-  
-  mark (reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE,
-	reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE + PAGE_SIZE,
-	false,
-	vm::NOT_WRITABLE);
-  
-  mark (reinterpret_cast<logical_address_t> (&text_begin),
-	reinterpret_cast<logical_address_t> (&text_end),
-	true,
-	vm::NOT_WRITABLE);
-  
-  mark (reinterpret_cast<logical_address_t> (&rodata_begin),
-	reinterpret_cast<logical_address_t> (&rodata_end),
-	true,
-	vm::NOT_WRITABLE);
-  
-  mark (reinterpret_cast<logical_address_t> (&data_begin),
-	reinterpret_cast<logical_address_t> (&data_end),
-	true,
-	vm::WRITABLE);
-  
-  mark (system_syscall::heap_begin (),
-	system_syscall::heap_end (),
-	true,
-	vm::WRITABLE);
-  
-  mark (initrd_begin + KERNEL_VIRTUAL_BASE,
-	initrd_end + KERNEL_VIRTUAL_BASE,
-	false,
-	vm::NOT_WRITABLE);
-  
-  // Sweep away logical addresses that aren't in use.
-  sweep ();
-
-  // Tell the system allocator that is must allocate frames and map them.
+  // Tell the system allocator that it must allocate frames and map them.
   system_syscall::engage_vm (PAGING_AREA);
 
   // Create the system automaton.
-  system_automaton::create_system_automaton (initrd_begin, initrd_end);
+  system_automaton::create_system_automaton (automaton_buffer, automaton_size, data_buffer, data_size);
+
+  // Release the buffers.
+  destroy (automaton_buffer, system_alloc ());
+  destroy (data_buffer, system_alloc ());
 
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, 0);

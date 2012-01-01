@@ -16,7 +16,8 @@
 #include "kassert.hpp"
 
 namespace syscall {
-  
+
+  // TODO:  Inline system calls.
   void
   finish (const void* action_entry_point,
 	  aid_t parameter,

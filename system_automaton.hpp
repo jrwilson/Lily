@@ -20,6 +20,7 @@
 #include "system_allocator.hpp"
 
 class automaton;
+class buffer;
 
 namespace system_automaton {
   typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, system_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
@@ -61,20 +62,10 @@ namespace system_automaton {
   automaton_end ();
 
   void
-  create_system_automaton (physical_address_t initrd_begin,
-			   physical_address_t initrd_end);
-
-  typedef np_internal_action_traits first_traits;
-  void
-  first (void);
-
-  typedef p_nb_nc_output_action_traits<automaton*> init_traits;
-  void
-  init (automaton* p);
-
-  typedef np_internal_action_traits bindsys_traits;
-  void
-  bindsys (void);
+  create_system_automaton (buffer* automaton_buffer,
+			   size_t automaton_size,
+			   buffer* data_buffer,
+			   size_t data_size);
 }
 
 #endif /* __system_automaton_hpp__ */
