@@ -19,7 +19,7 @@
 #include <utility>
 #include <iterator>
 
-namespace std {
+namespace ltl {
 
   template <class Key, class Hash>
   struct us_drop {
@@ -35,7 +35,7 @@ namespace std {
     { }
   };
 
-  template <class T, class Hash = std::hash<T>, class Predicate = std::equal_to<T>, class Allocator = allocator<T> >
+  template <class T, class Hash = std::hash<T>, class Predicate = std::equal_to<T>, class Allocator = std::allocator<T> >
   class unordered_set :
     private Hash,
     private Predicate,

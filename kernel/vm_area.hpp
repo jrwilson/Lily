@@ -18,7 +18,7 @@
 #include "vm.hpp"
 #include "frame_manager.hpp"
 #include "kassert.hpp"
-#include "string.hpp"
+#include <string.h>
 
 class vm_area_base {
 protected:
@@ -102,7 +102,7 @@ public:
     // Back the request with a frame.
     vm::map (address, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     // Clear the frame.
-    ltl::memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+    memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 };
 
@@ -125,7 +125,7 @@ public:
     // Back the request with a frame.
     vm::map (address, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     // Clear the frame.
-    ltl::memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+    memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 };
 

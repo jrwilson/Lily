@@ -1354,11 +1354,11 @@ namespace system_automaton {
     // create_queue_ = new (alloc_type ()) create_queue_type ();
 
     // Create the initial automaton.
-    bid_t b = syscall::buffer_copy (automaton_bid_, 0, automaton_size_);
-    syscall::buffer_append (b, data_bid_, 0, data_size_);
+    bid_t b = lilycall::buffer_copy (automaton_bid_, 0, automaton_size_);
+    lilycall::buffer_append (b, data_bid_, 0, data_size_);
     //create_queue_->push_back (create_item (b, automaton_size_, data_size_));
-    syscall::buffer_destroy (automaton_bid_);
-    syscall::buffer_destroy (data_bid_);
+    lilycall::buffer_destroy (automaton_bid_);
+    lilycall::buffer_destroy (data_bid_);
 
     schedule ();
     //scheduler_->finish<first_traits> ();
@@ -1395,8 +1395,8 @@ namespace system_automaton {
     };
 
     enum byte_order {
-      LITTLE_ENDIAN = 1,
-      BIG_ENDIAN = 2,
+      LITTLE_END = 1,
+      BIG_END = 2,
     };
 
     enum filetype {
@@ -1499,7 +1499,7 @@ namespace system_automaton {
 
     // if (create_precondition ()) {
     //   const create_item& item = create_queue_->front ();
-    //   const size_t buffer_size = syscall::buffer_size (item.bid);
+    //   const size_t buffer_size = lilycall::buffer_size (item.bid);
 
     //   if (buffer_size == static_cast<size_t> (-1)) {
     // 	// TODO:  Bad buffer.
@@ -1522,17 +1522,17 @@ namespace system_automaton {
     //   }
 
     //   // Split the buffers.
-    //   bid_t automaton_bid = syscall::buffer_copy (item.bid, 0, item.automaton_size);
-    //   bid_t data_bid = syscall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
+    //   bid_t automaton_bid = lilycall::buffer_copy (item.bid, 0, item.automaton_size);
+    //   bid_t data_bid = lilycall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
 
     //   // Destroy the old buffer.
-    //   syscall::buffer_destroy (item.bid);
+    //   lilycall::buffer_destroy (item.bid);
 
     //   // Map the automaton.  Must succeed.
-    //   const elf::header* h = static_cast<const elf::header*> (syscall::buffer_map (automaton_bid));
+    //   const elf::header* h = static_cast<const elf::header*> (lilycall::buffer_map (automaton_bid));
     //   kassert (h != 0);
 
-    //   if (ltl::strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
+    //   if (std::strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
     // 	// TODO:  We only support ELF.
     //     kassert (0);
     //   }
@@ -1542,7 +1542,7 @@ namespace system_automaton {
     // 	kassert (0);
     //   }
 
-    //   if (h->byte_order != elf::LITTLE_ENDIAN) {
+    //   if (h->byte_order != elf::LITTLE_END) {
     // 	// TODO:  We only support little-endian.
     // 	kassert (0);
     //   }

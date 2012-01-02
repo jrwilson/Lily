@@ -45,7 +45,7 @@ trap_dispatch (volatile registers regs)
   switch (regs.number) {
   case SYSCALL_INTERRUPT:
     switch (regs.eax) {
-    case syscall::FINISH:
+    case lilycall::FINISH:
       {
 	const void* action_entry_point = reinterpret_cast<const void*> (regs.ebx);
 	aid_t parameter = static_cast<aid_t> (regs.ecx);
@@ -86,67 +86,67 @@ trap_dispatch (volatile registers regs)
 	return;
       }
       break;
-    case syscall::GETPAGESIZE:
+    case lilycall::GETPAGESIZE:
       {
 	regs.eax = PAGE_SIZE;
 	return;
       }
       break;
-    case syscall::SBRK:
+    case lilycall::SBRK:
       {
 	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->sbrk (regs.ebx));
 	return;
       }
       break;
-    case syscall::BINDING_COUNT:
+    case lilycall::BINDING_COUNT:
       {
 	regs.eax = scheduler::current_action ().action->automaton->binding_count (reinterpret_cast<const void*> (regs.ebx), regs.ecx);
 	return;
       }
       break;
-    case syscall::BUFFER_CREATE:
+    case lilycall::BUFFER_CREATE:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_create (regs.ebx);
 	return;
       }
       break;
-    case syscall::BUFFER_COPY:
+    case lilycall::BUFFER_COPY:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_copy (regs.ebx, regs.ecx, regs.edx);
 	return;
       }
       break;
-    case syscall::BUFFER_GROW:
+    case lilycall::BUFFER_GROW:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_grow (regs.ebx, regs.ecx);
 	return;
       }
       break;
-    case syscall::BUFFER_APPEND:
+    case lilycall::BUFFER_APPEND:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_append (regs.ebx, regs.ecx, regs.edx, regs.esi);
 	return;
       }
       break;
-    case syscall::BUFFER_ASSIGN:
+    case lilycall::BUFFER_ASSIGN:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_assign (regs.ebx, regs.ecx, regs.edx, regs.esi, regs.edi);
 	return;
       }
       break;
-    case syscall::BUFFER_MAP:
+    case lilycall::BUFFER_MAP:
       {
 	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->buffer_map (regs.ebx));
 	return;
       }
       break;
-    case syscall::BUFFER_DESTROY:
+    case lilycall::BUFFER_DESTROY:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_destroy (regs.ebx);
 	return;
       }
       break;
-    case syscall::BUFFER_SIZE:
+    case lilycall::BUFFER_SIZE:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_size (regs.ebx);
 	return;

@@ -16,7 +16,7 @@
 
 #include <stddef.h>
 
-namespace std {
+namespace ltl {
 
   template <class Arg, class Result>
   struct unary_function {
@@ -41,7 +41,7 @@ namespace std {
   };
 
   template <class T>
-  struct hash : public std::unary_function<T, size_t> {
+  struct hash : public ltl::unary_function<T, size_t> {
     size_t
     operator() (T value) const
     {
@@ -74,7 +74,7 @@ namespace std {
   struct hash<unsigned short>;
 
   template <>
-  struct hash<int> : public std::unary_function<int, size_t> {
+  struct hash<int> : public ltl::unary_function<int, size_t> {
     size_t
     operator() (int value) const
     {
@@ -83,7 +83,7 @@ namespace std {
   };
 
   template <>
-  struct hash<unsigned int> : public std::unary_function<unsigned int, size_t> {
+  struct hash<unsigned int> : public ltl::unary_function<unsigned int, size_t> {
     size_t
     operator() (unsigned int value) const
     {
@@ -113,7 +113,7 @@ namespace std {
   struct hash<long double>;
 
   template <class T>
-  struct hash<T*> : public std::unary_function<T*, size_t> {
+  struct hash<T*> : public ltl::unary_function<T*, size_t> {
     size_t
     operator() (T* value) const
     {

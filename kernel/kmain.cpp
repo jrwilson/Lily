@@ -82,8 +82,8 @@ kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
   // Zero uninitialized memory avoiding the stack.
-  ltl::memset (&bss_begin, 0, &stack_begin - &bss_begin);
-  ltl::memset (&stack_end, 0, &bss_end - &stack_end);
+  memset (&bss_begin, 0, &stack_begin - &bss_begin);
+  memset (&stack_end, 0, &bss_end - &stack_end);
 
   kout.initialize ();
 
@@ -122,10 +122,10 @@ kmain (uint32_t multiboot_magic,
     for (const multiboot_module_t* mod = multiboot_parser.module_begin ();
 	 mod != multiboot_parser.module_end ();
 	 ++mod) {
-      if (ltl::strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
+      if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
 	automaton_module = mod;
       }
-      else if (ltl::strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
+      else if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
 	data_module = mod;
       }
     }

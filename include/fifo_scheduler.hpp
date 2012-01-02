@@ -81,11 +81,11 @@ private:
     if (!queue_.empty ()) {
       /* Schedule. */
       const entry& e = queue_.front ();
-      syscall::finish (e.action_entry_point, e.parameter, status, bid, buffer);
+      lilycall::finish (e.action_entry_point, e.parameter, status, bid, buffer);
     }
     else {
       /* Don't schedule. */
-      syscall::finish (0, -1, status, bid, buffer);
+      lilycall::finish (0, -1, status, bid, buffer);
     }
   }
 

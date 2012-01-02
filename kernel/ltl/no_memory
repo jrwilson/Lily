@@ -18,7 +18,7 @@
 
 /* From Chapter 19 of the C++ Programming Language. */
 
-namespace std {
+namespace ltl {
 
   template <class T> class allocator;
 

@@ -22,3 +22,11 @@ EAX (unused)
 EBX (unused)
 ECX parameter
 EDX input value
+
+
+
+This prints symbols defined by the preprocessor.
+echo "" | cpp -dM
+
+This prints symbols defined by features.h
+echo "#include <features.h>" | cpp -dN | grep "#define __USE_"

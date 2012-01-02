@@ -60,4 +60,13 @@ struct caction {
   }
 };
 
+// TODO:  Come up with a better hash function.
+struct caction_hash {
+  size_t
+  operator() (const caction& c) const
+  {
+    return reinterpret_cast<uintptr_t> (c.action) ^ c.parameter;
+  }
+};
+
 #endif /* __action_descriptor_hpp__ */

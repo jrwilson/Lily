@@ -3,13 +3,16 @@ AFLAGS=-f elf
 CXX=g++
 OFLAG=-O0
 # Add -Werror at some point	
-CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -nostdlib -fno-builtin -nostartfiles -nostdinc -nodefaultlibs -fno-exceptions -fno-rtti -fno-stack-protector -I. -I stl -I../include
+CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -std=c++0x -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I ltl -I../include
+# -nostdinc -fno-rtti
 LD=ld
 LDFLAGS=$(OFLAG) -T linker.ld
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
 cpp_runtime.o \
+string.o \
+math.o \
 kout.o \
 kernel_allocator.o \
 gdt.o \

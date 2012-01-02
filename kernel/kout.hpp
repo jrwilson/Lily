@@ -157,7 +157,7 @@ public:
   inline console&
   operator<< (const void* p)
   {
-    *this << reinterpret_cast<uintintptr_t> (p);
+    *this << reinterpret_cast<uintptr_t> (p);
     width_ = 0;
     return *this;
   }

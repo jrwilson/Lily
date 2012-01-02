@@ -457,6 +457,11 @@ The system automaton can then split the buffer and proceed.
 Optimize clearing/copying pages (rep stos).
 
 
+Two irritating things:
+I was forced to use rtti to appease the shared_ptr implementation.
+To use TR1, the -std=c++x0 defines a bunch of features macros that eventually causes __USE_MISC to be defined.
+This macro causes a function call syscall to be defined which clashes with the syscall namespace so I had to re-name it.
+
 
 http://www.netbsd.org/docs/kernel/elf-notes.html
 

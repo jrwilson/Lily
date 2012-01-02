@@ -14,7 +14,7 @@
   Justin R. Wilson
 */
 
-namespace std {
+namespace ltl {
   
   template <class T, class U>
   struct pair {

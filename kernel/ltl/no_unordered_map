@@ -19,7 +19,7 @@
 #include <utility>
 #include <iterator>
 
-namespace std {
+namespace ltl {
 
   template <class Key, class T, class Hash>
   struct um_drop {

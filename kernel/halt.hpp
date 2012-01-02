@@ -16,8 +16,8 @@
 
 #include "interrupts.hpp"
 
-inline void
-halt ()
+static inline void __attribute__((noreturn))
+halt (void)
 {
   for (;;) {
     interrupts::disable ();

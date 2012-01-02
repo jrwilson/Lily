@@ -12,7 +12,7 @@
 */
 
 #include "gdt.hpp"
-#include "string.hpp"
+#include <string.h>
 
 extern uint32_t stack_end;
 
@@ -65,7 +65,7 @@ gdt::install ()
   // I am unsure about the privilege level and granularity.
   gdt_entry_[TSS_SELECTOR / sizeof (descriptor::descriptor)].tss = make_tss_descriptor (reinterpret_cast<uint32_t> (&tss), reinterpret_cast<uint32_t> (&tss) + sizeof (tss) - 1, descriptor::RING0, descriptor::PRESENT, descriptor::PAGE_GRANULARITY);
 
-  ltl::memset (&tss, 0, sizeof (tss));
+  memset (&tss, 0, sizeof (tss));
 
   tss.ss0 = KERNEL_DATA_SELECTOR;
   tss.esp0 = reinterpret_cast<uint32_t> (&stack_end);

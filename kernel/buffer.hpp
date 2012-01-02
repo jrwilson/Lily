@@ -135,7 +135,7 @@ public:
 	// Map the dst to the address.
 	vm::map (address, dst, vm::USER, vm::WRITABLE);
 	// Copy.
-	ltl::memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
+	memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
 	// Unmap the src and decrement its reference count.
 	vm::unmap (vm::get_stub1 ());
 	frame_manager::decref (src);
@@ -157,7 +157,7 @@ public:
       // we need to unmap the current frame to make room.
       vm::unmap (address);
       vm::map (address, dst, vm::USER, vm::WRITABLE);
-      ltl::memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
+      memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
       vm::unmap (vm::get_stub1 ());
       frame_manager::decref (src);
       frame_list_[idx].frame_ = dst;

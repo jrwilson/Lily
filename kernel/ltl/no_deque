@@ -18,7 +18,7 @@
 #include <iterator>
 #include <algorithm>
 
-namespace std {
+namespace ltl {
 
   template <class T, class Allocator = allocator<T> >
   class deque : private Allocator {
@@ -138,7 +138,7 @@ namespace std {
 
       size_type old_cap = capacity ();
       if (n > old_cap) {
-       	n = max (n, 2 * old_cap);
+       	n = std::max (n, 2 * old_cap);
 	// Allocate.
        	pointer new_first = allocate (n);
        	pointer new_begin = new_first;

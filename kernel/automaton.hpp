@@ -26,6 +26,7 @@
 #include "action.hpp"
 #include "bid.hpp"
 #include "buffer.hpp"
+#include <algorithm>
 
 class automaton {
 private:
@@ -44,6 +45,14 @@ private:
     {
       // Owner doesn't matter.
       return input == other.input;
+    }
+  };
+
+  struct input_act_hash {
+    size_t
+    operator() (const input_act& act) const
+    {
+      return caction_hash () (act.input);
     }
   };
 
@@ -75,6 +84,14 @@ private:
     }
   };
 
+  struct binding_hash {
+    size_t
+    operator() (const binding& b) const
+    {
+      return caction_hash () (b.output) ^ caction_hash () (b.input);
+    }
+  };
+
   aid_t aid_;
   // Frame that contains the automaton's page directory.
   frame_t const page_directory_frame_;
@@ -93,17 +110,17 @@ private:
 
   // Bound outputs.
 public:
-  typedef std::unordered_set <input_act, std::hash<input_act>, std::equal_to<input_act>, kernel_allocator<input_act> > input_action_set_type;
+  typedef std::unordered_set <input_act, input_act_hash, std::equal_to<input_act>, kernel_allocator<input_act> > input_action_set_type;
 private:
-  typedef std::unordered_map <caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, kernel_allocator<std::pair<const caction, input_action_set_type> > > bound_outputs_map_type;
+  typedef std::unordered_map <caction, input_action_set_type, caction_hash, std::equal_to<caction>, kernel_allocator<std::pair<const caction, input_action_set_type> > > bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
 
   // Bound inputs.
-  typedef std::unordered_map<caction, output_act, std::hash<caction>, std::equal_to<caction>, kernel_allocator<std::pair<const caction, output_act> > > bound_inputs_map_type;
+  typedef std::unordered_map<caction, output_act, caction_hash, std::equal_to<caction>, kernel_allocator<std::pair<const caction, output_act> > > bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
 
   // Bindings.
-  typedef std::unordered_set<binding, std::hash<binding>, std::equal_to<binding>, kernel_allocator<binding> > bindings_set_type;
+  typedef std::unordered_set<binding, binding_hash, std::equal_to<binding>, kernel_allocator<binding> > bindings_set_type;
   bindings_set_type bindings_set_;
 
   // Next bid to allocate.

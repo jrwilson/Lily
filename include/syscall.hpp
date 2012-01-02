@@ -18,7 +18,7 @@
 #include "bid.hpp"
 #include <stddef.h>
 
-namespace syscall {
+namespace lilycall {
 
   enum {
     FINISH = 0,
