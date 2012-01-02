@@ -54,6 +54,7 @@ memmove (void* dest,
 {
   unsigned char* d = static_cast<unsigned char*> (dest);
   const unsigned char* s = static_cast<const unsigned char*> (src);
+
   if (s >= d || s + n <= d) {
     // No overlap.
     memcpy (dest, src, n);
@@ -61,8 +62,8 @@ memmove (void* dest,
   else {
     s += n;
     d += n;
-    while (n != 0) {
-      *d-- = *s--;
+    while (n-- != 0) {
+      *(--d) = *(--s);
     }
   }
   

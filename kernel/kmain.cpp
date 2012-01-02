@@ -26,6 +26,8 @@
 #include "system_automaton.hpp"
 #include "scheduler.hpp"
 
+#include <math.h>
+
 // Symbols to build the kernel's memory map.
 extern int text_begin;
 extern int text_end;
@@ -89,7 +91,7 @@ kmain (uint32_t multiboot_magic,
 
   // Print a welcome message.
   kout << "Lily" << endl;
-  
+
   buffer* automaton_buffer;
   size_t automaton_size;
   buffer* data_buffer;

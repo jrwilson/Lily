@@ -42,8 +42,8 @@ namespace system_automaton {
   static bid_t data_bid_;
   static size_t data_size_;
 
-  // typedef fifo_scheduler<allocator_type> scheduler_type;
-  // static scheduler_type* scheduler_ = 0;
+  typedef fifo_scheduler scheduler_type;
+  static scheduler_type* scheduler_ = 0;
 
   // typedef std::deque<automaton*, allocator_type<automaton*> > init_queue_type;
   // static init_queue_type* init_queue_ = 0;
@@ -1345,13 +1345,12 @@ namespace system_automaton {
   static void
   first (void)
   {
-    kassert (0);
-    // // Initialize the allocator.
-    // alloc_type::initialize ();
-    // // Allocate a scheduler.
-    // scheduler_ = new (alloc_type ()) scheduler_type ();
+    // Allocate a scheduler.
+    scheduler_ = new scheduler_type ();
     // init_queue_ = new (alloc_type ()) init_queue_type ();
     // create_queue_ = new (alloc_type ()) create_queue_type ();
+
+    kassert (0);
 
     // Create the initial automaton.
     bid_t b = lilycall::buffer_copy (automaton_bid_, 0, automaton_size_);
