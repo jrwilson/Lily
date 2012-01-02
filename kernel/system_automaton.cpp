@@ -12,7 +12,6 @@
 */
 
 #include "system_automaton.hpp"
-#include "list_allocator.hpp"
 #include "fifo_scheduler.hpp"
 #include "automaton.hpp"
 #include "scheduler.hpp"
@@ -26,21 +25,6 @@ extern int data_begin;
 extern int data_end;
 
 namespace system_automaton {
-
-  static list_alloc_state state_;
-
-  struct system_automaton_syscall : public list_alloc_syscall {
-    static list_alloc_state&
-    state ()
-    {
-      return state_;
-    }
-  };
-
-  typedef list_alloc<system_automaton_syscall> alloc_type;
-
-  template <typename T>
-  struct allocator_type : public list_allocator<T, system_automaton_syscall> { };
 
   // Heap location for system automata.
   // Starting at 4MB allow us to use the low page table of the kernel.
@@ -58,11 +42,11 @@ namespace system_automaton {
   static bid_t data_bid_;
   static size_t data_size_;
 
-  typedef fifo_scheduler<allocator_type> scheduler_type;
-  static scheduler_type* scheduler_ = 0;
+  // typedef fifo_scheduler<allocator_type> scheduler_type;
+  // static scheduler_type* scheduler_ = 0;
 
-  typedef std::deque<automaton*, allocator_type<automaton*> > init_queue_type;
-  static init_queue_type* init_queue_ = 0;
+  // typedef std::deque<automaton*, allocator_type<automaton*> > init_queue_type;
+  // static init_queue_type* init_queue_ = 0;
 
   struct create_item {
     bid_t bid;
@@ -77,8 +61,8 @@ namespace system_automaton {
       data_size (d)
     { }
   };
-  typedef std::deque<create_item, allocator_type<create_item> > create_queue_type;
-  static create_queue_type* create_queue_ = 0;
+  // typedef std::deque<create_item, allocator_type<create_item> > create_queue_type;
+  // static create_queue_type* create_queue_ = 0;
 
   static automaton*
   create_automaton (bool privcall,
@@ -114,7 +98,7 @@ namespace system_automaton {
     current_aid_ = std::max (aid + 1, 0);
     
     // Create the automaton and insert it into the map.
-    automaton* a = new (system_alloc ()) automaton (aid, frame, privcall);
+    automaton* a = new (kernel_alloc ()) automaton (aid, frame, privcall);
     aid_map_.insert (std::make_pair (aid, a));
     
     // Add to the scheduler.
@@ -1361,22 +1345,23 @@ namespace system_automaton {
   static void
   first (void)
   {
-    // Initialize the allocator.
-    alloc_type::initialize ();
-    // Allocate a scheduler.
-    scheduler_ = new (alloc_type ()) scheduler_type ();
-    init_queue_ = new (alloc_type ()) init_queue_type ();
-    create_queue_ = new (alloc_type ()) create_queue_type ();
+    kassert (0);
+    // // Initialize the allocator.
+    // alloc_type::initialize ();
+    // // Allocate a scheduler.
+    // scheduler_ = new (alloc_type ()) scheduler_type ();
+    // init_queue_ = new (alloc_type ()) init_queue_type ();
+    // create_queue_ = new (alloc_type ()) create_queue_type ();
 
     // Create the initial automaton.
     bid_t b = syscall::buffer_copy (automaton_bid_, 0, automaton_size_);
     syscall::buffer_append (b, data_bid_, 0, data_size_);
-    create_queue_->push_back (create_item (b, automaton_size_, data_size_));
+    //create_queue_->push_back (create_item (b, automaton_size_, data_size_));
     syscall::buffer_destroy (automaton_bid_);
     syscall::buffer_destroy (data_bid_);
 
     schedule ();
-    scheduler_->finish<first_traits> ();
+    //scheduler_->finish<first_traits> ();
   }
 
   typedef ap_nb_nc_input_action_traits create_request_traits;
@@ -1390,11 +1375,11 @@ namespace system_automaton {
 
   typedef np_internal_action_traits create_traits;
 
-  static bool
-  create_precondition (void)
-  {
-    return !create_queue_->empty ();
-  }
+  // static bool
+  // create_precondition (void)
+  // {
+  //   return !create_queue_->empty ();
+  // }
 
   // The image of an automaton must be smaller than this.
   // I picked this number arbitrarily.
@@ -1509,174 +1494,175 @@ namespace system_automaton {
   static void
   create (void)
   {
-    scheduler_->remove<create_traits> (&create);
+    kassert (0);
+    // scheduler_->remove<create_traits> (&create);
 
-    if (create_precondition ()) {
-      const create_item& item = create_queue_->front ();
-      const size_t buffer_size = syscall::buffer_size (item.bid);
+    // if (create_precondition ()) {
+    //   const create_item& item = create_queue_->front ();
+    //   const size_t buffer_size = syscall::buffer_size (item.bid);
 
-      if (buffer_size == static_cast<size_t> (-1)) {
-	// TODO:  Bad buffer.
-	kassert (0);
-      }
+    //   if (buffer_size == static_cast<size_t> (-1)) {
+    // 	// TODO:  Bad buffer.
+    // 	kassert (0);
+    //   }
 
-      if (buffer_size == 0) {
-	// TODO:  Empty buffer.
-	kassert (0);
-      }
+    //   if (buffer_size == 0) {
+    // 	// TODO:  Empty buffer.
+    // 	kassert (0);
+    //   }
 
-      if (align_up (item.automaton_size, PAGE_SIZE) + align_up (item.data_size, PAGE_SIZE) != buffer_size) {
-	// TODO:  Sizes are not correct.
-	kassert (0);
-      }
+    //   if (align_up (item.automaton_size, PAGE_SIZE) + align_up (item.data_size, PAGE_SIZE) != buffer_size) {
+    // 	// TODO:  Sizes are not correct.
+    // 	kassert (0);
+    //   }
 
-      if (item.automaton_size < sizeof (elf::header) || item.automaton_size > MAX_AUTOMATON_SIZE) {
-	// TODO:  Automaton is too small or large, i.e., we can't map it in.
-	kassert (0);
-      }
+    //   if (item.automaton_size < sizeof (elf::header) || item.automaton_size > MAX_AUTOMATON_SIZE) {
+    // 	// TODO:  Automaton is too small or large, i.e., we can't map it in.
+    // 	kassert (0);
+    //   }
 
-      // Split the buffers.
-      bid_t automaton_bid = syscall::buffer_copy (item.bid, 0, item.automaton_size);
-      bid_t data_bid = syscall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
+    //   // Split the buffers.
+    //   bid_t automaton_bid = syscall::buffer_copy (item.bid, 0, item.automaton_size);
+    //   bid_t data_bid = syscall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
 
-      // Destroy the old buffer.
-      syscall::buffer_destroy (item.bid);
+    //   // Destroy the old buffer.
+    //   syscall::buffer_destroy (item.bid);
 
-      // Map the automaton.  Must succeed.
-      const elf::header* h = static_cast<const elf::header*> (syscall::buffer_map (automaton_bid));
-      kassert (h != 0);
+    //   // Map the automaton.  Must succeed.
+    //   const elf::header* h = static_cast<const elf::header*> (syscall::buffer_map (automaton_bid));
+    //   kassert (h != 0);
 
-      if (strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
-	// TODO:  We only support ELF.
-        kassert (0);
-      }
+    //   if (ltl::strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
+    // 	// TODO:  We only support ELF.
+    //     kassert (0);
+    //   }
 
-      if (h->width != elf::BIT32) {
-	// TODO:  We only support 32-bit.
-	kassert (0);
-      }
+    //   if (h->width != elf::BIT32) {
+    // 	// TODO:  We only support 32-bit.
+    // 	kassert (0);
+    //   }
 
-      if (h->byte_order != elf::LITTLE_ENDIAN) {
-	// TODO:  We only support little-endian.
-	kassert (0);
-      }
+    //   if (h->byte_order != elf::LITTLE_ENDIAN) {
+    // 	// TODO:  We only support little-endian.
+    // 	kassert (0);
+    //   }
 
-      if (h->filetype != elf::EXECUTABLE) {
-	// TODO:  We only support executable_files.
-	kassert (0);
-      }
+    //   if (h->filetype != elf::EXECUTABLE) {
+    // 	// TODO:  We only support executable_files.
+    // 	kassert (0);
+    //   }
 
-      if (h->archtype != elf::X86) {
-	// TODO:  We only support x86.
-	kassert (0);
-      }
+    //   if (h->archtype != elf::X86) {
+    // 	// TODO:  We only support x86.
+    // 	kassert (0);
+    //   }
 
-      if (h->header_size != sizeof (elf::header)) {
-	// TODO:  Perhaps we need to fix the code.
-	kassert (0);
-      }
+    //   if (h->header_size != sizeof (elf::header)) {
+    // 	// TODO:  Perhaps we need to fix the code.
+    // 	kassert (0);
+    //   }
 
-      if (h->program_header_entry_size != sizeof (elf::program)) {
-	// TODO:  Perhaps we need to fix the code.
-	kassert (0);
-      }
+    //   if (h->program_header_entry_size != sizeof (elf::program)) {
+    // 	// TODO:  Perhaps we need to fix the code.
+    // 	kassert (0);
+    //   }
 
-      if (h->program_header_offset + h->program_header_entry_size * h->program_header_entry_count > item.automaton_size) {
-	// TODO:  The program headers are not reported correctly.
-	kassert (0);
-      }
+    //   if (h->program_header_offset + h->program_header_entry_size * h->program_header_entry_count > item.automaton_size) {
+    // 	// TODO:  The program headers are not reported correctly.
+    // 	kassert (0);
+    //   }
 
-      if (h->section_header_offset + h->section_header_entry_size * h->section_header_entry_count > item.automaton_size) {
-	// TODO:  The section headers are not reported correctly.
-	kassert (0);
-      }
+    //   if (h->section_header_offset + h->section_header_entry_size * h->section_header_entry_count > item.automaton_size) {
+    // 	// TODO:  The section headers are not reported correctly.
+    // 	kassert (0);
+    //   }
 
-      const elf::program* p = reinterpret_cast<const elf::program*> (reinterpret_cast<const uint8_t*> (h) + h->program_header_offset);
-      for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
-	switch (p->type) {
-	case elf::LOAD:
-	  if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
-	    // TODO:  Segment location not reported correctly.
-	    kassert (0);
-	  }
+    //   const elf::program* p = reinterpret_cast<const elf::program*> (reinterpret_cast<const uint8_t*> (h) + h->program_header_offset);
+    //   for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
+    // 	switch (p->type) {
+    // 	case elf::LOAD:
+    // 	  if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
+    // 	    // TODO:  Segment location not reported correctly.
+    // 	    kassert (0);
+    // 	  }
 
-	  if (p->alignment != PAGE_SIZE) {
-	    // TODO:  We only support PAGE_SIZE alignment.
-	    kassert (0);
-	  }
+    // 	  if (p->alignment != PAGE_SIZE) {
+    // 	    // TODO:  We only support PAGE_SIZE alignment.
+    // 	    kassert (0);
+    // 	  }
 
-	  if (!is_aligned (p->offset, p->alignment)) {
-	    // TODO:  Section is not aligned properly.
-	    kassert (0);
-	  }
+    // 	  if (!is_aligned (p->offset, p->alignment)) {
+    // 	    // TODO:  Section is not aligned properly.
+    // 	    kassert (0);
+    // 	  }
 
-	  if (!is_aligned (p->virtual_address, p->alignment)) {
-	    // TODO:  Section is not aligned properly.
-	    kassert (0);
-	  }
+    // 	  if (!is_aligned (p->virtual_address, p->alignment)) {
+    // 	    // TODO:  Section is not aligned properly.
+    // 	    kassert (0);
+    // 	  }
 
-	  kout << " offset = " << hexformat (p->offset)
-	       << " virtual_address = " << hexformat (p->virtual_address)
-	       << " file_size = " << hexformat (p->file_size)
-	       << " memory_size = " << hexformat (p->memory_size);
+    // 	  kout << " offset = " << hexformat (p->offset)
+    // 	       << " virtual_address = " << hexformat (p->virtual_address)
+    // 	       << " file_size = " << hexformat (p->file_size)
+    // 	       << " memory_size = " << hexformat (p->memory_size);
 
-	  if (p->flags & elf::EXECUTE) {
-	    kout << " execute";
-	  }
-	  if (p->flags & elf::WRITE) {
-	    kout << " write";
-	  }
-	  if (p->flags & elf::READ) {
-	    kout << " read";
-	  }
+    // 	  if (p->flags & elf::EXECUTE) {
+    // 	    kout << " execute";
+    // 	  }
+    // 	  if (p->flags & elf::WRITE) {
+    // 	    kout << " write";
+    // 	  }
+    // 	  if (p->flags & elf::READ) {
+    // 	    kout << " read";
+    // 	  }
 
-	  kout << endl;
-	  break;
-	case elf::NOTE:
-	  {
-	    if (p->offset + p->file_size > item.automaton_size) {
-	      // TODO:  Segment location not reported correctly.
-	      kassert (0);
-	    }
+    // 	  kout << endl;
+    // 	  break;
+    // 	case elf::NOTE:
+    // 	  {
+    // 	    if (p->offset + p->file_size > item.automaton_size) {
+    // 	      // TODO:  Segment location not reported correctly.
+    // 	      kassert (0);
+    // 	    }
 
-	    const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
-	    const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
+    // 	    const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
+    // 	    const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
 
-	    while (note_begin < note_end) {
-	      // If the next one is in range, this one is safe to process.
-	      if (note_begin->next () <= note_end) {
-		const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
-		kout << "NOTE name = " << note_begin->name ()
-		     << " type = " << hexformat (note_begin->type)
-		     << " desc_size = " << note_begin->desc_size
-		     << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
-	      }
-	      note_begin = note_begin->next ();
-	    }
-	  }
-	  break;
-	}
-      }
+    // 	    while (note_begin < note_end) {
+    // 	      // If the next one is in range, this one is safe to process.
+    // 	      if (note_begin->next () <= note_end) {
+    // 		const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
+    // 		kout << "NOTE name = " << note_begin->name ()
+    // 		     << " type = " << hexformat (note_begin->type)
+    // 		     << " desc_size = " << note_begin->desc_size
+    // 		     << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
+    // 	      }
+    // 	      note_begin = note_begin->next ();
+    // 	    }
+    // 	  }
+    // 	  break;
+    // 	}
+    //   }
 
-      kout << "program_header_offset = " << h->program_header_offset << endl;
-      kout << "section_header_offset = " << h->section_header_offset << endl;
+    //   kout << "program_header_offset = " << h->program_header_offset << endl;
+    //   kout << "section_header_offset = " << h->section_header_offset << endl;
 
-      kout << "program_header_entry_size = " << h->program_header_entry_size << endl;
-      kout << "program_header_entry_count = " << h->program_header_entry_count << endl;
-      kout << "section_header_entry_size = " << h->section_header_entry_size << endl;
-      kout << "section_header_entry_count = " << h->section_header_entry_count << endl;
-      kout << "string_section = " << h->string_section << endl;
+    //   kout << "program_header_entry_size = " << h->program_header_entry_size << endl;
+    //   kout << "program_header_entry_count = " << h->program_header_entry_count << endl;
+    //   kout << "section_header_entry_size = " << h->section_header_entry_size << endl;
+    //   kout << "section_header_entry_count = " << h->section_header_entry_count << endl;
+    //   kout << "string_section = " << h->string_section << endl;
 
-      // kout << automaton_bid << "\t" << item.automaton_size << endl;
-      // kout << data_bid << "\t" << item.data_size << endl;
+    //   // kout << automaton_bid << "\t" << item.automaton_size << endl;
+    //   // kout << data_bid << "\t" << item.data_size << endl;
 
-      kassert (0);
+    //   kassert (0);
 
-      create_queue_->pop_front ();
-    }
+    //   create_queue_->pop_front ();
+    // }
 
     schedule ();
-    scheduler_->finish<create_traits> ();
+    //scheduler_->finish<create_traits> ();
   }
 
   typedef p_nb_nc_output_action_traits<automaton*> init_traits;
@@ -1684,11 +1670,12 @@ namespace system_automaton {
   static void
   init (automaton* p)
   {
-    scheduler_->remove<init_traits> (&init, p);
-    kassert (p == init_queue_->front ());
-    init_queue_->pop_front ();
-    schedule ();
-    scheduler_->finish<init_traits> (true);
+    kassert (0);
+    // scheduler_->remove<init_traits> (&init, p);
+    // kassert (p == init_queue_->front ());
+    // init_queue_->pop_front ();
+    // schedule ();
+    // scheduler_->finish<init_traits> (true);
   }
 
   typedef ap_nb_nc_output_action_traits create_response_traits;
@@ -1703,12 +1690,13 @@ namespace system_automaton {
   static void
   schedule ()
   {
-    if (create_precondition ()) {
-      scheduler_->add<create_traits> (&create);
-    }
-    if (!init_queue_->empty ()) {
-      scheduler_->add<init_traits> (&init, init_queue_->front ());
-    }
+    kassert (0);
+    // if (create_precondition ()) {
+    //   scheduler_->add<create_traits> (&create);
+    // }
+    // if (!init_queue_->empty ()) {
+    //   scheduler_->add<init_traits> (&init, init_queue_->front ());
+    // }
   }
 
   void
@@ -1728,42 +1716,47 @@ namespace system_automaton {
     bool r;
     
     // Text.
-    area = new (system_alloc ()) vm_text_area (reinterpret_cast<logical_address_t> (&text_begin),
+    area = new (kernel_alloc ()) vm_text_area (reinterpret_cast<logical_address_t> (&text_begin),
 					       reinterpret_cast<logical_address_t> (&text_end));
     r = system_automaton_->insert_vm_area (area);
     kassert (r);
     
     // Read-only data.
-    area = new (system_alloc ()) vm_rodata_area (reinterpret_cast<logical_address_t> (&rodata_begin),
+    area = new (kernel_alloc ()) vm_rodata_area (reinterpret_cast<logical_address_t> (&rodata_begin),
 						 reinterpret_cast<logical_address_t> (&rodata_end));
     r = system_automaton_->insert_vm_area (area);
     kassert (r);
     
     // Data.
-    area = new (system_alloc ()) vm_data_area (reinterpret_cast<logical_address_t> (&data_begin),
+    area = new (kernel_alloc ()) vm_data_area (reinterpret_cast<logical_address_t> (&data_begin),
 					       reinterpret_cast<logical_address_t> (&data_end));
     r = system_automaton_->insert_vm_area (area);
     kassert (r);
 
     // Heap.
-    vm_heap_area* heap_area = new (system_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
+    vm_heap_area* heap_area = new (kernel_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
     r = system_automaton_->insert_heap_area (heap_area);
     kassert (r);
     
     // Stack.
-    vm_stack_area* stack_area = new (system_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
+    vm_stack_area* stack_area = new (kernel_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
     r = system_automaton_->insert_stack_area (stack_area);
     kassert (r);
     
     // Add the actions.
-    system_automaton_->add_action<system_automaton::first_traits> (&system_automaton::first);
-    system_automaton_->add_action<system_automaton::create_request_traits> (&system_automaton::create_request);
-    system_automaton_->add_action<system_automaton::create_traits> (&system_automaton::create);
-    system_automaton_->add_action<system_automaton::init_traits> (&system_automaton::init);
-    system_automaton_->add_action<system_automaton::create_response_traits> (&system_automaton::create_response);
+    r = system_automaton_->add_action (reinterpret_cast<const void*> (&first), first_traits::action_type, first_traits::parameter_mode, first_traits::buffer_value_mode, first_traits::copy_value_mode, first_traits::copy_value_size);
+    kassert (r);
+    r = system_automaton_->add_action (reinterpret_cast<const void*> (&create_request), create_request_traits::action_type, create_request_traits::parameter_mode, create_request_traits::buffer_value_mode, create_request_traits::copy_value_mode, create_request_traits::copy_value_size);
+    kassert (r);
+    r = system_automaton_->add_action (reinterpret_cast<const void*> (&create), create_traits::action_type, create_traits::parameter_mode, create_traits::buffer_value_mode, create_traits::copy_value_mode, create_traits::copy_value_size);
+    kassert (r);
+    r = system_automaton_->add_action (reinterpret_cast<const void*> (&init), init_traits::action_type, init_traits::parameter_mode, init_traits::buffer_value_mode, init_traits::copy_value_mode, init_traits::copy_value_size);
+    kassert (r);
+    r = system_automaton_->add_action (reinterpret_cast<const void*> (&create_response), create_response_traits::action_type, create_response_traits::parameter_mode, create_response_traits::buffer_value_mode, create_response_traits::copy_value_mode, create_response_traits::copy_value_size);
+    kassert (r);
     
     // Bootstrap.
-    checked_schedule (system_automaton_, reinterpret_cast<const void*> (&system_automaton::first));
+    checked_schedule (system_automaton_, reinterpret_cast<const void*> (&first));
 
     automaton_bid_ = system_automaton_->buffer_create (*automaton_buffer);
     automaton_size_ = automaton_size;

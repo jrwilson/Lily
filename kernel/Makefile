@@ -10,10 +10,8 @@ LDFLAGS=$(OFLAG) -T linker.ld
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
 cpp_runtime.o \
-string.o \
 kout.o \
-list_allocator.o \
-system_allocator.o \
+kernel_allocator.o \
 gdt.o \
 gdt_flush.o \
 idt.o \
@@ -28,9 +26,9 @@ frame_manager.o \
 vm.o \
 global_fifo_scheduler.o \
 kmain.o \
-system_automaton.o \
-note.o
+system_automaton.o
 
+#note.o
 #action_test_automaton.o \
 #buffer_test_automaton.o \
 #ramdisk_automaton.o \

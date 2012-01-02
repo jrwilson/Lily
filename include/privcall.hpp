@@ -28,7 +28,7 @@ namespace privcall {
   {
     uint16_t cs;
     asm ("mov %%cs, %0\n" : "=g"(cs) ::);
-    if ((cs & descriptor_constants::RING3) == descriptor_constants::RING0) {
+    if ((cs & descriptor::RING3) == descriptor::RING0) {
       // Privileged mode.
       asm ("invlpg (%0)\n" :: "r"(address));
     }

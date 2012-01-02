@@ -15,7 +15,7 @@
 
 #include "kout.hpp"
 #include "multiboot_parser.hpp"
-#include "system_allocator.hpp"
+#include "kernel_allocator.hpp"
 #include "vm.hpp"
 #include "gdt.hpp"
 #include "idt.hpp"
@@ -82,8 +82,8 @@ kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
   // Zero uninitialized memory avoiding the stack.
-  memset (&bss_begin, 0, &stack_begin - &bss_begin);
-  memset (&stack_end, 0, &bss_end - &stack_end);
+  ltl::memset (&bss_begin, 0, &stack_begin - &bss_begin);
+  ltl::memset (&stack_end, 0, &bss_end - &stack_end);
 
   kout.initialize ();
 
@@ -122,10 +122,10 @@ kmain (uint32_t multiboot_magic,
     for (const multiboot_module_t* mod = multiboot_parser.module_begin ();
 	 mod != multiboot_parser.module_end ();
 	 ++mod) {
-      if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
+      if (ltl::strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
 	automaton_module = mod;
       }
-      else if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
+      else if (ltl::strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
 	data_module = mod;
       }
     }
@@ -152,8 +152,7 @@ kmain (uint32_t multiboot_magic,
     const logical_address_t heap_end = INITIAL_LOGICAL_LIMIT;
 
     // Initialize the heap.
-    system_syscall::initialize (heap_begin, heap_end);
-    system_alloc::initialize ();
+    kernel_alloc::initialize (heap_begin, heap_end);
 
     // Call the static constructors.
     // Since heap allocation is working, static objects can use dynamic memory.
@@ -242,8 +241,8 @@ kmain (uint32_t multiboot_magic,
 	  true,
 	  vm::WRITABLE);
   
-    mark (system_syscall::heap_begin (),
-	  system_syscall::heap_end (),
+    mark (kernel_alloc::heap_begin (),
+	  kernel_alloc::heap_end (),
 	  true,
 	  vm::WRITABLE);
 
@@ -258,9 +257,9 @@ kmain (uint32_t multiboot_magic,
 	  vm::NOT_WRITABLE);
     
     // Convert the modules into buffers.
-    automaton_buffer = new (system_alloc ()) buffer (physical_address_to_frame (automaton_module->mod_start), physical_address_to_frame (align_up (automaton_module->mod_end, PAGE_SIZE)));
+    automaton_buffer = new (kernel_alloc ()) buffer (physical_address_to_frame (automaton_module->mod_start), physical_address_to_frame (align_up (automaton_module->mod_end, PAGE_SIZE)));
     automaton_size = automaton_module->mod_end - automaton_module->mod_start;
-    data_buffer = new (system_alloc ()) buffer (physical_address_to_frame (data_module->mod_start), physical_address_to_frame (align_up (data_module->mod_end, PAGE_SIZE)));
+    data_buffer = new (kernel_alloc ()) buffer (physical_address_to_frame (data_module->mod_start), physical_address_to_frame (align_up (data_module->mod_end, PAGE_SIZE)));
     data_size = data_module->mod_end - data_module->mod_start;
 
     // Sweep away logical addresses that aren't in use.
@@ -268,14 +267,14 @@ kmain (uint32_t multiboot_magic,
   }
 
   // Tell the system allocator that it must allocate frames and map them.
-  system_syscall::engage_vm (PAGING_AREA);
+  kernel_alloc::engage_vm (PAGING_AREA);
 
   // Create the system automaton.
   system_automaton::create_system_automaton (automaton_buffer, automaton_size, data_buffer, data_size);
 
   // Release the buffers.
-  destroy (automaton_buffer, system_alloc ());
-  destroy (data_buffer, system_alloc ());
+  destroy (automaton_buffer, kernel_alloc ());
+  destroy (data_buffer, kernel_alloc ());
 
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, 0);

@@ -5,28 +5,27 @@
 
 class automaton;
 
-// TODO:  Can we make these smaller?
-
 // Partial action.
 struct paction {
   ::automaton* const automaton;
-  action_type_t const type;
   const void* const action_entry_point;
+  // I think we're trading space for speed.
+  action_type_t const type;
   parameter_mode_t const parameter_mode;
   buffer_value_mode_t const buffer_value_mode;
   copy_value_mode_t const copy_value_mode;
   size_t const copy_value_size;
 
   paction (::automaton* a,
-	   action_type_t t,
 	   const void* aep,
+	   action_type_t t,
 	   parameter_mode_t pm,
 	   buffer_value_mode_t bvm,
 	   copy_value_mode_t cvm,
 	   size_t vs) :
     automaton (a),
-    type (t),
     action_entry_point (aep),
+    type (t),
     parameter_mode (pm),
     buffer_value_mode (bvm),
     copy_value_mode (cvm),

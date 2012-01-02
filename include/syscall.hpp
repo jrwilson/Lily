@@ -17,9 +17,23 @@
 #include "aid.hpp"
 #include "bid.hpp"
 #include <stddef.h>
-#include "syscall_def.hpp"
 
 namespace syscall {
+
+  enum {
+    FINISH = 0,
+    GETPAGESIZE,
+    SBRK,
+    BINDING_COUNT,
+    BUFFER_CREATE,
+    BUFFER_COPY,
+    BUFFER_GROW,
+    BUFFER_APPEND,
+    BUFFER_ASSIGN,
+    BUFFER_MAP,
+    BUFFER_DESTROY,
+    BUFFER_SIZE,
+  };
 
   inline void
   finish (const void* action_entry_point,

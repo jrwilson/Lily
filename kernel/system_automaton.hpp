@@ -17,13 +17,13 @@
 #include "action_traits.hpp"
 #include "vm_def.hpp"
 #include <unordered_map>
-#include "system_allocator.hpp"
+#include "kernel_allocator.hpp"
 
 class automaton;
 class buffer;
 
 namespace system_automaton {
-  typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, system_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
+  typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, kernel_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
 
   class const_automaton_iterator : public std::iterator<std::forward_iterator_tag, const automaton> {
   public:

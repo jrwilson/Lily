@@ -12,7 +12,7 @@
 */
 
 #include "stack_allocator.hpp"
-#include "system_allocator.hpp"
+#include "kernel_allocator.hpp"
 
 stack_allocator::stack_allocator (frame_t begin,
 				  frame_t end) :
@@ -23,7 +23,7 @@ stack_allocator::stack_allocator (frame_t begin,
   kassert (begin < end);
   
   const frame_entry_t size = end - begin;
-  entry_  = new (system_alloc ()) frame_entry_t[size];
+  entry_  = new (kernel_alloc ()) frame_entry_t[size];
   for (frame_entry_t k = 0; k < size; ++k) {
     entry_[k] = k + 1;
   }

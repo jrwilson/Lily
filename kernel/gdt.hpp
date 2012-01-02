@@ -39,7 +39,7 @@ private:
   static const unsigned char TSS_SELECTOR = 0x28;
   
   static gdt_ptr gp_;
-  static descriptor gdt_entry_[DESCRIPTOR_COUNT];
+  static descriptor::descriptor gdt_entry_[DESCRIPTOR_COUNT];
 };
 
 #endif /* __gdt_hpp__ */

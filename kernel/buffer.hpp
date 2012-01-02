@@ -107,18 +107,18 @@ public:
 
   virtual void
   page_fault (logical_address_t address,
-	      page_fault_error_t error,
+	      vm::page_fault_error_t error,
 	      volatile registers*)
   {
-    kassert (data_context (error));
+    kassert (vm::data_context (error));
 
     size_t idx = physical_address_to_frame (address - begin_);
 
     // The frame in question should always be copy on write.
     kassert (frame_list_[idx].writable_ == vm::NOT_WRITABLE);
 
-    if (not_present (error)) {
-      if (read_context (error)) {
+    if (vm::not_present (error)) {
+      if (vm::read_context (error)) {
 	// The page is not present and we are trying to read.
 	// Map.
 	vm::map (address, frame_list_[idx].frame_, vm::USER, vm::NOT_WRITABLE);
@@ -135,7 +135,7 @@ public:
 	// Map the dst to the address.
 	vm::map (address, dst, vm::USER, vm::WRITABLE);
 	// Copy.
-	memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
+	ltl::memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
 	// Unmap the src and decrement its reference count.
 	vm::unmap (vm::get_stub1 ());
 	frame_manager::decref (src);
@@ -146,7 +146,7 @@ public:
       }
     }
     else {
-      kassert (write_context (error));
+      kassert (vm::write_context (error));
       kassert (frame_list_[idx].present_ == vm::PRESENT);
       // The user tried to write to page mapped previously as read-only.
       // Copy.
@@ -157,7 +157,7 @@ public:
       // we need to unmap the current frame to make room.
       vm::unmap (address);
       vm::map (address, dst, vm::USER, vm::WRITABLE);
-      memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
+      ltl::memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
       vm::unmap (vm::get_stub1 ());
       frame_manager::decref (src);
       frame_list_[idx].frame_ = dst;
@@ -185,7 +185,7 @@ public:
 
 private:
   // The frames.
-  typedef std::vector<vm::page_table_entry, system_allocator<vm::page_table_entry> > frame_list_type;
+  typedef std::vector<vm::page_table_entry, kernel_allocator<vm::page_table_entry> > frame_list_type;
   frame_list_type frame_list_;
 
   // Assigns and (1) unmaps/decrefs overwritten frames and (2) makes the source buffer copy-on-write.

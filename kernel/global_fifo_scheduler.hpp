@@ -17,7 +17,7 @@
 #include "action.hpp"
 #include <deque>
 #include <unordered_set>
-#include <string.h>
+#include "string.hpp"
 #include "vm.hpp"
 #include "automaton.hpp"
 
@@ -80,9 +80,9 @@ private:
 
   private:
     status_t status_;
-    typedef std::deque<caction, system_allocator<caction> > queue_type;
+    typedef std::deque<caction, kernel_allocator<caction> > queue_type;
     queue_type queue_;
-    typedef std::unordered_set<caction, std::hash<caction>, std::equal_to<caction>, system_allocator<caction> > set_type;
+    typedef std::unordered_set<caction, std::hash<caction>, std::equal_to<caction>, kernel_allocator<caction> > set_type;
     set_type set_;
   };
   
@@ -143,7 +143,7 @@ private:
 	  }
 	  if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	    // Destroy the buffer.
-	    destroy (output_buffer_, system_alloc ());
+	    destroy (output_buffer_, kernel_alloc ());
 	  }
 	  break;
 	case OUTPUT:
@@ -160,7 +160,7 @@ private:
 	    if (input_actions_ != 0) {
 	      if (action_.action->copy_value_mode == COPY_VALUE) {
 		// Copy the value.
-		memcpy (value_buffer_, buffer, action_.action->copy_value_size);
+		ltl::memcpy (value_buffer_, buffer, action_.action->copy_value_size);
 	      }
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
@@ -170,7 +170,7 @@ private:
 	    }
 	    if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	      // Destroy the buffer.
-	      destroy (output_buffer_, system_alloc ());
+	      destroy (output_buffer_, kernel_alloc ());
 	    }
 	  }
 	  break;
@@ -196,7 +196,7 @@ private:
 	if (action_.action->copy_value_mode == COPY_VALUE) {
 	  // Copy the value to the stack.
 	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.action->copy_value_size, STACK_ALIGN)));
-	  memcpy (stack_pointer, value_buffer_, action_.action->copy_value_size);
+	  ltl::memcpy (stack_pointer, value_buffer_, action_.action->copy_value_size);
 	}
 	if (action_.action->buffer_value_mode == BUFFER_VALUE) {
 	  // Copy the buffer to the input automaton.
@@ -220,7 +220,7 @@ private:
       uint32_t* sp = stack_pointer;
 
       // Push the stack segment.
-      *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor_constants::RING3;
+      *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
       
       // Push the stack pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (sp);
@@ -232,7 +232,7 @@ private:
       *--stack_pointer = eflags;
 
       // Push the code segment.
-      *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor_constants::RING3;
+      *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
 
       // Push the instruction pointer.
       *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
@@ -249,15 +249,15 @@ private:
       	   "xor %%edi, %%edi\n"
       	   "xor %%esi, %%esi\n"
       	   "xor %%ebp, %%ebp\n"
-      	   "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor_constants::RING3), "r"(stack_pointer));
+      	   "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
     }
   };
 
   /* TODO:  Need one per core. */
   static execution_context exec_context_;
-  typedef std::deque<automaton_context*, system_allocator<automaton_context*> > queue_type;
+  typedef std::deque<automaton_context*, kernel_allocator<automaton_context*> > queue_type;
   static queue_type ready_queue_;
-  typedef std::unordered_map<automaton*, automaton_context*, std::hash<automaton*>, std::equal_to<automaton*>, system_allocator<std::pair<automaton* const, automaton_context*> > > context_map_type;
+  typedef std::unordered_map<automaton*, automaton_context*, std::hash<automaton*>, std::equal_to<automaton*>, kernel_allocator<std::pair<automaton* const, automaton_context*> > > context_map_type;
   static context_map_type context_map_;
 
 public:

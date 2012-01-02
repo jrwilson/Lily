@@ -115,22 +115,22 @@ irq_handler::install ()
   io::outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask_);
   io::outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask_);
 
-  idt::set (PIC_MASTER_BASE + 0, make_interrupt_gate (irq0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 1, make_interrupt_gate (irq1, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 2, make_interrupt_gate (irq2, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 3, make_interrupt_gate (irq3, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 4, make_interrupt_gate (irq4, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 5, make_interrupt_gate (irq5, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 6, make_interrupt_gate (irq6, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_MASTER_BASE + 7, make_interrupt_gate (irq7, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 0, make_interrupt_gate (irq8, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 1, make_interrupt_gate (irq9, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 2, make_interrupt_gate (irq10, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 3, make_interrupt_gate (irq11, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 4, make_interrupt_gate (irq12, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 5, make_interrupt_gate (irq13, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 6, make_interrupt_gate (irq14, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
-  idt::set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING0, descriptor_constants::PRESENT));
+  idt::set (PIC_MASTER_BASE + 0, make_interrupt_gate (irq0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 1, make_interrupt_gate (irq1, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 2, make_interrupt_gate (irq2, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 3, make_interrupt_gate (irq3, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 4, make_interrupt_gate (irq4, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 5, make_interrupt_gate (irq5, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 6, make_interrupt_gate (irq6, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_MASTER_BASE + 7, make_interrupt_gate (irq7, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 0, make_interrupt_gate (irq8, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 1, make_interrupt_gate (irq9, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 2, make_interrupt_gate (irq10, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 3, make_interrupt_gate (irq11, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 4, make_interrupt_gate (irq12, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 5, make_interrupt_gate (irq13, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 6, make_interrupt_gate (irq14, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
+  idt::set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
 }
 
 // void

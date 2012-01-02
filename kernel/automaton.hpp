@@ -14,7 +14,6 @@
   Justin R. Wilson
 */
 
-#include "syscall_def.hpp"
 #include "vm_area.hpp"
 #include <unordered_map>
 #include <unordered_set>
@@ -82,10 +81,10 @@ private:
   // Flag indicating if the automaton can execute privileged instructions.
   bool privileged_;
   // Table of action descriptors for guiding execution, checking bindings, etc.
-  typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, system_allocator<std::pair<const void* const, const paction* const> > > action_map_type;
+  typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, kernel_allocator<std::pair<const void* const, const paction* const> > > action_map_type;
   action_map_type action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
-  typedef std::vector<vm_area_base*, system_allocator<vm_area_base*> > memory_map_type;
+  typedef std::vector<vm_area_base*, kernel_allocator<vm_area_base*> > memory_map_type;
   memory_map_type memory_map_;
   // Heap area.
   vm_heap_area* heap_area_;
@@ -94,23 +93,23 @@ private:
 
   // Bound outputs.
 public:
-  typedef std::unordered_set <input_act, std::hash<input_act>, std::equal_to<input_act>, system_allocator<input_act> > input_action_set_type;
+  typedef std::unordered_set <input_act, std::hash<input_act>, std::equal_to<input_act>, kernel_allocator<input_act> > input_action_set_type;
 private:
-  typedef std::unordered_map <caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, input_action_set_type> > > bound_outputs_map_type;
+  typedef std::unordered_map <caction, input_action_set_type, std::hash<caction>, std::equal_to<caction>, kernel_allocator<std::pair<const caction, input_action_set_type> > > bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
 
   // Bound inputs.
-  typedef std::unordered_map<caction, output_act, std::hash<caction>, std::equal_to<caction>, system_allocator<std::pair<const caction, output_act> > > bound_inputs_map_type;
+  typedef std::unordered_map<caction, output_act, std::hash<caction>, std::equal_to<caction>, kernel_allocator<std::pair<const caction, output_act> > > bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
 
   // Bindings.
-  typedef std::unordered_set<binding, std::hash<binding>, std::equal_to<binding>, system_allocator<binding> > bindings_set_type;
+  typedef std::unordered_set<binding, std::hash<binding>, std::equal_to<binding>, kernel_allocator<binding> > bindings_set_type;
   bindings_set_type bindings_set_;
 
   // Next bid to allocate.
   bid_t current_bid_;
   // Map from bid_t to buffer*.
-  typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, system_allocator<std::pair<const bid_t, buffer*> > > bid_to_buffer_map_type;
+  typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, kernel_allocator<std::pair<const bid_t, buffer*> > > bid_to_buffer_map_type;
   bid_to_buffer_map_type bid_to_buffer_map_;
 
 public:
@@ -188,15 +187,6 @@ private:
     return memory_map_.end ();
   }
 
-  template <class Action>
-  void
-  add_action_ (const void* action_entry_point)
-  {
-    paction* ac = new (system_alloc ()) paction (this, Action::action_type, action_entry_point, Action::parameter_mode, Action::buffer_value_mode, Action::copy_value_mode, Action::copy_value_size);
-    std::pair<typename action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac->action_entry_point, ac));
-    kassert (r.second);
-  }
-
 public:
 
   automaton (aid_t aid,
@@ -218,7 +208,7 @@ public:
     for (bid_to_buffer_map_type::iterator pos = bid_to_buffer_map_.begin ();
 	 pos != bid_to_buffer_map_.end ();
 	 ++pos) {
-      destroy (pos->second, system_alloc ());
+      destroy (pos->second, kernel_alloc ());
     }
   }
 
@@ -348,7 +338,7 @@ public:
   
   void
   page_fault (logical_address_t address,
-	      page_fault_error_t error,
+	      vm::page_fault_error_t error,
 	      volatile registers* regs)
   {
     memory_map_type::const_iterator pos = find_address (address);
@@ -364,347 +354,17 @@ public:
     }
   }
 
-private:
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			no_parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (void))
+  bool
+  add_action (const void* action_entry_point,
+	      action_type_t action_type,
+	      parameter_mode_t parameter_mode,
+	      buffer_value_mode_t buffer_value_mode,
+	      copy_value_mode_t copy_value_mode,
+	      size_t copy_value_size)
   {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			no_parameter_tag,
-			no_buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (typename Action::copy_value_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			no_parameter_tag,
-			buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (bid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			no_parameter_tag,
-			buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (bid_t, typename Action::copy_value_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			parameter_tag,
-			no_buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type, typename Action::copy_value_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			parameter_tag,
-			buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type, bid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			parameter_tag,
-			buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type, bid_t, typename Action::copy_value_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			auto_parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (aid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			auto_parameter_tag,
-			no_buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (aid_t, typename Action::copy_value_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			auto_parameter_tag,
-			buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (aid_t, bid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (input_action_tag,
-			auto_parameter_tag,
-			buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (aid_t, bid_t, typename Action::copy_value_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			no_parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (void))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			no_parameter_tag,
-			no_buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (void))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			no_parameter_tag,
-			buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (void))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			no_parameter_tag,
-			buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (void))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			parameter_tag,
-			no_buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			parameter_tag,
-			buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			parameter_tag,
-			buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			auto_parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (aid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			auto_parameter_tag,
-			no_buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (aid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			auto_parameter_tag,
-			buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (aid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (output_action_tag,
-			auto_parameter_tag,
-			buffer_value_tag,
-			copy_value_tag,
-			void (*action_entry_point) (aid_t))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (internal_action_tag,
-			no_parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (void))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-  template <class Action>
-  void
-  add_action_dispatch_ (internal_action_tag,
-			parameter_tag,
-			no_buffer_value_tag,
-			no_copy_value_tag,
-			void (*action_entry_point) (typename Action::parameter_type))
-  {
-    add_action_<Action> (reinterpret_cast<const void*> (action_entry_point));
-  }
-
-public:
-  // TODO:  Remove template code.
-  template <class Action>
-  void
-  add_action (void (*action_entry_point) ())
-  {
-    STATIC_ASSERT (is_action<Action>::value);
-    add_action_dispatch_<Action> (typename Action::action_category (),
-				  typename Action::parameter_category (),
-				  typename Action::buffer_value_category (),
-				  typename Action::copy_value_category (),
-				  action_entry_point);
-  }
-  
-  template <class Action,
-	    class T>
-  void
-  add_action (void (*action_entry_point) (T))
-  {
-    STATIC_ASSERT (is_action<Action>::value);
-    add_action_dispatch_<Action> (typename Action::action_category (),
-				  typename Action::parameter_category (),
-				  typename Action::buffer_value_category (),
-				  typename Action::copy_value_category (),
-				  action_entry_point);
-  }
-
-  template <class Action,
-	    class T1,
-	    class T2>
-  void
-  add_action (void (*action_entry_point) (T1, T2))
-  {
-    STATIC_ASSERT (is_action<Action>::value);
-    add_action_dispatch_<Action> (typename Action::action_category (),
-				  typename Action::parameter_category (),
-				  typename Action::buffer_value_category (),
-				  typename Action::copy_value_category (),
-				  action_entry_point);
-  }
-
-  template <class Action,
-	    class T1,
-	    class T2,
-	    class T3>
-  void
-  add_action (void (*action_entry_point) (T1, T2, T3))
-  {
-    STATIC_ASSERT (is_action<Action>::value);
-    add_action_dispatch_<Action> (typename Action::action_category (),
-				  typename Action::parameter_category (),
-				  typename Action::buffer_value_category (),
-				  typename Action::copy_value_category (),
-				  action_entry_point);
+    paction* ac = new (kernel_alloc ()) paction (this, action_entry_point, action_type, parameter_mode, buffer_value_mode, copy_value_mode, copy_value_size);
+    std::pair<action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac->action_entry_point, ac));
+    return r.second;
   }
 
   const_action_iterator
@@ -816,7 +476,7 @@ public:
     bid_t bid = generate_bid ();
     
     // Create the buffer and insert it into the map.
-    buffer* b = new (system_alloc ()) buffer (size);
+    buffer* b = new (kernel_alloc ()) buffer (size);
     bid_to_buffer_map_.insert (std::make_pair (bid, b));
     
     return bid;
@@ -838,7 +498,7 @@ public:
 	bid_t bid = generate_bid ();
 	
 	// Create the buffer and insert it into the map.
-	buffer* n = new (system_alloc ()) buffer (*b, offset, length);
+	buffer* n = new (kernel_alloc ()) buffer (*b, offset, length);
 	bid_to_buffer_map_.insert (std::make_pair (bid, n));
 	
 	return bid;
@@ -861,7 +521,7 @@ public:
     bid_t bid = generate_bid ();
     
     // Create the buffer and insert it into the map.
-    buffer* b = new (system_alloc ()) buffer (other);
+    buffer* b = new (kernel_alloc ()) buffer (other);
     bid_to_buffer_map_.insert (std::make_pair (bid, b));
     
     return bid;
@@ -1051,7 +711,7 @@ public:
       bid_to_buffer_map_.erase (bpos);
 
       // Destroy it.
-      destroy (b, system_alloc ());
+      destroy (b, kernel_alloc ());
 
       return 0;
     }

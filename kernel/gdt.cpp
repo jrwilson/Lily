@@ -12,7 +12,7 @@
 */
 
 #include "gdt.hpp"
-#include <string.h>
+#include "string.hpp"
 
 extern uint32_t stack_end;
 
@@ -54,33 +54,33 @@ gdt_flush (gdt::gdt_ptr*);
 void
 gdt::install ()
 {
-  gp_.limit = (sizeof (descriptor) * DESCRIPTOR_COUNT) - 1;
+  gp_.limit = (sizeof (descriptor::descriptor) * DESCRIPTOR_COUNT) - 1;
   gp_.base = reinterpret_cast<uint32_t> (gdt_entry_);
  
-  gdt_entry_[NULL_SELECTOR / sizeof (descriptor)] = make_null_descriptor ();
-  gdt_entry_[KERNEL_CODE_SELECTOR / sizeof (descriptor)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, descriptor_constants::READABLE, descriptor_constants::NOT_CONFORMING, descriptor_constants::RING0, descriptor_constants::PRESENT, descriptor_constants::WIDTH_32, descriptor_constants::PAGE_GRANULARITY); 
-  gdt_entry_[KERNEL_DATA_SELECTOR / sizeof (descriptor)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, descriptor_constants::WRITABLE, descriptor_constants::EXPAND_UP, descriptor_constants::RING0, descriptor_constants::PRESENT, descriptor_constants::WIDTH_32, descriptor_constants::PAGE_GRANULARITY);
-  gdt_entry_[USER_CODE_SELECTOR / sizeof (descriptor)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, descriptor_constants::READABLE, descriptor_constants::NOT_CONFORMING, descriptor_constants::RING3, descriptor_constants::PRESENT, descriptor_constants::WIDTH_32, descriptor_constants::PAGE_GRANULARITY);
-  gdt_entry_[USER_DATA_SELECTOR / sizeof (descriptor)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, descriptor_constants::WRITABLE, descriptor_constants::EXPAND_UP, descriptor_constants::RING3, descriptor_constants::PRESENT, descriptor_constants::WIDTH_32, descriptor_constants::PAGE_GRANULARITY);
+  gdt_entry_[NULL_SELECTOR / sizeof (descriptor::descriptor)] = descriptor::make_null_descriptor ();
+  gdt_entry_[KERNEL_CODE_SELECTOR / sizeof (descriptor::descriptor)].code_segment = descriptor::make_code_segment_descriptor (0, 0xFFFFFFFF, descriptor::READABLE, descriptor::NOT_CONFORMING, descriptor::RING0, descriptor::PRESENT, descriptor::WIDTH_32, descriptor::PAGE_GRANULARITY); 
+  gdt_entry_[KERNEL_DATA_SELECTOR / sizeof (descriptor::descriptor)].data_segment = descriptor::make_data_segment_descriptor (0, 0xFFFFFFFF, descriptor::WRITABLE, descriptor::EXPAND_UP, descriptor::RING0, descriptor::PRESENT, descriptor::WIDTH_32, descriptor::PAGE_GRANULARITY);
+  gdt_entry_[USER_CODE_SELECTOR / sizeof (descriptor::descriptor)].code_segment = make_code_segment_descriptor (0, 0xFFFFFFFF, descriptor::READABLE, descriptor::NOT_CONFORMING, descriptor::RING3, descriptor::PRESENT, descriptor::WIDTH_32, descriptor::PAGE_GRANULARITY);
+  gdt_entry_[USER_DATA_SELECTOR / sizeof (descriptor::descriptor)].data_segment = make_data_segment_descriptor (0, 0xFFFFFFFF, descriptor::WRITABLE, descriptor::EXPAND_UP, descriptor::RING3, descriptor::PRESENT, descriptor::WIDTH_32, descriptor::PAGE_GRANULARITY);
   // I am unsure about the privilege level and granularity.
-  gdt_entry_[TSS_SELECTOR / sizeof (descriptor)].tss = make_tss_descriptor (reinterpret_cast<uint32_t> (&tss), reinterpret_cast<uint32_t> (&tss) + sizeof (tss) - 1, descriptor_constants::RING0, descriptor_constants::PRESENT, descriptor_constants::PAGE_GRANULARITY);
+  gdt_entry_[TSS_SELECTOR / sizeof (descriptor::descriptor)].tss = make_tss_descriptor (reinterpret_cast<uint32_t> (&tss), reinterpret_cast<uint32_t> (&tss) + sizeof (tss) - 1, descriptor::RING0, descriptor::PRESENT, descriptor::PAGE_GRANULARITY);
 
-  memset (&tss, 0, sizeof (tss));
+  ltl::memset (&tss, 0, sizeof (tss));
 
   tss.ss0 = KERNEL_DATA_SELECTOR;
   tss.esp0 = reinterpret_cast<uint32_t> (&stack_end);
 
-  tss.cs = KERNEL_CODE_SELECTOR | descriptor_constants::RING3;
-  tss.ss = KERNEL_DATA_SELECTOR | descriptor_constants::RING3;
-  tss.ds = KERNEL_DATA_SELECTOR | descriptor_constants::RING3;
-  tss.es = KERNEL_DATA_SELECTOR | descriptor_constants::RING3;
-  tss.fs = KERNEL_DATA_SELECTOR | descriptor_constants::RING3;
-  tss.gs = KERNEL_DATA_SELECTOR | descriptor_constants::RING3;
+  tss.cs = KERNEL_CODE_SELECTOR | descriptor::RING3;
+  tss.ss = KERNEL_DATA_SELECTOR | descriptor::RING3;
+  tss.ds = KERNEL_DATA_SELECTOR | descriptor::RING3;
+  tss.es = KERNEL_DATA_SELECTOR | descriptor::RING3;
+  tss.fs = KERNEL_DATA_SELECTOR | descriptor::RING3;
+  tss.gs = KERNEL_DATA_SELECTOR | descriptor::RING3;
   
   gdt_flush (&gp_);
 
-  asm ("ltr %%ax\n" : : "a"(TSS_SELECTOR | descriptor_constants::RING3));
+  asm ("ltr %%ax\n" : : "a"(TSS_SELECTOR | descriptor::RING3));
 }
 
 gdt::gdt_ptr gdt::gp_;
-descriptor gdt::gdt_entry_[DESCRIPTOR_COUNT];
+descriptor::descriptor gdt::gdt_entry_[DESCRIPTOR_COUNT];

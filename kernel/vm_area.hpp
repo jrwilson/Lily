@@ -18,7 +18,7 @@
 #include "vm.hpp"
 #include "frame_manager.hpp"
 #include "kassert.hpp"
-#include <string.h>
+#include "string.hpp"
 
 class vm_area_base {
 protected:
@@ -46,7 +46,7 @@ public:
   
   virtual void
   page_fault (logical_address_t,
-	      page_fault_error_t,
+	      vm::page_fault_error_t,
 	      volatile registers*)
   {
     kassert (0);
@@ -75,16 +75,6 @@ public:
 		logical_address_t end) :
     vm_area_base (begin, end)
   { }
-
-  // logical_address_t begin () const
-  // {
-  //   return begin_;
-  // }
-
-  // logical_address_t end () const
-  // {
-  //   return end_;
-  // }
 };
 
 class vm_heap_area : public vm_area_base {
@@ -102,17 +92,17 @@ public:
 
   void
   page_fault (logical_address_t address,
-	      page_fault_error_t error,
+	      vm::page_fault_error_t error,
 	      volatile registers*)
   {
     // Fault should come from not being present.
-    kassert (not_present (error));
+    kassert (vm::not_present (error));
     // Fault should come from data.
-    kassert (data_context (error));
+    kassert (vm::data_context (error));
     // Back the request with a frame.
     vm::map (address, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     // Clear the frame.
-    memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+    ltl::memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 };
 
@@ -125,17 +115,17 @@ public:
 
   void
   page_fault (logical_address_t address,
-	      page_fault_error_t error,
+	      vm::page_fault_error_t error,
 	      volatile registers*)
   {
     // Fault should come from not being present.
-    kassert (not_present (error));
+    kassert (vm::not_present (error));
     // Fault should come from data.
-    kassert (data_context (error));
+    kassert (vm::data_context (error));
     // Back the request with a frame.
     vm::map (address, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     // Clear the frame.
-    memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
+    ltl::memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
 };
 

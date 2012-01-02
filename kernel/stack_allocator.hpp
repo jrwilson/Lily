@@ -41,7 +41,7 @@ using namespace std::rel_ops;
   Share a page 32,767 times seems reasonable so I will use the more space-efficient 15-bit entries.
 */
 
-class system_alloc;
+class kernel_alloc;
 
 class stack_allocator {
 public:

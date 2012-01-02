@@ -373,6 +373,63 @@ namespace vm {
     /* Switch to the page directory. */
     asm ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
   }
+
+  typedef uint32_t page_fault_error_t;
+  
+  inline bool
+  not_present (page_fault_error_t error)
+  {
+    return (error & (1 << 0)) == 0;
+  }
+  
+  inline bool
+  protection_violation (page_fault_error_t error)
+  {
+    return (error & (1 << 0)) != 0;
+  }
+  
+  inline bool
+  read_context (page_fault_error_t error)
+  {
+    return (error & (1 << 1)) == 0;
+  }
+  
+  inline bool
+  write_context (page_fault_error_t error)
+  {
+    return (error & (1 << 1)) != 0;
+  }
+  
+  inline bool
+  supervisor_context (page_fault_error_t error)
+  {
+    return (error & (1 << 2)) == 0;
+  }
+  
+  inline bool
+  user_context (page_fault_error_t error)
+  {
+    return (error & (1 << 2)) != 0;
+  }
+  
+  inline bool
+  reserved_bit_violation (page_fault_error_t error)
+  {
+    return (error & (1 << 3)) != 0;
+  }
+  
+  inline bool
+  data_context (page_fault_error_t error)
+  {
+    return (error & (1 << 4)) == 0;
+  }
+  
+  inline bool
+  instruction_context (page_fault_error_t error)
+  {
+    return (error & (1 << 4)) != 0;
+  }
+
 };
 
 #endif /* __vm_hpp__ */

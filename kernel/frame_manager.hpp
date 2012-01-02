@@ -18,7 +18,7 @@
 #include <vector>
 #include <algorithm>
 #include "stack_allocator.hpp"
-#include "system_allocator.hpp"
+#include "kernel_allocator.hpp"
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -83,7 +83,7 @@ public:
   }
 
 private:
-  typedef std::vector<stack_allocator*, system_allocator<stack_allocator*> > allocator_list_type;
+  typedef std::vector<stack_allocator*, kernel_allocator<stack_allocator*> > allocator_list_type;
   static allocator_list_type allocator_list_;
 
   struct contains_frame {

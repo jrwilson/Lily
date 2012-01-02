@@ -28,17 +28,17 @@ public:
   static void
   install ();
   
-  static interrupt_descriptor
+  static descriptor::interrupt_descriptor
   get (unsigned int num);
   
   static void
   set (unsigned int num,
-       interrupt_descriptor id);
+       descriptor::interrupt_descriptor id);
 
 private:
   static const unsigned int INTERRUPT_COUNT = 256;
   static idt::idt_ptr ip_;
-  static descriptor idt_entry_[INTERRUPT_COUNT];
+  static descriptor::descriptor idt_entry_[INTERRUPT_COUNT];
 };
 
 #endif /* __idt_hpp__ */

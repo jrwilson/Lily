@@ -14,13 +14,13 @@
 #include "trap_handler.hpp"
 #include "idt.hpp"
 #include "gdt.hpp"
-#include "syscall_def.hpp"
 #include "vm_def.hpp"
 #include <utility>
 #include "registers.hpp"
 #include "aid.hpp"
 #include "automaton.hpp"
 #include "scheduler.hpp"
+#include "syscall.hpp"
 
 using namespace std::rel_ops;
 
@@ -35,8 +35,8 @@ extern "C" void trap1 ();
 void
 trap_handler::install ()
 {
-  idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING3, descriptor_constants::PRESENT));
-  idt::set (PRIVCALL_INTERRUPT, make_trap_gate (trap1, gdt::KERNEL_CODE_SELECTOR, descriptor_constants::RING3, descriptor_constants::PRESENT));
+  idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
+  idt::set (PRIVCALL_INTERRUPT, make_trap_gate (trap1, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
 }
 
 extern "C" void

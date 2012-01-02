@@ -18,17 +18,17 @@
 void
 idt::install ()
 {
-  ip_.limit = (sizeof (descriptor) * INTERRUPT_COUNT) - 1;
+  ip_.limit = (sizeof (descriptor::descriptor) * INTERRUPT_COUNT) - 1;
   ip_.base = reinterpret_cast<uint32_t> (idt_entry_);
   
   for (unsigned int k = 0; k < INTERRUPT_COUNT; ++k) {
-    idt_entry_[k].interrupt = make_interrupt_gate (0, 0, descriptor_constants::RING0, descriptor_constants::NOT_PRESENT);
+    idt_entry_[k].interrupt = make_interrupt_gate (0, 0, descriptor::RING0, descriptor::NOT_PRESENT);
   }
 
   asm ("lidt (%0)\n" : : "r"(&ip_));
 }
 
-interrupt_descriptor
+descriptor::interrupt_descriptor
 idt::get (unsigned int k)
 {
   kassert (k < INTERRUPT_COUNT);
@@ -37,13 +37,13 @@ idt::get (unsigned int k)
 
 void
 idt::set (unsigned int k,
-	  interrupt_descriptor id)
+	  descriptor::interrupt_descriptor id)
 {
   kassert (k < INTERRUPT_COUNT);
-  kassert (idt_entry_[k].interrupt.present == descriptor_constants::NOT_PRESENT);
+  kassert (idt_entry_[k].interrupt.present == descriptor::NOT_PRESENT);
   idt_entry_[k].interrupt = id;
   asm ("lidt (%0)\n" : : "r"(&ip_));
 }
 
 idt::idt_ptr idt::ip_;
-descriptor idt::idt_entry_[INTERRUPT_COUNT];
+descriptor::descriptor idt::idt_entry_[INTERRUPT_COUNT];

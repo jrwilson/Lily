@@ -11,7 +11,8 @@
   Justin R. Wilson
 */
 
-#include "kassert.hpp"
+#include "kout.hpp"
+#include "halt.hpp"
 
 void *__dso_handle;
 
