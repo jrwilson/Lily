@@ -92,7 +92,7 @@ static const unsigned int DIVIDE_ERROR = 0;
 static const unsigned int SINGLE_STEP = 1;
 static const unsigned int NON_MASKABLE_INTERRUPT = 2;
 static const unsigned int BREAKPOINT = 3;
-static const unsigned int OVERFLOW = 4;
+static const unsigned int OVERFLOW_ERROR = 4;
 static const unsigned int BOUND = 5;
 static const unsigned int INVALID_OPCODE = 6;
 static const unsigned int COPROCESSOR_NA = 7;
@@ -125,7 +125,7 @@ exception_dispatch (volatile registers regs)
     // TODO
     kassert (0);
     break;
-  case OVERFLOW:
+  case OVERFLOW_ERROR:
     // TODO
     kassert (0);
     break; 

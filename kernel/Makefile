@@ -1,5 +1,4 @@
-AS=nasm
-AFLAGS=-f elf
+AS=as
 CXX=g++
 OFLAG=-O0
 # Add -Werror at some point	
@@ -31,14 +30,6 @@ global_fifo_scheduler.o \
 kmain.o \
 system_automaton.o
 
-#note.o
-#action_test_automaton.o \
-#buffer_test_automaton.o \
-#ramdisk_automaton.o \
-#ext2_automaton.o \
-#boot_automaton.o
-# pit.o \
-
 KERNEL=lily
 
 .PHONY : all
@@ -47,11 +38,11 @@ all : $(KERNEL)
 $(KERNEL) : $(OBJECTS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
-%.o : %.s
-	$(AS) $(AFLAGS) -o $@ $<
-
 %.o : %.cpp
 	$(CXX) -g -o $@ -c $< $(CXXFLAGS)
+
+%.o : %.S
+	as -o $@ $<
 
 .PHONY : clean
 clean :

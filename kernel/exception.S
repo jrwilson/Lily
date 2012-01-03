@@ -1,54 +1,51 @@
-	;; Authors
-	;;   Justin R. Wilson
+	/* Authors
+	   Justin R. Wilson
+	*/
 
-	[bits 32]
+	.include "selectors.S"
 
-	%include "selectors.s"
-
-	[section .text]
-
-%macro EXCEPTION_NOERRCODE 1
-	[global exception%1]
-exception%1:
-	push dword 0
-	push dword %1
+.macro EXCEPTION_NOERRCODE num
+	.global exception\num
+exception\num:
+	push $0
+	push $\num
 	jmp exception_common_stub
-%endmacro
+.endm
 
-%macro EXCEPTION_ERRCODE 1
-	[global exception%1]
-exception%1:
-	push dword %1
+.macro EXCEPTION_ERRCODE num
+	.global exception\num
+exception\num:
+	push $\num
 	jmp exception_common_stub
-%endmacro
+.endm
 
-	;; Import exception_handler.
-	[extern exception_dispatch]
+	# Import exception_handler.
+	.extern exception_dispatch
 exception_common_stub:
-	;; Push the processor state.
+	# Push the processor state.
 	pusha
-	;; Push the old data segment.
-	mov ax, ds
-	push eax
-	;; Load the kernel data segment.
-	mov ax, KERNEL_DATA_SELECTOR
-	mov ds, ax
-	mov es, ax
-	mov fs, ax
-	mov gs, ax
-	;; TODO:  What about the stack segment?
+	# Push the old data segment.
+	mov %ds, %ax
+	push %eax
+	# Load the kernel data segment.
+	mov $KERNEL_DATA_SELECTOR, %ax
+	mov %ax, %ds
+	mov %ax, %es
+	mov %ax, %fs
+	mov %ax, %gs
+	# TODO:  What about the stack segment?
 	call exception_dispatch
-	;; Pop the old data segment.
-	pop eax
-	;; Load the old data segment.
-	mov ds, ax
-	mov es, ax
-	mov fs, ax
-	mov gs, ax
-	;; Pop the processor state.
+	# Pop the old data segment.
+	pop %eax
+	# Load the old data segment.
+	mov %ax, %ds
+	mov %ax, %es
+	mov %ax, %fs
+	mov %ax, %gs
+	# Pop the processor state.
 	popa
-	;; Pop the interrupt number and error code.
-	add esp, 8
+	# Pop the interrupt number and error code.
+	add $8, %esp
 	iret
 	
 EXCEPTION_NOERRCODE 0
