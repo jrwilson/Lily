@@ -101,8 +101,7 @@ public:
   void
   add (void (*action_entry_point) (void))
   {
-    STATIC_ASSERT (is_local_action<LocalAction>::value);
-    STATIC_ASSERT (LocalAction::parameter_mode == NO_PARAMETER);
+    static_assert (is_local_action<LocalAction>::value && LocalAction::parameter_mode == NO_PARAMETER, "add expects an unparameterized local action");
     add_ (reinterpret_cast<const void*> (action_entry_point), 0);
   }
 
@@ -111,8 +110,7 @@ public:
   add (void (*action_entry_point) (typename LocalAction::parameter_type),
        typename LocalAction::parameter_type parameter)
   {
-    STATIC_ASSERT (is_local_action<LocalAction>::value);
-    STATIC_ASSERT (LocalAction::parameter_mode == PARAMETER || LocalAction::parameter_mode == AUTO_PARAMETER);
+    static_assert (is_local_action<LocalAction>::value && (LocalAction::parameter_mode == PARAMETER || LocalAction::parameter_mode == AUTO_PARAMETER), "add expects a parameterized local action");
     add_ (reinterpret_cast<const void*> (action_entry_point), aid_cast (parameter));
   }
 
@@ -120,8 +118,7 @@ public:
   void
   remove (void (*action_entry_point) (void))
   {
-    STATIC_ASSERT (is_local_action<LocalAction>::value);
-    STATIC_ASSERT (LocalAction::parameter_mode == NO_PARAMETER);
+    static_assert (is_local_action<LocalAction>::value && LocalAction::parameter_mode == NO_PARAMETER, "remove expects an unparameterized local action");
     remove_ (reinterpret_cast<const void*> (action_entry_point), 0);
   }
   
@@ -130,8 +127,7 @@ public:
   remove (void (*action_entry_point) (typename LocalAction::parameter_type),
 	  typename LocalAction::parameter_type parameter)
   {
-    STATIC_ASSERT (is_local_action<LocalAction>::value);
-    STATIC_ASSERT (LocalAction::parameter_mode == PARAMETER || LocalAction::parameter_mode == AUTO_PARAMETER);
+    static_assert (is_local_action<LocalAction>::value && (LocalAction::parameter_mode == PARAMETER || LocalAction::parameter_mode == AUTO_PARAMETER), "remove expects a parameterized local action");
     remove_ (reinterpret_cast<const void*> (action_entry_point), aid_cast (parameter));
   }
 
@@ -139,7 +135,7 @@ public:
   void
   finish ()
   {
-    STATIC_ASSERT (is_action<Action>::value);
+    static_assert (is_action<Action>::value, "Action is not an action");
     finish_ (false, -1, 0);
   }
 
@@ -147,7 +143,7 @@ public:
   void
   finish (bool status)
   {
-    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE);
+    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE, "finish expects an output action without a buffer or copy value");
     finish_ (status, -1, 0);
   }
 
@@ -155,7 +151,7 @@ public:
   void
   finish (bid_t bid)
   {
-    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE);
+    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE, "finish expects output action with buffer value");
     finish_ (true, bid, 0);
   }
 
@@ -163,7 +159,7 @@ public:
   void
   finish (const typename OutputAction::copy_value_type* buffer)
   {
-    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE);
+    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE, "finish expects output action with copy value");
     finish_ (true, -1, buffer);
   }
 
@@ -172,7 +168,7 @@ public:
   finish (bid_t bid,
 	  const typename OutputAction::copy_value_type* buffer)
   {
-    STATIC_ASSERT (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE);
+    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE, "finish expects output action with buffer and copy values");
     finish_ (true, bid, buffer);
   }
 

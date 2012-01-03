@@ -20,7 +20,6 @@
 #include <vector>
 #include "descriptor.hpp"
 #include "action_traits.hpp"
-#include "static_assert.hpp"
 #include <type_traits>
 #include "gdt.hpp"
 #include "action.hpp"
