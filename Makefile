@@ -2,17 +2,14 @@
 all : lily.iso
 
 kernel/lily :
-	cd lib; $(MAKE) $(MFLAGS)
 	cd kernel; $(MAKE) $(MFLAGS)
 
 .PHONY : clean
 clean :
-	cd lib; $(MAKE) $(MFLAGS) clean
 	cd kernel; $(MAKE) $(MFLAGS) clean
 
 .PHONY : depclean
 depclean :
-	cd lib; $(MAKE) $(MFLAGS) depclean
 	cd kernel; $(MAKE) $(MFLAGS) depclean
 
 lily : kernel/lily

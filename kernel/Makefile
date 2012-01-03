@@ -6,8 +6,7 @@ OFLAG=-O0
 CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -std=c++0x -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include
 # -nostdinc -fno-rtti
 LD=ld
-LDFLAGS=$(OFLAG) -T linker.ld -L../lib
-LDADD=-lcxx
+LDFLAGS=$(OFLAG) -T linker.ld
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
@@ -46,7 +45,7 @@ KERNEL=lily
 all : $(KERNEL)
 
 $(KERNEL) : $(OBJECTS)
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDADD)
+	$(LD) $(LDFLAGS) -o $@ $^
 
 %.o : %.s
 	$(AS) $(AFLAGS) -o $@ $<

@@ -13,6 +13,8 @@
 
 #include "kassert.hpp"
 #include <cxxabi.h>
+#include <syscall.hpp>
+#include "vm_def.hpp"
 
 void *__dso_handle;
 
@@ -32,7 +34,440 @@ __cxa_atexit (void (* /*destructor*/)(void*),
   return 0;
 }
 
-// I believe this is needed for vector::reserve.
+static const size_t BIN_COUNT = 128;
+
+static const size_t bin_size[] = {
+  652,
+  831,
+  1058,
+  1348,
+  1717,
+  2188,
+  2787,
+  3550,
+  4522,
+  5761,
+  7339,
+  9348,
+  11908,
+  15170,
+  19324,
+  24616,
+  31357,
+  39945,
+  50884,
+  64819,
+  82570,
+  105183,
+  133988,
+  170682,
+  217425,
+  276969,
+  352820,
+  449443,
+  572527,
+  729319,
+  929050,
+  1183479,
+  1507587,
+  1920454,
+  2446389,
+  3116356,
+  3969800,
+  5056968,
+  6441868,
+  8206036,
+  10453338,
+  13316085,
+  16962824,
+  21608257,
+  27525887,
+  35064117,
+  44666764,
+  56899189,
+  72481582,
+  92331364,
+  117617200,
+  149827807,
+  190859599,
+  243128345,
+  309711391,
+  394528849,
+  502574386,
+  640209238,
+  815536724,
+  1038879337,
+  1323386482,
+  1685808657,
+  2147483648U
+};
+
+
+static const size_t ALLOC_ALIGN = 8;
+static const size_t ALLOC_MIN = 8;
+
+class header;
+
+class footer {
+private:
+  size_t size_;
+  
+public:
+  footer (size_t size) :
+    size_ (size)
+  { }
+  
+  inline size_t
+  size () const
+  {
+    return size_;
+  }
+  
+  inline header*
+  get_header ()
+  {
+    return reinterpret_cast<header*> (this - 1 - size_ / sizeof (footer));
+  }
+  
+  inline const header*
+  get_header () const
+  {
+    return reinterpret_cast<const header*> (this - 1 - size_ / sizeof (footer));
+  }
+  
+  inline footer*
+  prev ()
+  {
+    return this - 2 - size_ / sizeof (footer);
+  }
+  
+  inline const footer*
+  prev () const
+  {
+    return this - 2 - size_ / sizeof (footer);
+  }
+};
+  
+class header {
+private:
+  size_t available_ : 1;
+  size_t size_ : 31;
+  
+public:
+  header (size_t size) :
+    available_ (true),
+    size_ (size)
+  {
+    new (get_footer ()) footer (size_);
+  }
+  
+  inline bool
+  available () const
+  {
+    return available_;
+  }
+  
+  inline void
+  available (bool a)
+  {
+    available_ = a;
+  }
+  
+  inline size_t
+  size () const
+  {
+    return size_;
+  }
+  
+  inline footer*
+  get_footer ()
+  {
+    return reinterpret_cast<footer*> (this + 1 + size_ / sizeof (header));
+  }
+  
+  inline const footer*
+  get_footer () const
+  {
+    return reinterpret_cast<const footer*> (this + 1 + size_ / sizeof (header));
+  }
+  
+  inline header*
+  next ()
+  {
+    return this + 2 + size_ / sizeof (header);
+  }
+  
+  inline const header*
+  next () const
+  {
+    return this + 2 + size_ / sizeof (header);
+  }
+  
+  // Try to merge with the next chunk.
+  inline void
+  merge (const header* n)
+  {
+    size_ += n->size () + 2 * sizeof (header);
+    new (get_footer ()) footer (size_);
+  }
+  
+  inline header*
+  split (size_t size)
+  {
+    if ((size_ - size) < 2 * sizeof (header) + ALLOC_MIN) {
+      return 0;
+    }
+    else {
+      header* n = this + 2 + size / sizeof (header);
+      new (n) header (size_ - size - 2 * sizeof (header));
+      new (this) header (size);
+      return n;
+    }
+  }
+  
+  inline header*&
+  free_next ()
+  {
+    return reinterpret_cast<header*&> (*(this + 1));
+  }
+  
+  inline header*&
+  free_prev ()
+  {
+    return reinterpret_cast<header*&> (*(this + 2));
+  }
+  
+  inline void*
+  data ()
+  {
+    return this + 1;
+  }
+};
+
+static header* first_header_ = 0;
+static header* last_header_ = 0;
+static header* bin_[BIN_COUNT];
+
+static inline size_t
+size_to_bin (size_t size)
+{
+  if (size <= 512) {
+    return size / 8;
+  }
+  else {
+    return 65 + std::lower_bound (bin_size, bin_size + 63, size) - bin_size;
+  }
+}
+
+static inline void
+insert (header* h)
+{
+  header* prev;
+  header* next;
+  const size_t idx = size_to_bin (h->size ());
+  for (prev = 0, next = bin_[idx];
+       next != 0 && (next->size () < h->size () || next < h);
+       prev = next, next = next->free_next ()) ;;
+  
+  if (next != 0) {
+    next->free_prev () = h;
+  }
+  
+  h->free_next () = next;
+  h->free_prev () = prev;
+  
+  if (prev != 0) {
+    prev->free_next () = h;
+  }
+  else {
+    bin_[idx] = h;
+  }
+}
+
+static inline void
+remove (header* h)
+{
+  header* prev = h->free_prev ();
+  header* next = h->free_next ();
+  
+  if (prev != 0) {
+    prev->free_next () = next;
+  }
+  else {
+    bin_[size_to_bin (h->size ())] = next;
+  }
+  
+  if (next != 0) {
+    next->free_prev () = prev;
+  }
+}
+
+  // static void
+  // check ()
+  // {
+  //   // Scan the free list.
+  //   size_t free = 0;
+  //   for (size_t idx = 0; idx < BIN_COUNT; ++idx) {
+  //     header* h = bin_[idx];
+  //     while (h != 0) {
+  // 	kassert (first_header_ <= h);
+  // 	kassert (h < last_header_);
+  // 	kassert (h->available ());
+  // 	++free;
+  // 	kassert (h->size () >= ALLOC_MIN);
+  // 	footer* f = h->get_footer ();
+  // 	kassert (h->size () == f->size ());
+  // 	kassert (f->get_header () == h);
+
+  // 	header* t;
+  // 	t = h->free_next ();
+  // 	kassert (t == 0 || (first_header_ <= t && t < last_header_));
+  // 	t = h->free_prev ();
+  // 	kassert (t == 0 || (first_header_ <= t && t < last_header_));
+
+  // 	h = h->free_next ();
+  //     }
+  //   }
+
+  //   // Scan all of the chunks.
+  //   size_t chunks = 0;
+  //   size_t available = 0;
+  //   for (header* ptr = first_header_; ptr <= last_header_; ptr = ptr->next ()) {
+  //     ++chunks;
+  //     if (ptr->available ()) {
+  // 	++available;
+  //     }
+  //   }
+  //   kassert (free <= available);
+  //   kassert (available <= chunks);
+  //   kout << "\t" << free << "/" << available << "/" << chunks << endl;
+  // }
+
+void
+initialize_allocator (void)
+{
+  first_header_ = new (lilycall::sbrk (PAGE_SIZE)) header (PAGE_SIZE - 2 * sizeof (header));
+  last_header_ = first_header_;
+  for (size_t idx = 0; idx != BIN_COUNT; ++idx) {
+    bin_[idx] = 0;
+  }
+}
+
+void*
+operator new (size_t size)
+{
+  // Increase the size to the minimum and align.
+  const size_t m = ALLOC_MIN;
+  size = align_up (std::max (size, m), ALLOC_ALIGN);
+  
+  // Try to allocate a chunk from the list of free chunks.
+  for (size_t idx = size_to_bin (size); idx != BIN_COUNT; ++idx) {
+    for (header* ptr = bin_[idx]; ptr != 0; ptr = ptr->free_next ()) {
+      if (ptr->size () >= size) {
+	// Remove from the free list.
+	remove (ptr);
+	// Try to split.
+	header* s = ptr->split (size);
+	if (s != 0) {
+	  insert (s);
+	}
+	// Mark as used and return.
+	ptr->available (false);
+	return ptr->data ();
+      }
+    }
+  }
+  
+  // Allocating a chunk from the free list failed.
+  // Use the last chunk.
+  if (!last_header_->available ()) {
+    // The last chunk is not available.
+    // Create one.
+    size_t request_size = align_up (size + 2 * sizeof (header), PAGE_SIZE);
+    // TODO:  Check the return value.
+    last_header_ = new (lilycall::sbrk (request_size)) header (request_size - 2 * sizeof (header));
+  }
+  else if (last_header_->size () < size) {
+    // The last chunk is available but too small.
+    // Resize the last chunk.
+    size_t request_size = align_up (size - last_header_->size (), PAGE_SIZE);
+    // TODO:  Check the return value.
+    lilycall::sbrk (request_size);
+    new (last_header_) header (last_header_->size () + request_size);
+  }
+  
+  // The last chunk is now of sufficient size.  Try to split.
+  header* ptr = last_header_;
+  header* s = ptr->split (size);
+  if (s != 0) {
+    last_header_ = s;
+  }
+  
+  // Mark as used and return.
+  ptr->available (false);
+  return ptr->data ();
+}
+
+void
+operator delete (void* p)
+{
+  header* h = static_cast<header*> (p);
+  --h;
+  
+  if (h >= first_header_ &&
+      h <= last_header_ &&
+      !h->available ()) {
+    
+    footer* f = h->get_footer ();
+    
+    if (f >= first_header_->get_footer () &&
+	f <= last_header_->get_footer () &&
+	h->size () == f->size ()) {
+      // We are satisfied that the chunk is correct.
+      // We could be more paranoid and check the previous/next chunk.
+      
+      // Chunk is now available.
+      h->available (true);
+      
+      if (h != last_header_) {
+	header* next = h->next ();
+	if (next->available ()) {
+	  if (next != last_header_) {
+	    // Remove from the free list.
+	    remove (next);
+	  }
+	  else {
+	    // Become the last.
+	    last_header_ = h;
+	  }
+	  // Merge with next.
+	  h->merge (next);
+	}
+      }
+      
+      if (h != first_header_) {
+	header* prev = h->get_footer ()->prev ()->get_header ();
+	if (prev->available ()) {
+	  // Remove from the free list.
+	  remove (prev);
+	  // Merge.
+	  prev->merge (h);
+	  if (h == last_header_) {
+	    // Become the last.
+	    last_header_ = prev;
+	  }
+	  h = prev;
+	}
+      }
+      
+      // Insert.
+      if (h != last_header_) {
+	insert (h);
+      }
+    }
+  }
+}
+
 namespace std {
   void
   __throw_length_error (const char*)

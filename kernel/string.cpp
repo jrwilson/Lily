@@ -70,6 +70,20 @@ memmove (void* dest,
   return dest;
 }
 
+int
+strncmp (const char* p,
+	 const char* q,
+	 size_t n)
+{
+  while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
+    ++p;
+    ++q;
+    --n;
+  }
+    
+  return (n == 0) ? 0 : *p - *q;
+}
+
 // inline char*
 // strcpy (char* p,
 // 	const char* q)
@@ -80,21 +94,7 @@ memmove (void* dest,
 //   }
 //   return retval;
 // }
-      
-// inline int
-// strncmp (const char* p,
-// 	 const char* q,
-// 	 int n)
-// {
-//   while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
-//     ++p;
-//     ++q;
-//     --n;
-//   }
-    
-//   return (n == 0) ? 0 : *p - *q;
-// }
-  
+        
   
 // inline int
 // memcmp (const void* p,

@@ -39,9 +39,17 @@ private:
     }
   };
 
+  struct entry_hash {
+    size_t
+    operator() (const entry& e) const
+    {
+      return reinterpret_cast<size_t> (e.action_entry_point) ^ e.parameter;
+    }
+  };
+
   typedef std::deque<entry> queue_type;
   queue_type queue_;
-  typedef std::unordered_set<entry, std::hash<entry> > set_type;
+  typedef std::unordered_set<entry, entry_hash> set_type;
   set_type set_;
 
   void

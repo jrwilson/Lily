@@ -24,6 +24,10 @@ extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
+// Forward declaration to initialize the memory allocator.
+void
+initialize_allocator (void);
+
 namespace system_automaton {
 
   // Heap location for system automata.
@@ -45,8 +49,8 @@ namespace system_automaton {
   typedef fifo_scheduler scheduler_type;
   static scheduler_type* scheduler_ = 0;
 
-  // typedef std::deque<automaton*, allocator_type<automaton*> > init_queue_type;
-  // static init_queue_type* init_queue_ = 0;
+  typedef std::deque<automaton*> init_queue_type;
+  static init_queue_type* init_queue_ = 0;
 
   struct create_item {
     bid_t bid;
@@ -61,8 +65,8 @@ namespace system_automaton {
       data_size (d)
     { }
   };
-  // typedef std::deque<create_item, allocator_type<create_item> > create_queue_type;
-  // static create_queue_type* create_queue_ = 0;
+  typedef std::deque<create_item> create_queue_type;
+  static create_queue_type* create_queue_ = 0;
 
   static automaton*
   create_automaton (bool privcall,
@@ -108,1214 +112,6 @@ namespace system_automaton {
   }
 
   static void
-  bind_ (automaton* output_automaton,
-	 const void* output_action_entry_point,
-	 parameter_mode_t output_parameter_mode,
-	 aid_t output_parameter,
-	 automaton* input_automaton,
-	 const void* input_action_entry_point,
-	 parameter_mode_t input_parameter_mode,
-	 aid_t input_parameter,
-	 buffer_value_mode_t buffer_value_mode,
-	 copy_value_mode_t copy_value_mode,
-	 size_t copy_value_size,
-	 automaton* owner)
-  {
-    // Check the output action dynamically.
-    kassert (output_automaton != 0);
-    automaton::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
-    kassert (output_pos != output_automaton->action_end () &&
-	     (*output_pos)->type == OUTPUT &&
-	     (*output_pos)->parameter_mode == output_parameter_mode &&
-	     (*output_pos)->buffer_value_mode == buffer_value_mode &&
-	     (*output_pos)->copy_value_mode == copy_value_mode &&
-	     (*output_pos)->copy_value_size == copy_value_size);
-    
-    // Check the input action dynamically.
-    kassert (input_automaton != 0);
-    automaton::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
-    kassert (input_pos != input_automaton->action_end () &&
-	     (*input_pos)->type == INPUT &&
-	     (*input_pos)->parameter_mode == input_parameter_mode &&
-	     (*input_pos)->buffer_value_mode == buffer_value_mode &&
-	     (*input_pos)->copy_value_mode == copy_value_mode &&
-	     (*input_pos)->copy_value_size == copy_value_size);
-    
-    // TODO:  All of the bind checks.
-    caction oa (*output_pos, output_parameter);
-    caction ia (*input_pos, input_parameter);
-    
-    output_automaton->bind_output (oa, ia, owner);
-    input_automaton->bind_input (oa, ia, owner);
-    owner->bind (oa, ia);
-  }
-
-  // TODO:  Remove all of this code.
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  no_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (void),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  no_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (void),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>  
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  no_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (void),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  no_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::copy_value_type),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  no_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::copy_value_type),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  no_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::copy_value_type),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  no_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (bid_t),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  no_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (bid_t),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  no_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (bid_t),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  no_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (bid_t, typename InputAction::copy_value_type),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  no_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (bid_t, typename InputAction::copy_value_type),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  no_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (bid_t, typename InputAction::copy_value_type),
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, bid_t),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, bid_t),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, bid_t),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, bid_t, typename InputAction::copy_value_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, bid_t, typename InputAction::copy_value_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (typename InputAction::parameter_type, bid_t, typename InputAction::copy_value_type),
-		  typename InputAction::parameter_type input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  auto_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  auto_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  auto_parameter_tag,
-		  no_buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  auto_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, typename InputAction::copy_value_type),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  auto_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, typename InputAction::copy_value_type),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  auto_parameter_tag,
-		  no_buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, typename InputAction::copy_value_type),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  auto_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, bid_t),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  auto_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, bid_t),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  auto_parameter_tag,
-		  buffer_value_tag,
-		  no_copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, bid_t),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (no_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (void),
-		  auto_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, bid_t, typename InputAction::copy_value_type),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (typename OutputAction::parameter_type),
-		  typename OutputAction::parameter_type output_parameter,
-		  auto_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, bid_t, typename InputAction::copy_value_type),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction, class InputAction>
-  static void
-  bind_dispatch_ (auto_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* output_automaton,
-		  void (*output_ptr) (aid_t),
-		  aid_t output_parameter,
-		  auto_parameter_tag,
-		  buffer_value_tag,
-		  copy_value_tag,
-		  automaton* input_automaton,
-		  void (*input_ptr) (aid_t, bid_t, typename InputAction::copy_value_type),
-		  aid_t input_parameter,
-		  size_t copy_value_size,
-		  automaton* owner)
-  {
-    bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
-     	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
-	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (void),
-  	automaton* input_automaton,
-  	void (*input_ptr) (void),
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (typename OutputAction::parameter_type),
-	typename OutputAction::parameter_type output_parameter,
-  	automaton* input_automaton,
-  	void (*input_ptr) (void),
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       output_parameter,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (void),
-  	automaton* input_automaton,
-  	void (*input_ptr) (IT1),
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (typename OutputAction::parameter_type),
-	typename OutputAction::parameter_type output_parameter,
-  	automaton* input_automaton,
-  	void (*input_ptr) (IT1),
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       output_parameter,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1,
-	    class IT2>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (void),
-  	automaton* input_automaton,
-  	void (*input_ptr) (IT1, IT2),
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1,
-	    class IT2>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (typename OutputAction::parameter_type),
-	typename OutputAction::parameter_type output_parameter,
-  	automaton* input_automaton,
-  	void (*input_ptr) (IT1, IT2),
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       output_parameter,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (void),
-  	automaton* input_automaton,
-  	void (*input_ptr) (typename InputAction::parameter_type),
-	typename InputAction::parameter_type input_parameter,
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       input_parameter,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (typename OutputAction::parameter_type),
-	typename OutputAction::parameter_type output_parameter,
-  	automaton* input_automaton,
-  	void (*input_ptr) (typename InputAction::parameter_type),
-	typename InputAction::parameter_type input_parameter,
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       output_parameter,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       input_parameter,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (void),
-  	automaton* input_automaton,
-  	void (*input_ptr) (typename InputAction::parameter_type, IT1),
-	typename InputAction::parameter_type input_parameter,
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       input_parameter,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (typename OutputAction::parameter_type),
-	typename OutputAction::parameter_type output_parameter,
-  	automaton* input_automaton,
-  	void (*input_ptr) (typename InputAction::parameter_type, IT1),
-	typename InputAction::parameter_type input_parameter,
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       output_parameter,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       input_parameter,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1,
-	    class IT2>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (void),
-  	automaton* input_automaton,
-  	void (*input_ptr) (typename InputAction::parameter_type, IT1, IT2),
-	typename InputAction::parameter_type input_parameter,
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       input_parameter,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  template <class OutputAction,
-	    class InputAction,
-	    class IT1,
-	    class IT2>
-  static void
-  bind (automaton* output_automaton,
-  	void (*output_ptr) (typename OutputAction::parameter_type),
-	typename OutputAction::parameter_type output_parameter,
-  	automaton* input_automaton,
-  	void (*input_ptr) (typename InputAction::parameter_type, IT1, IT2),
-	typename InputAction::parameter_type input_parameter,
-	automaton* owner)
-  {
-    // Check both actions statically.
-    STATIC_ASSERT (is_output_action<OutputAction>::value);
-    STATIC_ASSERT (is_input_action<InputAction>::value);
-    // Value types must be the same.    
-    STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
-    STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
-
-    bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
-					       typename OutputAction::buffer_value_category (),
-					       typename OutputAction::copy_value_category (),
-					       output_automaton,
-					       output_ptr,
-					       output_parameter,
-					       typename InputAction::parameter_category (),
-					       typename InputAction::buffer_value_category (),
-					       typename InputAction::copy_value_category (),
-					       input_automaton,
-					       input_ptr,
-					       input_parameter,
-					       OutputAction::copy_value_size,
-					       owner);
-  }
-
-  static void
   checked_schedule (automaton* a,
 		    const void* aep,
 		    aid_t p = 0)
@@ -1345,22 +141,23 @@ namespace system_automaton {
   static void
   first (void)
   {
+    // Initialize the memory allocator manually.
+    initialize_allocator ();
+
     // Allocate a scheduler.
     scheduler_ = new scheduler_type ();
-    // init_queue_ = new (alloc_type ()) init_queue_type ();
-    // create_queue_ = new (alloc_type ()) create_queue_type ();
-
-    kassert (0);
+    init_queue_ = new init_queue_type ();
+    create_queue_ = new create_queue_type ();
 
     // Create the initial automaton.
     bid_t b = lilycall::buffer_copy (automaton_bid_, 0, automaton_size_);
     lilycall::buffer_append (b, data_bid_, 0, data_size_);
-    //create_queue_->push_back (create_item (b, automaton_size_, data_size_));
+    create_queue_->push_back (create_item (b, automaton_size_, data_size_));
     lilycall::buffer_destroy (automaton_bid_);
     lilycall::buffer_destroy (data_bid_);
 
     schedule ();
-    //scheduler_->finish<first_traits> ();
+    scheduler_->finish<first_traits> ();
   }
 
   typedef ap_nb_nc_input_action_traits create_request_traits;
@@ -1374,11 +171,11 @@ namespace system_automaton {
 
   typedef np_internal_action_traits create_traits;
 
-  // static bool
-  // create_precondition (void)
-  // {
-  //   return !create_queue_->empty ();
-  // }
+  static bool
+  create_precondition (void)
+  {
+    return !create_queue_->empty ();
+  }
 
   // The image of an automaton must be smaller than this.
   // I picked this number arbitrarily.
@@ -1493,175 +290,174 @@ namespace system_automaton {
   static void
   create (void)
   {
-    kassert (0);
-    // scheduler_->remove<create_traits> (&create);
+    scheduler_->remove<create_traits> (&create);
 
-    // if (create_precondition ()) {
-    //   const create_item& item = create_queue_->front ();
-    //   const size_t buffer_size = lilycall::buffer_size (item.bid);
+    if (create_precondition ()) {
+      const create_item& item = create_queue_->front ();
+      const size_t buffer_size = lilycall::buffer_size (item.bid);
 
-    //   if (buffer_size == static_cast<size_t> (-1)) {
-    // 	// TODO:  Bad buffer.
-    // 	kassert (0);
-    //   }
+      if (buffer_size == static_cast<size_t> (-1)) {
+    	// TODO:  Bad buffer.
+    	kassert (0);
+      }
 
-    //   if (buffer_size == 0) {
-    // 	// TODO:  Empty buffer.
-    // 	kassert (0);
-    //   }
+      if (buffer_size == 0) {
+    	// TODO:  Empty buffer.
+    	kassert (0);
+      }
 
-    //   if (align_up (item.automaton_size, PAGE_SIZE) + align_up (item.data_size, PAGE_SIZE) != buffer_size) {
-    // 	// TODO:  Sizes are not correct.
-    // 	kassert (0);
-    //   }
+      if (align_up (item.automaton_size, PAGE_SIZE) + align_up (item.data_size, PAGE_SIZE) != buffer_size) {
+    	// TODO:  Sizes are not correct.
+    	kassert (0);
+      }
 
-    //   if (item.automaton_size < sizeof (elf::header) || item.automaton_size > MAX_AUTOMATON_SIZE) {
-    // 	// TODO:  Automaton is too small or large, i.e., we can't map it in.
-    // 	kassert (0);
-    //   }
+      if (item.automaton_size < sizeof (elf::header) || item.automaton_size > MAX_AUTOMATON_SIZE) {
+    	// TODO:  Automaton is too small or large, i.e., we can't map it in.
+    	kassert (0);
+      }
 
-    //   // Split the buffers.
-    //   bid_t automaton_bid = lilycall::buffer_copy (item.bid, 0, item.automaton_size);
-    //   bid_t data_bid = lilycall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
+      // Split the buffers.
+      bid_t automaton_bid = lilycall::buffer_copy (item.bid, 0, item.automaton_size);
+      bid_t data_bid = lilycall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
 
-    //   // Destroy the old buffer.
-    //   lilycall::buffer_destroy (item.bid);
+      // Destroy the old buffer.
+      lilycall::buffer_destroy (item.bid);
 
-    //   // Map the automaton.  Must succeed.
-    //   const elf::header* h = static_cast<const elf::header*> (lilycall::buffer_map (automaton_bid));
-    //   kassert (h != 0);
+      // Map the automaton.  Must succeed.
+      const elf::header* h = static_cast<const elf::header*> (lilycall::buffer_map (automaton_bid));
+      kassert (h != 0);
 
-    //   if (std::strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
-    // 	// TODO:  We only support ELF.
-    //     kassert (0);
-    //   }
+      if (strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
+    	// TODO:  We only support ELF.
+        kassert (0);
+      }
 
-    //   if (h->width != elf::BIT32) {
-    // 	// TODO:  We only support 32-bit.
-    // 	kassert (0);
-    //   }
+      if (h->width != elf::BIT32) {
+    	// TODO:  We only support 32-bit.
+    	kassert (0);
+      }
 
-    //   if (h->byte_order != elf::LITTLE_END) {
-    // 	// TODO:  We only support little-endian.
-    // 	kassert (0);
-    //   }
+      if (h->byte_order != elf::LITTLE_END) {
+    	// TODO:  We only support little-endian.
+    	kassert (0);
+      }
 
-    //   if (h->filetype != elf::EXECUTABLE) {
-    // 	// TODO:  We only support executable_files.
-    // 	kassert (0);
-    //   }
+      if (h->filetype != elf::EXECUTABLE) {
+    	// TODO:  We only support executable_files.
+    	kassert (0);
+      }
 
-    //   if (h->archtype != elf::X86) {
-    // 	// TODO:  We only support x86.
-    // 	kassert (0);
-    //   }
+      if (h->archtype != elf::X86) {
+    	// TODO:  We only support x86.
+    	kassert (0);
+      }
 
-    //   if (h->header_size != sizeof (elf::header)) {
-    // 	// TODO:  Perhaps we need to fix the code.
-    // 	kassert (0);
-    //   }
+      if (h->header_size != sizeof (elf::header)) {
+    	// TODO:  Perhaps we need to fix the code.
+    	kassert (0);
+      }
 
-    //   if (h->program_header_entry_size != sizeof (elf::program)) {
-    // 	// TODO:  Perhaps we need to fix the code.
-    // 	kassert (0);
-    //   }
+      if (h->program_header_entry_size != sizeof (elf::program)) {
+    	// TODO:  Perhaps we need to fix the code.
+    	kassert (0);
+      }
 
-    //   if (h->program_header_offset + h->program_header_entry_size * h->program_header_entry_count > item.automaton_size) {
-    // 	// TODO:  The program headers are not reported correctly.
-    // 	kassert (0);
-    //   }
+      if (h->program_header_offset + h->program_header_entry_size * h->program_header_entry_count > item.automaton_size) {
+    	// TODO:  The program headers are not reported correctly.
+    	kassert (0);
+      }
 
-    //   if (h->section_header_offset + h->section_header_entry_size * h->section_header_entry_count > item.automaton_size) {
-    // 	// TODO:  The section headers are not reported correctly.
-    // 	kassert (0);
-    //   }
+      if (h->section_header_offset + h->section_header_entry_size * h->section_header_entry_count > item.automaton_size) {
+    	// TODO:  The section headers are not reported correctly.
+    	kassert (0);
+      }
 
-    //   const elf::program* p = reinterpret_cast<const elf::program*> (reinterpret_cast<const uint8_t*> (h) + h->program_header_offset);
-    //   for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
-    // 	switch (p->type) {
-    // 	case elf::LOAD:
-    // 	  if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
-    // 	    // TODO:  Segment location not reported correctly.
-    // 	    kassert (0);
-    // 	  }
+      const elf::program* p = reinterpret_cast<const elf::program*> (reinterpret_cast<const uint8_t*> (h) + h->program_header_offset);
+      for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
+    	switch (p->type) {
+    	case elf::LOAD:
+    	  if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
+    	    // TODO:  Segment location not reported correctly.
+    	    kassert (0);
+    	  }
 
-    // 	  if (p->alignment != PAGE_SIZE) {
-    // 	    // TODO:  We only support PAGE_SIZE alignment.
-    // 	    kassert (0);
-    // 	  }
+    	  if (p->alignment != PAGE_SIZE) {
+    	    // TODO:  We only support PAGE_SIZE alignment.
+    	    kassert (0);
+    	  }
 
-    // 	  if (!is_aligned (p->offset, p->alignment)) {
-    // 	    // TODO:  Section is not aligned properly.
-    // 	    kassert (0);
-    // 	  }
+    	  if (!is_aligned (p->offset, p->alignment)) {
+    	    // TODO:  Section is not aligned properly.
+    	    kassert (0);
+    	  }
 
-    // 	  if (!is_aligned (p->virtual_address, p->alignment)) {
-    // 	    // TODO:  Section is not aligned properly.
-    // 	    kassert (0);
-    // 	  }
+    	  if (!is_aligned (p->virtual_address, p->alignment)) {
+    	    // TODO:  Section is not aligned properly.
+    	    kassert (0);
+    	  }
 
-    // 	  kout << " offset = " << hexformat (p->offset)
-    // 	       << " virtual_address = " << hexformat (p->virtual_address)
-    // 	       << " file_size = " << hexformat (p->file_size)
-    // 	       << " memory_size = " << hexformat (p->memory_size);
+    	  kout << " offset = " << hexformat (p->offset)
+    	       << " virtual_address = " << hexformat (p->virtual_address)
+    	       << " file_size = " << hexformat (p->file_size)
+    	       << " memory_size = " << hexformat (p->memory_size);
 
-    // 	  if (p->flags & elf::EXECUTE) {
-    // 	    kout << " execute";
-    // 	  }
-    // 	  if (p->flags & elf::WRITE) {
-    // 	    kout << " write";
-    // 	  }
-    // 	  if (p->flags & elf::READ) {
-    // 	    kout << " read";
-    // 	  }
+    	  if (p->flags & elf::EXECUTE) {
+    	    kout << " execute";
+    	  }
+    	  if (p->flags & elf::WRITE) {
+    	    kout << " write";
+    	  }
+    	  if (p->flags & elf::READ) {
+    	    kout << " read";
+    	  }
 
-    // 	  kout << endl;
-    // 	  break;
-    // 	case elf::NOTE:
-    // 	  {
-    // 	    if (p->offset + p->file_size > item.automaton_size) {
-    // 	      // TODO:  Segment location not reported correctly.
-    // 	      kassert (0);
-    // 	    }
+    	  kout << endl;
+    	  break;
+    	case elf::NOTE:
+    	  {
+    	    if (p->offset + p->file_size > item.automaton_size) {
+    	      // TODO:  Segment location not reported correctly.
+    	      kassert (0);
+    	    }
 
-    // 	    const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
-    // 	    const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
+    	    const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
+    	    const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
 
-    // 	    while (note_begin < note_end) {
-    // 	      // If the next one is in range, this one is safe to process.
-    // 	      if (note_begin->next () <= note_end) {
-    // 		const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
-    // 		kout << "NOTE name = " << note_begin->name ()
-    // 		     << " type = " << hexformat (note_begin->type)
-    // 		     << " desc_size = " << note_begin->desc_size
-    // 		     << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
-    // 	      }
-    // 	      note_begin = note_begin->next ();
-    // 	    }
-    // 	  }
-    // 	  break;
-    // 	}
-    //   }
+    	    while (note_begin < note_end) {
+    	      // If the next one is in range, this one is safe to process.
+    	      if (note_begin->next () <= note_end) {
+    		const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
+    		kout << "NOTE name = " << note_begin->name ()
+    		     << " type = " << hexformat (note_begin->type)
+    		     << " desc_size = " << note_begin->desc_size
+    		     << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
+    	      }
+    	      note_begin = note_begin->next ();
+    	    }
+    	  }
+    	  break;
+    	}
+      }
 
-    //   kout << "program_header_offset = " << h->program_header_offset << endl;
-    //   kout << "section_header_offset = " << h->section_header_offset << endl;
+      kout << "program_header_offset = " << h->program_header_offset << endl;
+      kout << "section_header_offset = " << h->section_header_offset << endl;
 
-    //   kout << "program_header_entry_size = " << h->program_header_entry_size << endl;
-    //   kout << "program_header_entry_count = " << h->program_header_entry_count << endl;
-    //   kout << "section_header_entry_size = " << h->section_header_entry_size << endl;
-    //   kout << "section_header_entry_count = " << h->section_header_entry_count << endl;
-    //   kout << "string_section = " << h->string_section << endl;
+      kout << "program_header_entry_size = " << h->program_header_entry_size << endl;
+      kout << "program_header_entry_count = " << h->program_header_entry_count << endl;
+      kout << "section_header_entry_size = " << h->section_header_entry_size << endl;
+      kout << "section_header_entry_count = " << h->section_header_entry_count << endl;
+      kout << "string_section = " << h->string_section << endl;
 
-    //   // kout << automaton_bid << "\t" << item.automaton_size << endl;
-    //   // kout << data_bid << "\t" << item.data_size << endl;
+      // kout << automaton_bid << "\t" << item.automaton_size << endl;
+      // kout << data_bid << "\t" << item.data_size << endl;
 
-    //   kassert (0);
+      kassert (0);
 
-    //   create_queue_->pop_front ();
-    // }
+      create_queue_->pop_front ();
+    }
 
     schedule ();
-    //scheduler_->finish<create_traits> ();
+    scheduler_->finish<create_traits> ();
   }
 
   typedef p_nb_nc_output_action_traits<automaton*> init_traits;
@@ -1689,13 +485,12 @@ namespace system_automaton {
   static void
   schedule ()
   {
-    kassert (0);
-    // if (create_precondition ()) {
-    //   scheduler_->add<create_traits> (&create);
-    // }
-    // if (!init_queue_->empty ()) {
-    //   scheduler_->add<init_traits> (&init, init_queue_->front ());
-    // }
+    if (create_precondition ()) {
+      scheduler_->add<create_traits> (&create);
+    }
+    if (!init_queue_->empty ()) {
+      scheduler_->add<init_traits> (&init, init_queue_->front ());
+    }
   }
 
   void
@@ -1764,6 +559,1215 @@ namespace system_automaton {
   }
 
 }
+
+  // static void
+  // bind_ (automaton* output_automaton,
+  // 	 const void* output_action_entry_point,
+  // 	 parameter_mode_t output_parameter_mode,
+  // 	 aid_t output_parameter,
+  // 	 automaton* input_automaton,
+  // 	 const void* input_action_entry_point,
+  // 	 parameter_mode_t input_parameter_mode,
+  // 	 aid_t input_parameter,
+  // 	 buffer_value_mode_t buffer_value_mode,
+  // 	 copy_value_mode_t copy_value_mode,
+  // 	 size_t copy_value_size,
+  // 	 automaton* owner)
+  // {
+  //   // Check the output action dynamically.
+  //   kassert (output_automaton != 0);
+  //   automaton::const_action_iterator output_pos = output_automaton->action_find (output_action_entry_point);
+  //   kassert (output_pos != output_automaton->action_end () &&
+  // 	     (*output_pos)->type == OUTPUT &&
+  // 	     (*output_pos)->parameter_mode == output_parameter_mode &&
+  // 	     (*output_pos)->buffer_value_mode == buffer_value_mode &&
+  // 	     (*output_pos)->copy_value_mode == copy_value_mode &&
+  // 	     (*output_pos)->copy_value_size == copy_value_size);
+    
+  //   // Check the input action dynamically.
+  //   kassert (input_automaton != 0);
+  //   automaton::const_action_iterator input_pos = input_automaton->action_find (input_action_entry_point);
+  //   kassert (input_pos != input_automaton->action_end () &&
+  // 	     (*input_pos)->type == INPUT &&
+  // 	     (*input_pos)->parameter_mode == input_parameter_mode &&
+  // 	     (*input_pos)->buffer_value_mode == buffer_value_mode &&
+  // 	     (*input_pos)->copy_value_mode == copy_value_mode &&
+  // 	     (*input_pos)->copy_value_size == copy_value_size);
+    
+  //   // TODO:  All of the bind checks.
+  //   caction oa (*output_pos, output_parameter);
+  //   caction ia (*input_pos, input_parameter);
+    
+  //   output_automaton->bind_output (oa, ia, owner);
+  //   input_automaton->bind_input (oa, ia, owner);
+  //   owner->bind (oa, ia);
+  // }
+
+  // // TODO:  Remove all of this code.
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (void),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (void),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>  
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (void),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::copy_value_type),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::copy_value_type),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::copy_value_type),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (bid_t),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (bid_t),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (bid_t),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (bid_t, typename InputAction::copy_value_type),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (bid_t, typename InputAction::copy_value_type),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (bid_t, typename InputAction::copy_value_type),
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), NO_PARAMETER, 0,
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, typename InputAction::copy_value_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, bid_t),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, bid_t),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, bid_t),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, bid_t, typename InputAction::copy_value_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, bid_t, typename InputAction::copy_value_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (typename InputAction::parameter_type, bid_t, typename InputAction::copy_value_type),
+  // 		  typename InputAction::parameter_type input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), PARAMETER, aid_cast (input_parameter),
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   NO_BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, typename InputAction::copy_value_type),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, typename InputAction::copy_value_type),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  no_buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, typename InputAction::copy_value_type),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   NO_BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, bid_t),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, bid_t),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  no_copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, bid_t),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   BUFFER_VALUE, NO_COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (no_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (void),
+  // 		  auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, bid_t, typename InputAction::copy_value_type),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), NO_PARAMETER, 0,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (typename OutputAction::parameter_type),
+  // 		  typename OutputAction::parameter_type output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, bid_t, typename InputAction::copy_value_type),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), PARAMETER, aid_cast (output_parameter),
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction, class InputAction>
+  // static void
+  // bind_dispatch_ (auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* output_automaton,
+  // 		  void (*output_ptr) (aid_t),
+  // 		  aid_t output_parameter,
+  // 		  auto_parameter_tag,
+  // 		  buffer_value_tag,
+  // 		  copy_value_tag,
+  // 		  automaton* input_automaton,
+  // 		  void (*input_ptr) (aid_t, bid_t, typename InputAction::copy_value_type),
+  // 		  aid_t input_parameter,
+  // 		  size_t copy_value_size,
+  // 		  automaton* owner)
+  // {
+  //   bind_ (output_automaton, reinterpret_cast<const void*> (output_ptr), AUTO_PARAMETER, output_parameter,
+  //    	   input_automaton, reinterpret_cast<const void*> (input_ptr), AUTO_PARAMETER, input_parameter,
+  // 	   BUFFER_VALUE, COPY_VALUE, copy_value_size, owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (void),
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (void),
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (typename OutputAction::parameter_type),
+  // 	typename OutputAction::parameter_type output_parameter,
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (void),
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       output_parameter,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (void),
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (IT1),
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (typename OutputAction::parameter_type),
+  // 	typename OutputAction::parameter_type output_parameter,
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (IT1),
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       output_parameter,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1,
+  // 	    class IT2>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (void),
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (IT1, IT2),
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1,
+  // 	    class IT2>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (typename OutputAction::parameter_type),
+  // 	typename OutputAction::parameter_type output_parameter,
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (IT1, IT2),
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       output_parameter,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (void),
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (typename InputAction::parameter_type),
+  // 	typename InputAction::parameter_type input_parameter,
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       input_parameter,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (typename OutputAction::parameter_type),
+  // 	typename OutputAction::parameter_type output_parameter,
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (typename InputAction::parameter_type),
+  // 	typename InputAction::parameter_type input_parameter,
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       output_parameter,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       input_parameter,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (void),
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (typename InputAction::parameter_type, IT1),
+  // 	typename InputAction::parameter_type input_parameter,
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       input_parameter,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (typename OutputAction::parameter_type),
+  // 	typename OutputAction::parameter_type output_parameter,
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (typename InputAction::parameter_type, IT1),
+  // 	typename InputAction::parameter_type input_parameter,
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       output_parameter,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       input_parameter,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1,
+  // 	    class IT2>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (void),
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (typename InputAction::parameter_type, IT1, IT2),
+  // 	typename InputAction::parameter_type input_parameter,
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       input_parameter,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
+  // template <class OutputAction,
+  // 	    class InputAction,
+  // 	    class IT1,
+  // 	    class IT2>
+  // static void
+  // bind (automaton* output_automaton,
+  // 	void (*output_ptr) (typename OutputAction::parameter_type),
+  // 	typename OutputAction::parameter_type output_parameter,
+  // 	automaton* input_automaton,
+  // 	void (*input_ptr) (typename InputAction::parameter_type, IT1, IT2),
+  // 	typename InputAction::parameter_type input_parameter,
+  // 	automaton* owner)
+  // {
+  //   // Check both actions statically.
+  //   STATIC_ASSERT (is_output_action<OutputAction>::value);
+  //   STATIC_ASSERT (is_input_action<InputAction>::value);
+  //   // Value types must be the same.    
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::copy_value_type COMMA typename InputAction::copy_value_type>::value);
+  //   STATIC_ASSERT (std::is_same <typename OutputAction::buffer_value_type COMMA typename InputAction::buffer_value_type>::value);
+
+  //   bind_dispatch_<OutputAction, InputAction> (typename OutputAction::parameter_category (),
+  // 					       typename OutputAction::buffer_value_category (),
+  // 					       typename OutputAction::copy_value_category (),
+  // 					       output_automaton,
+  // 					       output_ptr,
+  // 					       output_parameter,
+  // 					       typename InputAction::parameter_category (),
+  // 					       typename InputAction::buffer_value_category (),
+  // 					       typename InputAction::copy_value_category (),
+  // 					       input_automaton,
+  // 					       input_ptr,
+  // 					       input_parameter,
+  // 					       OutputAction::copy_value_size,
+  // 					       owner);
+  // }
+
 
   // static void
   // create_action_test_automaton ()

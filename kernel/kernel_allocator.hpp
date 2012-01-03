@@ -21,7 +21,6 @@
 
 // TODO:  We assume a 32-bit architecture.
 
-
 class kernel_alloc {
 private:
   static const size_t BIN_COUNT = 128;

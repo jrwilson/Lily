@@ -79,9 +79,6 @@ sweep ()
   }
 }
 
-int
-frobnicate (void);
-
 extern "C" void
 kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
@@ -94,8 +91,6 @@ kmain (uint32_t multiboot_magic,
 
   // Print a welcome message.
   kout << "Lily" << endl;
-
-  kout << frobnicate () << endl;
 
   buffer* automaton_buffer;
   size_t automaton_size;
