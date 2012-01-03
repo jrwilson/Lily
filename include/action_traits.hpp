@@ -29,10 +29,14 @@ struct no_parameter_tag { };
 struct parameter_tag { };
 struct auto_parameter_tag { };
 
+#define M_NO_PARAMETER 0
+#define M_PARAMETER 1
+#define M_AUTO_PARAMETER 2
+
 enum parameter_mode_t {
-  NO_PARAMETER,
-  PARAMETER,
-  AUTO_PARAMETER,
+  NO_PARAMETER = M_NO_PARAMETER,
+  PARAMETER = M_PARAMETER,
+  AUTO_PARAMETER = M_AUTO_PARAMETER,
 };
 
 struct no_parameter {
@@ -58,9 +62,12 @@ struct auto_parameter {
 struct no_buffer_value_tag { };
 struct buffer_value_tag { };
 
+#define M_NO_BUFFER_VALUE 0
+#define M_BUFFER_VALUE 1
+
 enum buffer_value_mode_t {
-  NO_BUFFER_VALUE,
-  BUFFER_VALUE,
+  NO_BUFFER_VALUE = M_NO_BUFFER_VALUE,
+  BUFFER_VALUE = M_BUFFER_VALUE,
 };
 
 struct no_buffer_value {
@@ -83,9 +90,12 @@ const size_t MAX_COPY_VALUE_SIZE = 512;
 struct no_copy_value_tag { };
 struct copy_value_tag { };
 
+#define M_NO_COPY_VALUE 0
+#define M_COPY_VALUE 1
+
 enum copy_value_mode_t {
-  NO_COPY_VALUE,
-  COPY_VALUE,
+  NO_COPY_VALUE = M_NO_COPY_VALUE,
+  COPY_VALUE = M_COPY_VALUE,
 };
 
 struct no_copy_value {
@@ -108,10 +118,14 @@ struct input_action_tag { };
 struct output_action_tag { };
 struct internal_action_tag { };
 
+#define M_INPUT 0
+#define M_OUTPUT 1
+#define M_INTERNAL 2
+
 enum action_type_t {
-  INPUT,
-  OUTPUT,
-  INTERNAL,
+  INPUT = M_INPUT,
+  OUTPUT = M_OUTPUT,
+  INTERNAL = M_INTERNAL,
 };
 
 struct input_action {
@@ -263,5 +277,40 @@ struct is_local_action : public bool_dispatch<is_output_action<T>::value || is_i
 
 template <class T>
 struct is_action : public bool_dispatch<is_input_action<T>::value || is_output_action<T>::value || is_internal_action<T>::value> { };
+
+#ifdef NOTE
+#include <iostream>
+
+template <class T>
+class action_printer {
+public:
+  action_printer (const char* func_name,
+	const char* export_name)
+  {
+    static_assert (is_action<T>::value, "Type is not an action");
+
+    std::cout << ".pushsection .action_info, \"\", @note\n"
+	      << ".balign 4\n"
+	      << ".long 1f - 0f\n"		// Length of the author string.
+	      << ".long 3f - 2f\n"		// Length of the description.
+	      << ".long 0\n"		// The type.  0 => action descriptor
+	      << "0: .asciz \"lily\"\n"	// The author.
+	      << "1: .balign 4\n"
+	      << "2:\n"			// The description.
+	      << ".long " << func_name << "\n"		// Action entry point.
+	      << ".long " << T::action_type << "\n"	// Type.  Input, output, or internal.
+	      << ".long " << T::parameter_mode << "\n"	// Parameter mode.  No parameter, parameter, auto parameter.
+	      << ".long " << T::buffer_value_mode << "\n"	// Buffer value mode.  No buffer value, buffer value.
+	      << ".long " << T::copy_value_mode << "\n"	// Copy value mode.  No copy value, copy value.
+	      << ".long " << T::copy_value_size << "\n" // Copy value size.
+	      << ".asciz \"" << export_name << "\"\n"	// Export the action using this name.
+	      << "3: .balign 4\n"
+	      << ".popsection\n" << std::endl;
+  }
+};
+#define ACTION(traits, func_name, share_name) action_printer<traits> share_name_ (#func_name, #share_name);
+#else
+#define ACTION(traits, func_name, share_name)
+#endif
 
 #endif /* __action_traits_hpp__ */

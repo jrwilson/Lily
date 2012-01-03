@@ -4,19 +4,29 @@ all : lily.iso
 kernel/lily :
 	cd kernel; $(MAKE) $(MFLAGS)
 
+lib/libnote.a :
+	cd lib; $(MAKE) $(MFLAGS)
+
+user/init_automaton : lib/libnote.a
+	cd user; $(MAKE) $(MFLAGS)
+
 .PHONY : clean
 clean :
 	cd kernel; $(MAKE) $(MFLAGS) clean
+	cd lib; $(MAKE) $(MFLAGS) clean
+	cd user; $(MAKE) $(MFLAGS) clean
 
 .PHONY : depclean
 depclean :
 	cd kernel; $(MAKE) $(MFLAGS) depclean
+	cd lib; $(MAKE) $(MFLAGS) depclean
+	cd user; $(MAKE) $(MFLAGS) depclean
 
 lily : kernel/lily
 	strip $^ -o $@
 
-initautomaton : lily
-	cp $^ $@
+initautomaton : user/init_automaton
+	strip $^ -o $@
 
 #	echo "This is the initial automaton!!" > $@
 

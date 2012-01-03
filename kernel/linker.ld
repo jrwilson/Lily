@@ -14,7 +14,6 @@ PHDRS
 	setup PT_LOAD FLAGS (7) ;
 	text PT_LOAD FLAGS (5);
 	data PT_LOAD FLAGS (6);
-	note PT_NOTE ;
 }
 
 SECTIONS
@@ -74,11 +73,6 @@ SECTIONS
 		bss_end = .;
 		data_end = .;
 	} :data
-
-	.note :
-	{
-		*(.note*)
-	} :note
 
 	/DISCARD/ :
 	{

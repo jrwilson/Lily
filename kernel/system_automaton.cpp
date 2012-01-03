@@ -376,25 +376,6 @@ namespace system_automaton {
       for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
     	switch (p->type) {
     	case elf::LOAD:
-    	  if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
-    	    // TODO:  Segment location not reported correctly.
-    	    kassert (0);
-    	  }
-
-    	  if (p->alignment != PAGE_SIZE) {
-    	    // TODO:  We only support PAGE_SIZE alignment.
-    	    kassert (0);
-    	  }
-
-    	  if (!is_aligned (p->offset, p->alignment)) {
-    	    // TODO:  Section is not aligned properly.
-    	    kassert (0);
-    	  }
-
-    	  if (!is_aligned (p->virtual_address, p->alignment)) {
-    	    // TODO:  Section is not aligned properly.
-    	    kassert (0);
-    	  }
 
     	  kout << " offset = " << hexformat (p->offset)
     	       << " virtual_address = " << hexformat (p->virtual_address)
@@ -412,6 +393,27 @@ namespace system_automaton {
     	  }
 
     	  kout << endl;
+
+    	  if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
+    	    // TODO:  Segment location not reported correctly.
+    	    kassert (0);
+    	  }
+
+    	  if (p->alignment != PAGE_SIZE) {
+    	    // TODO:  We only support PAGE_SIZE alignment.
+    	    kassert (0);
+    	  }
+
+    	  if (p->file_size != 0 && !is_aligned (p->offset, p->alignment)) {
+    	    // TODO:  Section is not aligned properly.
+    	    kassert (0);
+    	  }
+
+    	  if (!is_aligned (p->virtual_address, p->alignment)) {
+    	    // TODO:  Section is not aligned properly.
+    	    kassert (0);
+    	  }
+
     	  break;
     	case elf::NOTE:
     	  {

@@ -2,7 +2,7 @@ AS=as
 CXX=g++
 OFLAG=-O0
 # Add -Werror at some point	
-CXXFLAGS=-MD $(OFLAG) -Wall -Wextra -std=c++0x -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include
+CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -std=c++0x -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include
 # -nostdinc -fno-rtti
 LD=ld
 LDFLAGS=$(OFLAG) -T linker.ld
@@ -39,7 +39,7 @@ $(KERNEL) : $(OBJECTS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
 %.o : %.cpp
-	$(CXX) -g -o $@ -c $< $(CXXFLAGS)
+	$(CXX) -o $@ -c $< $(CXXFLAGS)
 
 %.o : %.S
 	as -o $@ $<
