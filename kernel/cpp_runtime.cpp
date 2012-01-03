@@ -39,6 +39,12 @@ namespace std {
   {
     kassert (0);
   }
+
+  void
+  __throw_bad_alloc()
+  {
+    kassert (0);
+  }
 }
 
 // I needed to enable RTTI to get TR1 extensions.
@@ -148,13 +154,6 @@ namespace __cxxabiv1 {
     return __class_type_info::__sub_kind ();
   }
 
-}
-
-void
-operator delete (void*)
-{
-  // TODO
-  kassert (0);
 }
 
 // From hashtable-aux.cc from GNU libstdc++-v3.
