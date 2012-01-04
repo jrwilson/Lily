@@ -2,33 +2,43 @@
 #define __action_descriptor_hpp__
 
 #include "action_traits.hpp"
+#include "kstring.hpp"
 
 class automaton;
 
 // Partial action.
 struct paction {
+  // If size becomes a problem we can bit-pack the various modes.
   ::automaton* const automaton;
-  const void* const action_entry_point;
-  // I think we're trading space for speed.
+  kstring const name;
   action_type_t const type;
+  const void* const action_entry_point;
   parameter_mode_t const parameter_mode;
   buffer_value_mode_t const buffer_value_mode;
+  kstring const buffer_value_type;
   copy_value_mode_t const copy_value_mode;
+  kstring const copy_value_type;
   size_t const copy_value_size;
 
   paction (::automaton* a,
-	   const void* aep,
+	   const char* n,
 	   action_type_t t,
+	   const void* aep,
 	   parameter_mode_t pm,
 	   buffer_value_mode_t bvm,
+	   const char* bvt,
 	   copy_value_mode_t cvm,
+	   const char* cvt,
 	   size_t vs) :
     automaton (a),
-    action_entry_point (aep),
+    name (n),
     type (t),
+    action_entry_point (aep),
     parameter_mode (pm),
     buffer_value_mode (bvm),
+    buffer_value_type (bvt),
     copy_value_mode (cvm),
+    copy_value_type (cvt),
     copy_value_size (vs)
   { }
 

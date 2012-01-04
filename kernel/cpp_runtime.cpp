@@ -480,6 +480,13 @@ namespace std {
   {
     kassert (0);
   }
+
+  void
+  __throw_logic_error(char const*)
+  {
+    kassert (0);
+  }
+
 }
 
 // I needed to enable RTTI to get TR1 extensions.

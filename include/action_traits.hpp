@@ -28,14 +28,10 @@ struct no_parameter_tag { };
 struct parameter_tag { };
 struct auto_parameter_tag { };
 
-#define M_NO_PARAMETER 0
-#define M_PARAMETER 1
-#define M_AUTO_PARAMETER 2
-
 enum parameter_mode_t {
-  NO_PARAMETER = M_NO_PARAMETER,
-  PARAMETER = M_PARAMETER,
-  AUTO_PARAMETER = M_AUTO_PARAMETER,
+  NO_PARAMETER = 0x0001,
+  PARAMETER = 0x0002,
+  AUTO_PARAMETER = 0x0004,
 };
 
 struct no_parameter {
@@ -61,12 +57,9 @@ struct auto_parameter {
 struct no_buffer_value_tag { };
 struct buffer_value_tag { };
 
-#define M_NO_BUFFER_VALUE 0
-#define M_BUFFER_VALUE 1
-
 enum buffer_value_mode_t {
-  NO_BUFFER_VALUE = M_NO_BUFFER_VALUE,
-  BUFFER_VALUE = M_BUFFER_VALUE,
+  NO_BUFFER_VALUE = 0x0008,
+  BUFFER_VALUE = 0x0010,
 };
 
 struct no_buffer_value {
@@ -89,12 +82,9 @@ const size_t MAX_COPY_VALUE_SIZE = 512;
 struct no_copy_value_tag { };
 struct copy_value_tag { };
 
-#define M_NO_COPY_VALUE 0
-#define M_COPY_VALUE 1
-
 enum copy_value_mode_t {
-  NO_COPY_VALUE = M_NO_COPY_VALUE,
-  COPY_VALUE = M_COPY_VALUE,
+  NO_COPY_VALUE = 0x0020,
+  COPY_VALUE = 0x0040,
 };
 
 struct no_copy_value {
@@ -117,14 +107,10 @@ struct input_action_tag { };
 struct output_action_tag { };
 struct internal_action_tag { };
 
-#define M_INPUT 0
-#define M_OUTPUT 1
-#define M_INTERNAL 2
-
 enum action_type_t {
-  INPUT = M_INPUT,
-  OUTPUT = M_OUTPUT,
-  INTERNAL = M_INTERNAL,
+  INPUT = 0x0080,
+  OUTPUT = 0x0100,
+  INTERNAL = 0x0200,
 };
 
 struct input_action {
@@ -281,29 +267,51 @@ struct is_action : public bool_dispatch<is_input_action<T>::value || is_output_a
 #include <iostream>
 
 template <class T>
+struct type_formatter;
+
+template <>
+struct type_formatter<void>
+{
+  static const char*
+  get_format ()
+  {
+    return "void";
+  }
+};
+
+template <>
+struct type_formatter<null_type>
+{
+  static const char*
+  get_format ()
+  {
+    return "";
+  }
+};
+
+template <class T>
 class action_printer {
 public:
   action_printer (const char* func_name,
-	const char* export_name)
+		  const char* export_name)
   {
     static_assert (is_action<T>::value, "Type is not an action");
 
     std::cout << ".pushsection .action_info, \"\", @note\n"
 	      << ".balign 4\n"
-	      << ".long 1f - 0f\n"		// Length of the author string.
-	      << ".long 3f - 2f\n"		// Length of the description.
+	      << ".long 1f - 0f\n"	// Length of the author string.
+	      << ".long 3f - 2f\n"	// Length of the description.
 	      << ".long 0\n"		// The type.  0 => action descriptor
 	      << "0: .asciz \"lily\"\n"	// The author.
 	      << "1: .balign 4\n"
 	      << "2:\n"			// The description.
-	      << ".long " << func_name << "\n"		// Action entry point.
-	      << ".long " << T::action_type << "\n"	// Type.  Input, output, or internal.
-	      << ".long " << T::parameter_mode << "\n"	// Parameter mode.  No parameter, parameter, auto parameter.
-	      << ".long " << T::buffer_value_mode << "\n"	// Buffer value mode.  No buffer value, buffer value.
-	      << ".long " << T::copy_value_mode << "\n"	// Copy value mode.  No copy value, copy value.
-	      << ".long " << T::copy_value_size << "\n" // Copy value size.
-	      << ".asciz \"" << export_name << "\"\n"	// Export the action using this name.
-	      << "3: .balign 4\n"
+	      << ".long " << func_name << "\n"	// Action entry point.
+	      << ".long " << (T::action_type | T::parameter_mode | T::buffer_value_mode | T::copy_value_mode) << "\n"
+	      << ".long " << T::copy_value_size << "\n" 	// Copy value size.
+	      << ".asciz \"" << export_name << "\"\n"		// Export the action using this name.
+	      << ".asciz \"" << type_formatter<typename T::buffer_value_type>::get_format () << "\"\n"	// A string describing the buffer value.
+	      << ".asciz \"" << type_formatter<typename T::copy_value_type>::get_format () << "\"\n"	// A string describing the copy value.
+      	      << "3: .balign 4\n"
 	      << ".popsection\n" << std::endl;
   }
 };

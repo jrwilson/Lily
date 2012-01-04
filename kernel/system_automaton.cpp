@@ -540,15 +540,15 @@ namespace system_automaton {
     kassert (r);
     
     // Add the actions.
-    r = system_automaton_->add_action (reinterpret_cast<const void*> (&first), first_traits::action_type, first_traits::parameter_mode, first_traits::buffer_value_mode, first_traits::copy_value_mode, first_traits::copy_value_size);
+    r = system_automaton_->add_action ("first", first_traits::action_type, reinterpret_cast<const void*> (&first), first_traits::parameter_mode, first_traits::buffer_value_mode, "bvt", first_traits::copy_value_mode, "cvt", first_traits::copy_value_size);
     kassert (r);
-    r = system_automaton_->add_action (reinterpret_cast<const void*> (&create_request), create_request_traits::action_type, create_request_traits::parameter_mode, create_request_traits::buffer_value_mode, create_request_traits::copy_value_mode, create_request_traits::copy_value_size);
+    r = system_automaton_->add_action ("create_request", create_request_traits::action_type, reinterpret_cast<const void*> (&create_request), create_request_traits::parameter_mode, create_request_traits::buffer_value_mode, "bvt", create_request_traits::copy_value_mode, "cvt", create_request_traits::copy_value_size);
     kassert (r);
-    r = system_automaton_->add_action (reinterpret_cast<const void*> (&create), create_traits::action_type, create_traits::parameter_mode, create_traits::buffer_value_mode, create_traits::copy_value_mode, create_traits::copy_value_size);
+    r = system_automaton_->add_action ("create", create_traits::action_type, reinterpret_cast<const void*> (&create), create_traits::parameter_mode, create_traits::buffer_value_mode, "bvt", create_traits::copy_value_mode, "cvt", create_traits::copy_value_size);
     kassert (r);
-    r = system_automaton_->add_action (reinterpret_cast<const void*> (&init), init_traits::action_type, init_traits::parameter_mode, init_traits::buffer_value_mode, init_traits::copy_value_mode, init_traits::copy_value_size);
+    r = system_automaton_->add_action ("init", init_traits::action_type, reinterpret_cast<const void*> (&init), init_traits::parameter_mode, init_traits::buffer_value_mode, "bvt", init_traits::copy_value_mode, "cvt", init_traits::copy_value_size);
     kassert (r);
-    r = system_automaton_->add_action (reinterpret_cast<const void*> (&create_response), create_response_traits::action_type, create_response_traits::parameter_mode, create_response_traits::buffer_value_mode, create_response_traits::copy_value_mode, create_response_traits::copy_value_size);
+    r = system_automaton_->add_action ("create_response", create_response_traits::action_type, reinterpret_cast<const void*> (&create_response), create_response_traits::parameter_mode, create_response_traits::buffer_value_mode, "bvt", create_response_traits::copy_value_mode, "cvt", create_response_traits::copy_value_size);
     kassert (r);
     
     // Bootstrap.

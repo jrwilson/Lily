@@ -84,6 +84,23 @@ strncmp (const char* p,
   return (n == 0) ? 0 : *p - *q;
 }
 
+int
+memcmp (const void* p,
+	const void* q,
+	size_t n)
+{
+  const char* r = static_cast<const char*> (p);
+  const char* s = static_cast<const char*> (q);
+  
+  for (; n != 0; --n, ++r, ++s) {
+    if (*r != *s) {
+      return *r - *s;
+    }
+  }
+  
+  return 0;
+}
+
 // inline char*
 // strcpy (char* p,
 // 	const char* q)
@@ -94,22 +111,3 @@ strncmp (const char* p,
 //   }
 //   return retval;
 // }
-        
-  
-// inline int
-// memcmp (const void* p,
-// 	const void* q,
-// 	size_t n)
-// {
-//   const char* r = static_cast<const char*> (p);
-//   const char* s = static_cast<const char*> (q);
-    
-//   for (; n != 0; --n, ++r, ++s) {
-//     if (*r != *s) {
-//       return *r - *s;
-//     }
-//   }
-    
-//   return 0;
-// }
-  

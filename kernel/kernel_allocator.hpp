@@ -540,6 +540,13 @@ public:
   {
     return static_cast<size_type> (-1) / sizeof (T);
   }
+
+  template <class U>
+  inline bool
+  operator== (const kernel_allocator<U>&) const
+  {
+    return true;
+  }
   
   template <class U>
   struct rebind {

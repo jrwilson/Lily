@@ -96,9 +96,12 @@ private:
   frame_t const page_directory_frame_;
   // Flag indicating if the automaton can execute privileged instructions.
   bool privileged_;
-  // Table of action descriptors for guiding execution, checking bindings, etc.
-  typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, kernel_allocator<std::pair<const void* const, const paction* const> > > action_map_type;
-  action_map_type action_map_;
+  // Map from action entry point (aep) to action.
+  typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, kernel_allocator<std::pair<const void* const, const paction* const> > > aep_to_action_map_type;
+  aep_to_action_map_type aep_to_action_map_;
+  // Map from name to action.
+  typedef std::unordered_map<kstring, const paction* const, kstring_hash, std::equal_to<kstring>, kernel_allocator<std::pair<kstring const, const paction* const> > > name_to_action_map_type;
+  name_to_action_map_type name_to_action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef std::vector<vm_area_base*, kernel_allocator<vm_area_base*> > memory_map_type;
   memory_map_type memory_map_;
@@ -131,10 +134,10 @@ private:
 public:
   class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, const paction* const> {
   private:
-    action_map_type::const_iterator pos_;
+    aep_to_action_map_type::const_iterator pos_;
     
   public:
-    const_action_iterator (const action_map_type::const_iterator& p) :
+    const_action_iterator (const aep_to_action_map_type::const_iterator& p) :
       pos_ (p)
     { }
 
@@ -371,28 +374,37 @@ public:
   }
 
   bool
-  add_action (const void* action_entry_point,
+  add_action (const char* name,
 	      action_type_t action_type,
+	      const void* action_entry_point,
 	      parameter_mode_t parameter_mode,
 	      buffer_value_mode_t buffer_value_mode,
+	      const char* buffer_value_type,
 	      copy_value_mode_t copy_value_mode,
+	      const char* copy_value_type,
 	      size_t copy_value_size)
   {
-    paction* ac = new (kernel_alloc ()) paction (this, action_entry_point, action_type, parameter_mode, buffer_value_mode, copy_value_mode, copy_value_size);
-    std::pair<action_map_type::iterator, bool> r = action_map_.insert (std::make_pair (ac->action_entry_point, ac));
-    return r.second;
+    if (aep_to_action_map_.find (action_entry_point) != aep_to_action_map_.end () &&
+	name_to_action_map_.find (name) != name_to_action_map_.end ()) {
+      paction* ac = new (kernel_alloc ()) paction (this, name, action_type, action_entry_point, parameter_mode, buffer_value_mode, buffer_value_type, copy_value_mode, copy_value_type, copy_value_size);
+      aep_to_action_map_.insert (std::make_pair (ac->action_entry_point, ac));
+      return true;
+    }
+    else {
+      return false;
+    }
   }
 
   const_action_iterator
   action_end () const
   {
-    return const_action_iterator (action_map_.end ());
+    return const_action_iterator (aep_to_action_map_.end ());
   }
 
   const_action_iterator
   action_find (const void* action_entry_point) const
   {
-    return const_action_iterator (action_map_.find (action_entry_point));
+    return const_action_iterator (aep_to_action_map_.find (action_entry_point));
   }
 
   void
@@ -435,8 +447,8 @@ public:
   binding_count (const void* aep,
 		 aid_t parameter) const
   {
-    action_map_type::const_iterator pos = action_map_.find (aep);
-    if (pos != action_map_.end ()) {
+    aep_to_action_map_type::const_iterator pos = aep_to_action_map_.find (aep);
+    if (pos != aep_to_action_map_.end ()) {
       const caction act (pos->second, parameter);
       switch (pos->second->type) {
       case OUTPUT:
