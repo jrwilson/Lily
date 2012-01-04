@@ -279,5 +279,5 @@ kmain (uint32_t multiboot_magic,
   destroy (data_buffer, kernel_alloc ());
 
   // Start the scheduler.  Doesn't return.
-  scheduler::finish (false, -1, 0);
+  scheduler::finish (0, 0, -1, 0);
 }

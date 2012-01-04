@@ -33,7 +33,7 @@ namespace privcall {
       asm ("invlpg (%0)\n" :: "r"(address));
     }
     else {
-      asm ("int $0x81\n" : : "a"(INVLPG), "b"(address) :);
+      asm ("int $0x82\n" : : "a"(INVLPG), "b"(address) :);
     }
   }
 

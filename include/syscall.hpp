@@ -21,8 +21,7 @@
 namespace lilycall {
 
   enum {
-    FINISH = 0,
-    GETPAGESIZE,
+    GETPAGESIZE = 0,
     SBRK,
     BINDING_COUNT,
     BUFFER_CREATE,
@@ -38,18 +37,19 @@ namespace lilycall {
   inline void
   finish (const void* action_entry_point,
 	  aid_t parameter,
-	  bool status,
-	  bid_t bid,
-	  const void* buffer)
+	  const void* copy_value,
+	  size_t copy_value_size,
+	  bid_t buffer,
+	  size_t buffer_size)
   {
-    asm ("int $0x80\n" : : "a"(FINISH), "b"(action_entry_point), "c"(parameter), "d"(status), "S"(bid), "D"(buffer) :);
+    asm ("int $0x80\n" : : "a"(action_entry_point), "b"(parameter), "c"(copy_value), "d"(copy_value_size), "S"(buffer), "D"(buffer_size) :);
   }
   
   inline size_t
   getpagesize (void)
   {
     size_t size;
-    asm ("int $0x80\n" : "=a"(size) : "0"(GETPAGESIZE) :);
+    asm ("int $0x81\n" : "=a"(size) : "0"(GETPAGESIZE) :);
     return size;
 }
   
@@ -57,7 +57,7 @@ namespace lilycall {
   sbrk (ptrdiff_t size)
   {
     void* ptr;
-    asm ("int $0x80\n" : "=a"(ptr) : "0"(SBRK), "b"(size) :);
+    asm ("int $0x81\n" : "=a"(ptr) : "0"(SBRK), "b"(size) :);
     return ptr;
   }
 
@@ -67,7 +67,7 @@ namespace lilycall {
 		 aid_t parameter)
   {
     size_t count;
-    asm ("int $0x80\n" : "=a"(count) : "0"(BINDING_COUNT), "b"(ptr), "c"(parameter) :);
+    asm ("int $0x81\n" : "=a"(count) : "0"(BINDING_COUNT), "b"(ptr), "c"(parameter) :);
     return count;
   }
 
@@ -119,7 +119,7 @@ namespace lilycall {
   buffer_create (size_t size)
   {
     bid_t bid;
-    asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_CREATE), "b"(size) :);
+    asm ("int $0x81\n" : "=a"(bid) : "0"(BUFFER_CREATE), "b"(size) :);
     return bid;
   }
 
@@ -129,7 +129,7 @@ namespace lilycall {
 	       size_t length)
   {
     bid_t bid;
-    asm ("int $0x80\n" : "=a"(bid) : "0"(BUFFER_COPY), "b"(b), "c"(offset), "d"(length) :);
+    asm ("int $0x81\n" : "=a"(bid) : "0"(BUFFER_COPY), "b"(b), "c"(offset), "d"(length) :);
     return bid;
   }
 
@@ -138,7 +138,7 @@ namespace lilycall {
 	       size_t size)
   {
     size_t off;
-    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_GROW), "b"(bid), "c"(size) :);
+    asm ("int $0x81\n" : "=a"(off) : "0"(BUFFER_GROW), "b"(bid), "c"(size) :);
     return off;
   }
 
@@ -149,7 +149,7 @@ namespace lilycall {
 		 size_t length)
   {
     size_t off;
-    asm ("int $0x80\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(dest), "c"(src), "d"(offset), "S"(length) :);
+    asm ("int $0x81\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(dest), "c"(src), "d"(offset), "S"(length) :);
     return off;
   }
 
@@ -161,7 +161,7 @@ namespace lilycall {
 		 size_t length)
   {
     int result;
-    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_ASSIGN), "b"(dest), "c"(dest_offset), "d"(src), "S"(src_offset), "D"(length) :);
+    asm ("int $0x81\n" : "=a"(result) : "0"(BUFFER_ASSIGN), "b"(dest), "c"(dest_offset), "d"(src), "S"(src_offset), "D"(length) :);
     return result;
   }
 
@@ -170,7 +170,7 @@ namespace lilycall {
   buffer_map (bid_t bid)
   {
     void* ptr;
-    asm ("int $0x80\n" : "=a"(ptr) : "0"(BUFFER_MAP), "b"(bid) :);
+    asm ("int $0x81\n" : "=a"(ptr) : "0"(BUFFER_MAP), "b"(bid) :);
     return ptr;
   }
 
@@ -178,7 +178,7 @@ namespace lilycall {
   buffer_destroy (bid_t bid)
   {
     int result;
-    asm ("int $0x80\n" : "=a"(result) : "0"(BUFFER_DESTROY), "b"(bid) :);
+    asm ("int $0x81\n" : "=a"(result) : "0"(BUFFER_DESTROY), "b"(bid) :);
     return result;
   }
 
@@ -186,7 +186,7 @@ namespace lilycall {
   buffer_size (bid_t bid)
   {
     size_t size;
-    asm ("int $0x80\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :);
+    asm ("int $0x81\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :);
     return size;
   }
 

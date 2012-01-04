@@ -87,12 +87,14 @@ private:
   
   class execution_context {
   private:
-    uint8_t value_buffer_[MAX_COPY_VALUE_SIZE];
     caction action_;
     const automaton::input_action_set_type* input_actions_;
     automaton::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
     bid_t input_buffer_;
+    size_t buffer_size_;
+    uint8_t copy_value_[MAX_COPY_VALUE_SIZE];
+    size_t copy_value_size_;
 
   public:
     execution_context ()
@@ -105,6 +107,8 @@ private:
     {
       action_.action = 0;
       action_.parameter = 0;
+      output_buffer_ = 0;
+      input_buffer_ = -1;
     }
 
     inline const caction&
@@ -121,16 +125,18 @@ private:
     }
 
     inline void
-    finish_action (bool status,
-		   bid_t bid,
-		   const void* buffer)
+    finish_action (const void* copy_value,
+		   size_t copy_value_size,
+		   bid_t buffer,
+		   size_t buffer_size)
     {
       if (action_.action != 0) {	
 	switch (action_.action->type) {
 	case INPUT:
-	  if (action_.action->buffer_value_mode == BUFFER_VALUE) {
+	  if (input_buffer_ != -1) {
 	    // Destroy the buffer.
 	    action_.action->automaton->buffer_destroy (input_buffer_);
+	    input_buffer_ = -1;
 	  }
 	  /* Move to the next input. */
 	  ++input_action_pos_;
@@ -140,37 +146,37 @@ private:
 	    /* Execute.  (This does not return). */
 	    execute ();
 	  }
-	  if (action_.action->buffer_value_mode == BUFFER_VALUE) {
+	  // Finished executing input actions.
+	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
 	    destroy (output_buffer_, kernel_alloc ());
+	    output_buffer_ = 0;
 	  }
 	  break;
 	case OUTPUT:
-	  // Only proceed if the output executed.
-	  // If the output should have produced data (value_size_ != 0), then check that the supplied buffer is valid.
-	  // Finally, the the inputs bound to the output.  If an input exists, proceed with execution.
-	  if (status) {
-	    if (action_.action->buffer_value_mode == BUFFER_VALUE) {
-	      // The output action produced a buffer.  Remove it from the automaton.
-	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bid);
+	  buffer_size_ = buffer_size;
+	  copy_value_size_ = copy_value_size;
+	  if (buffer != -1) {
+	    // The output action produced a buffer.  Remove it from the automaton.
+	    output_buffer_ = action_.action->automaton->buffer_output_destroy (buffer);
+	  }
+	  input_actions_ = action_.action->automaton->get_bound_inputs (action_);
+	  if (input_actions_ != 0) {
+	    if (copy_value_size_ != 0) {
+	      // Copy the value.
+	      memcpy (copy_value_, copy_value, copy_value_size_);
 	    }
-
-	    input_actions_ = action_.action->automaton->get_bound_inputs (action_);
-	    if (input_actions_ != 0) {
-	      if (action_.action->copy_value_mode == COPY_VALUE) {
-		// Copy the value.
-		memcpy (value_buffer_, buffer, action_.action->copy_value_size);
-	      }
-	      /* Load the execution context. */
-	      input_action_pos_ = input_actions_->begin ();
-	      action_ = input_action_pos_->input;
-	      /* Execute.  (This does not return). */
-	      execute ();
-	    }
-	    if (action_.action->buffer_value_mode == BUFFER_VALUE) {
-	      // Destroy the buffer.
-	      destroy (output_buffer_, kernel_alloc ());
-	    }
+	    /* Load the execution context. */
+	    input_action_pos_ = input_actions_->begin ();
+	    action_ = input_action_pos_->input;
+	    /* Execute.  (This does not return). */
+	    execute ();
+	  }
+	  // There were no inputs.
+	  if (output_buffer_ != 0) {
+	    // Destroy the buffer.
+	    destroy (output_buffer_, kernel_alloc ());
+	    output_buffer_ = 0;
 	  }
 	  break;
 	case INTERNAL:
@@ -191,28 +197,34 @@ private:
       // First, they set up the cdecl calling convention for actions.
       // Second, they force the stack to be created if it is not.
 
+
       if (action_.action->type == INPUT) {
-	if (action_.action->copy_value_mode == COPY_VALUE) {
+	void* copy_value = 0;
+	if (copy_value_size_ != 0) {
 	  // Copy the value to the stack.
-	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - action_.action->copy_value_size, STACK_ALIGN)));
-	  memcpy (stack_pointer, value_buffer_, action_.action->copy_value_size);
+	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - copy_value_size_, STACK_ALIGN)));
+	  copy_value = stack_pointer;
+	  memcpy (copy_value, copy_value_, copy_value_size_);
 	}
-	if (action_.action->buffer_value_mode == BUFFER_VALUE) {
+
+	if (output_buffer_ != 0) {
 	  // Copy the buffer to the input automaton.
 	  input_buffer_ = action_.action->automaton->buffer_create (*output_buffer_);
-	  *--stack_pointer = input_buffer_;
 	}
+
+	// Push the buffer size.
+	*--stack_pointer = buffer_size_;
+	// Push the buffer.
+	*--stack_pointer = input_buffer_;	
+
+	// Push the copy value size.
+	*--stack_pointer = copy_value_size_;
+	// Push the pointer to the copy value.
+	*--stack_pointer = reinterpret_cast<uint32_t> (copy_value);
       }
       
-      switch (action_.action->parameter_mode) {
-      case NO_PARAMETER:
-      	break;
-      case PARAMETER:
-      case AUTO_PARAMETER:
-	// Copy the parameter to the stack.
-	*--stack_pointer = static_cast<uint32_t> (action_.parameter);
-	break;
-      }
+      // Push the parameter.
+      *--stack_pointer = static_cast<uint32_t> (action_.parameter);
 
       // Push a bogus instruction pointer so we can use the cdecl calling convention.
       *--stack_pointer = 0;
@@ -286,12 +298,13 @@ public:
   }
   
   static inline void
-  finish (bool status,
-	  bid_t bid,
-	  const void* buffer)
+  finish (const void* copy_value,
+	  size_t copy_value_size,
+	  bid_t buffer,
+	  size_t buffer_size)
   {
     // This call won't return when executing input actions.
-    exec_context_.finish_action (status, bid, buffer);
+    exec_context_.finish_action (copy_value, copy_value_size, buffer, buffer_size);
 
     if (!ready_queue_.empty ()) {
       // Get the automaton context and remove it from the ready queue.

@@ -30,7 +30,7 @@ memcpy (void* dst,
 {
   unsigned char* d = static_cast<unsigned char*> (dst);
   const unsigned char* s = static_cast<const unsigned char*> (src);
-  while (size-- > 0) {
+  while (size-- != 0) {
     *d++ = *s++;
   }
   return dst;

@@ -24,68 +24,87 @@
 
 using namespace std::rel_ops;
 
-// User operating system trap use interrupt 0x80.
-// Privileged operations use interrupt 0x81.
-static const unsigned int SYSCALL_INTERRUPT = 0x80;
-static const unsigned int PRIVCALL_INTERRUPT = 0x81;
+// The interrupt for finishing an action is 0x80.
+// User operating system traps use interrupt 0x81.
+// Privileged operations use interrupt 0x82.
+
+static const unsigned int FINISH_INTERRUPT = 0x80;
+static const unsigned int SYSCALL_INTERRUPT = 0x81;
+static const unsigned int PRIVCALL_INTERRUPT = 0x82;
 
 extern "C" void trap0 ();
 extern "C" void trap1 ();
+extern "C" void trap2 ();
 
 void
 trap_handler::install ()
 {
-  idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
-  idt::set (PRIVCALL_INTERRUPT, make_trap_gate (trap1, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
+  idt::set (FINISH_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
+  idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap1, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
+  idt::set (PRIVCALL_INTERRUPT, make_trap_gate (trap2, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
 }
 
 extern "C" void
 trap_dispatch (volatile registers regs)
 {
   switch (regs.number) {
+  case FINISH_INTERRUPT:
+    {
+      const void* const action_entry_point = reinterpret_cast<const void*> (regs.eax);
+      aid_t const parameter = static_cast<aid_t> (regs.ebx);
+      const void* copy_value = reinterpret_cast<const void*> (regs.ecx);
+      size_t copy_value_size = regs.edx;
+      bid_t buffer = regs.esi;
+      size_t buffer_size = regs.edi;
+      
+      const caction& current = scheduler::current_action ();
+      
+      if (action_entry_point != 0) {
+	// Check the action that was scheduled.
+	automaton::const_action_iterator pos = current.action->automaton->action_find (action_entry_point);
+	if (pos != current.action->automaton->action_end ()) {
+	  scheduler::schedule (caction (*pos, parameter));
+	}
+	else {
+	  // TODO:  Automaton scheduled a bad action.
+	  kassert (0);
+	}
+      }
+
+      if (current.action->type == OUTPUT) {
+	// Check the data produced by an output.
+	if (copy_value != 0) {
+	  if (copy_value_size > MAX_COPY_VALUE_SIZE || (copy_value_size != 0 && !current.action->automaton->verify_span (copy_value, copy_value_size))) {
+	    // TODO:  The automaton produced a bad copy value.
+	    kassert (0);
+	  }
+	}
+	else {
+	  // No copy value was produced.
+	  copy_value = 0;
+	  copy_value_size = 0;
+	}
+
+	const size_t s = current.action->automaton->buffer_size (buffer);
+	if (s != static_cast<size_t> (-1)) {
+	  if (buffer_size > s) {
+	    // TODO:  The action produced a value buffer but claims the size is larger than the size in memory.
+	    kassert (0);
+	  }
+	}
+	else {
+	  // No buffer was produced.
+	  buffer = -1;
+	  buffer_size = 0;
+	}
+      }
+      
+      scheduler::finish (copy_value, copy_value_size, buffer, buffer_size);
+      return;
+    }
+    break;
   case SYSCALL_INTERRUPT:
     switch (regs.eax) {
-    case lilycall::FINISH:
-      {
-	const void* action_entry_point = reinterpret_cast<const void*> (regs.ebx);
-	aid_t parameter = static_cast<aid_t> (regs.ecx);
-	bool status = regs.edx;
-	bid_t bid = regs.esi;
-	const void* buffer = reinterpret_cast<const void*> (regs.edi);
-	
-	const caction& current = scheduler::current_action ();
-	
-	if (action_entry_point != 0) {
-	  // Check the action that was scheduled.
-	  automaton::const_action_iterator pos = current.action->automaton->action_find (action_entry_point);
-	  if (pos != current.action->automaton->action_end ()) {
-	    // Ignore the parameter if NO_PARAMETER.
-	    scheduler::schedule (caction (*pos, ((*pos)->parameter_mode == NO_PARAMETER) ? 0 : parameter));
-	  }
-	  else {
-	    // TODO:  Automaton scheduled a bad action.
-	    kassert (0);
-	  }
-	}
-	
-	if (current.action->type == OUTPUT &&
-	    status) {
-	  if (current.action->copy_value_mode == COPY_VALUE &&
-	      !current.action->automaton->verify_span (buffer, current.action->copy_value_size)) {
-	    // TODO:  Automaton returned a bad copy value.
-	    kassert (0);
-	  }
-	  else if (current.action->buffer_value_mode == BUFFER_VALUE &&
-		   !current.action->automaton->buffer_exists (bid)) {
-	    // TODO:  Automaton returned a bad buffer.
-	    kassert (0);
-	  }
-	}
-	
-	scheduler::finish (status, bid, buffer);
-	return;
-      }
-      break;
     case lilycall::GETPAGESIZE:
       {
 	regs.eax = PAGE_SIZE;

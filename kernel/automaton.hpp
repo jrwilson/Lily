@@ -350,6 +350,7 @@ public:
   verify_span (const void* ptr,
 	       size_t size) const
   {
+    kassert (size != 0);
     const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
     memory_map_type::const_iterator pos = find_address (address);
     return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();
@@ -375,18 +376,14 @@ public:
 
   bool
   add_action (const char* name,
+	      const char* description,
 	      action_type_t action_type,
 	      const void* action_entry_point,
-	      parameter_mode_t parameter_mode,
-	      buffer_value_mode_t buffer_value_mode,
-	      const char* buffer_value_type,
-	      copy_value_mode_t copy_value_mode,
-	      const char* copy_value_type,
-	      size_t copy_value_size)
+	      parameter_mode_t parameter_mode)
   {
-    if (aep_to_action_map_.find (action_entry_point) != aep_to_action_map_.end () &&
-	name_to_action_map_.find (name) != name_to_action_map_.end ()) {
-      paction* ac = new (kernel_alloc ()) paction (this, name, action_type, action_entry_point, parameter_mode, buffer_value_mode, buffer_value_type, copy_value_mode, copy_value_type, copy_value_size);
+    if (name_to_action_map_.find (name) == name_to_action_map_.end () &&
+	aep_to_action_map_.find (action_entry_point) == aep_to_action_map_.end ()) {
+      paction* ac = new (kernel_alloc ()) paction (this, name, description, action_type, action_entry_point, parameter_mode);
       aep_to_action_map_.insert (std::make_pair (ac->action_entry_point, ac));
       return true;
     }

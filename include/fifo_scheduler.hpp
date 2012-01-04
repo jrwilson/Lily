@@ -81,18 +81,19 @@ private:
   }
 
   void
-  finish_ (bool status,
-	   bid_t bid,
-	   const void* buffer)
+  finish_ (const void* copy_value,
+	   size_t copy_value_size,
+	   bid_t buffer,
+	   size_t buffer_size)
   {
     if (!queue_.empty ()) {
       /* Schedule. */
       const entry& e = queue_.front ();
-      lilycall::finish (e.action_entry_point, e.parameter, status, bid, buffer);
+      lilycall::finish (e.action_entry_point, e.parameter, copy_value, copy_value_size, buffer, buffer_size);
     }
     else {
       /* Don't schedule. */
-      lilycall::finish (0, -1, status, bid, buffer);
+      lilycall::finish (0, -1, copy_value, copy_value_size, buffer, buffer_size);
     }
   }
 
@@ -131,47 +132,26 @@ public:
     remove_ (reinterpret_cast<const void*> (action_entry_point), aid_cast (parameter));
   }
 
-  template <class Action>
   void
   finish ()
   {
-    static_assert (is_action<Action>::value, "Action is not an action");
-    finish_ (false, -1, 0);
+    finish_ (0, 0, -1, 0);
   }
 
-  template <class OutputAction>
   void
   finish (bool status)
   {
-    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE, "finish expects an output action without a buffer or copy value");
-    finish_ (status, -1, 0);
+    finish_ (status ? reinterpret_cast<const void*> (1) : 0, 0, -1, 0);
   }
 
-  template <class OutputAction>
   void
-  finish (bid_t bid)
+  finish (const void* copy_value,
+	  size_t copy_value_size,
+	  bid_t buffer,
+	  size_t buffer_size)
   {
-    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == NO_COPY_VALUE, "finish expects output action with buffer value");
-    finish_ (true, bid, 0);
+    finish_ (copy_value, copy_value_size, buffer, buffer_size);
   }
-
-  template <class OutputAction>
-  void
-  finish (const typename OutputAction::copy_value_type* buffer)
-  {
-    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == NO_BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE, "finish expects output action with copy value");
-    finish_ (true, -1, buffer);
-  }
-
-  template <class OutputAction>
-  void
-  finish (bid_t bid,
-	  const typename OutputAction::copy_value_type* buffer)
-  {
-    static_assert (is_output_action<OutputAction>::value && OutputAction::buffer_value_mode == BUFFER_VALUE && OutputAction::copy_value_mode == COPY_VALUE, "finish expects output action with buffer and copy values");
-    finish_ (true, bid, buffer);
-  }
-
 };
 
 #endif /* __fifo_scheduler_hpp__ */

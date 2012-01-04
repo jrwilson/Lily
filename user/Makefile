@@ -12,19 +12,15 @@ TARGETS=init_automaton
 .PHONY : all
 all : $(TARGETS)
 
-init_automaton : init_automaton.o init_automaton.action_info
+init_automaton : init_automaton.o
 	$(LD) $(LDFLAGS) -o $@ $^
-
-%.action_info : %.cpp
-	$(CXX) -g -Wall -I../include -std=c++0x -DNOTE $< -o $(basename $<).tmp -L../lib -lnote
-	./$(basename $<).tmp | as -o $@ --
 
 %.o : %.cpp
 	$(CXX) -o $@ -c $< $(CXXFLAGS)
 
 .PHONY : clean
 clean :
-	-rm -f $(TARGETS) *.o *.action_info *.tmp
+	-rm -f $(TARGETS) *.o
 
 .PHONY : depclean
 depclean :

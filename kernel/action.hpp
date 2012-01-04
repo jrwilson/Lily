@@ -11,35 +11,23 @@ struct paction {
   // If size becomes a problem we can bit-pack the various modes.
   ::automaton* const automaton;
   kstring const name;
+  kstring const description;
   action_type_t const type;
   const void* const action_entry_point;
   parameter_mode_t const parameter_mode;
-  buffer_value_mode_t const buffer_value_mode;
-  kstring const buffer_value_type;
-  copy_value_mode_t const copy_value_mode;
-  kstring const copy_value_type;
-  size_t const copy_value_size;
 
   paction (::automaton* a,
 	   const char* n,
+	   const char* d,
 	   action_type_t t,
 	   const void* aep,
-	   parameter_mode_t pm,
-	   buffer_value_mode_t bvm,
-	   const char* bvt,
-	   copy_value_mode_t cvm,
-	   const char* cvt,
-	   size_t vs) :
+	   parameter_mode_t pm) :
     automaton (a),
     name (n),
+    description (d),
     type (t),
     action_entry_point (aep),
-    parameter_mode (pm),
-    buffer_value_mode (bvm),
-    buffer_value_type (bvt),
-    copy_value_mode (cvm),
-    copy_value_type (cvt),
-    copy_value_size (vs)
+    parameter_mode (pm)
   { }
 
 private:
