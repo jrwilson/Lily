@@ -17,6 +17,7 @@ irq\irq_num:
 irq_common_stub:
 	# Push the processor state.
 	pusha
+	# TODO:  Is all this segment manipulation necessary?
 	# Push the old data segment.
 	mov %ds, %ax
 	push %eax
@@ -26,7 +27,6 @@ irq_common_stub:
 	mov %ax, %es
 	mov %ax, %fs
 	mov %ax, %gs
-	# TODO:  What about the stack segment?
 	call irq_handler
 	# Pop the old data segment.
 	pop %eax

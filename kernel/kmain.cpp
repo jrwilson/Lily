@@ -31,8 +31,6 @@
 // Symbols to build the kernel's memory map.
 extern int text_begin;
 extern int text_end;
-extern int rodata_begin;
-extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
@@ -233,11 +231,6 @@ kmain (uint32_t multiboot_magic,
 	  true,
 	  vm::NOT_WRITABLE);
   
-    mark (reinterpret_cast<logical_address_t> (&rodata_begin),
-	  reinterpret_cast<logical_address_t> (&rodata_end),
-	  true,
-	  vm::NOT_WRITABLE);
-  
     mark (reinterpret_cast<logical_address_t> (&data_begin),
 	  reinterpret_cast<logical_address_t> (&data_end),
 	  true,
@@ -275,8 +268,8 @@ kmain (uint32_t multiboot_magic,
   system_automaton::create_system_automaton (automaton_buffer, automaton_size, data_buffer, data_size);
 
   // Release the buffers.
-  destroy (automaton_buffer, kernel_alloc ());
-  destroy (data_buffer, kernel_alloc ());
+  kdestroy (automaton_buffer, kernel_alloc ());
+  kdestroy (data_buffer, kernel_alloc ());
 
   // Start the scheduler.  Doesn't return.
   scheduler::finish (0, 0, -1, 0);

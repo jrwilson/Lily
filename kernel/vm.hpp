@@ -17,7 +17,7 @@
 #include "vm_def.hpp"
 #include "kassert.hpp"
 #include "frame_manager.hpp"
-#include "privcall.hpp"
+#include "sacall.hpp"
 
 namespace vm {
   struct page_directory;
@@ -229,7 +229,7 @@ namespace vm {
   {
     return get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_;
   }
-    
+
   inline logical_address_t
   get_stub1 (void)
   {
@@ -287,7 +287,7 @@ namespace vm {
       }
       
       // Flush the TLB.
-      privcall::invlpg (reinterpret_cast<logical_address_t> (pt));
+      sacall::invlpg (reinterpret_cast<logical_address_t> (pt));
       // Initialize the page table.
       new (pt) vm::page_table ();
     }
@@ -298,7 +298,7 @@ namespace vm {
     pt->entry[table_entry] = page_table_entry (fr, privilege, writable, PRESENT);
     frame_manager::incref (fr);
     // Flush the TLB.
-    privcall::invlpg (logical_addr);
+    sacall::invlpg (logical_addr);
   }
 
   inline void
@@ -316,7 +316,7 @@ namespace vm {
 
     page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, privilege, writable, PRESENT);
     /* Flush the TLB. */
-    privcall::invlpg (logical_addr);
+    sacall::invlpg (logical_addr);
   }
 
   inline void
@@ -364,7 +364,7 @@ namespace vm {
     }
     page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
     /* Flush the TLB. */
-    privcall::invlpg (logical_addr);
+    sacall::invlpg (logical_addr);
   }
 
   inline void

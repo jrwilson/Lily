@@ -94,8 +94,6 @@ private:
   aid_t aid_;
   // Frame that contains the automaton's page directory.
   frame_t const page_directory_frame_;
-  // Flag indicating if the automaton can execute privileged instructions.
-  bool privileged_;
   // Map from action entry point (aep) to action.
   typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, kernel_allocator<std::pair<const void* const, const paction* const> > > aep_to_action_map_type;
   aep_to_action_map_type aep_to_action_map_;
@@ -109,6 +107,8 @@ private:
   vm_heap_area* heap_area_;
   // Stack area.
   vm_stack_area* stack_area_;
+  // Stub area.
+  vm_stub_area* stub_area_;
 
   // Bound outputs.
 public:
@@ -209,13 +209,12 @@ private:
 public:
 
   automaton (aid_t aid,
-	     frame_t page_directory_frame,
-	     bool privileged) :
+	     frame_t page_directory_frame) :
     aid_ (aid),
     page_directory_frame_ (page_directory_frame),
-    privileged_ (privileged),
     heap_area_ (0),
     stack_area_ (0),
+    stub_area_ (0),
     current_bid_ (0)
   { }
 
@@ -227,7 +226,7 @@ public:
     for (bid_to_buffer_map_type::iterator pos = bid_to_buffer_map_.begin ();
 	 pos != bid_to_buffer_map_.end ();
 	 ++pos) {
-      destroy (pos->second, kernel_alloc ());
+      kdestroy (pos->second, kernel_alloc ());
     }
   }
 
@@ -241,12 +240,6 @@ public:
   page_directory_frame () const
   {
     return page_directory_frame_;
-  }
-
-  bool
-  can_execute_privileged () const
-  {
-    return privileged_;
   }
 
   logical_address_t
@@ -308,6 +301,18 @@ public:
     }
   }
 
+  bool
+  insert_stub_area (vm_stub_area* area)
+  {
+    if (insert_vm_area (area)) {
+      stub_area_ = area;
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
   void*
   sbrk (ptrdiff_t size)
   {
@@ -361,9 +366,10 @@ public:
 	      vm::page_fault_error_t error,
 	      volatile registers* regs)
   {
+    kassert (stub_area_ != 0);
     memory_map_type::const_iterator pos = find_address (address);
     if (pos != memory_map_.end ()) {
-      (*pos)->page_fault (address, error, regs);
+      (*pos)->page_fault (address, error, regs, stub_area_->begin ());
     }
     else {
       kout << "Page Fault" << endl;
@@ -736,7 +742,7 @@ public:
       bid_to_buffer_map_.erase (bpos);
 
       // Destroy it.
-      destroy (b, kernel_alloc ());
+      kdestroy (b, kernel_alloc ());
 
       return 0;
     }
@@ -763,6 +769,14 @@ public:
   buffer_exists (bid_t bid)
   {
     return bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ();
+  }
+
+  const buffer*
+  lookup_buffer (bid_t bid)
+  {
+    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
+    kassert (bpos != bid_to_buffer_map_.end ());
+    return bpos->second;
   }
 
 };

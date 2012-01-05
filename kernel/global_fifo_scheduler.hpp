@@ -149,7 +149,7 @@ private:
 	  // Finished executing input actions.
 	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
-	    destroy (output_buffer_, kernel_alloc ());
+	    kdestroy (output_buffer_, kernel_alloc ());
 	    output_buffer_ = 0;
 	  }
 	  break;
@@ -175,7 +175,7 @@ private:
 	  // There were no inputs.
 	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
-	    destroy (output_buffer_, kernel_alloc ());
+	    kdestroy (output_buffer_, kernel_alloc ());
 	    output_buffer_ = 0;
 	  }
 	  break;

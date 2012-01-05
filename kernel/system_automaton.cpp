@@ -15,12 +15,12 @@
 #include "fifo_scheduler.hpp"
 #include "automaton.hpp"
 #include "scheduler.hpp"
+#include "elf.hpp"
+#include <queue>
 
 // Symbols to build memory maps.
 extern int text_begin;
 extern int text_end;
-extern int rodata_begin;
-extern int rodata_end;
 extern int data_begin;
 extern int data_end;
 
@@ -31,67 +31,70 @@ initialize_allocator (void);
 // Heap location for system automata.
 // Starting at 4MB allow us to use the low page table of the kernel.
 static const logical_address_t SYSTEM_HEAP_BEGIN = FOUR_MEGABYTES;
-  
-// Stack range for system automata.
-static const logical_address_t SYSTEM_STACK_BEGIN = KERNEL_VIRTUAL_BASE - PAGE_SIZE;
-static const logical_address_t SYSTEM_STACK_END = KERNEL_VIRTUAL_BASE;
 
-static aid_t current_aid_;
-static system_automaton::aid_map_type aid_map_;
+// The stub is an unused page-sized region above the stack used for copying pages, etc.
+static const logical_address_t STUB_END = KERNEL_VIRTUAL_BASE;
+static const logical_address_t STUB_BEGIN = STUB_END - PAGE_SIZE;
 
+// The stack is right blow the stub.
+static const logical_address_t STACK_END = STUB_BEGIN;
+static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
+
+// For loading the first automaton.
 static bid_t automaton_bid_;
 static size_t automaton_size_;
 static bid_t data_bid_;
 static size_t data_size_;
 
+// The scheduler.
 typedef fifo_scheduler scheduler_type;
 static scheduler_type* scheduler_ = 0;
 
-typedef std::deque<automaton*> init_queue_type;
-static init_queue_type* init_queue_ = 0;
+// For creating automata and allocating them an aid.
+static aid_t current_aid_;
+static system_automaton::aid_map_type aid_map_;
 
-struct create_item {
-  bid_t bid;
-  size_t automaton_size;
-  size_t data_size;
+enum privilege_t {
+  NORMAL,
+  PRIVILEGED,
+};
 
-  create_item (bid_t b,
-	       size_t a,
-	       size_t d) :
+// Queue of create requests.
+struct create_request_item {
+  automaton* const parent;		// Automaton creating this automaton.
+  bid_t const bid;			// Buffer containing the text and initialization data.
+  size_t const automaton_offset;	// Offset and size of the automaton.
+  size_t const automaton_size;
+  size_t const data_offset;		// Offset and size of the automaton.
+  size_t const data_size;
+  privilege_t const privilege;		// Requested privilege level.
+
+  create_request_item (automaton* p,
+		       bid_t b,
+		       size_t a_o,
+		       size_t a_s,
+		       size_t d_o,
+		       size_t d_s,
+		       privilege_t priv) :
+    parent (p),
     bid (b),
-    automaton_size (a),
-    data_size (d)
+    automaton_offset (a_o),
+    automaton_size (a_s),
+    data_offset (d_o),
+    data_size (d_s),
+    privilege (priv)
   { }
 };
-typedef std::deque<create_item> create_queue_type;
-static create_queue_type* create_queue_ = 0;
+typedef std::queue<create_request_item> create_request_queue_type;
+static create_request_queue_type* create_request_queue_ = 0;
+
+// Queue of automata that need to be initialized.
+typedef std::queue<automaton*> init_queue_type;
+static init_queue_type* init_queue_ = 0;
 
 static automaton*
-create_automaton (bool privcall,
-		  vm::page_privilege_t map_privilege,
-		  vm::page_privilege_t kernel_privilege)
+create_automaton (frame_t frame)
 {
-  // Allocate a frame.
-  frame_t frame = frame_manager::alloc ();
-  // Map the page directory.
-  vm::map (vm::get_stub1 (), frame, vm::USER, vm::WRITABLE);
-  vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
-  // Initialize the page directory.
-  // If the second argument is vm::USER, the automaton can access the paging area, i.e., manipulate virtual memory.
-  // If the second argument is vm::SUPERVISOR, the automaton cannot.
-  // This is useful for the system automaton because it maps in frames to create page directories by calling this function.
-  // However, it is not necessary as it can be done using buffers.
-  new (pd) vm::page_directory (frame, map_privilege);
-  // Initialize the page directory with a copy of the kernel.
-  // If the third argument is vm::USER, the automaton gains access to kernel data.
-  // If the third argument is vm::SUPERVISOR, the automaton does not.
-  vm::copy_page_directory (pd, vm::get_kernel_page_directory (), kernel_privilege);
-  // Unmap.
-  vm::unmap (vm::get_stub1 ());
-  // Drop the reference count from allocation.
-  size_t count = frame_manager::decref (frame);
-  kassert (count == 1);
-    
   // Generate an id.
   aid_t aid = current_aid_;
   while (aid_map_.find (aid) != aid_map_.end ()) {
@@ -100,7 +103,7 @@ create_automaton (bool privcall,
   current_aid_ = std::max (aid + 1, 0);
     
   // Create the automaton and insert it into the map.
-  automaton* a = new (kernel_alloc ()) automaton (aid, frame, privcall);
+  automaton* a = new (kernel_alloc ()) automaton (aid, frame);
   aid_map_.insert (std::make_pair (aid, a));
     
   // Add to the scheduler.
@@ -125,7 +128,7 @@ schedule ();
 typedef action_traits<internal_action> first_traits;
 #define FIRST_TRAITS first_traits
 #define FIRST_NAME "first"
-#define FIRST_DESCRIPTION "description"
+#define FIRST_DESCRIPTION ""
 #define FIRST_ACTION M_INTERNAL
 #define FIRST_PARAMETER M_NO_PARAMETER
 extern "C" void first (no_param_t);
@@ -134,7 +137,7 @@ ACTION_DESCRIPTOR (FIRST, first);
 typedef action_traits<input_action, auto_parameter> create_request_traits;
 #define CREATE_REQUEST_TRAITS create_request_traits
 #define CREATE_REQUEST_NAME "create_request"
-#define CREATE_REQUEST_DESCRIPTION "description"
+#define CREATE_REQUEST_DESCRIPTION "TODO: create_request description"
 #define CREATE_REQUEST_ACTION M_INPUT
 #define CREATE_REQUEST_PARAMETER M_AUTO_PARAMETER
 extern "C" void create_request (aid_t, void*, size_t, bid_t, size_t);
@@ -143,7 +146,7 @@ ACTION_DESCRIPTOR (CREATE_REQUEST, create_request);
 typedef action_traits<internal_action> create_traits;
 #define CREATE_TRAITS create_traits
 #define CREATE_NAME "create"
-#define CREATE_DESCRIPTION "description"
+#define CREATE_DESCRIPTION ""
 #define CREATE_ACTION M_INTERNAL
 #define CREATE_PARAMETER M_NO_PARAMETER
 extern "C" void create (no_param_t);
@@ -152,7 +155,7 @@ ACTION_DESCRIPTOR (CREATE, create);
 typedef action_traits<output_action, parameter<automaton*> > init_traits;
 #define INIT_TRAITS init_traits
 #define INIT_NAME "init"
-#define INIT_DESCRIPTION "description"
+#define INIT_DESCRIPTION "TODO: init description"
 #define INIT_ACTION M_OUTPUT
 #define INIT_PARAMETER M_PARAMETER
 extern "C" void init (automaton*);
@@ -161,11 +164,92 @@ ACTION_DESCRIPTOR (INIT, init);
 typedef action_traits<output_action, auto_parameter> create_response_traits;
 #define CREATE_RESPONSE_TRAITS create_response_traits
 #define CREATE_RESPONSE_NAME "create_response"
-#define CREATE_RESPONSE_DESCRIPTION "description"
+#define CREATE_RESPONSE_DESCRIPTION "TODO: create_response description"
 #define CREATE_RESPONSE_ACTION M_OUTPUT
 #define CREATE_RESPONSE_PARAMETER M_AUTO_PARAMETER
 extern "C" void create_response (aid_t);
 ACTION_DESCRIPTOR (CREATE_RESPONSE, create_response);
+
+typedef action_traits<input_action, auto_parameter> bind_request_traits;
+#define BIND_REQUEST_TRAITS bind_request_traits
+#define BIND_REQUEST_NAME "bind_request"
+#define BIND_REQUEST_DESCRIPTION "TODO: bind_request description"
+#define BIND_REQUEST_ACTION M_INPUT
+#define BIND_REQUEST_PARAMETER M_AUTO_PARAMETER
+extern "C" void bind_request (aid_t, void*, size_t, bid_t, size_t);
+ACTION_DESCRIPTOR (BIND_REQUEST, bind_request);
+
+typedef action_traits<internal_action> bind_traits;
+#define BIND_TRAITS bind_traits
+#define BIND_NAME "bind"
+#define BIND_DESCRIPTION ""
+#define BIND_ACTION M_INTERNAL
+#define BIND_PARAMETER M_NO_PARAMETER
+extern "C" void bind (no_param_t);
+ACTION_DESCRIPTOR (BIND, bind);
+
+typedef action_traits<output_action, auto_parameter> bind_response_traits;
+#define BIND_RESPONSE_TRAITS bind_response_traits
+#define BIND_RESPONSE_NAME "bind_response"
+#define BIND_RESPONSE_DESCRIPTION "TODO: bind_response description"
+#define BIND_RESPONSE_ACTION M_OUTPUT
+#define BIND_RESPONSE_PARAMETER M_AUTO_PARAMETER
+extern "C" void bind_response (aid_t);
+ACTION_DESCRIPTOR (BIND_RESPONSE, bind_response);
+
+typedef action_traits<input_action, auto_parameter> loose_request_traits;
+#define LOOSE_REQUEST_TRAITS loose_request_traits
+#define LOOSE_REQUEST_NAME "loose_request"
+#define LOOSE_REQUEST_DESCRIPTION "TODO: loose_request description"
+#define LOOSE_REQUEST_ACTION M_INPUT
+#define LOOSE_REQUEST_PARAMETER M_AUTO_PARAMETER
+extern "C" void loose_request (aid_t, void*, size_t, bid_t, size_t);
+ACTION_DESCRIPTOR (LOOSE_REQUEST, loose_request);
+
+typedef action_traits<internal_action> loose_traits;
+#define LOOSE_TRAITS loose_traits
+#define LOOSE_NAME "loose"
+#define LOOSE_DESCRIPTION ""
+#define LOOSE_ACTION M_INTERNAL
+#define LOOSE_PARAMETER M_NO_PARAMETER
+extern "C" void loose (no_param_t);
+ACTION_DESCRIPTOR (LOOSE, loose);
+
+typedef action_traits<output_action, auto_parameter> loose_response_traits;
+#define LOOSE_RESPONSE_TRAITS loose_response_traits
+#define LOOSE_RESPONSE_NAME "loose_response"
+#define LOOSE_RESPONSE_DESCRIPTION "TODO: loose_response description"
+#define LOOSE_RESPONSE_ACTION M_OUTPUT
+#define LOOSE_RESPONSE_PARAMETER M_AUTO_PARAMETER
+extern "C" void loose_response (aid_t);
+ACTION_DESCRIPTOR (LOOSE_RESPONSE, loose_response);
+
+typedef action_traits<input_action, auto_parameter> destroy_request_traits;
+#define DESTROY_REQUEST_TRAITS destroy_request_traits
+#define DESTROY_REQUEST_NAME "destroy_request"
+#define DESTROY_REQUEST_DESCRIPTION "TODO: destroy_request description"
+#define DESTROY_REQUEST_ACTION M_INPUT
+#define DESTROY_REQUEST_PARAMETER M_AUTO_PARAMETER
+extern "C" void destroy_request (aid_t, void*, size_t, bid_t, size_t);
+ACTION_DESCRIPTOR (DESTROY_REQUEST, destroy_request);
+
+typedef action_traits<internal_action> destroy_traits;
+#define DESTROY_TRAITS destroy_traits
+#define DESTROY_NAME "destroy"
+#define DESTROY_DESCRIPTION ""
+#define DESTROY_ACTION M_INTERNAL
+#define DESTROY_PARAMETER M_NO_PARAMETER
+extern "C" void destroy (no_param_t);
+ACTION_DESCRIPTOR (DESTROY, destroy);
+
+typedef action_traits<output_action, auto_parameter> destroy_response_traits;
+#define DESTROY_RESPONSE_TRAITS destroy_response_traits
+#define DESTROY_RESPONSE_NAME "destroy_response"
+#define DESTROY_RESPONSE_DESCRIPTION "TODO: destroy_response description"
+#define DESTROY_RESPONSE_ACTION M_OUTPUT
+#define DESTROY_RESPONSE_PARAMETER M_AUTO_PARAMETER
+extern "C" void destroy_response (aid_t);
+ACTION_DESCRIPTOR (DESTROY_RESPONSE, destroy_response);
 
 extern "C" void
 first (no_param_t)
@@ -175,13 +259,13 @@ first (no_param_t)
 
   // Allocate a scheduler.
   scheduler_ = new scheduler_type ();
+  create_request_queue_ = new create_request_queue_type ();
   init_queue_ = new init_queue_type ();
-  create_queue_ = new create_queue_type ();
 
   // Create the initial automaton.
   bid_t b = lilycall::buffer_copy (automaton_bid_, 0, automaton_size_);
-  lilycall::buffer_append (b, data_bid_, 0, data_size_);
-  create_queue_->push_back (create_item (b, automaton_size_, data_size_));
+  const size_t data_offset = lilycall::buffer_append (b, data_bid_, 0, data_size_);
+  create_request_queue_->push (create_request_item (0, b, 0, automaton_size_, data_offset, data_size_, PRIVILEGED));
   lilycall::buffer_destroy (automaton_bid_);
   lilycall::buffer_destroy (data_bid_);
 
@@ -192,125 +276,31 @@ first (no_param_t)
 extern "C" void
 create_request (aid_t, void*, size_t, bid_t, size_t)
 {
+  // TODO
   kout << __func__ << endl;
   kassert (0);
+
+  // Automaton and data should be page aligned.
+  // if (align_up (item.automaton_size, PAGE_SIZE) + align_up (item.data_size, PAGE_SIZE) != buffer_size) {
+  //   // TODO:  Sizes are not correct.
+  //   kassert (0);
+  // }
+
+    // if (item.automaton_size < sizeof (elf::header) || item.automaton_size > MAX_AUTOMATON_SIZE) {
+    //   // TODO:  Automaton is too small or large, i.e., we can't map it in.
+    //   kassert (0);
+    // }
 }
 
 static bool
 create_precondition (void)
 {
-  return !create_queue_->empty ();
+  return !create_request_queue_->empty ();
 }
 
 // The image of an automaton must be smaller than this.
 // I picked this number arbitrarily.
 static const size_t MAX_AUTOMATON_SIZE = 0x8000000;
-
-// I stole this from Linkers and Loaders (John R. Levine, p. 64).
-namespace elf {
-  static const char MAGIC[4] = { '\177', 'E', 'L', 'F' };
-    
-  enum width {
-    BIT32 = 1,
-    BIT64 = 2,
-  };
-
-  enum byte_order {
-    LITTLE_END = 1,
-    BIG_END = 2,
-  };
-
-  enum filetype {
-    RELOCATABLE = 1,
-    EXECUTABLE = 2,
-    SHARED_OBJECT = 3,
-    CORE_IMAGE = 4
-  };
-
-  enum archtype {
-    SPARC = 2,
-    X86 = 3,
-    M68K = 4,
-  };
-
-  struct header {
-    char magic[4];
-    char width;				// See width above.
-    char byte_order;				// See byte_order above.
-    char header_version;			// Header version (always 1).
-    char pad[9];
-    uint16_t filetype;			// See filtype above.
-    uint16_t archtype;			// See archtype above.
-    uint32_t file_version;			// File version (always 1).
-    uint32_t entry_point;			// Entry point.
-    uint32_t program_header_offset;		// Offset of the program header.
-    uint32_t section_header_offset;		// Offset of the section header.
-    uint32_t flags;				// Architecture specific flags.
-    uint16_t header_size;			// Size of this header.
-    uint16_t program_header_entry_size;	// Size of an entry in the program header.
-    uint16_t program_header_entry_count;	// Number of entries in the program header.
-    uint16_t section_header_entry_size;	// Size of an entry in the section header.
-    uint16_t section_header_entry_count;	// Number of entries in the section header.
-    uint16_t string_section;			// Section number that contains section name strings.
-  };
-
-  enum segment_type {
-    NULL_ENTRY = 0,
-    LOAD = 1,
-    DYNAMIC = 2,
-    INTERP = 3,
-    NOTE = 4,
-    SHLIB = 5,
-    PHDR = 6,
-  };
-
-  enum permission {
-    EXECUTE = 1,
-    WRITE = 2,
-    READ = 4,
-  };
-
-  struct program {
-    uint32_t type;			// See segment_type above.
-    uint32_t offset;			// File offset of segment.
-    uint32_t virtual_address;		// Virtual address of segment.
-    uint32_t physical_address;	// Physical address of segment.
-    uint32_t file_size;		// Size of the segment in the file.
-    uint32_t memory_size;		// Size of the segment in memory.
-    uint32_t flags;			// Read, write, execute bits.
-    uint32_t alignment;		// Required alignment.
-  };
-
-  struct note {
-    uint32_t name_size;
-    uint32_t desc_size;
-    uint32_t type;
-
-    const char*
-    name () const
-    {
-      if (name_size != 0) {
-	return reinterpret_cast<const char*> (&type + 1);
-      }
-      else {
-	return 0;
-      }
-    }
-
-    const void*
-    desc () const
-    {
-      return name () + align_up (name_size, 4);
-    }
-
-    const note*
-    next () const
-    {
-      return reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (this) + sizeof (elf::note) + align_up (name_size, 4) + align_up (desc_size, 4));
-    }
-  };
-
-}
 
 extern "C" void
 create (no_param_t)
@@ -318,169 +308,165 @@ create (no_param_t)
   scheduler_->remove<create_traits> (&create);
 
   if (create_precondition ()) {
-    const create_item& item = create_queue_->front ();
-    const size_t buffer_size = lilycall::buffer_size (item.bid);
+    const create_request_item item = create_request_queue_->front ();
+    create_request_queue_->pop ();
 
-    if (buffer_size == static_cast<size_t> (-1)) {
-      // TODO:  Bad buffer.
+    // Create a page directory.
+    frame_t frame;
+    {
+      // Create a buffer and map it in.
+      bid_t bid = lilycall::buffer_create (sizeof (vm::page_directory));
+      kassert (bid != -1);
+      vm::page_directory* pd = static_cast<vm::page_directory*> (lilycall::buffer_map (bid));
+      // Force the mapping by writing to it.
+      pd->entry[PAGE_ENTRY_COUNT - 1].frame_ = 1;
+      // Now we can get the frame associated with the page directory.
+      frame = vm::logical_address_to_frame (reinterpret_cast<logical_address_t> (pd));
+      // Initialize the page directory.
+      // If the second argument is vm::USER, the automaton can access the paging area, i.e., manipulate virtual memory.
+      // If the second argument is vm::SUPERVISOR, the automaton cannot.
+      new (pd) vm::page_directory (frame, vm::SUPERVISOR /*map_privilege*/);
+      // Initialize the page directory with a copy of the kernel.
+      // If the third argument is vm::USER, the automaton gains access to kernel data.
+      // If the third argument is vm::SUPERVISOR, the automaton does not.
+      vm::copy_page_directory (pd, vm::get_kernel_page_directory (), vm::SUPERVISOR /*kernel_privilege*/);
+      
+      // At this point the frame has a reference count of 3 from the following sources.
+      //   buffer
+      //   virtual memory
+      //   page directory self reference
+      
+      // Destroy the buffer.
+      lilycall::buffer_destroy (bid);
+      
+      // The frame now has a reference count of 1.
+    }
+
+    // Create the automaton.
+    automaton* child = create_automaton (frame);
+
+    // Split the buffer.
+    bid_t automaton_bid = lilycall::buffer_copy (item.bid, item.automaton_offset, item.automaton_size);
+    bid_t data_bid = lilycall::buffer_copy (item.bid, item.data_offset, item.data_size);
+
+    // Get the actual buffer because we need to inspect the frames.
+    const buffer* automaton_buffer = system_automaton::instance->lookup_buffer (automaton_bid);
+
+    // Map the automaton program.  Must succeed.
+    const uint8_t* a = static_cast<const uint8_t*> (lilycall::buffer_map (automaton_bid));
+    kassert (a != 0);
+
+    // Parse the automaton.
+    elf::header_parser hp (a + item.automaton_offset, item.automaton_size);
+    if (!hp.parse ()) {
+      // TODO
       kassert (0);
     }
 
-    if (buffer_size == 0) {
-      // TODO:  Empty buffer.
-      kassert (0);
+    // First pass:  Loadable sections.
+    for (const elf::program_header_entry* e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
+      if (e->type == elf::LOAD &&
+	  e->memory_size != 0) {
+
+	if (e->permissions & elf::EXECUTE) {
+	  // Create an area for code.
+	  vm_text_area* area = new (kernel_alloc ()) vm_text_area (e->virtual_address, e->virtual_address + e->memory_size);
+
+	  // Assign frames.
+	  for (size_t s = 0; s < e->file_size; s += PAGE_SIZE) {
+	    kout << "assigning frame " << automaton_buffer->frame_at_offset (e->offset + s) << endl;
+	  }
+	}
+	else {
+	  // Data.
+	  //vm_data_area* area = new (kernel_alloc ()) vm_data_area (begin, end);
+	}
+      }
     }
 
-    if (align_up (item.automaton_size, PAGE_SIZE) + align_up (item.data_size, PAGE_SIZE) != buffer_size) {
-      // TODO:  Sizes are not correct.
-      kassert (0);
-    }
+    kout << "item.bid = " << item.bid << endl;
+    kout << "frame = " << frame << endl;
+    kout << "child = " << hexformat (child) << endl;
+    kout << "automaton_bid = " << automaton_bid << endl;
+    kout << "data_bind = " << data_bid << endl;
 
-    if (item.automaton_size < sizeof (elf::header) || item.automaton_size > MAX_AUTOMATON_SIZE) {
-      // TODO:  Automaton is too small or large, i.e., we can't map it in.
-      kassert (0);
-    }
-
-    // Split the buffers.
-    bid_t automaton_bid = lilycall::buffer_copy (item.bid, 0, item.automaton_size);
-    bid_t data_bid = lilycall::buffer_copy (item.bid, align_up (item.automaton_size, PAGE_SIZE), item.data_size);
+    kassert (0);
 
     // Destroy the old buffer.
     lilycall::buffer_destroy (item.bid);
 
-    // Map the automaton.  Must succeed.
-    const elf::header* h = static_cast<const elf::header*> (lilycall::buffer_map (automaton_bid));
-    kassert (h != 0);
 
-    if (strncmp (h->magic, elf::MAGIC, sizeof (elf::MAGIC)) != 0) {
-      // TODO:  We only support ELF.
-      kassert (0);
-    }
 
-    if (h->width != elf::BIT32) {
-      // TODO:  We only support 32-bit.
-      kassert (0);
-    }
+    // const elf::program* p = reinterpret_cast<const elf::program*> (reinterpret_cast<const uint8_t*> (h) + h->program_header_offset);
+    // for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
+    //   switch (p->type) {
+    //   case elf::LOAD:
 
-    if (h->byte_order != elf::LITTLE_END) {
-      // TODO:  We only support little-endian.
-      kassert (0);
-    }
+    // 	kout << " offset = " << hexformat (p->offset)
+    // 	     << " virtual_address = " << hexformat (p->virtual_address)
+    // 	     << " file_size = " << hexformat (p->file_size)
+    // 	     << " memory_size = " << hexformat (p->memory_size);
 
-    if (h->filetype != elf::EXECUTABLE) {
-      // TODO:  We only support executable_files.
-      kassert (0);
-    }
+    // 	if (p->flags & elf::EXECUTE) {
+    // 	  kout << " execute";
+    // 	}
+    // 	if (p->flags & elf::WRITE) {
+    // 	  kout << " write";
+    // 	}
+    // 	if (p->flags & elf::READ) {
+    // 	  kout << " read";
+    // 	}
 
-    if (h->archtype != elf::X86) {
-      // TODO:  We only support x86.
-      kassert (0);
-    }
+    // 	kout << endl;
 
-    if (h->header_size != sizeof (elf::header)) {
-      // TODO:  Perhaps we need to fix the code.
-      kassert (0);
-    }
+    // 	if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
+    // 	  // TODO:  Segment location not reported correctly.
+    // 	  kassert (0);
+    // 	}
 
-    if (h->program_header_entry_size != sizeof (elf::program)) {
-      // TODO:  Perhaps we need to fix the code.
-      kassert (0);
-    }
+    // 	if (p->alignment != PAGE_SIZE) {
+    // 	  // TODO:  We only support PAGE_SIZE alignment.
+    // 	  kassert (0);
+    // 	}
 
-    if (h->program_header_offset + h->program_header_entry_size * h->program_header_entry_count > item.automaton_size) {
-      // TODO:  The program headers are not reported correctly.
-      kassert (0);
-    }
+    // 	if (p->file_size != 0 && !is_aligned (p->offset, p->alignment)) {
+    // 	  // TODO:  Section is not aligned properly.
+    // 	  kassert (0);
+    // 	}
 
-    if (h->section_header_offset + h->section_header_entry_size * h->section_header_entry_count > item.automaton_size) {
-      // TODO:  The section headers are not reported correctly.
-      kassert (0);
-    }
+    // 	if (!is_aligned (p->virtual_address, p->alignment)) {
+    // 	  // TODO:  Section is not aligned properly.
+    // 	  kassert (0);
+    // 	}
 
-    const elf::program* p = reinterpret_cast<const elf::program*> (reinterpret_cast<const uint8_t*> (h) + h->program_header_offset);
-    for (size_t idx = 0; idx < h->program_header_entry_count; ++idx, ++p) {
-      switch (p->type) {
-      case elf::LOAD:
+    // 	break;
+    //   case elf::NOTE:
+    // 	{
+    // 	  if (p->offset + p->file_size > item.automaton_size) {
+    // 	    // TODO:  Segment location not reported correctly.
+    // 	    kassert (0);
+    // 	  }
 
-	kout << " offset = " << hexformat (p->offset)
-	     << " virtual_address = " << hexformat (p->virtual_address)
-	     << " file_size = " << hexformat (p->file_size)
-	     << " memory_size = " << hexformat (p->memory_size);
+    // 	  const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
+    // 	  const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
 
-	if (p->flags & elf::EXECUTE) {
-	  kout << " execute";
-	}
-	if (p->flags & elf::WRITE) {
-	  kout << " write";
-	}
-	if (p->flags & elf::READ) {
-	  kout << " read";
-	}
-
-	kout << endl;
-
-	if (p->file_size != 0 && p->offset + p->file_size > item.automaton_size) {
-	  // TODO:  Segment location not reported correctly.
-	  kassert (0);
-	}
-
-	if (p->alignment != PAGE_SIZE) {
-	  // TODO:  We only support PAGE_SIZE alignment.
-	  kassert (0);
-	}
-
-	if (p->file_size != 0 && !is_aligned (p->offset, p->alignment)) {
-	  // TODO:  Section is not aligned properly.
-	  kassert (0);
-	}
-
-	if (!is_aligned (p->virtual_address, p->alignment)) {
-	  // TODO:  Section is not aligned properly.
-	  kassert (0);
-	}
-
-	break;
-      case elf::NOTE:
-	{
-	  if (p->offset + p->file_size > item.automaton_size) {
-	    // TODO:  Segment location not reported correctly.
-	    kassert (0);
-	  }
-
-	  const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
-	  const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
-
-	  while (note_begin < note_end) {
-	    // If the next one is in range, this one is safe to process.
-	    if (note_begin->next () <= note_end) {
-	      const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
-	      kout << "NOTE name = " << note_begin->name ()
-		   << " type = " << hexformat (note_begin->type)
-		   << " desc_size = " << note_begin->desc_size
-		   << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
-	    }
-	    note_begin = note_begin->next ();
-	  }
-	}
-	break;
-      }
-    }
-
-    kout << "program_header_offset = " << h->program_header_offset << endl;
-    kout << "section_header_offset = " << h->section_header_offset << endl;
-
-    kout << "program_header_entry_size = " << h->program_header_entry_size << endl;
-    kout << "program_header_entry_count = " << h->program_header_entry_count << endl;
-    kout << "section_header_entry_size = " << h->section_header_entry_size << endl;
-    kout << "section_header_entry_count = " << h->section_header_entry_count << endl;
-    kout << "string_section = " << h->string_section << endl;
-
-    // kout << automaton_bid << "\t" << item.automaton_size << endl;
-    // kout << data_bid << "\t" << item.data_size << endl;
+    // 	  while (note_begin < note_end) {
+    // 	    // If the next one is in range, this one is safe to process.
+    // 	    if (note_begin->next () <= note_end) {
+    // 	      const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
+    // 	      kout << "NOTE name = " << note_begin->name ()
+    // 		   << " type = " << hexformat (note_begin->type)
+    // 		   << " desc_size = " << note_begin->desc_size
+    // 		   << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
+    // 	    }
+    // 	    note_begin = note_begin->next ();
+    // 	  }
+    // 	}
+    // 	break;
+    //   }
+    // }
 
     kassert (0);
-
-    create_queue_->pop_front ();
   }
 
   schedule ();
@@ -490,6 +476,7 @@ create (no_param_t)
 extern "C" void
 init (automaton* p)
 {
+  // TODO
   kassert (0);
   // scheduler_->remove<init_traits> (&init, p);
   // kassert (p == init_queue_->front ());
@@ -501,6 +488,79 @@ init (automaton* p)
 extern "C" void
 create_response (aid_t)
 {
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+bind_request (aid_t, void*, size_t, bid_t, size_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+bind (no_param_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+bind_response (aid_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+loose_request (aid_t, void*, size_t, bid_t, size_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+loose (no_param_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+loose_response (aid_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+destroy_request (aid_t, void*, size_t, bid_t, size_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+destroy (no_param_t)
+{
+  // TODO
+  kout << __func__ << endl;
+  kassert (0);
+}
+
+extern "C" void
+destroy_response (aid_t)
+{
+  // TODO
   kout << __func__ << endl;
   kassert (0);
 }
@@ -517,6 +577,8 @@ schedule ()
 }
 
 namespace system_automaton {
+
+  automaton* instance;
 
   const_automaton_iterator
   automaton_begin ()
@@ -536,11 +598,29 @@ namespace system_automaton {
 			   buffer* data_buffer,
 			   size_t data_size)
   {
+    // Automaton can manipulate virtual memory.  (Could be done with buffers but this way is more direct.)
+    // Automaton can access kernel data.  (That is where its code/data reside.)
+    
+    // Allocate a frame.
+    frame_t frame = frame_manager::alloc ();
+    // Map the page directory.
+    vm::map (vm::get_stub1 (), frame, vm::USER, vm::WRITABLE);
+    vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
+    // Initialize the page directory.
+    // Since the second argument is vm::USER, the automaton can access the paging area, i.e., manipulate virtual memory.
+    new (pd) vm::page_directory (frame, vm::USER);
+    // Initialize the page directory with a copy of the kernel.
+    // Since, the third argument is vm::USER, the automaton gains access to kernel data.
+    vm::copy_page_directory (pd, vm::get_kernel_page_directory (), vm::USER);
+    // Unmap.
+    vm::unmap (vm::get_stub1 ());
+    // Drop the reference count from allocation.
+    size_t count = frame_manager::decref (frame);
+    kassert (count == 1);
+
     // Create the automaton.
     // Automaton can execute privileged instructions.  (Needed when system allocator calls invlpg when mapping).
-    // Automaton can manipulate virtual memory.  (Could be done with buffers but this way is more direct.)
-    // Automaton can access kernel data.  (That is where the code/data reside.)
-    automaton* system_automaton_ = create_automaton (true, vm::USER, vm::USER);
+    instance = create_automaton (frame);
 
     // Create the memory map.
     vm_area_base* area;
@@ -549,49 +629,69 @@ namespace system_automaton {
     // Text.
     area = new (kernel_alloc ()) vm_text_area (reinterpret_cast<logical_address_t> (&text_begin),
 					       reinterpret_cast<logical_address_t> (&text_end));
-    r = system_automaton_->insert_vm_area (area);
-    kassert (r);
-    
-    // Read-only data.
-    area = new (kernel_alloc ()) vm_rodata_area (reinterpret_cast<logical_address_t> (&rodata_begin),
-						 reinterpret_cast<logical_address_t> (&rodata_end));
-    r = system_automaton_->insert_vm_area (area);
+    r = instance->insert_vm_area (area);
     kassert (r);
     
     // Data.
     area = new (kernel_alloc ()) vm_data_area (reinterpret_cast<logical_address_t> (&data_begin),
 					       reinterpret_cast<logical_address_t> (&data_end));
-    r = system_automaton_->insert_vm_area (area);
+    r = instance->insert_vm_area (area);
     kassert (r);
 
     // Heap.
     vm_heap_area* heap_area = new (kernel_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
-    r = system_automaton_->insert_heap_area (heap_area);
+    r = instance->insert_heap_area (heap_area);
     kassert (r);
     
     // Stack.
-    vm_stack_area* stack_area = new (kernel_alloc ()) vm_stack_area (SYSTEM_STACK_BEGIN, SYSTEM_STACK_END);
-    r = system_automaton_->insert_stack_area (stack_area);
+    vm_stack_area* stack_area = new (kernel_alloc ()) vm_stack_area (STACK_BEGIN, STACK_END);
+    r = instance->insert_stack_area (stack_area);
     kassert (r);
     
+    vm_stub_area* stub_area = new (kernel_alloc ()) vm_stub_area (STUB_BEGIN, STUB_END);
+    r = instance->insert_stub_area (stub_area);
+    kassert (r);
+
     // Add the actions.
-    r = system_automaton_->add_action (FIRST_NAME, FIRST_DESCRIPTION, first_traits::action_type, reinterpret_cast<const void*> (&first), first_traits::parameter_mode);
+    r = instance->add_action (FIRST_NAME, FIRST_DESCRIPTION, first_traits::action_type, reinterpret_cast<const void*> (&first), first_traits::parameter_mode);
     kassert (r);
-    r = system_automaton_->add_action (CREATE_REQUEST_NAME, CREATE_REQUEST_DESCRIPTION, create_request_traits::action_type, reinterpret_cast<const void*> (&create_request), create_request_traits::parameter_mode);
+
+    r = instance->add_action (CREATE_REQUEST_NAME, CREATE_REQUEST_DESCRIPTION, create_request_traits::action_type, reinterpret_cast<const void*> (&create_request), create_request_traits::parameter_mode);
     kassert (r);
-    r = system_automaton_->add_action (CREATE_NAME, CREATE_DESCRIPTION, create_traits::action_type, reinterpret_cast<const void*> (&create), create_traits::parameter_mode);
+    r = instance->add_action (CREATE_NAME, CREATE_DESCRIPTION, create_traits::action_type, reinterpret_cast<const void*> (&create), create_traits::parameter_mode);
     kassert (r);
-    r = system_automaton_->add_action (INIT_NAME, INIT_DESCRIPTION, init_traits::action_type, reinterpret_cast<const void*> (&init), init_traits::parameter_mode);
+    r = instance->add_action (INIT_NAME, INIT_DESCRIPTION, init_traits::action_type, reinterpret_cast<const void*> (&init), init_traits::parameter_mode);
     kassert (r);
-    r = system_automaton_->add_action (CREATE_RESPONSE_NAME, CREATE_RESPONSE_DESCRIPTION, create_response_traits::action_type, reinterpret_cast<const void*> (&create_response), create_response_traits::parameter_mode);
+    r = instance->add_action (CREATE_RESPONSE_NAME, CREATE_RESPONSE_DESCRIPTION, create_response_traits::action_type, reinterpret_cast<const void*> (&create_response), create_response_traits::parameter_mode);
+    kassert (r);
+
+    r = instance->add_action (BIND_REQUEST_NAME, BIND_REQUEST_DESCRIPTION, bind_request_traits::action_type, reinterpret_cast<const void*> (&bind_request), bind_request_traits::parameter_mode);
+    kassert (r);
+    r = instance->add_action (BIND_NAME, BIND_DESCRIPTION, bind_traits::action_type, reinterpret_cast<const void*> (&bind), bind_traits::parameter_mode);
+    kassert (r);
+    r = instance->add_action (BIND_RESPONSE_NAME, BIND_RESPONSE_DESCRIPTION, bind_response_traits::action_type, reinterpret_cast<const void*> (&bind_response), bind_response_traits::parameter_mode);
+    kassert (r);
+
+    r = instance->add_action (LOOSE_REQUEST_NAME, LOOSE_REQUEST_DESCRIPTION, loose_request_traits::action_type, reinterpret_cast<const void*> (&loose_request), loose_request_traits::parameter_mode);
+    kassert (r);
+    r = instance->add_action (LOOSE_NAME, LOOSE_DESCRIPTION, loose_traits::action_type, reinterpret_cast<const void*> (&loose), loose_traits::parameter_mode);
+    kassert (r);
+    r = instance->add_action (LOOSE_RESPONSE_NAME, LOOSE_RESPONSE_DESCRIPTION, loose_response_traits::action_type, reinterpret_cast<const void*> (&loose_response), loose_response_traits::parameter_mode);
+    kassert (r);
+
+    r = instance->add_action (DESTROY_REQUEST_NAME, DESTROY_REQUEST_DESCRIPTION, destroy_request_traits::action_type, reinterpret_cast<const void*> (&destroy_request), destroy_request_traits::parameter_mode);
+    kassert (r);
+    r = instance->add_action (DESTROY_NAME, DESTROY_DESCRIPTION, destroy_traits::action_type, reinterpret_cast<const void*> (&destroy), destroy_traits::parameter_mode);
+    kassert (r);
+    r = instance->add_action (DESTROY_RESPONSE_NAME, DESTROY_RESPONSE_DESCRIPTION, destroy_response_traits::action_type, reinterpret_cast<const void*> (&destroy_response), destroy_response_traits::parameter_mode);
     kassert (r);
     
     // Bootstrap.
-    checked_schedule (system_automaton_, reinterpret_cast<const void*> (&first));
+    checked_schedule (instance, reinterpret_cast<const void*> (&first));
 
-    automaton_bid_ = system_automaton_->buffer_create (*automaton_buffer);
+    automaton_bid_ = instance->buffer_create (*automaton_buffer);
     automaton_size_ = automaton_size;
-    data_bid_ = system_automaton_->buffer_create (*data_buffer);
+    data_bid_ = instance->buffer_create (*data_buffer);
     data_size_ = data_size;
   }
 

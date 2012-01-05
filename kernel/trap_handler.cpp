@@ -21,16 +21,17 @@
 #include "automaton.hpp"
 #include "scheduler.hpp"
 #include "syscall.hpp"
+#include "system_automaton.hpp"
 
 using namespace std::rel_ops;
 
 // The interrupt for finishing an action is 0x80.
-// User operating system traps use interrupt 0x81.
-// Privileged operations use interrupt 0x82.
+// Operating system traps use interrupt 0x81.
+// Certain operations of the system automaton use interrupt 0x82.
 
 static const unsigned int FINISH_INTERRUPT = 0x80;
 static const unsigned int SYSCALL_INTERRUPT = 0x81;
-static const unsigned int PRIVCALL_INTERRUPT = 0x82;
+static const unsigned int SACALL_INTERRUPT = 0x82;
 
 extern "C" void trap0 ();
 extern "C" void trap1 ();
@@ -41,7 +42,7 @@ trap_handler::install ()
 {
   idt::set (FINISH_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
   idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap1, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
-  idt::set (PRIVCALL_INTERRUPT, make_trap_gate (trap2, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
+  idt::set (SACALL_INTERRUPT, make_trap_gate (trap2, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
 }
 
 extern "C" void
@@ -173,10 +174,10 @@ trap_dispatch (volatile registers regs)
       break;
     }
     break;
-  case PRIVCALL_INTERRUPT:
-    if (scheduler::current_action ().action->automaton->can_execute_privileged ()) {
+  case SACALL_INTERRUPT:
+    if (scheduler::current_action ().action->automaton == system_automaton::instance) {
       switch (regs.eax) {
-      case privcall::INVLPG:
+      case sacall::INVLPG:
 	{
 	  asm ("invlpg (%0)\n" :: "r"(regs.ebx));
 	  return;
@@ -185,7 +186,7 @@ trap_dispatch (volatile registers regs)
       }
     }
     else {
-      // TODO:  Unprivileged automaton tried to execute privileged instruction.
+      // An automaton other than the system automaton tried to execute a special instruction.
       kassert (0);
     }
     break;

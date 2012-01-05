@@ -23,6 +23,9 @@ class automaton;
 class buffer;
 
 namespace system_automaton {
+  
+  extern automaton* instance;
+
   typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, kernel_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
 
   class const_automaton_iterator : public std::iterator<std::forward_iterator_tag, const automaton> {

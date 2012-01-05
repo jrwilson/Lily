@@ -47,8 +47,10 @@ public:
   virtual void
   page_fault (logical_address_t,
 	      vm::page_fault_error_t,
-	      volatile registers*)
+	      volatile registers*,
+	      logical_address_t)
   {
+    // TODO
     kassert (0);
   }
 };
@@ -57,14 +59,6 @@ class vm_text_area : public vm_area_base {
 public:
   vm_text_area (logical_address_t begin,
 		logical_address_t end) :
-    vm_area_base (begin, end)
-  { }
-};
-
-class vm_rodata_area : public vm_area_base {
-public:
-  vm_rodata_area (logical_address_t begin,
-		  logical_address_t end) :
     vm_area_base (begin, end)
   { }
 };
@@ -93,10 +87,13 @@ public:
   void
   page_fault (logical_address_t address,
 	      vm::page_fault_error_t error,
-	      volatile registers*)
+	      volatile registers*,
+	      logical_address_t)
   {
+    // TODO
     // Fault should come from not being present.
     kassert (vm::not_present (error));
+    // TODO
     // Fault should come from data.
     kassert (vm::data_context (error));
     // Back the request with a frame.
@@ -116,10 +113,13 @@ public:
   void
   page_fault (logical_address_t address,
 	      vm::page_fault_error_t error,
-	      volatile registers*)
+	      volatile registers*,
+	      logical_address_t)
   {
+    // TODO
     // Fault should come from not being present.
     kassert (vm::not_present (error));
+    // TODO
     // Fault should come from data.
     kassert (vm::data_context (error));
     // Back the request with a frame.
@@ -127,6 +127,14 @@ public:
     // Clear the frame.
     memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
+};
+
+class vm_stub_area : public vm_area_base {
+public:
+  vm_stub_area (logical_address_t begin,
+		logical_address_t end) :
+    vm_area_base (begin, end)
+  { }
 };
 
 #endif /* __vm_area_hpp__ */

@@ -462,8 +462,8 @@ operator new[] (size_t sz,
 
 template <class T>
 inline void
-destroy (T* p,
-	 const kernel_alloc& la)
+kdestroy (T* p,
+	  const kernel_alloc& la)
 {
   if (p != 0) {
     p->~T ();

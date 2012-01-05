@@ -14,6 +14,7 @@ PHDRS
 	setup PT_LOAD FLAGS (7) ;
 	text PT_LOAD FLAGS (5);
 	data PT_LOAD FLAGS (6);
+	action_info PT_NOTE ;
 }
 
 SECTIONS
@@ -37,13 +38,12 @@ SECTIONS
 		text_begin = .;
 		*(.text*)
 		*(.gnu.linkonce.t*)
-		text_end = .;
+
 	} :text
 
-	/* Place the readonly data on page boundary physically after the previous segment but logically after 0xC0000000. */
-	.rodata ALIGN (0x1000) : AT(ADDR(.rodata) - 0xC0000000)
+	/* Place the initialized data on page boundary physically after the previous segment but logically after 0xC0000000. */
+	.rodata : AT(ADDR(.rodata) - 0xC0000000)
 	{
-		rodata_begin = .;
 		ctors_begin = .;
 		*(.ctor*)
 		ctors_end = .;
@@ -52,7 +52,7 @@ SECTIONS
 		dtors_end = .;
 		*(.rodata*)
 		*(.gnu.linkonce.r*)
-		rodata_end = .;
+		text_end = .;
 	} :text
 
 	/* Place the initialized data on page boundary physically after the previous segment but logically after 0xC0000000. */
@@ -64,7 +64,7 @@ SECTIONS
 	} :data
 
 	/* Place the uninitialized data on a page boundary physically after the previous segment but logically after 0xC0000000. */
-	.bss ALIGN (0x1000) : AT(ADDR(.bss) - 0xC0000000)
+	.bss : AT(ADDR(.bss) - 0xC0000000)
 	{
 		bss_begin = .;
 		*(COMMON)
@@ -73,6 +73,11 @@ SECTIONS
 		bss_end = .;
 		data_end = .;
 	} :data
+
+	.action_info :
+	{
+		*(.action_info)
+	} :action_info
 
 	/DISCARD/ :
 	{

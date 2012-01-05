@@ -1,10 +1,10 @@
-#ifndef __privcall_hpp__
-#define __privcall_hpp__
+#ifndef __sacall_hpp__
+#define __sacall_hpp__
 
 /*
   File
   ----
-  privcall.hpp
+  sacall.hpp
   
   Description
   -----------
@@ -17,7 +17,7 @@
 #include "vm_def.hpp"
 #include "descriptor.hpp"
 
-namespace privcall {
+namespace sacall {
   
   enum {
     INVLPG,
@@ -39,4 +39,4 @@ namespace privcall {
 
 }
 
-#endif /* __privcall_hpp__ */
+#endif /* __sacall_hpp__ */

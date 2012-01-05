@@ -20,15 +20,12 @@ SECTIONS
 
 	.text ALIGN (0x1000) :
 	{
-		text_begin = .;
 		*(.text*)
 		*(.gnu.linkonce.t*)
-		text_end = .;
 	} :text
 
-	.rodata ALIGN (0x1000) :
+	.rodata :
 	{
-		rodata_begin = .;
 		ctors_begin = .;
 		*(.ctor*)
 		ctors_end = .;
@@ -37,7 +34,6 @@ SECTIONS
 		dtors_end = .;
 		*(.rodata*)
 		*(.gnu.linkonce.r*)
-		rodata_end = .;
 	} :text
 
 	.data ALIGN (0x1000) :
@@ -47,7 +43,7 @@ SECTIONS
 		*(.gnu.linkonce.d*)
 	} :data
 
-	.bss ALIGN (0x1000) :
+	.bss :
 	{
 		bss_begin = .;
 		*(COMMON)

@@ -3,7 +3,7 @@
 
 #include "vm_area.hpp"
 
-// TODO:  The zero frame might be over-referenced.  Consider allocating a new one to keep the reference count in range.
+// TODO:  Don't increment/decrement the zero frame.
 
 class buffer : public vm_area_base {
 public:
@@ -108,7 +108,8 @@ public:
   virtual void
   page_fault (logical_address_t address,
 	      vm::page_fault_error_t error,
-	      volatile registers*)
+	      volatile registers*,
+	      logical_address_t stub)
   {
     kassert (vm::data_context (error));
 
@@ -131,13 +132,13 @@ public:
 	frame_t dst = frame_manager::alloc ();
 	frame_t src = frame_list_[idx].frame_;
 	// Map the src to the stub.
-	vm::map (vm::get_stub1 (), src, vm::USER, vm::NOT_WRITABLE);
+	vm::map (stub, src, vm::USER, vm::NOT_WRITABLE);
 	// Map the dst to the address.
 	vm::map (address, dst, vm::USER, vm::WRITABLE);
 	// Copy.
-	memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
+	memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (stub), PAGE_SIZE);
 	// Unmap the src and decrement its reference count.
-	vm::unmap (vm::get_stub1 ());
+	vm::unmap (stub);
 	frame_manager::decref (src);
 	// Record the dst.
 	frame_list_[idx].frame_ = dst;
@@ -153,12 +154,12 @@ public:
       // Exactly the same as previous copy except...
       frame_t dst = frame_manager::alloc ();
       frame_t src = frame_list_[idx].frame_;
-      vm::map (vm::get_stub1 (), src, vm::USER, vm::NOT_WRITABLE);
+      vm::map (stub, src, vm::USER, vm::NOT_WRITABLE);
       // we need to unmap the current frame to make room.
       vm::unmap (address);
       vm::map (address, dst, vm::USER, vm::WRITABLE);
-      memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (vm::get_stub1 ()), PAGE_SIZE);
-      vm::unmap (vm::get_stub1 ());
+      memcpy (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), reinterpret_cast<const void*> (stub), PAGE_SIZE);
+      vm::unmap (stub);
       frame_manager::decref (src);
       frame_list_[idx].frame_ = dst;
       frame_list_[idx].writable_ = vm::WRITABLE;
@@ -183,6 +184,11 @@ public:
     }
   }
 
+  frame_t
+  frame_at_offset (size_t offset) const
+  {
+    return frame_list_[offset / PAGE_SIZE].frame_;
+  }
 private:
   // The frames.
   typedef std::vector<vm::page_table_entry, kernel_allocator<vm::page_table_entry> > frame_list_type;
@@ -217,7 +223,6 @@ private:
       frame_manager::incref (frame_list_[begin].frame_);
     }
   }
-
 };
 
 #endif /* __buffer_hpp__ */

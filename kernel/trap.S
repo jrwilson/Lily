@@ -16,6 +16,7 @@ trap\trap_num:
 trap_common_stub:
 	# Push the processor state.
 	pusha
+	# TODO:  Is all this segment manipulation necessary?
 	# Push the old data segment.
 	mov %ds, %ax
 	push %eax
@@ -25,7 +26,6 @@ trap_common_stub:
 	mov %ax, %es
 	mov %ax, %fs
 	mov %ax, %gs
-	# TODO:  What about the stack segment?
 	call trap_dispatch
 	# Pop the old data segment.
 	pop %eax
