@@ -100,7 +100,7 @@ private:
 public:
   template <class LocalAction>
   void
-  add (void (*action_entry_point) (void))
+  add (void (*action_entry_point) (no_param_t))
   {
     static_assert (is_local_action<LocalAction>::value && LocalAction::parameter_mode == NO_PARAMETER, "add expects an unparameterized local action");
     add_ (reinterpret_cast<const void*> (action_entry_point), 0);
@@ -117,7 +117,7 @@ public:
 
   template <class LocalAction>
   void
-  remove (void (*action_entry_point) (void))
+  remove (void (*action_entry_point) (no_param_t))
   {
     static_assert (is_local_action<LocalAction>::value && LocalAction::parameter_mode == NO_PARAMETER, "remove expects an unparameterized local action");
     remove_ (reinterpret_cast<const void*> (action_entry_point), 0);

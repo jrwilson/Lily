@@ -456,6 +456,11 @@ The system automaton can then split the buffer and proceed.
 
 Optimize clearing/copying pages (rep stos).
 
+Maximum buffer count
+Maximum buffer size
+Maximum lengths of action names and descriptions
+Maximum number of actions
+Etc.
 
 Two irritating things:
 I was forced to use rtti to appease the shared_ptr implementation.

@@ -1,6 +1,6 @@
 #include <action_traits.hpp>
 
-typedef action_traits<input_action, no_parameter, null_type, void> init_traits;
+typedef action_traits<input_action, no_parameter> init_traits;
 #define INIT_TRAITS init_traits
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION "description"
@@ -8,9 +8,8 @@ typedef action_traits<input_action, no_parameter, null_type, void> init_traits;
 #define INIT_PARAMETER M_NO_PARAMETER
 
 extern "C" void
-init (void)
+init (no_param_t, void*, size_t, bid_t, size_t)
 {
   asm ("hlt\n");
 }
 ACTION_DESCRIPTOR (INIT, init);
-
