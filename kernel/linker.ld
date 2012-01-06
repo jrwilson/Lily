@@ -47,9 +47,9 @@ SECTIONS
 		ctors_begin = .;
 		*(.ctor*)
 		ctors_end = .;
-		dtors_begin = .;
+		/*dtors_begin = .;
 		*(.dtor*)
-		dtors_end = .;
+		dtors_end = .;*/
 		*(.rodata*)
 		*(.gnu.linkonce.r*)
 		text_end = .;

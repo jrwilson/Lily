@@ -17,10 +17,14 @@ kernel_alloc::sbrk (size_t size)
   // Check to make sure we don't run out of logical address space.
   kassert (heap_end_ <= heap_limit_);
   if (backing_) {
+    // Switch to the kernel page directory.
+    physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
     // Back with frames.
     for (size_t x = 0; x != size; x += PAGE_SIZE) {
       vm::map (retval + x, frame_manager::alloc (), vm::USER, vm::WRITABLE);
     }
+    // Switch back.
+    vm::switch_to_directory (old);
   }
   
   return reinterpret_cast<void*> (retval);

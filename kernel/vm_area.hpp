@@ -55,22 +55,6 @@ public:
   }
 };
 
-class vm_text_area : public vm_area_base {
-public:
-  vm_text_area (logical_address_t begin,
-		logical_address_t end) :
-    vm_area_base (begin, end)
-  { }
-};
-
-class vm_data_area : public vm_area_base {
-public:
-  vm_data_area (logical_address_t begin,
-		logical_address_t end) :
-    vm_area_base (begin, end)
-  { }
-};
-
 class vm_heap_area : public vm_area_base {
 public:
   vm_heap_area (logical_address_t begin) :
@@ -127,14 +111,6 @@ public:
     // Clear the frame.
     memset (reinterpret_cast<void*> (align_down (address, PAGE_SIZE)), 0x00, PAGE_SIZE);
   }
-};
-
-class vm_stub_area : public vm_area_base {
-public:
-  vm_stub_area (logical_address_t begin,
-		logical_address_t end) :
-    vm_area_base (begin, end)
-  { }
 };
 
 #endif /* __vm_area_hpp__ */

@@ -38,6 +38,8 @@
 
 	# Paging structures.
 	.balign 4096, 0
+	.global kpd
+kpd:
 	.global kernel_page_directory
 kernel_page_directory:
 	.space 4096, 0
@@ -96,7 +98,7 @@ loop2:
 	.section .text
 highhalf:	
 	# Setup the stack in order to call kmain.
-	add KERNEL_VIRTUAL_BASE, %esp
+	add $KERNEL_VIRTUAL_BASE, %esp
 	
 	# Import the kmain symbol.
 	.extern kmain

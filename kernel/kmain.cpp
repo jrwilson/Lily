@@ -23,7 +23,7 @@
 #include "irq_handler.hpp"
 #include "trap_handler.hpp"
 #include "frame_manager.hpp"
-#include "system_automaton.hpp"
+#include "rts.hpp"
 #include "scheduler.hpp"
 
 #include <math.h>
@@ -265,7 +265,7 @@ kmain (uint32_t multiboot_magic,
   kernel_alloc::engage_vm (PAGING_AREA);
 
   // Create the system automaton.
-  system_automaton::create_system_automaton (automaton_buffer, automaton_size, data_buffer, data_size);
+  rts::create_system_automaton (automaton_buffer, automaton_size, data_buffer, data_size);
 
   // Release the buffers.
   kdestroy (automaton_buffer, kernel_alloc ());

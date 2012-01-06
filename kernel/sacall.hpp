@@ -8,33 +8,46 @@
   
   Description
   -----------
-  The system automaton needs access to certain privileged instructions.
+  System calls for the system automaton.
 
   Authors:
   Justin R. Wilson
 */
 
-#include "vm_def.hpp"
-#include "descriptor.hpp"
+#include "bid.hpp"
 
 namespace sacall {
   
   enum {
-    INVLPG,
+    CREATE,
+    BIND,
+    LOOSE,
+    DESTROY,
   };
 
   inline void
-  invlpg (logical_address_t address)
+  create (bid_t automaton_bid,
+	  size_t automaton_size)
   {
-    uint16_t cs;
-    asm ("mov %%cs, %0\n" : "=g"(cs) ::);
-    if ((cs & descriptor::RING3) == descriptor::RING0) {
-      // Privileged mode.
-      asm ("invlpg (%0)\n" :: "r"(address));
-    }
-    else {
-      asm ("int $0x82\n" : : "a"(INVLPG), "b"(address) :);
-    }
+    asm ("int $0x82\n" : : "a"(CREATE), "b"(automaton_bid), "c"(automaton_size) :);
+  }
+
+  inline void
+  bind (void)
+  {
+    asm ("int $0x82\n" : : "a"(BIND) :);
+  }
+
+  inline void
+  loose (void)
+  {
+    asm ("int $0x82\n" : : "a"(LOOSE) :);
+  }
+
+  inline void
+  destroy (void)
+  {
+    asm ("int $0x82\n" : : "a"(DESTROY) :);
   }
 
 }

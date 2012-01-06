@@ -25,7 +25,7 @@ trap_handler.o \
 trap.o \
 stack_allocator.o \
 frame_manager.o \
-vm.o \
+rts.o \
 global_fifo_scheduler.o \
 kmain.o \
 system_automaton.o

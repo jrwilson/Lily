@@ -182,34 +182,31 @@ namespace vm {
     page_directory_entry entry[PAGE_ENTRY_COUNT];
 
     page_directory (frame_t frame,
-		    page_privilege_t privilege)
+		    page_privilege_t paging_area_privilege,
+		    page_privilege_t kernel_data_privilege)
     {
+      // The kernel page directory.
+      const page_directory* src = reinterpret_cast<page_directory*> (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE);
+      // Avoid the last entry.
+      for (page_table_idx_t idx = get_page_directory_entry (KERNEL_VIRTUAL_BASE); idx != PAGE_ENTRY_COUNT - 1; ++idx) {
+	if (src->entry[idx].present_ == PRESENT) {
+	  entry[idx] = src->entry[idx];
+	  frame_manager::incref (entry[idx].frame_);
+	  entry[idx].user_ = kernel_data_privilege;
+	}
+      }
+
       // Map the page directory to itself.
-      entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, privilege, PRESENT);
+      entry[PAGE_ENTRY_COUNT - 1] = page_directory_entry (frame, paging_area_privilege, PRESENT);
       frame_manager::incref (frame);
     }
   };
 
-  inline void
-  copy_page_directory (page_directory* dst,
-		       page_directory* src,
-		       page_privilege_t privilege)
+  inline physical_address_t
+  get_kernel_page_directory_physical_address (void)
   {
-    // Avoid the last entry.
-    for (page_table_idx_t idx = 0; idx != PAGE_ENTRY_COUNT - 1; ++idx) {
-      if (src->entry[idx].present_ == PRESENT && dst->entry[idx].present_ == NOT_PRESENT) {
-	dst->entry[idx] = src->entry[idx];
-	frame_manager::incref (dst->entry[idx].frame_);
-	dst->entry[idx].user_ = privilege;
-      }
-    }
+    return reinterpret_cast<physical_address_t> (&kernel_page_directory);
   }
-
-  inline page_directory*
-  get_kernel_page_directory (void)
-  {
-    return reinterpret_cast<page_directory*> (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE);
-  };
 
   inline page_directory*
   get_page_directory (void)
@@ -237,6 +234,13 @@ namespace vm {
     return reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE;
   }
 
+  // inline logical_address_t
+  // get_stub2 (void)
+  // {
+  //   // Reuse the address space of the zero frame.
+  //   return reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE;
+  // }
+
   inline frame_t
   zero_frame ()
   {
@@ -257,9 +261,6 @@ namespace vm {
     return pt->entry[table_entry].frame_;
   }
 
-  void
-  expand_kernel (page_table_idx_t directory_entry);
-
   inline void
   map (logical_address_t logical_addr,
        frame_t fr,
@@ -272,22 +273,9 @@ namespace vm {
     const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
 
     if (page_directory->entry[directory_entry].present_ == NOT_PRESENT) {
-      // We need to allocate a new page table.
-      if (logical_addr < KERNEL_VIRTUAL_BASE) {
-	// User space.
-	page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
-      }
-      else {
-	// Kernel space.
-	// Whenever we allocate a new page table for the kernel, we map it into all page directories.
-	// This prevents page faults in kernel space and seems to simplify the code.
-	// The drawback is that it is proportional to the number of automata in the system.
-	// However, it only occurs for every 4MB of allocation.
-	expand_kernel (directory_entry);
-      }
-      
+      page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
       // Flush the TLB.
-      sacall::invlpg (reinterpret_cast<logical_address_t> (pt));
+      asm ("invlpg (%0)\n" :: "r"(pt));
       // Initialize the page table.
       new (pt) vm::page_table ();
     }
@@ -298,7 +286,7 @@ namespace vm {
     pt->entry[table_entry] = page_table_entry (fr, privilege, writable, PRESENT);
     frame_manager::incref (fr);
     // Flush the TLB.
-    sacall::invlpg (logical_addr);
+    asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
 
   inline void
@@ -316,7 +304,7 @@ namespace vm {
 
     page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, privilege, writable, PRESENT);
     /* Flush the TLB. */
-    sacall::invlpg (logical_addr);
+    asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
 
   inline void
@@ -364,14 +352,17 @@ namespace vm {
     }
     page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
     /* Flush the TLB. */
-    sacall::invlpg (logical_addr);
+    asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
 
-  inline void
-  switch_to_directory (frame_t frame)
+  inline physical_address_t
+  switch_to_directory (physical_address_t n)
   {
-    /* Switch to the page directory. */
-    asm ("mov %0, %%cr3\n" :: "g"(frame_to_physical_address (frame)));
+    /* Switch to the page directory returning the old one. */
+    physical_address_t old;
+    asm ("mov %%cr3, %0\n"
+	 "mov %1, %%cr3\n" : "=r"(old) : "r"(n));
+    return old;
   }
 
   typedef uint32_t page_fault_error_t;

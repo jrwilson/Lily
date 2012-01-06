@@ -189,14 +189,13 @@ private:
     execute ()
     {
       // Switch page directories.
-      vm::switch_to_directory (action_.action->automaton->page_directory_frame ());
+      vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());
 
       uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (action_.action->automaton->stack_pointer ());
 
       // These instructions serve a dual purpose.
       // First, they set up the cdecl calling convention for actions.
       // Second, they force the stack to be created if it is not.
-
 
       if (action_.action->type == INPUT) {
 	void* copy_value = 0;

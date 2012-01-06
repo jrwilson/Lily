@@ -111,6 +111,8 @@ exception_dispatch (volatile registers regs)
   switch (regs.number) {
   case DIVIDE_ERROR:
     // TODO
+    kout << "Divide error" << endl;
+    kout << regs << endl;
     kassert (0);
     break;
   case SINGLE_STEP:
@@ -155,6 +157,7 @@ exception_dispatch (volatile registers regs)
     break; 
   case SEGMENT_NOT_PRESENT:
     // TODO
+    kout << "Segment not present" << endl;
     kout << regs << endl;
     kassert (0);
     break; 

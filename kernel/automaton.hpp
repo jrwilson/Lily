@@ -108,7 +108,7 @@ private:
   // Stack area.
   vm_stack_area* stack_area_;
   // Stub area.
-  vm_stub_area* stub_area_;
+  vm_area_base* stub_area_;
 
   // Bound outputs.
 public:
@@ -236,10 +236,10 @@ public:
     return aid_;
   }
 
-  frame_t
-  page_directory_frame () const
+  physical_address_t
+  page_directory_physical_address () const
   {
-    return page_directory_frame_;
+    return frame_to_physical_address (page_directory_frame_);
   }
 
   logical_address_t
@@ -302,7 +302,7 @@ public:
   }
 
   bool
-  insert_stub_area (vm_stub_area* area)
+  insert_stub_area (vm_area_base* area)
   {
     if (insert_vm_area (area)) {
       stub_area_ = area;
@@ -698,6 +698,33 @@ public:
     else {
       // The buffer does not exist.
       return 0;
+    }
+  }
+
+  int
+  buffer_unmap (bid_t bid)
+  {
+    bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
+    if (bpos != bid_to_buffer_map_.end ()) {
+      buffer* b = bpos->second;
+
+      if (b->begin () != 0) {
+	// Remove from the memory map.
+	memory_map_.erase (find_address (b->begin ()));
+
+	// Unmap the buffer.	
+	b->unmap ();
+
+	return 0;
+      }
+      else {
+	// The buffer was not mapped.
+	return -1;
+      }
+    }
+    else {
+      // The buffer does not exist.
+      return -1;
     }
   }
 

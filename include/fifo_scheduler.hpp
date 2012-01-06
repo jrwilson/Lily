@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <unordered_set>
+#include <algorithm>
 #include "syscall.hpp"
 #include "action_traits.hpp"
 

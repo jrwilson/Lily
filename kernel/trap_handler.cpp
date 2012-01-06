@@ -21,7 +21,7 @@
 #include "automaton.hpp"
 #include "scheduler.hpp"
 #include "syscall.hpp"
-#include "system_automaton.hpp"
+#include "rts.hpp"
 
 using namespace std::rel_ops;
 
@@ -68,6 +68,7 @@ trap_dispatch (volatile registers regs)
 	}
 	else {
 	  // TODO:  Automaton scheduled a bad action.
+	  kout << "aep = " << hexformat (action_entry_point) << endl;
 	  kassert (0);
 	}
       }
@@ -175,18 +176,28 @@ trap_dispatch (volatile registers regs)
     }
     break;
   case SACALL_INTERRUPT:
-    if (scheduler::current_action ().action->automaton == system_automaton::instance) {
+    if (scheduler::current_action ().action->automaton == rts::system_automaton) {
       switch (regs.eax) {
-      case sacall::INVLPG:
-	{
-	  asm ("invlpg (%0)\n" :: "r"(regs.ebx));
-	  return;
-	}
-	break;
+      case sacall::CREATE:
+	rts::create (regs.ebx, regs.ecx);
+	return;
+      	break;
+      case sacall::BIND:
+	rts::bind ();
+	return;
+      	break;
+      case sacall::LOOSE:
+	rts::loose ();
+	return;
+      	break;
+      case sacall::DESTROY:
+	rts::destroy ();
+	return;
+      	break;
       }
     }
     else {
-      // An automaton other than the system automaton tried to execute a special instruction.
+      // TODO: An automaton other than the system automaton tried to execute a special instruction.
       kassert (0);
     }
     break;
