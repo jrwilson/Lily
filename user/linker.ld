@@ -8,17 +8,20 @@ OUTPUT_FORMAT("elf32-i386")
 
 PHDRS
 {
-	text PT_LOAD FLAGS (5);
-	data PT_LOAD FLAGS (6);
+	headers PT_PHDR PHDRS ;
+	text PT_LOAD FILEHDR PHDRS;
+	data PT_LOAD;
 	action_info PT_NOTE ;
 }
 
 SECTIONS
 {
-	/* Start at 1M. */
-	. = 0x00100000;
+	. = SIZEOF_HEADERS;
 
-	.text ALIGN (0x1000) :
+	/* Start at 1M. */
+	/*. = 0x00100000;*/
+
+	.text :
 	{
 		*(.text*)
 		*(.gnu.linkonce.t*)
@@ -36,7 +39,9 @@ SECTIONS
 		*(.gnu.linkonce.r*)
 	} :text
 
-	.data ALIGN (0x1000) :
+	. = . + 0x1000;
+
+	.data :
 	{
 		data_begin = .;
 		*(.data)

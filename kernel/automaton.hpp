@@ -27,6 +27,10 @@
 #include "buffer.hpp"
 #include <algorithm>
 
+// The stack.
+static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
+static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
+
 class automaton {
 private:
   struct input_act {
@@ -92,8 +96,8 @@ private:
   };
 
   aid_t aid_;
-  // Frame that contains the automaton's page directory.
-  frame_t const page_directory_frame_;
+  // Physical address that contains the automaton's page directory.
+  physical_address_t const page_directory_;
   // Map from action entry point (aep) to action.
   typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, kernel_allocator<std::pair<const void* const, const paction* const> > > aep_to_action_map_type;
   aep_to_action_map_type aep_to_action_map_;
@@ -104,11 +108,9 @@ private:
   typedef std::vector<vm_area_base*, kernel_allocator<vm_area_base*> > memory_map_type;
   memory_map_type memory_map_;
   // Heap area.
-  vm_heap_area* heap_area_;
+  vm_area_base* heap_area_;
   // Stack area.
-  vm_stack_area* stack_area_;
-  // Stub area.
-  vm_area_base* stub_area_;
+  vm_area_base* stack_area_;
 
   // Bound outputs.
 public:
@@ -211,23 +213,30 @@ public:
   automaton (aid_t aid,
 	     frame_t page_directory_frame) :
     aid_ (aid),
-    page_directory_frame_ (page_directory_frame),
+    page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
-    stack_area_ (0),
-    stub_area_ (0),
     current_bid_ (0)
-  { }
+  {
+    // Add a stack.
+    stack_area_ = new (kernel_alloc ()) vm_area_base (STACK_BEGIN, STACK_END);
+    insert_vm_area (stack_area_);
+
+    // TODO:  Might want to defer these operations since it involves switching page directories.
+
+    // Map the stack using copy-on-write of the zero page.
+    physical_address_t old = vm::switch_to_directory (page_directory_);
+    
+    for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
+      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
+    }
+
+    vm::switch_to_directory (old);
+  }
 
   ~automaton ()
   {
-    // TODO
+    // TODO:  Destroy vm_areas, buffers, etc.
     kassert (0);
-    // Destroy buffers that have been created but not mapped.
-    for (bid_to_buffer_map_type::iterator pos = bid_to_buffer_map_.begin ();
-	 pos != bid_to_buffer_map_.end ();
-	 ++pos) {
-      kdestroy (pos->second, kernel_alloc ());
-    }
   }
 
   aid_t
@@ -239,13 +248,12 @@ public:
   physical_address_t
   page_directory_physical_address () const
   {
-    return frame_to_physical_address (page_directory_frame_);
+    return page_directory_;
   }
 
   logical_address_t
   stack_pointer () const
   {
-    kassert (stack_area_ != 0);
     return stack_area_->end ();
   }
 
@@ -278,34 +286,10 @@ public:
   }
   
   bool
-  insert_heap_area (vm_heap_area* area)
+  insert_heap_area (vm_area_base* area)
   {
     if (insert_vm_area (area)) {
       heap_area_ = area;
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
-
-  bool
-  insert_stack_area (vm_stack_area* area)
-  {
-    if (insert_vm_area (area)) {
-      stack_area_ = area;
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
-
-  bool
-  insert_stub_area (vm_area_base* area)
-  {
-    if (insert_vm_area (area)) {
-      stub_area_ = area;
       return true;
     }
     else {
@@ -326,9 +310,16 @@ public:
       kassert (pos != memory_map_.end ());
       // Move to the next.
       ++pos;
+      kassert (pos != memory_map_.end ());
       if (new_end <= (*pos)->begin ()) {
 	// The allocation does not interfere with next area.  Success.
 	heap_area_->set_end (new_end);
+
+	// Map the zero frame.
+	for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
+	  vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
+	}
+
 	return reinterpret_cast<void*> (old_end);
       }
       else {
@@ -361,24 +352,24 @@ public:
     return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();
   }
   
-  void
-  page_fault (logical_address_t address,
-	      vm::page_fault_error_t error,
-	      volatile registers* regs)
-  {
-    kassert (stub_area_ != 0);
-    memory_map_type::const_iterator pos = find_address (address);
-    if (pos != memory_map_.end ()) {
-      (*pos)->page_fault (address, error, regs, stub_area_->begin ());
-    }
-    else {
-      kout << "Page Fault" << endl;
-      kout << "address = " << hexformat (address) << " error = " << hexformat (error) << endl;
-      kout << *regs << endl;
-      // TODO:  Handle page fault for address not in memory map.
-      kassert (0);
-    }
-  }
+  // void
+  // page_fault (logical_address_t address,
+  // 	      vm::page_fault_error_t error,
+  // 	      volatile registers* regs)
+  // {
+  //   kassert (stub_area_ != 0);
+  //   memory_map_type::const_iterator pos = find_address (address);
+  //   if (pos != memory_map_.end ()) {
+  //     (*pos)->page_fault (address, error, regs, stub_area_->begin ());
+  //   }
+  //   else {
+  //     kout << "Page Fault" << endl;
+  //     kout << "address = " << hexformat (address) << " error = " << hexformat (error) << endl;
+  //     kout << *regs << endl;
+  //     // TODO:  Handle page fault for address not in memory map.
+  //     kassert (0);
+  //   }
+  // }
 
   bool
   add_action (const char* name,
@@ -676,7 +667,7 @@ public:
 	    memory_map_type::reverse_iterator prev = stack_pos + 1;
 	    size_t size = (*stack_pos)->begin () - (*prev)->end ();
 	    if (size >= b->size ()) {
-	      b->set_end ((*stack_pos)->begin ());
+	      b->map ((*stack_pos)->begin ());
 	      memory_map_.insert (prev.base (), b);
 	      return reinterpret_cast<void*> (b->begin ());
 	    }

@@ -12,6 +12,7 @@ OBJECTS=loader.o \
 cpp_runtime.o \
 string.o \
 ceil.o \
+ceilf.o \
 kout.o \
 kernel_allocator.o \
 gdt.o \

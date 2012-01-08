@@ -1,20 +1,8 @@
 #include <string.h>
+#include "string_nocheck.hpp"
+#include "kassert.hpp"
 
-// TODO:  Inline these.
-
-extern "C" void*
-memset (void* ptr,
-	int value,
-	size_t size)
-{
-  unsigned char* p = static_cast<unsigned char*> (ptr);
-  while (size-- > 0) {
-    *p++ = value;
-  }
-  return ptr;
-}
-
-extern "C" int
+int
 strcmp (const char* p,
 	const char* q)
 {
@@ -23,20 +11,23 @@ strcmp (const char* p,
   return *p - *q;
 }
 
-extern "C" void*
+void*
+memset (void* ptr,
+	int value,
+	size_t size)
+{
+  return memset_nocheck (ptr, value, size);
+}
+
+void*
 memcpy (void* dst,
 	const void* src,
 	size_t size)
 {
-  unsigned char* d = static_cast<unsigned char*> (dst);
-  const unsigned char* s = static_cast<const unsigned char*> (src);
-  while (size-- != 0) {
-    *d++ = *s++;
-  }
-  return dst;
+  return memcpy_nocheck (dst, src, size);
 }
 
-extern "C" size_t
+size_t
 strlen (const char* p)
 {
   size_t retval = 0;
@@ -47,7 +38,7 @@ strlen (const char* p)
   return retval;
 }
 
-extern "C" void*
+void*
 memmove (void* dest,
 	 const void* src,
 	 size_t n)
@@ -70,19 +61,19 @@ memmove (void* dest,
   return dest;
 }
 
-int
-strncmp (const char* p,
-	 const char* q,
-	 size_t n)
-{
-  while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
-    ++p;
-    ++q;
-    --n;
-  }
+// int
+// strncmp (const char* p,
+// 	 const char* q,
+// 	 size_t n)
+// {
+//   while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
+//     ++p;
+//     ++q;
+//     --n;
+//   }
     
-  return (n == 0) ? 0 : *p - *q;
-}
+//   return (n == 0) ? 0 : *p - *q;
+// }
 
 int
 memcmp (const void* p,
@@ -99,6 +90,32 @@ memcmp (const void* p,
   }
   
   return 0;
+}
+
+extern "C" void*
+__memcpy_chk (void* dst,
+	      const void* src,
+	      size_t len,
+	      size_t destlen)
+{
+  if (len > destlen) {
+    // Error.
+    kassert (0);
+  }
+  return memcpy_nocheck (dst, src, len);
+}
+
+extern "C" void*
+__memset_chk (void* dest,
+	      int value,
+	      size_t len,
+	      size_t destlen)
+{
+  if (len > destlen) {
+    // Error.
+    kassert (0);
+  }
+  return memset_nocheck (dest, value, len);
 }
 
 // inline char*

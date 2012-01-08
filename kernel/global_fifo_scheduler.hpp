@@ -188,6 +188,8 @@ private:
     inline void
     execute ()
     {
+      kout << action_.action->automaton->aid () << "\t" << action_.action->name.c_str () << endl;
+
       // Switch page directories.
       vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());
 

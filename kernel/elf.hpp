@@ -251,12 +251,8 @@ namespace elf {
 	      // Unsupported alignment.
 	      return false;
 	    }
-	    if (!is_aligned (e->offset, PAGE_SIZE)) {
+	    if ((e->offset & (e->alignment - 1)) != (e->virtual_address & (e->alignment - 1))) {
 	      // Not aligned in the file.
-	      return false;
-	    }
-	    if (!is_aligned (e->virtual_address, PAGE_SIZE)) {
-	      // Not aligned in memory.
 	      return false;
 	    }
 	    if ((e->permissions & (elf::EXECUTE | elf::WRITE | elf::READ)) == 0) {

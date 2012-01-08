@@ -66,6 +66,11 @@ namespace vm {
     PRESENT = 1,
   };
 
+  enum copy_on_write_t {
+    NOT_COPY_ON_WRITE = 0,
+    COPY_ON_WRITE = 1,
+  };
+
   inline page_table_idx_t
   get_page_table_entry (logical_address_t address)
   {
@@ -95,7 +100,8 @@ namespace vm {
     unsigned int dirty_ : 1;
     unsigned int zero_ : 1;
     unsigned int global_ : 1;
-    unsigned int available_ : 3;
+    unsigned int copy_on_write_ : 1;
+    unsigned int available_ : 2;
     unsigned int frame_ : 20;
     
     page_table_entry () :
@@ -108,11 +114,13 @@ namespace vm {
       dirty_ (0),
       zero_ (0),
       global_ (NOT_GLOBAL),  
+      copy_on_write_ (NOT_COPY_ON_WRITE),
       available_ (0),
       frame_ (0)
     { }
 
     page_table_entry (frame_t frame,
+		      copy_on_write_t cow,
 		      page_privilege_t privilege,
 		      writable_t writable,
 		      present_t present) :
@@ -124,7 +132,8 @@ namespace vm {
       accessed_ (0),
       dirty_ (0),
       zero_ (0),
-      global_ (NOT_GLOBAL),  
+      global_ (NOT_GLOBAL),
+      copy_on_write_ (cow),
       available_ (0),
       frame_ (frame)
     { }
@@ -144,7 +153,8 @@ namespace vm {
     unsigned int zero_ : 1;
     unsigned int page_size_ : 1;
     unsigned int ignored_ : 1;
-    unsigned int available_ : 3;
+    unsigned int copy_on_write_ : 1;
+    unsigned int available_ : 2;
     unsigned int frame_ : 20;
 
     page_directory_entry () :
@@ -157,6 +167,7 @@ namespace vm {
       zero_ (0),
       page_size_ (PAGE_SIZE_4K),
       ignored_ (0),
+      copy_on_write_ (NOT_COPY_ON_WRITE),
       available_ (0),
       frame_ (0)
     { }
@@ -173,6 +184,7 @@ namespace vm {
       zero_ (0),
       page_size_ (PAGE_SIZE_4K),
       ignored_ (0),
+      copy_on_write_ (NOT_COPY_ON_WRITE),
       available_ (0),
       frame_ (frame)
     { }
@@ -206,6 +218,12 @@ namespace vm {
   get_kernel_page_directory_physical_address (void)
   {
     return reinterpret_cast<physical_address_t> (&kernel_page_directory);
+  }
+
+  inline page_directory*
+  get_kernel_page_directory (void)
+  {
+    return reinterpret_cast<page_directory*> (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE);
   }
 
   inline page_directory*
@@ -261,11 +279,17 @@ namespace vm {
     return pt->entry[table_entry].frame_;
   }
 
+  enum map_mode_t {
+    MAP_READ_WRITE = 0,
+    MAP_READ_ONLY = 1,
+    MAP_COPY_ON_WRITE = 2,
+  };
+
   inline void
   map (logical_address_t logical_addr,
        frame_t fr,
        page_privilege_t privilege,
-       writable_t writable)
+       map_mode_t map_mode)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* pt = get_page_table (logical_addr);
@@ -283,7 +307,17 @@ namespace vm {
     // The entry shoud not be present.
     kassert (pt->entry[table_entry].present_ == NOT_PRESENT);
     // Map.
-    pt->entry[table_entry] = page_table_entry (fr, privilege, writable, PRESENT);
+    switch (map_mode) {
+    case MAP_READ_WRITE:
+      pt->entry[table_entry] = page_table_entry (fr, vm::NOT_COPY_ON_WRITE, privilege, vm::WRITABLE, PRESENT);
+      break;
+    case MAP_READ_ONLY:
+      pt->entry[table_entry] = page_table_entry (fr, vm::NOT_COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      break;
+    case MAP_COPY_ON_WRITE:
+      pt->entry[table_entry] = page_table_entry (fr, vm::COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      break;
+    }
     frame_manager::incref (fr);
     // Flush the TLB.
     asm ("invlpg (%0)\n" :: "r"(logical_addr));
@@ -292,7 +326,7 @@ namespace vm {
   inline void
   remap (logical_address_t logical_addr,
 	 page_privilege_t privilege,
-	 writable_t writable)
+	 map_mode_t map_mode)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
@@ -302,14 +336,25 @@ namespace vm {
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     kassert (page_table->entry[table_entry].present_ == PRESENT);
 
-    page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, privilege, writable, PRESENT);
+    switch (map_mode) {
+    case MAP_READ_WRITE:
+      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::NOT_COPY_ON_WRITE, privilege, vm::WRITABLE, PRESENT);
+      break;
+    case MAP_READ_ONLY:
+      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::NOT_COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      break;
+    case MAP_COPY_ON_WRITE:
+      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      break;
+    }
+
     /* Flush the TLB. */
     asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
 
   inline void
-  set_available (logical_address_t logical_addr,
-		 int available)
+  set_accessed (logical_address_t logical_addr,
+		bool flag)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
@@ -318,12 +363,12 @@ namespace vm {
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
 
-    page_table->entry[table_entry].available_ = available;
+    page_table->entry[table_entry].accessed_ = flag;
     // No flushing required.
   }
 
-  inline int
-  get_available (logical_address_t logical_addr)
+  inline bool
+  get_accessed (logical_address_t logical_addr)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
@@ -332,9 +377,22 @@ namespace vm {
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     
-    return page_table->entry[table_entry].available_;
+    return page_table->entry[table_entry].accessed_;
   }
-  
+
+  inline copy_on_write_t
+  get_copy_on_write (logical_address_t logical_addr)
+  {
+    page_directory* page_directory = get_page_directory ();
+    page_table* page_table = get_page_table (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+    
+    return static_cast<copy_on_write_t> (page_table->entry[table_entry].copy_on_write_);
+  }
+
   inline void
   unmap (logical_address_t logical_addr,
 	 bool decref = true)
@@ -350,7 +408,7 @@ namespace vm {
     if (decref) {
       frame_manager::decref (page_table->entry[table_entry].frame_);
     }
-    page_table->entry[table_entry] = page_table_entry (0, SUPERVISOR, NOT_WRITABLE, NOT_PRESENT);
+    page_table->entry[table_entry] = page_table_entry ();
     /* Flush the TLB. */
     asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
@@ -360,8 +418,8 @@ namespace vm {
   {
     /* Switch to the page directory returning the old one. */
     physical_address_t old;
-    asm ("mov %%cr3, %0\n"
-	 "mov %1, %%cr3\n" : "=r"(old) : "r"(n));
+    asm ("mov %%cr3, %0\n" : "=r"(old));
+    asm ("mov %0, %%cr3\n" :  : "r"(n));
     return old;
   }
 

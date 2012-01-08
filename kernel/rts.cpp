@@ -16,14 +16,6 @@ namespace rts {
   // Starting at 4MB allow us to use the low page table of the kernel.
   static const logical_address_t SYSTEM_HEAP_BEGIN = FOUR_MEGABYTES;
   
-  // The stub is an unused page-sized region above the stack used for copying pages, etc.
-  static const logical_address_t STUB_END = KERNEL_VIRTUAL_BASE;
-  static const logical_address_t STUB_BEGIN = STUB_END - PAGE_SIZE;
-  
-  // The stack is right blow the stub.
-  static const logical_address_t STACK_END = STUB_BEGIN;
-  static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
-
   // The system automaton.
   automaton* system_automaton;
 
@@ -44,7 +36,7 @@ namespace rts {
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
     // Map the page directory.
-    vm::map (vm::get_stub1 (), frame, vm::USER, vm::WRITABLE);
+    vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE);
     vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
     // Initialize the page directory with a copy of the kernel.
     // Since the second argument is vm::SUPERVISOR, the automaton cannot access the paging area, i.e., manipulate virtual memory.
@@ -70,7 +62,7 @@ namespace rts {
     
     // Add to the scheduler.
     scheduler::add_automaton (a);
-    
+
     return a;
   }
 
@@ -111,20 +103,10 @@ namespace rts {
     kassert (r);
     
     // Heap.
-    vm_heap_area* heap_area = new (kernel_alloc ()) vm_heap_area (SYSTEM_HEAP_BEGIN);
-    r = system_automaton->insert_heap_area (heap_area);
+    area = new (kernel_alloc ()) vm_area_base (SYSTEM_HEAP_BEGIN, SYSTEM_HEAP_BEGIN);
+    r = system_automaton->insert_heap_area (area);
     kassert (r);
     
-    // Stack.
-    vm_stack_area* stack_area = new (kernel_alloc ()) vm_stack_area (STACK_BEGIN, STACK_END);
-    r = system_automaton->insert_stack_area (stack_area);
-    kassert (r);
-
-    // Stub.
-    area = new (kernel_alloc ()) vm_area_base (STUB_BEGIN, STUB_END);
-    r = system_automaton->insert_stub_area (area);
-    kassert (r);
-
     // Add the actions.
     r = system_automaton->add_action (FIRST_NAME, FIRST_DESCRIPTION, first_traits::action_type, reinterpret_cast<const void*> (&::first), first_traits::parameter_mode);
     kassert (r);
@@ -171,14 +153,14 @@ namespace rts {
   struct map_op {
     logical_address_t logical_address;
     frame_t frame;
-    vm::writable_t writable;
+    vm::map_mode_t map_mode;
 
     map_op (logical_address_t la,
 	    frame_t f,
-	    vm::writable_t w) :
+	    vm::map_mode_t m) :
       logical_address (la),
       frame (f),
-      writable (w)
+      map_mode (m)
     { }
   };
 
@@ -204,14 +186,6 @@ namespace rts {
     // Create the automaton.
     automaton* child = create_automaton (vm::SUPERVISOR);
 
-    // Stack.
-    vm_stack_area* stack_area = new (kernel_alloc ()) vm_stack_area (STACK_BEGIN, STACK_END);
-    child->insert_stack_area (stack_area);
-
-    // Stub.
-    vm_area_base* stub_area = new (kernel_alloc ()) vm_area_base (STUB_BEGIN, STUB_END);
-    child->insert_stub_area (stub_area);
-
     // Parse the file.
     elf::header_parser hp (automaton_text, automaton_size);
     if (!hp.parse ()) {
@@ -220,8 +194,8 @@ namespace rts {
     }
 
     // First pass
-    // 1.  Build a list of frames that need to be mapped.
-    // 2.  Build a list of area that need to be cleared.
+    // 1.  Build a map from logical address to frame.
+    // 2.  Build a list of areas that need to be cleared.
     // 3.  Create the memory map for the automaton.
     frame_list_.clear ();
     clear_list_.clear ();
@@ -232,19 +206,19 @@ namespace rts {
 	  size_t s;
 	  // Initialized data.
 	  for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-	    frame_list_.push_back (map_op (e->virtual_address + s, buffer->frame_at_offset (e->offset + s), ((e->permissions & elf::WRITE) != 0) ? vm::WRITABLE : vm::NOT_WRITABLE));
+	    frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (buffer->begin () + e->offset + s), ((e->permissions & elf::WRITE) != 0) ? vm::MAP_READ_WRITE : vm::MAP_READ_ONLY));
 	  }
 
 	  // Clear the tiny region between the end of initialized data and the first unitialized page.
 	  if (e->file_size < e->memory_size) {
 	    logical_address_t begin = e->virtual_address + e->file_size;
-	    logical_address_t end = e->virtual_address + std::min (e->memory_size, align_up (e->file_size, PAGE_SIZE));
+	    logical_address_t end = e->virtual_address + e->memory_size;
 	    clear_list_.push_back (std::make_pair (begin, end));
 	  }
 
 	  // Uninitialized data.
 	  for (; s < e->memory_size; s += PAGE_SIZE) {
-	    frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), ((e->permissions & elf::WRITE) != 0) ? vm::WRITABLE : vm::NOT_WRITABLE));
+	    frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), ((e->permissions & elf::WRITE) != 0) ? vm::MAP_READ_WRITE : vm::MAP_READ_ONLY));
 	  }
 
 	  vm_area_base* area = new (kernel_alloc ()) vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
@@ -259,23 +233,23 @@ namespace rts {
 
     // Switch to the automaton.
     physical_address_t old = vm::switch_to_directory (child->page_directory_physical_address ());
-
+    
     // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
     
     // Map all the frames.
     for (frame_list_type::const_iterator pos = frame_list_.begin ();
     	 pos != frame_list_.end ();
     	 ++pos) {
-      kout << "Mapping " << hexformat (pos->logical_address) << endl;
-      vm::map (pos->logical_address, pos->frame, vm::USER, pos->writable);
+      kout << "Mapping " << hexformat (pos->logical_address) << " -> " << pos->frame << endl;
+      vm::map (pos->logical_address, pos->frame, vm::USER, pos->map_mode);
     }
 
     // Clear.
     for (clear_list_type::const_iterator pos = clear_list_.begin ();
-	 pos != clear_list_.end ();
-	 ++pos) {
-      kout << "Setting " << hexformat (pos->first) << " size = " << pos->second - pos->first << endl;
-      memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
+    	 pos != clear_list_.end ();
+    	 ++pos) {
+      kout << "Clearing " << hexformat (pos->first) << " -> " << hexformat (pos->second) << endl;
+      //memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
     }
 
     // Switch back.

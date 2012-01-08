@@ -18,9 +18,6 @@
 #include "halt.hpp"
 #include "quote.hpp"
 
-extern int kpd;
-
-// Switch to the kernel page directory so the kout will work.
-#define kassert(expr) do { if (!(expr)) { asm ("mov %0, %%cr3\n" : : "r"(&kpd)); kout << "Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr; halt (); } } while (0);
+#define kassert(expr) do { if (!(expr)) { kout << "Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr; halt (); } } while (0);
 
 #endif /* __kassert_hpp__ */

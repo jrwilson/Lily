@@ -25,8 +25,7 @@
 #include "frame_manager.hpp"
 #include "rts.hpp"
 #include "scheduler.hpp"
-
-#include <math.h>
+#include "string_nocheck.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -43,21 +42,30 @@ extern char stack_end;
 extern int* ctors_begin;
 extern int* ctors_end;
 
+// Clear the mark on all logical addresses.
+static void
+clear (void)
+{
+  for (logical_address_t address = KERNEL_VIRTUAL_BASE; address != INITIAL_LOGICAL_LIMIT; address += PAGE_SIZE) {
+    vm::set_accessed (address, false);
+  }
+}
+
 // Mark frames and logical addresses when rectifying virtual memory.
 static void
 mark (logical_address_t begin,
       logical_address_t end,
       bool should_appear,
-      vm::writable_t writable)
+      vm::map_mode_t map_mode)
 {
   for (; begin < end; begin += PAGE_SIZE) {
     // Prevent the frame manager from allocating this frame.
     frame_manager::mark_as_used (physical_address_to_frame (begin - KERNEL_VIRTUAL_BASE));
     if (should_appear && begin < INITIAL_LOGICAL_LIMIT) {
       // Correct permissions.
-      vm::remap (begin, vm::USER, writable);
+      vm::remap (begin, vm::USER, map_mode);
       // Mark.
-      vm::set_available (begin, 1);
+      vm::set_accessed (begin, true);
     }
   }
 }
@@ -66,13 +74,9 @@ static void
 sweep ()
 {
   for (logical_address_t address = KERNEL_VIRTUAL_BASE; address != INITIAL_LOGICAL_LIMIT; address += PAGE_SIZE) {
-    if (vm::get_available (address) == 0) {
+    if (vm::get_accessed (address) == false) {
       // Unmap addresses that aren't marked.
       vm::unmap (address, false);
-    }
-    else {
-      // Reset.
-      vm::set_available (address, 0);
     }
   }
 }
@@ -82,8 +86,8 @@ kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
   // Zero uninitialized memory avoiding the stack.
-  memset (&bss_begin, 0, &stack_begin - &bss_begin);
-  memset (&stack_end, 0, &bss_end - &stack_end);
+  memset_nocheck (&bss_begin, 0, &stack_begin - &bss_begin);
+  memset_nocheck (&stack_end, 0, &bss_end - &stack_end);
 
   kout.initialize ();
 
@@ -205,51 +209,54 @@ kmain (uint32_t multiboot_magic,
       }
     }
 
+    // Clear the mark on all logical addresses.
+    clear ();
+
     // Mark frames and logical addresses that are in use.
     mark (KERNEL_VIRTUAL_BASE,
 	  KERNEL_VIRTUAL_BASE + ONE_MEGABYTE,
 	  true,
-	  vm::WRITABLE);
+	  vm::MAP_READ_WRITE);
 
     mark (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE,
 	  reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_directory),
 	  true,
-	  vm::WRITABLE);
+	  vm::MAP_READ_WRITE);
   
     mark (reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE,
 	  reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_table),
 	  false,
-	  vm::WRITABLE);
+	  vm::MAP_READ_WRITE);
   
     mark (reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE,
 	  reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE + PAGE_SIZE,
 	  false,
-	  vm::NOT_WRITABLE);
+	  vm::MAP_READ_ONLY);
   
     mark (reinterpret_cast<logical_address_t> (&text_begin),
 	  reinterpret_cast<logical_address_t> (&text_end),
 	  true,
-	  vm::NOT_WRITABLE);
+	  vm::MAP_READ_ONLY);
   
     mark (reinterpret_cast<logical_address_t> (&data_begin),
 	  reinterpret_cast<logical_address_t> (&data_end),
 	  true,
-	  vm::WRITABLE);
+	  vm::MAP_READ_WRITE);
   
     mark (kernel_alloc::heap_begin (),
 	  kernel_alloc::heap_end (),
 	  true,
-	  vm::WRITABLE);
+	  vm::MAP_READ_WRITE);
 
     mark (automaton_module->mod_start + KERNEL_VIRTUAL_BASE,
 	  automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
 	  false,
-	  vm::NOT_WRITABLE);
+	  vm::MAP_READ_ONLY);
 
     mark (data_module->mod_start + KERNEL_VIRTUAL_BASE,
 	  data_module->mod_end + KERNEL_VIRTUAL_BASE,
 	  false,
-	  vm::NOT_WRITABLE);
+	  vm::MAP_READ_ONLY);
     
     // Convert the modules into buffers.
     automaton_buffer = new (kernel_alloc ()) buffer (physical_address_to_frame (automaton_module->mod_start), physical_address_to_frame (align_up (automaton_module->mod_end, PAGE_SIZE)));
