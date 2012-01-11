@@ -203,10 +203,12 @@ namespace rts {
       switch (e->type) {
       case elf::LOAD:
 	if (e->memory_size != 0) {
+	  vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
+
 	  size_t s;
 	  // Initialized data.
 	  for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-	    frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (buffer->begin () + e->offset + s), ((e->permissions & elf::WRITE) != 0) ? vm::MAP_READ_WRITE : vm::MAP_READ_ONLY));
+	    frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (buffer->begin () + e->offset + s), map_mode));
 	  }
 
 	  // Clear the tiny region between the end of initialized data and the first unitialized page.
@@ -218,7 +220,7 @@ namespace rts {
 
 	  // Uninitialized data.
 	  for (; s < e->memory_size; s += PAGE_SIZE) {
-	    frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), ((e->permissions & elf::WRITE) != 0) ? vm::MAP_READ_WRITE : vm::MAP_READ_ONLY));
+	    frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
 	  }
 
 	  vm_area_base* area = new (kernel_alloc ()) vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
@@ -227,6 +229,9 @@ namespace rts {
 	    kassert (0);
 	  }
 	}
+	break;
+      case elf::NOTE:
+	kout << "note" << endl;
 	break;
       }
     }
@@ -240,7 +245,6 @@ namespace rts {
     for (frame_list_type::const_iterator pos = frame_list_.begin ();
     	 pos != frame_list_.end ();
     	 ++pos) {
-      kout << "Mapping " << hexformat (pos->logical_address) << " -> " << pos->frame << endl;
       vm::map (pos->logical_address, pos->frame, vm::USER, pos->map_mode);
     }
 
@@ -248,15 +252,12 @@ namespace rts {
     for (clear_list_type::const_iterator pos = clear_list_.begin ();
     	 pos != clear_list_.end ();
     	 ++pos) {
-      kout << "Clearing " << hexformat (pos->first) << " -> " << hexformat (pos->second) << endl;
-      //memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
+      memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
     }
 
     // Switch back.
     vm::switch_to_directory (old);
     
-    kout << "back" << endl;
-
     // Unmap the program text.
     system_automaton->buffer_unmap (automaton_bid);
 

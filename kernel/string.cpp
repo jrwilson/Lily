@@ -61,19 +61,19 @@ memmove (void* dest,
   return dest;
 }
 
-// int
-// strncmp (const char* p,
-// 	 const char* q,
-// 	 size_t n)
-// {
-//   while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
-//     ++p;
-//     ++q;
-//     --n;
-//   }
+int
+strncmp (const char* p,
+	 const char* q,
+	 size_t n)
+{
+  while (n != 0 && *p != 0 && *q != 0 && *p == *q) {
+    ++p;
+    ++q;
+    --n;
+  }
     
-//   return (n == 0) ? 0 : *p - *q;
-// }
+  return (n == 0) ? 0 : *p - *q;
+}
 
 int
 memcmp (const void* p,

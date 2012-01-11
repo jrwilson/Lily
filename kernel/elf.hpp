@@ -3,35 +3,6 @@
 
 // I stole this from Linkers and Loaders (John R. Levine, p. 64).
 namespace elf {    
-  // struct note {
-  //   uint32_t name_size;
-  //   uint32_t desc_size;
-  //   uint32_t type;
-
-  //   const char*
-  //   name () const
-  //   {
-  //     if (name_size != 0) {
-  // 	return reinterpret_cast<const char*> (&type + 1);
-  //     }
-  //     else {
-  // 	return 0;
-  //     }
-  //   }
-
-  //   const void*
-  //   desc () const
-  //   {
-  //     return name () + align_up (name_size, 4);
-  //   }
-
-  //   const note*
-  //   next () const
-  //   {
-  //     return reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (this) + sizeof (elf::note) + align_up (name_size, 4) + align_up (desc_size, 4));
-  //   }
-  // };
-
   static const char MAGIC[4] = { '\177', 'E', 'L', 'F' };
 
   enum width {
@@ -106,6 +77,59 @@ namespace elf {
     uint32_t memory_size;	// Size of the segment in memory.
     uint32_t permissions;	// Read, write, execute bits.  See permission above.
     uint32_t alignment;		// Required alignment.
+  };
+
+  struct note {
+    uint32_t name_size;
+    uint32_t desc_size;
+    uint32_t type;
+
+    const char*
+    name () const
+    {
+      return reinterpret_cast<const char*> (&type + 1);
+    }
+
+    const void*
+    desc () const
+    {
+      return name () + align_up (name_size, 4);
+    }
+
+    const note*
+    next () const
+    {
+      return reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (this) + sizeof (elf::note) + align_up (name_size, 4) + align_up (desc_size, 4));
+    }
+  };
+
+  enum note_type {
+    ACTION_DESCRIPTOR = 0,
+  };
+
+  enum compare_method {
+    STRING_EQUAL = 0,
+  };
+
+  struct action_descriptor {
+    uint32_t name_size;
+    uint32_t desc_size;
+    uint32_t desc_compare_method;
+    uint32_t action_type;
+    uint32_t action_entry_point;
+    uint32_t parameter_mode;
+
+    const char*
+    name () const
+    {
+      return reinterpret_cast<const char*> (this + 1);
+    }
+
+    const char*
+    desc () const
+    {
+      return name () + name_size;
+    }
   };
 
   // Interpret a region of memory as an ELF header.
@@ -276,6 +300,116 @@ namespace elf {
 	    if (reinterpret_cast<const int8_t*> (preamble_) + e->offset + e->file_size > end_) {
 	      // Section ends outside of file.
 	      return false;
+	    }
+	    if (e->alignment != 4) {
+	      // Must be aligned to 32-bit integers.
+	      return false;
+	    }
+
+	    // Parse the notes.
+	    for (const note* n = reinterpret_cast<const note*> (reinterpret_cast<const int8_t*> (preamble_) + e->offset);
+		 n < static_cast<const void*> (reinterpret_cast<const int8_t*> (preamble_) + e->offset + e->file_size);
+		 n = n->next ()) {
+
+	      if (n + 1 > end_) {
+		// Note is not in file.
+		return false;
+	      }
+	      
+	      if (n->name () > end_) {
+		// Name is not in file.
+		return false;
+	      }
+	      
+	      if (n->name () + n->name_size > end_) {
+		// Name is not in file.
+		return false;
+	      }
+	      
+	      if (n->name ()[n->name_size - 1] != 0) {
+		// Name is not null-terminated.
+		return false;
+	      }
+	      
+	      if (n->desc () > end_) {
+		// Description is not in file.
+		return false;
+	      }
+	      
+	      if (static_cast<const uint8_t*> (n->desc ()) + n->desc_size > end_) {
+		// Description is not in file.
+		return false;
+	      }
+	      
+	      if (strcmp (n->name (), "lily") == 0) {
+		// Note is intended for us.
+		switch (n->type) {
+		case ACTION_DESCRIPTOR:
+		  {
+		    const action_descriptor* d = static_cast<const action_descriptor*> (n->desc ());
+		    if (d + 1 > static_cast<const void*> (n->next ())) {
+		      // Action description is not in file.
+		      return false;
+		    }
+		    
+		    if (d->name () > static_cast<const void*> (n->next ())) {
+		      return false;
+		    }
+		    
+		    if (d->name () + d->name_size > static_cast<const void*> (n->next ())) {
+		      return false;
+		    }
+		    
+		    if (d->name ()[d->name_size - 1] != 0) {
+		      return false;
+		    }
+		    
+		    if (d->desc () > static_cast<const void*> (n->next ())) {
+		      return false;
+		    }
+		    
+		    if (d->desc () + d->desc_size > static_cast<const void*> (n->next ())) {
+		      return false;
+		    }
+		    
+		    if (d->desc ()[d->desc_size - 1] != 0) {
+		      return false;
+		    }
+		    
+		    switch (d->desc_compare_method) {
+		    case STRING_EQUAL:
+		      break;
+		    default:
+		      // Unknown method.
+		      return false;
+		    }
+		    
+		    switch (d->action_type) {
+		    case INPUT:
+		    case OUTPUT:
+		    case INTERNAL:
+		      break;
+		    default:
+		      // Unknown action type.
+		      return false;
+		    }
+		    
+		    switch (d->parameter_mode) {
+		    case NO_PARAMETER:
+		    case PARAMETER:
+		    case AUTO_PARAMETER:
+		      break;
+		    default:
+		      // Unknown parameter mode.
+		      return false;
+		    }
+		  }
+		  break;
+		default:
+		  // Unknown note.
+		  return false;
+		}
+	      }
 	    }
 	  }
 	  break;
