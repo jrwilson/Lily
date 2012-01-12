@@ -13,7 +13,7 @@
 
 #include "kassert.hpp"
 #include <cxxabi.h>
-#include <syscall.hpp>
+#include <lilycall.hpp>
 #include "vm_def.hpp"
 
 void *__dso_handle;

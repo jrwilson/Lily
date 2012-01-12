@@ -239,7 +239,7 @@ namespace rts {
     kassert (r);
     
     // Bootstrap.
-    checked_schedule (system_automaton, reinterpret_cast<const void*> (&::first));
+    checked_schedule (system_automaton, reinterpret_cast<const void*> (&::first), system_automaton->aid ());
 
     rts::automaton_bid = system_automaton->buffer_create (*automaton_buffer);
     rts::automaton_size = automaton_size;
@@ -268,7 +268,7 @@ namespace rts {
   typedef std::vector<std::pair<logical_address_t, logical_address_t>, kernel_allocator<std::pair<logical_address_t, logical_address_t> > > clear_list_type;
   static clear_list_type clear_list_;
 
-  void
+  aid_t
   create (bid_t automaton_bid,
 	  size_t automaton_size)
   {
@@ -300,11 +300,22 @@ namespace rts {
 
     // Bind the system automaton to the new automaton.
     if (!bind_actions (system_automaton, SA_INIT_NAME, 0, child, SA_INIT_NAME, 0, system_automaton)) {
-      // Couldn't bind to init.
+      // TODO:  Couldn't bind to init.
       kassert (0);
     }
 
-    kout << "Bind to system automaton" << endl;
+    // We don't care if these fail.
+    bind_actions (child, SA_CREATE_REQUEST_NAME, 0, system_automaton, SA_CREATE_REQUEST_NAME, 0, system_automaton);
+    bind_actions (system_automaton, SA_CREATE_RESPONSE_NAME, 0, child, SA_CREATE_RESPONSE_NAME, 0, system_automaton);
+
+    bind_actions (child, SA_BIND_REQUEST_NAME, 0, system_automaton, SA_BIND_REQUEST_NAME, 0, system_automaton);
+    bind_actions (system_automaton, SA_BIND_RESPONSE_NAME, 0, child, SA_BIND_RESPONSE_NAME, 0, system_automaton);
+
+    bind_actions (child, SA_LOOSE_REQUEST_NAME, 0, system_automaton, SA_LOOSE_REQUEST_NAME, 0, system_automaton);
+    bind_actions (system_automaton, SA_LOOSE_RESPONSE_NAME, 0, child, SA_LOOSE_RESPONSE_NAME, 0, system_automaton);
+
+    bind_actions (child, SA_DESTROY_REQUEST_NAME, 0, system_automaton, SA_DESTROY_REQUEST_NAME, 0, system_automaton);
+    bind_actions (system_automaton, SA_DESTROY_RESPONSE_NAME, 0, child, SA_DESTROY_RESPONSE_NAME, 0, system_automaton);
 
     // Build a map from logical address to frame.
     // Build a list of areas that need to be cleared.
@@ -364,8 +375,7 @@ namespace rts {
     // Unmap the program text.
     system_automaton->buffer_unmap (automaton_bid);
 
-    // TODO
-    kassert (0);
+    return child->aid ();
   }
 
   void

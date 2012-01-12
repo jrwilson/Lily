@@ -31,7 +31,7 @@ namespace rts {
 			   buffer* data_buffer,
 			   size_t data_size);
 
-  void
+  aid_t
   create (bid_t automaton_bid,
 	  size_t automaton_size);
 

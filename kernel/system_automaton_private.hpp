@@ -16,7 +16,7 @@
 
 #include <system_automaton.hpp>
 
-extern "C" void first (no_param_t);
+extern "C" void first (aid_t);
 extern "C" void create_request (aid_t, void*, size_t, bid_t, size_t);
 extern "C" void create (no_param_t);
 extern "C" void init (aid_t);
@@ -33,13 +33,13 @@ extern "C" void destroy_response (aid_t);
 
 namespace system_automaton {
 
-  typedef action_traits<internal_action> first_traits;
+  typedef action_traits<internal_action, parameter<aid_t> > first_traits;
 #define SA_FIRST_TRAITS system_automaton::first_traits
 #define SA_FIRST_NAME "first"
 #define SA_FIRST_DESCRIPTION ""
 #define SA_FIRST_COMPARE M_NO_COMPARE
 #define SA_FIRST_ACTION M_INTERNAL
-#define SA_FIRST_PARAMETER M_NO_PARAMETER
+#define SA_FIRST_PARAMETER M_PARAMETER
 
   typedef action_traits<internal_action> create_traits;
 #define SA_CREATE_TRAITS system_automaton::create_traits

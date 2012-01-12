@@ -154,8 +154,8 @@ private:
 	  }
 	  break;
 	case OUTPUT:
-	  buffer_size_ = buffer_size;
 	  copy_value_size_ = copy_value_size;
+	  buffer_size_ = buffer_size;
 	  if (buffer != -1) {
 	    // The output action produced a buffer.  Remove it from the automaton.
 	    output_buffer_ = action_.action->automaton->buffer_output_destroy (buffer);
@@ -188,7 +188,19 @@ private:
     inline void
     execute ()
     {
-      kout << action_.action->automaton->aid () << "\t" << action_.action->name.c_str () << endl;
+      switch (action_.action->type) {
+      case INPUT:
+	kout << "?";
+	break;
+      case OUTPUT:
+	kout << "!";
+	break;
+      case INTERNAL:
+	kout << "#";
+	break;
+      }
+
+      kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->name.c_str () << "\t" << action_.parameter << endl;
 
       // Switch page directories.
       vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());

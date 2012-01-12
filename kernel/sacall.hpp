@@ -14,6 +14,7 @@
   Justin R. Wilson
 */
 
+#include "aid.hpp"
 #include "bid.hpp"
 
 namespace sacall {
@@ -25,11 +26,13 @@ namespace sacall {
     DESTROY,
   };
 
-  inline void
+  inline aid_t
   create (bid_t automaton_bid,
 	  size_t automaton_size)
   {
-    asm ("int $0x82\n" : : "a"(CREATE), "b"(automaton_bid), "c"(automaton_size) :);
+    aid_t aid;
+    asm ("int $0x82\n" : "=a"(aid) : "a"(CREATE), "b"(automaton_bid), "c"(automaton_size) :);
+    return aid;
   }
 
   inline void

@@ -17,7 +17,7 @@
 #include <deque>
 #include <unordered_set>
 #include <algorithm>
-#include "syscall.hpp"
+#include "lilycall.hpp"
 #include "action_traits.hpp"
 
 class fifo_scheduler {

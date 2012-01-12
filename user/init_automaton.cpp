@@ -1,4 +1,5 @@
 #include <action_traits.hpp>
+#include <lilycall.hpp>
 #include <system_automaton.hpp>
 
 typedef action_traits<input_action<equal>, no_parameter> init_traits;
@@ -16,6 +17,6 @@ extern "C" void
 init (no_param_t, void*, size_t, bid_t, size_t)
 {
   x = y + 3;
-  asm ("hlt\n");
+  lilycall::finish (0, -1, 0, 0, -1, 0);
 }
 ACTION_DESCRIPTOR (INIT, init);

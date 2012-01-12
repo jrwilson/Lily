@@ -21,17 +21,17 @@
 namespace lilycall {
 
   enum {
-    GETPAGESIZE = 0,
-    SBRK,
-    BINDING_COUNT,
-    BUFFER_CREATE,
-    BUFFER_COPY,
-    BUFFER_GROW,
-    BUFFER_APPEND,
-    BUFFER_ASSIGN,
-    BUFFER_MAP,
-    BUFFER_DESTROY,
-    BUFFER_SIZE,
+    SBRK = 0,
+    BINDING_COUNT = 1,
+    BUFFER_CREATE = 2,
+    BUFFER_COPY = 3,
+    BUFFER_GROW = 4,
+    BUFFER_APPEND = 5,
+    BUFFER_ASSIGN = 6,
+    BUFFER_MAP = 7,
+    BUFFER_UNMAP = 8,
+    BUFFER_DESTROY = 9,
+    BUFFER_SIZE = 10,
   };
 
   inline void
@@ -44,14 +44,6 @@ namespace lilycall {
   {
     asm ("int $0x80\n" : : "a"(action_entry_point), "b"(parameter), "c"(copy_value), "d"(copy_value_size), "S"(buffer), "D"(buffer_size) :);
   }
-  
-  inline size_t
-  getpagesize (void)
-  {
-    size_t size;
-    asm ("int $0x81\n" : "=a"(size) : "0"(GETPAGESIZE) :);
-    return size;
-}
   
   inline void*
   sbrk (ptrdiff_t size)
@@ -172,6 +164,14 @@ namespace lilycall {
     void* ptr;
     asm ("int $0x81\n" : "=a"(ptr) : "0"(BUFFER_MAP), "b"(bid) :);
     return ptr;
+  }
+
+  inline int
+  buffer_unmap (bid_t bid)
+  {
+    int result;
+    asm ("int $0x81\n" : "=a"(result) : "0"(BUFFER_UNMAP), "b"(bid) :);
+    return result;
   }
 
   inline int

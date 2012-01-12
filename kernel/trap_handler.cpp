@@ -20,7 +20,7 @@
 #include "aid.hpp"
 #include "automaton.hpp"
 #include "scheduler.hpp"
-#include "syscall.hpp"
+#include "lilycall.hpp"
 #include "rts.hpp"
 
 using namespace std::rel_ops;
@@ -100,19 +100,13 @@ trap_dispatch (volatile registers regs)
 	  buffer_size = 0;
 	}
       }
-      
+
       scheduler::finish (copy_value, copy_value_size, buffer, buffer_size);
       return;
     }
     break;
   case SYSCALL_INTERRUPT:
     switch (regs.eax) {
-    case lilycall::GETPAGESIZE:
-      {
-	regs.eax = PAGE_SIZE;
-	return;
-      }
-      break;
     case lilycall::SBRK:
       {
 	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->sbrk (regs.ebx));
@@ -161,6 +155,12 @@ trap_dispatch (volatile registers regs)
 	return;
       }
       break;
+    case lilycall::BUFFER_UNMAP:
+      {
+	regs.eax = scheduler::current_action ().action->automaton->buffer_unmap (regs.ebx);
+	return;
+      }
+      break;
     case lilycall::BUFFER_DESTROY:
       {
 	regs.eax = scheduler::current_action ().action->automaton->buffer_destroy (regs.ebx);
@@ -179,7 +179,7 @@ trap_dispatch (volatile registers regs)
     if (scheduler::current_action ().action->automaton == rts::system_automaton) {
       switch (regs.eax) {
       case sacall::CREATE:
-	rts::create (regs.ebx, regs.ecx);
+	regs.eax = rts::create (regs.ebx, regs.ecx);
 	return;
       	break;
       case sacall::BIND:

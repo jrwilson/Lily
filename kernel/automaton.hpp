@@ -384,6 +384,8 @@ public:
   is_output_bound_to_automaton (const caction& output_action,
 				const automaton* input_automaton) const
   {
+    kassert (output_action.action->automaton == this);
+
     bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.find (output_action);
     if (pos1 != bound_outputs_map_.end ()) {
       // TODO:  Replace this iteration with look-up in a data structure.
@@ -402,6 +404,8 @@ public:
 	       const caction& input_action,
 	       automaton* owner)
   {
+    kassert (output_action.action->automaton == this);
+
     std::pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (std::make_pair (output_action, input_action_set_type ()));
     r.first->second.insert (input_act (input_action, owner));
   }
@@ -409,6 +413,8 @@ public:
   bool
   is_input_bound (const caction& input_action) const
   {
+    kassert (input_action.action->automaton == this);
+
     return bound_inputs_map_.find (input_action) != bound_inputs_map_.end ();
   }
 
@@ -417,6 +423,8 @@ public:
 	      const caction& input_action,
 	      automaton* owner)
   {
+    kassert (input_action.action->automaton == this);
+
     bound_inputs_map_.insert (std::make_pair (input_action, output_act (output_action, owner)));
   }
 

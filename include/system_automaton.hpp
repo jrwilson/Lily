@@ -26,13 +26,13 @@ namespace system_automaton {
 #define SA_CREATE_REQUEST_ACTION M_INPUT
 #define SA_CREATE_REQUEST_PARAMETER M_AUTO_PARAMETER
 
-  typedef action_traits<output_action<equal>, parameter<aid_t> > init_traits;
+  typedef action_traits<output_action<equal>, auto_parameter> init_traits;
 #define SA_INIT_TRAITS system_automaton::init_traits
 #define SA_INIT_NAME "init"
 #define SA_INIT_DESCRIPTION "TODO: init description"
 #define SA_INIT_COMPARE M_EQUAL
 #define SA_INIT_ACTION M_OUTPUT
-#define SA_INIT_PARAMETER M_PARAMETER
+#define SA_INIT_PARAMETER M_AUTO_PARAMETER
 
   typedef action_traits<output_action<equal>, auto_parameter> create_response_traits;
 #define SA_CREATE_RESPONSE_TRAITS system_automaton::create_response_traits
