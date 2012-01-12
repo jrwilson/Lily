@@ -107,14 +107,10 @@ namespace elf {
     ACTION_DESCRIPTOR = 0,
   };
 
-  enum compare_method {
-    STRING_EQUAL = 0,
-  };
-
   struct action_descriptor {
     uint32_t name_size;
     uint32_t desc_size;
-    uint32_t desc_compare_method;
+    uint32_t compare_method;
     uint32_t action_type;
     uint32_t action_entry_point;
     uint32_t parameter_mode;
@@ -132,18 +128,17 @@ namespace elf {
     }
   };
 
-  // Interpret a region of memory as an ELF header.
-  class header_parser {
+  // Interpret a region of memory as an ELF file.
+  class parser {
   public:
-    header_parser (const void* ptr,
-		   size_t size) :
-      preamble_ (static_cast<const preamble*> (ptr)),
-      end_ (static_cast<const uint8_t*> (ptr) + size)
-    { }
-    
     bool
-    parse (void)
+    parse (automaton* a,
+	   const void* ptr,
+	   size_t size)
     {
+      const preamble* const preamble_ = static_cast<const preamble*> (ptr);
+      const void* const end_ = static_cast<const uint8_t*> (ptr) + size;
+
       // Ensure we have enough data to process.
       if (preamble_ + 1 > end_) {
 	return false;
@@ -201,7 +196,7 @@ namespace elf {
       }
 
       // Compute the location of the program header.
-      program_header_begin_ = reinterpret_cast<const program_header_entry*> (reinterpret_cast<const uint8_t*> (preamble_) + header_->program_header_offset);
+      const program_header_entry* program_header_begin_ = reinterpret_cast<const program_header_entry*> (reinterpret_cast<const uint8_t*> (preamble_) + header_->program_header_offset);
 
       // Ignore the section header offset.
 
@@ -223,7 +218,7 @@ namespace elf {
       }
 
       // Calculate the end of the program header.
-      program_header_end_ = program_header_begin_ + header_->program_header_entry_count;
+      const program_header_entry* program_header_end_ = program_header_begin_ + header_->program_header_entry_count;
 
       // Both the beginning and end must be range.
       if (program_header_begin_ + 1 > end_) {
@@ -283,6 +278,9 @@ namespace elf {
 	      // No permissions.
 	      return false;
 	    }
+	    
+	    // Record the header.
+	    program_headers_.push_back (*e);
 	  }
 	  break;
 	case DYNAMIC:
@@ -376,8 +374,9 @@ namespace elf {
 		      return false;
 		    }
 		    
-		    switch (d->desc_compare_method) {
-		    case STRING_EQUAL:
+		    switch (d->compare_method) {
+		    case NO_COMPARE:
+		    case EQUAL:
 		      break;
 		    default:
 		      // Unknown method.
@@ -403,6 +402,8 @@ namespace elf {
 		      // Unknown parameter mode.
 		      return false;
 		    }
+
+		    actions_.push_back (new (kernel_alloc ()) paction (a, d->name (), d->desc (), static_cast<compare_method_t> (d->compare_method), static_cast<action_type_t> (d->action_type), reinterpret_cast<const void*> (d->action_entry_point), static_cast<parameter_mode_t> (d->parameter_mode)));
 		  }
 		  break;
 		default:
@@ -425,23 +426,39 @@ namespace elf {
       return true;
     }
 
-    const program_header_entry*
-    program_header_begin (void) const
+    typedef std::vector<program_header_entry, kernel_allocator<program_header_entry> > program_header_list_type;
+    typedef program_header_list_type::const_iterator program_header_iterator;
+
+    program_header_iterator
+    program_header_begin () const
     {
-      return program_header_begin_;
+      return program_headers_.begin ();
     }
 
-    const program_header_entry*
-    program_header_end (void) const
+    program_header_iterator
+    program_header_end () const
     {
-      return program_header_end_;
+      return program_headers_.end ();
+    }
+
+    typedef std::vector<paction*, kernel_allocator<paction*> > action_list_type;
+    typedef action_list_type::const_iterator action_iterator;
+
+    action_iterator
+    action_begin () const
+    {
+      return actions_.begin ();
+    }
+
+    action_iterator
+    action_end () const
+    {
+      return actions_.end ();
     }
 
   private:
-    const preamble* const preamble_;
-    const void* const end_;
-    const program_header_entry* program_header_begin_;
-    const program_header_entry* program_header_end_;
+    program_header_list_type program_headers_;
+    action_list_type actions_;
   };
 
 }

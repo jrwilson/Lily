@@ -8,10 +8,10 @@ class automaton;
 
 // Partial action.
 struct paction {
-  // If size becomes a problem we can bit-pack the various modes.
   ::automaton* const automaton;
   kstring const name;
   kstring const description;
+  compare_method_t const compare_method;
   action_type_t const type;
   const void* const action_entry_point;
   parameter_mode_t const parameter_mode;
@@ -19,12 +19,14 @@ struct paction {
   paction (::automaton* a,
 	   const char* n,
 	   const char* d,
+	   compare_method_t cm,
 	   action_type_t t,
 	   const void* aep,
 	   parameter_mode_t pm) :
     automaton (a),
     name (n),
     description (d),
+    compare_method (cm),
     type (t),
     action_entry_point (aep),
     parameter_mode (pm)

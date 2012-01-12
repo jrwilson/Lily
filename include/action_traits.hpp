@@ -22,6 +22,28 @@
 
 typedef aid_t no_param_t;
 
+// Descriptions.
+struct no_compare_tag { };
+struct equal_tag { };
+
+#define M_NO_COMPARE 0
+#define M_EQUAL 1
+
+enum compare_method_t {
+  NO_COMPARE = M_NO_COMPARE,
+  EQUAL = M_EQUAL,
+};
+
+struct no_compare {
+  typedef no_compare_tag compare_category;
+  static const compare_method_t compare_method = NO_COMPARE;
+};
+
+struct equal {
+  typedef equal_tag compare_category;
+  static const compare_method_t compare_method = EQUAL;
+};
+
 // Actions.
 struct input_action_tag { };
 struct output_action_tag { };
@@ -37,17 +59,19 @@ enum action_type_t {
   INTERNAL = M_INTERNAL,
 };
 
-struct input_action {
+template <typename Compare>
+struct input_action : public Compare {
   typedef input_action_tag action_category;
   static const action_type_t action_type = INPUT;
 };
 
-struct output_action {
+template <typename Compare>
+struct output_action : public Compare {
   typedef output_action_tag action_category;
   static const action_type_t action_type = OUTPUT;
 };
 
-struct internal_action {
+struct internal_action : public no_compare {
   typedef internal_action_tag action_category;
   static const action_type_t action_type = INTERNAL;
 };
@@ -125,6 +149,11 @@ struct copy_value_size<void>
 };
 
 template <class T>
+struct is_compare : public bool_dispatch<
+  std::is_same<typename T::compare_category, equal_tag>::value && T::compare_method == EQUAL
+  > { };
+
+template <class T>
 struct is_copy_value : public bool_dispatch<
   std::is_same<typename T::copy_value_type, void>::value ||
   copy_value_size<typename T::copy_value_type>::value <= MAX_COPY_VALUE_SIZE
@@ -132,6 +161,7 @@ struct is_copy_value : public bool_dispatch<
 
 template <class T>
 struct is_input_action : public bool_dispatch<
+  is_compare<T>::value &&
   std::is_same<typename T::action_category, input_action_tag>::value && T::action_type == INPUT &&
   is_parameter<T>::value &&
   is_copy_value<T>::value
@@ -139,6 +169,7 @@ struct is_input_action : public bool_dispatch<
 
 template <class T>
 struct is_output_action : public bool_dispatch<
+  is_compare<T>::value &&
   std::is_same<typename T::action_category, output_action_tag>::value && T::action_type == OUTPUT &&
   is_parameter<T>::value &&
   is_copy_value<T>::value
@@ -146,6 +177,7 @@ struct is_output_action : public bool_dispatch<
 
 template <class T>
 struct is_internal_action : public bool_dispatch<
+  std::is_same<typename T::compare_category, no_compare_tag>::value && T::compare_method == NO_COMPARE &&
   std::is_same<typename T::action_category, internal_action_tag>::value && T::action_type == INTERNAL &&
   is_parameter<T>::value &&
   T::parameter_mode != AUTO_PARAMETER
@@ -187,6 +219,7 @@ struct fp_typedef : public fp_typedef1<T, typename T::action_category> { };
 // A macro for embedding the action information.
 #define ACTION_DESCRIPTOR(base, func_name)				\
   static_assert (is_action<base##_TRAITS>::value, "traits is not an action trait"); \
+  static_assert (base##_COMPARE == base##_TRAITS::compare_method, quote (base) "_COMPARE does not agree with traits"); \
   static_assert (base##_ACTION == base##_TRAITS::action_type, quote (base) "_ACTION does not agree with traits"); \
   static_assert (base##_PARAMETER == base##_TRAITS::parameter_mode, quote (base) "_PARAMETER does not agree with traits"); \
   class base##_function_pointer_check { \
@@ -209,7 +242,7 @@ struct fp_typedef : public fp_typedef1<T, typename T::action_category> { };
   "2:\n"			/* The description of the note. */ \
   ".long 5f - 4f\n"		/* Length of the action name. */ \
   ".long 3f - 5f\n"		/* Length of the action description. */ \
-  ".long 0\n"			/* Action description comparison method. 0 => string compare. */ \
+  ".long " quote (base##_COMPARE) "\n"			/* Action description comparison method. 0 => string compare. */ \
   ".long " quote (base##_ACTION) "\n"	/* Action type. */ \
   ".long " #func_name "\n"		/* Action entry point. */		\
   ".long " quote (base##_PARAMETER) "\n"	/* Parameter mode. */ \

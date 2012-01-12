@@ -133,38 +133,6 @@ private:
   typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, kernel_allocator<std::pair<const bid_t, buffer*> > > bid_to_buffer_map_type;
   bid_to_buffer_map_type bid_to_buffer_map_;
 
-public:
-  class const_action_iterator : public std::iterator<std::bidirectional_iterator_tag, const paction* const> {
-  private:
-    aep_to_action_map_type::const_iterator pos_;
-    
-  public:
-    const_action_iterator (const aep_to_action_map_type::const_iterator& p) :
-      pos_ (p)
-    { }
-
-    bool
-    operator== (const const_action_iterator& other) const
-    {
-      return pos_ == other.pos_;
-    }
-
-    const paction* const *
-    operator-> () const
-    {
-      return &(pos_->second);
-    }
-
-    const paction*const &
-    operator* () const
-    {
-      return (pos_->second);
-    }
-
-  };
-
-private:
-
   struct compare_vm_area {
     bool
     operator () (const vm_area_base* const x,
@@ -372,16 +340,15 @@ public:
   // }
 
   bool
-  add_action (const char* name,
-	      const char* description,
-	      action_type_t action_type,
-	      const void* action_entry_point,
-	      parameter_mode_t parameter_mode)
+  add_action (paction* action)
   {
-    if (name_to_action_map_.find (name) == name_to_action_map_.end () &&
-	aep_to_action_map_.find (action_entry_point) == aep_to_action_map_.end ()) {
-      paction* ac = new (kernel_alloc ()) paction (this, name, description, action_type, action_entry_point, parameter_mode);
-      aep_to_action_map_.insert (std::make_pair (ac->action_entry_point, ac));
+    kassert (action != 0);
+    kassert (action->automaton == this);
+
+    if (name_to_action_map_.find (action->name) == name_to_action_map_.end () &&
+	aep_to_action_map_.find (action->action_entry_point) == aep_to_action_map_.end ()) {
+      name_to_action_map_.insert (std::make_pair (action->name, action));
+      aep_to_action_map_.insert (std::make_pair (action->action_entry_point, action));
       return true;
     }
     else {
@@ -389,16 +356,45 @@ public:
     }
   }
 
-  const_action_iterator
-  action_end () const
+  const paction*
+  find_action (const void* action_entry_point) const
   {
-    return const_action_iterator (aep_to_action_map_.end ());
+    aep_to_action_map_type::const_iterator pos = aep_to_action_map_.find (action_entry_point);
+    if (pos != aep_to_action_map_.end ()) {
+      return pos->second;
+    }
+    else {
+      return 0;
+    }
   }
 
-  const_action_iterator
-  action_find (const void* action_entry_point) const
+  const paction*
+  find_action (const kstring& name) const
   {
-    return const_action_iterator (aep_to_action_map_.find (action_entry_point));
+    name_to_action_map_type::const_iterator pos = name_to_action_map_.find (name);
+    if (pos != name_to_action_map_.end ()) {
+      return pos->second;
+    }
+    else {
+      return 0;
+    }
+  }
+
+  bool
+  is_output_bound_to_automaton (const caction& output_action,
+				const automaton* input_automaton) const
+  {
+    bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.find (output_action);
+    if (pos1 != bound_outputs_map_.end ()) {
+      // TODO:  Replace this iteration with look-up in a data structure.
+      for (input_action_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	if (pos2->input.action->automaton == input_automaton) {
+	  return true;
+	}
+      }
+    }
+
+    return false;
   }
 
   void
@@ -410,6 +406,12 @@ public:
     r.first->second.insert (input_act (input_action, owner));
   }
   
+  bool
+  is_input_bound (const caction& input_action) const
+  {
+    return bound_inputs_map_.find (input_action) != bound_inputs_map_.end ();
+  }
+
   void
   bind_input (const caction& output_action,
 	      const caction& input_action,

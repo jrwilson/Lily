@@ -1,7 +1,7 @@
 #include "rts.hpp"
 #include "kassert.hpp"
 #include "scheduler.hpp"
-#include "system_automaton.hpp"
+#include "system_automaton_private.hpp"
 #include "elf.hpp"
 
 // Symbols to build memory maps.
@@ -66,14 +66,111 @@ namespace rts {
     return a;
   }
 
+  static bool
+  bind_actions (automaton* output_automaton,
+		const kstring& output_action_name,
+		aid_t output_parameter,
+		automaton* input_automaton,
+		const kstring& input_action_name,
+		aid_t input_parameter,
+		automaton* owner)
+  {
+    kassert (output_automaton != 0);
+    kassert (input_automaton != 0);
+    kassert (owner != 0);
+
+    if (output_automaton == input_automaton) {
+      // The output and input automata must be different.
+      return false;
+    }
+
+    // Check the output action dynamically.
+    const paction* output_action = output_automaton->find_action (output_action_name);
+    if (output_action == 0 ||
+	output_action->type != OUTPUT) {
+      // Output action does not exist or has the wrong type.
+      return false;
+    }
+
+    // Check the input action dynamically.
+    const paction* input_action = input_automaton->find_action (input_action_name);
+    if (input_action == 0 ||
+	input_action->type != INPUT) {
+      // Input action does not exist or has the wrong type.
+      return false;
+    }
+
+    // Check the descriptions.
+    if (output_action->compare_method != input_action->compare_method) {
+      return false;
+    }
+
+    switch (output_action->compare_method) {
+    case NO_COMPARE:
+      // Okay.  I won't.
+      break;
+    case EQUAL:
+      // Simple string equality.
+      if (output_action->description != input_action->description) {
+	return false;
+      }
+      break;
+    }
+
+    // Adust the parameters.
+    switch (output_action->parameter_mode) {
+    case NO_PARAMETER:
+      output_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      output_parameter = input_automaton->aid ();
+      break;
+    }
+
+    switch (input_action->parameter_mode) {
+    case NO_PARAMETER:
+      input_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      input_parameter = output_automaton->aid ();
+      break;
+    }
+
+    // Form complete actions.
+    caction oa (output_action, output_parameter);
+    caction ia (input_action, input_parameter);
+
+    // Check that the input action is not bound.
+    // (Also checks that the binding does not exist.)
+    if (input_automaton->is_input_bound (ia)) {
+      return false;
+    }
+
+    // Check that the output action is not bound to an action in the input automaton.
+    if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
+      return false;
+    }
+
+    // Bind.
+    output_automaton->bind_output (oa, ia, owner);
+    input_automaton->bind_input (oa, ia, owner);
+    owner->bind (oa, ia);
+
+    return true;
+  }
+
   static void
   checked_schedule (automaton* a,
 		    const void* aep,
 		    aid_t p = 0)
   {
-    automaton::const_action_iterator pos = a->action_find (aep);
-    kassert (pos != a->action_end ());
-    scheduler::schedule (caction (*pos, p));
+    const paction* action = a->find_action (aep);
+    kassert (action != 0);
+    scheduler::schedule (caction (action, p));
   }
 
   void
@@ -108,37 +205,37 @@ namespace rts {
     kassert (r);
     
     // Add the actions.
-    r = system_automaton->add_action (FIRST_NAME, FIRST_DESCRIPTION, first_traits::action_type, reinterpret_cast<const void*> (&::first), first_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_FIRST_NAME, SA_FIRST_DESCRIPTION, system_automaton::first_traits::compare_method, system_automaton::first_traits::action_type, reinterpret_cast<const void*> (&::first), system_automaton::first_traits::parameter_mode));
     kassert (r);
 
-    r = system_automaton->add_action (CREATE_REQUEST_NAME, CREATE_REQUEST_DESCRIPTION, create_request_traits::action_type, reinterpret_cast<const void*> (&::create_request), create_request_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_CREATE_REQUEST_NAME, SA_CREATE_REQUEST_DESCRIPTION, system_automaton::create_request_traits::compare_method, system_automaton::create_request_traits::action_type, reinterpret_cast<const void*> (&::create_request), system_automaton::create_request_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (CREATE_NAME, CREATE_DESCRIPTION, create_traits::action_type, reinterpret_cast<const void*> (&::create), create_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_CREATE_NAME, SA_CREATE_DESCRIPTION, system_automaton::create_traits::compare_method, system_automaton::create_traits::action_type, reinterpret_cast<const void*> (&::create), system_automaton::create_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (INIT_NAME, INIT_DESCRIPTION, init_traits::action_type, reinterpret_cast<const void*> (&::init), init_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_INIT_NAME, SA_INIT_DESCRIPTION, system_automaton::init_traits::compare_method, system_automaton::init_traits::action_type, reinterpret_cast<const void*> (&::init), system_automaton::init_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (CREATE_RESPONSE_NAME, CREATE_RESPONSE_DESCRIPTION, create_response_traits::action_type, reinterpret_cast<const void*> (&::create_response), create_response_traits::parameter_mode);
-    kassert (r);
-
-    r = system_automaton->add_action (BIND_REQUEST_NAME, BIND_REQUEST_DESCRIPTION, bind_request_traits::action_type, reinterpret_cast<const void*> (&::bind_request), bind_request_traits::parameter_mode);
-    kassert (r);
-    r = system_automaton->add_action (BIND_NAME, BIND_DESCRIPTION, bind_traits::action_type, reinterpret_cast<const void*> (&::bind), bind_traits::parameter_mode);
-    kassert (r);
-    r = system_automaton->add_action (BIND_RESPONSE_NAME, BIND_RESPONSE_DESCRIPTION, bind_response_traits::action_type, reinterpret_cast<const void*> (&::bind_response), bind_response_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_CREATE_RESPONSE_NAME, SA_CREATE_RESPONSE_DESCRIPTION, system_automaton::create_response_traits::compare_method, system_automaton::create_response_traits::action_type, reinterpret_cast<const void*> (&::create_response), system_automaton::create_response_traits::parameter_mode));
     kassert (r);
 
-    r = system_automaton->add_action (LOOSE_REQUEST_NAME, LOOSE_REQUEST_DESCRIPTION, loose_request_traits::action_type, reinterpret_cast<const void*> (&::loose_request), loose_request_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_BIND_REQUEST_NAME, SA_BIND_REQUEST_DESCRIPTION, system_automaton::bind_request_traits::compare_method, system_automaton::bind_request_traits::action_type, reinterpret_cast<const void*> (&::bind_request), system_automaton::bind_request_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (LOOSE_NAME, LOOSE_DESCRIPTION, loose_traits::action_type, reinterpret_cast<const void*> (&::loose), loose_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_BIND_NAME, SA_BIND_DESCRIPTION, system_automaton::bind_traits::compare_method, system_automaton::bind_traits::action_type, reinterpret_cast<const void*> (&::bind), system_automaton::bind_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (LOOSE_RESPONSE_NAME, LOOSE_RESPONSE_DESCRIPTION, loose_response_traits::action_type, reinterpret_cast<const void*> (&::loose_response), loose_response_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_BIND_RESPONSE_NAME, SA_BIND_RESPONSE_DESCRIPTION, system_automaton::bind_response_traits::compare_method, system_automaton::bind_response_traits::action_type, reinterpret_cast<const void*> (&::bind_response), system_automaton::bind_response_traits::parameter_mode));
     kassert (r);
 
-    r = system_automaton->add_action (DESTROY_REQUEST_NAME, DESTROY_REQUEST_DESCRIPTION, destroy_request_traits::action_type, reinterpret_cast<const void*> (&::destroy_request), destroy_request_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_LOOSE_REQUEST_NAME, SA_LOOSE_REQUEST_DESCRIPTION, system_automaton::loose_request_traits::compare_method, system_automaton::loose_request_traits::action_type, reinterpret_cast<const void*> (&::loose_request), system_automaton::loose_request_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (DESTROY_NAME, DESTROY_DESCRIPTION, destroy_traits::action_type, reinterpret_cast<const void*> (&::destroy), destroy_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_LOOSE_NAME, SA_LOOSE_DESCRIPTION, system_automaton::loose_traits::compare_method, system_automaton::loose_traits::action_type, reinterpret_cast<const void*> (&::loose), system_automaton::loose_traits::parameter_mode));
     kassert (r);
-    r = system_automaton->add_action (DESTROY_RESPONSE_NAME, DESTROY_RESPONSE_DESCRIPTION, destroy_response_traits::action_type, reinterpret_cast<const void*> (&::destroy_response), destroy_response_traits::parameter_mode);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_LOOSE_RESPONSE_NAME, SA_LOOSE_RESPONSE_DESCRIPTION, system_automaton::loose_response_traits::compare_method, system_automaton::loose_response_traits::action_type, reinterpret_cast<const void*> (&::loose_response), system_automaton::loose_response_traits::parameter_mode));
+    kassert (r);
+
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_DESTROY_REQUEST_NAME, SA_DESTROY_REQUEST_DESCRIPTION, system_automaton::destroy_request_traits::compare_method, system_automaton::destroy_request_traits::action_type, reinterpret_cast<const void*> (&::destroy_request), system_automaton::destroy_request_traits::parameter_mode));
+    kassert (r);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_DESTROY_NAME, SA_DESTROY_DESCRIPTION, system_automaton::destroy_traits::compare_method, system_automaton::destroy_traits::action_type, reinterpret_cast<const void*> (&::destroy), system_automaton::destroy_traits::parameter_mode));
+    kassert (r);
+    r = system_automaton->add_action (new (kernel_alloc ()) paction (system_automaton, SA_DESTROY_RESPONSE_NAME, SA_DESTROY_RESPONSE_DESCRIPTION, system_automaton::destroy_response_traits::compare_method, system_automaton::destroy_response_traits::action_type, reinterpret_cast<const void*> (&::destroy_response), system_automaton::destroy_response_traits::parameter_mode));
     kassert (r);
     
     // Bootstrap.
@@ -187,52 +284,58 @@ namespace rts {
     automaton* child = create_automaton (vm::SUPERVISOR);
 
     // Parse the file.
-    elf::header_parser hp (automaton_text, automaton_size);
-    if (!hp.parse ()) {
+    elf::parser hp;
+    if (!hp.parse (child, automaton_text, automaton_size)) {
       // TODO
       kassert (0);
     }
 
-    // First pass
-    // 1.  Build a map from logical address to frame.
-    // 2.  Build a list of areas that need to be cleared.
-    // 3.  Create the memory map for the automaton.
+    // Add the actions to the automaton.
+    for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
+      if (!child->add_action (*pos)) {
+	// TODO:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
+	kassert (0);
+      }
+    }
+
+    // Bind the system automaton to the new automaton.
+    if (!bind_actions (system_automaton, SA_INIT_NAME, 0, child, SA_INIT_NAME, 0, system_automaton)) {
+      // Couldn't bind to init.
+      kassert (0);
+    }
+
+    kout << "Bind to system automaton" << endl;
+
+    // Build a map from logical address to frame.
+    // Build a list of areas that need to be cleared.
+    // Create the memory map for the automaton.
     frame_list_.clear ();
     clear_list_.clear ();
-    for (const elf::program_header_entry* e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
-      switch (e->type) {
-      case elf::LOAD:
-	if (e->memory_size != 0) {
-	  vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
-
-	  size_t s;
-	  // Initialized data.
-	  for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-	    frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (buffer->begin () + e->offset + s), map_mode));
-	  }
-
-	  // Clear the tiny region between the end of initialized data and the first unitialized page.
-	  if (e->file_size < e->memory_size) {
-	    logical_address_t begin = e->virtual_address + e->file_size;
-	    logical_address_t end = e->virtual_address + e->memory_size;
-	    clear_list_.push_back (std::make_pair (begin, end));
-	  }
-
-	  // Uninitialized data.
-	  for (; s < e->memory_size; s += PAGE_SIZE) {
-	    frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
-	  }
-
-	  vm_area_base* area = new (kernel_alloc ()) vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
-	  if (!child->insert_vm_area (area)) {
-	    // TODO:  The area conflicts with the existing memory map.
-	    kassert (0);
-	  }
-	}
-	break;
-      case elf::NOTE:
-	kout << "note" << endl;
-	break;
+    for (elf::parser::program_header_iterator e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
+      vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
+      
+      size_t s;
+      // Initialized data.
+      for (s = 0; s < e->file_size; s += PAGE_SIZE) {
+	frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (buffer->begin () + e->offset + s), map_mode));
+      }
+      
+      // Clear the tiny region between the end of initialized data and the first unitialized page.
+      if (e->file_size < e->memory_size) {
+	logical_address_t begin = e->virtual_address + e->file_size;
+	logical_address_t end = e->virtual_address + e->memory_size;
+	clear_list_.push_back (std::make_pair (begin, end));
+      }
+      
+      // Uninitialized data.
+      for (; s < e->memory_size; s += PAGE_SIZE) {
+	frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
+      }
+      
+      vm_area_base* area = new (kernel_alloc ()) vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
+      if (!child->insert_vm_area (area)) {
+	// TODO:  The area conflicts with the existing memory map.
+	kassert (0);
       }
     }
 
@@ -263,34 +366,6 @@ namespace rts {
 
     // TODO
     kassert (0);
-
-
-    // 	break;
-    //   case elf::NOTE:
-    // 	{
-    // 	  if (p->offset + p->file_size > item.automaton_size) {
-    // 	    // TODO:  Segment location not reported correctly.
-    // 	    kassert (0);
-    // 	  }
-
-    // 	  const elf::note* note_begin = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset);
-    // 	  const elf::note* note_end = reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (h) + p->offset + p->file_size);
-
-    // 	  while (note_begin < note_end) {
-    // 	    // If the next one is in range, this one is safe to process.
-    // 	    if (note_begin->next () <= note_end) {
-    // 	      const uint32_t* desc = static_cast<const uint32_t*> (note_begin->desc ());
-    // 	      kout << "NOTE name = " << note_begin->name ()
-    // 		   << " type = " << hexformat (note_begin->type)
-    // 		   << " desc_size = " << note_begin->desc_size
-    // 		   << " " << hexformat (*desc) << " " << hexformat (*(desc + 1)) << endl;
-    // 	    }
-    // 	    note_begin = note_begin->next ();
-    // 	  }
-    // 	}
-    // 	break;
-    //   }
-    // }
   }
 
   void

@@ -62,9 +62,9 @@ trap_dispatch (volatile registers regs)
       
       if (action_entry_point != 0) {
 	// Check the action that was scheduled.
-	automaton::const_action_iterator pos = current.action->automaton->action_find (action_entry_point);
-	if (pos != current.action->automaton->action_end ()) {
-	  scheduler::schedule (caction (*pos, parameter));
+	const paction* action = current.action->automaton->find_action (action_entry_point);
+	if (action != 0) {
+	  scheduler::schedule (caction (action, parameter));
 	}
 	else {
 	  // TODO:  Automaton scheduled a bad action.

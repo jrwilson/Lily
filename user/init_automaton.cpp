@@ -1,9 +1,11 @@
 #include <action_traits.hpp>
+#include <system_automaton.hpp>
 
-typedef action_traits<input_action, no_parameter> init_traits;
+typedef action_traits<input_action<equal>, no_parameter> init_traits;
 #define INIT_TRAITS init_traits
 #define INIT_NAME "init"
-#define INIT_DESCRIPTION "description"
+#define INIT_DESCRIPTION SA_INIT_DESCRIPTION
+#define INIT_COMPARE SA_INIT_COMPARE
 #define INIT_ACTION M_INPUT
 #define INIT_PARAMETER M_NO_PARAMETER
 
