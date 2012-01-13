@@ -5,13 +5,9 @@
 
 namespace rts {
   
-  // Heap location for system automata.
-  // Starting at 4MB allow us to use the low page table of the kernel.
-  static const logical_address_t SYSTEM_HEAP_BEGIN = FOUR_MEGABYTES;
-  
   // For creating automata and allocating them an aid.
   static aid_t current_aid_;
-  typedef std::unordered_map<aid_t, automaton*, std::hash<aid_t>, std::equal_to<aid_t>, kernel_allocator<std::pair<const aid_t, automaton*> > > aid_map_type;
+  typedef std::unordered_map<aid_t, automaton*> aid_map_type;
   static aid_map_type aid_map_;
 
   struct map_op {
@@ -29,10 +25,10 @@ namespace rts {
   };
 
   // A list of frames used when creating automata.
-  typedef std::vector<map_op, kernel_allocator<map_op> > frame_list_type;
+  typedef std::vector<map_op> frame_list_type;
   static frame_list_type frame_list_;
 
-  typedef std::vector<std::pair<logical_address_t, logical_address_t>, kernel_allocator<std::pair<logical_address_t, logical_address_t> > > clear_list_type;
+  typedef std::vector<std::pair<logical_address_t, logical_address_t> > clear_list_type;
   static clear_list_type clear_list_;
 
   static automaton*
@@ -65,7 +61,7 @@ namespace rts {
     current_aid_ = std::max (aid + 1, 0);
     
     // Create the automaton and insert it into the map.
-    automaton* a = new (kernel_alloc ()) automaton (aid, frame);
+    automaton* a = new automaton (aid, frame);
     aid_map_.insert (std::make_pair (aid, a));
     
     // Add to the scheduler.
@@ -110,7 +106,7 @@ namespace rts {
     	frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
       }
       
-      vm_area_base* area = new (kernel_alloc ()) vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
+      vm_area_base* area = new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
       if (!a->insert_vm_area (area)) {
     	// TODO:  The area conflicts with the existing memory map.
     	kassert (0);
@@ -142,102 +138,102 @@ namespace rts {
     return a;
   }
 
-  static bool
-  bind_actions (automaton* output_automaton,
-		const kstring& output_action_name,
-		aid_t output_parameter,
-		automaton* input_automaton,
-		const kstring& input_action_name,
-		aid_t input_parameter,
-		automaton* owner)
-  {
-    kassert (output_automaton != 0);
-    kassert (input_automaton != 0);
-    kassert (owner != 0);
+  // static bool
+  // bind_actions (automaton* output_automaton,
+  // 		const kstring& output_action_name,
+  // 		aid_t output_parameter,
+  // 		automaton* input_automaton,
+  // 		const kstring& input_action_name,
+  // 		aid_t input_parameter,
+  // 		automaton* owner)
+  // {
+  //   kassert (output_automaton != 0);
+  //   kassert (input_automaton != 0);
+  //   kassert (owner != 0);
 
-    if (output_automaton == input_automaton) {
-      // The output and input automata must be different.
-      return false;
-    }
+  //   if (output_automaton == input_automaton) {
+  //     // The output and input automata must be different.
+  //     return false;
+  //   }
 
-    // Check the output action dynamically.
-    const paction* output_action = output_automaton->find_action (output_action_name);
-    if (output_action == 0 ||
-	output_action->type != OUTPUT) {
-      // Output action does not exist or has the wrong type.
-      return false;
-    }
+  //   // Check the output action dynamically.
+  //   const paction* output_action = output_automaton->find_action (output_action_name);
+  //   if (output_action == 0 ||
+  // 	output_action->type != OUTPUT) {
+  //     // Output action does not exist or has the wrong type.
+  //     return false;
+  //   }
 
-    // Check the input action dynamically.
-    const paction* input_action = input_automaton->find_action (input_action_name);
-    if (input_action == 0 ||
-	input_action->type != INPUT) {
-      // Input action does not exist or has the wrong type.
-      return false;
-    }
+  //   // Check the input action dynamically.
+  //   const paction* input_action = input_automaton->find_action (input_action_name);
+  //   if (input_action == 0 ||
+  // 	input_action->type != INPUT) {
+  //     // Input action does not exist or has the wrong type.
+  //     return false;
+  //   }
 
-    // Check the descriptions.
-    if (output_action->compare_method != input_action->compare_method) {
-      return false;
-    }
+  //   // Check the descriptions.
+  //   if (output_action->compare_method != input_action->compare_method) {
+  //     return false;
+  //   }
 
-    switch (output_action->compare_method) {
-    case NO_COMPARE:
-      // Okay.  I won't.
-      break;
-    case EQUAL:
-      // Simple string equality.
-      if (output_action->description != input_action->description) {
-	return false;
-      }
-      break;
-    }
+  //   switch (output_action->compare_method) {
+  //   case NO_COMPARE:
+  //     // Okay.  I won't.
+  //     break;
+  //   case EQUAL:
+  //     // Simple string equality.
+  //     if (output_action->description != input_action->description) {
+  // 	return false;
+  //     }
+  //     break;
+  //   }
 
-    // Adust the parameters.
-    switch (output_action->parameter_mode) {
-    case NO_PARAMETER:
-      output_parameter = 0;
-      break;
-    case PARAMETER:
-      break;
-    case AUTO_PARAMETER:
-      output_parameter = input_automaton->aid ();
-      break;
-    }
+  //   // Adust the parameters.
+  //   switch (output_action->parameter_mode) {
+  //   case NO_PARAMETER:
+  //     output_parameter = 0;
+  //     break;
+  //   case PARAMETER:
+  //     break;
+  //   case AUTO_PARAMETER:
+  //     output_parameter = input_automaton->aid ();
+  //     break;
+  //   }
 
-    switch (input_action->parameter_mode) {
-    case NO_PARAMETER:
-      input_parameter = 0;
-      break;
-    case PARAMETER:
-      break;
-    case AUTO_PARAMETER:
-      input_parameter = output_automaton->aid ();
-      break;
-    }
+  //   switch (input_action->parameter_mode) {
+  //   case NO_PARAMETER:
+  //     input_parameter = 0;
+  //     break;
+  //   case PARAMETER:
+  //     break;
+  //   case AUTO_PARAMETER:
+  //     input_parameter = output_automaton->aid ();
+  //     break;
+  //   }
 
-    // Form complete actions.
-    caction oa (output_action, output_parameter);
-    caction ia (input_action, input_parameter);
+  //   // Form complete actions.
+  //   caction oa (output_action, output_parameter);
+  //   caction ia (input_action, input_parameter);
 
-    // Check that the input action is not bound.
-    // (Also checks that the binding does not exist.)
-    if (input_automaton->is_input_bound (ia)) {
-      return false;
-    }
+  //   // Check that the input action is not bound.
+  //   // (Also checks that the binding does not exist.)
+  //   if (input_automaton->is_input_bound (ia)) {
+  //     return false;
+  //   }
 
-    // Check that the output action is not bound to an action in the input automaton.
-    if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
-      return false;
-    }
+  //   // Check that the output action is not bound to an action in the input automaton.
+  //   if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
+  //     return false;
+  //   }
 
-    // Bind.
-    output_automaton->bind_output (oa, ia, owner);
-    input_automaton->bind_input (oa, ia, owner);
-    owner->bind (oa, ia);
+  //   // Bind.
+  //   output_automaton->bind_output (oa, ia, owner);
+  //   input_automaton->bind_input (oa, ia, owner);
+  //   owner->bind (oa, ia);
 
-    return true;
-  }
+  //   return true;
+  // }
 
   void
   create_init_automaton (frame_t automaton_frame_begin,
@@ -279,7 +275,7 @@ namespace rts {
     }
 
     // Schedule the init action.
-    const paction* action = child->find_action (kstring ("init"));
+    const paction* action = child->find_action (std::string ("init"));
 
     if (action == 0) {
       kout << "The initial automaton does not contain an init action.  Halting." << endl;
@@ -303,116 +299,11 @@ namespace rts {
   }
 
   aid_t
-  create (bid_t automaton_bid,
+  create (const void* automaton_buffer,
 	  size_t automaton_size)
   {
-    // TODO
-    kassert (0);
-
-    // // Map the buffer containing the program text.
-    // const void* automaton_text = system_automaton->buffer_map (automaton_bid);
-    // kassert (automaton_text != 0);
-
-    // // Get the buffer as well so we can look at the frames.
-    // const buffer* buffer = system_automaton->lookup_buffer (automaton_bid);
-    // kassert (buffer != 0);
-
-    // // Create the automaton.
-    // automaton* child = create_automaton ();
-
-    // // Parse the file.
-    // elf::parser hp;
-    // if (!hp.parse (child, automaton_text, automaton_size)) {
-    //   // TODO
-    //   kassert (0);
-    // }
-
-    // // Add the actions to the automaton.
-    // for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
-    //   if (!child->add_action (*pos)) {
-    // 	// TODO:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
-    // 	kassert (0);
-    //   }
-    // }
-
-    // // Bind the system automaton to the new automaton.
-    // if (!bind_actions (system_automaton, SA_INIT_NAME, 0, child, SA_INIT_NAME, 0, system_automaton)) {
-    //   // TODO:  Couldn't bind to init.
-    //   kassert (0);
-    // }
-
-    // // We don't care if these fail.
-    // bind_actions (child, SA_CREATE_REQUEST_NAME, 0, system_automaton, SA_CREATE_REQUEST_NAME, 0, system_automaton);
-    // bind_actions (system_automaton, SA_CREATE_RESPONSE_NAME, 0, child, SA_CREATE_RESPONSE_NAME, 0, system_automaton);
-
-    // bind_actions (child, SA_BIND_REQUEST_NAME, 0, system_automaton, SA_BIND_REQUEST_NAME, 0, system_automaton);
-    // bind_actions (system_automaton, SA_BIND_RESPONSE_NAME, 0, child, SA_BIND_RESPONSE_NAME, 0, system_automaton);
-
-    // bind_actions (child, SA_LOOSE_REQUEST_NAME, 0, system_automaton, SA_LOOSE_REQUEST_NAME, 0, system_automaton);
-    // bind_actions (system_automaton, SA_LOOSE_RESPONSE_NAME, 0, child, SA_LOOSE_RESPONSE_NAME, 0, system_automaton);
-
-    // bind_actions (child, SA_DESTROY_REQUEST_NAME, 0, system_automaton, SA_DESTROY_REQUEST_NAME, 0, system_automaton);
-    // bind_actions (system_automaton, SA_DESTROY_RESPONSE_NAME, 0, child, SA_DESTROY_RESPONSE_NAME, 0, system_automaton);
-
-    // Build a map from logical address to frame.
-    // Build a list of areas that need to be cleared.
-    // Create the memory map for the automaton.
-    // frame_list_.clear ();
-    // clear_list_.clear ();
-    // for (elf::parser::program_header_iterator e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
-    //   vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
-      
-    //   size_t s;
-    //   // Initialized data.
-    //   for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-    // 	frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (buffer->begin () + e->offset + s), map_mode));
-    //   }
-      
-    //   // Clear the tiny region between the end of initialized data and the first unitialized page.
-    //   if (e->file_size < e->memory_size) {
-    // 	logical_address_t begin = e->virtual_address + e->file_size;
-    // 	logical_address_t end = e->virtual_address + e->memory_size;
-    // 	clear_list_.push_back (std::make_pair (begin, end));
-    //   }
-      
-    //   // Uninitialized data.
-    //   for (; s < e->memory_size; s += PAGE_SIZE) {
-    // 	frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
-    //   }
-      
-    //   vm_area_base* area = new (kernel_alloc ()) vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
-    //   if (!child->insert_vm_area (area)) {
-    // 	// TODO:  The area conflicts with the existing memory map.
-    // 	kassert (0);
-    //   }
-    // }
-
-    // // Switch to the automaton.
-    // physical_address_t old = vm::switch_to_directory (child->page_directory_physical_address ());
-    
-    // // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
-    
-    // // Map all the frames.
-    // for (frame_list_type::const_iterator pos = frame_list_.begin ();
-    // 	 pos != frame_list_.end ();
-    // 	 ++pos) {
-    //   vm::map (pos->logical_address, pos->frame, vm::USER, pos->map_mode);
-    // }
-
-    // // Clear.
-    // for (clear_list_type::const_iterator pos = clear_list_.begin ();
-    // 	 pos != clear_list_.end ();
-    // 	 ++pos) {
-    //   memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
-    // }
-
-    // // Switch back.
-    // vm::switch_to_directory (old);
-    
-    // // Unmap the program text.
-    // system_automaton->buffer_unmap (automaton_bid);
-
-    // return child->aid ();
+    const automaton* a = create_automaton (reinterpret_cast<logical_address_t> (automaton_buffer), reinterpret_cast<logical_address_t> (automaton_buffer) + automaton_size);
+    return a->aid ();
   }
 
   void

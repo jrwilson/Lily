@@ -2,15 +2,15 @@
 #define __action_descriptor_hpp__
 
 #include "action_traits.hpp"
-#include "kstring.hpp"
+#include <string>
 
 class automaton;
 
 // Partial action.
 struct paction {
   ::automaton* const automaton;
-  kstring const name;
-  kstring const description;
+  std::string const name;
+  std::string const description;
   compare_method_t const compare_method;
   action_type_t const type;
   const void* const action_entry_point;

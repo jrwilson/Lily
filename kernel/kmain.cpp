@@ -16,7 +16,6 @@
 #include "string_nocheck.hpp"
 #include "kout.hpp"
 #include "multiboot_parser.hpp"
-#include "kernel_allocator.hpp"
 #include "vm.hpp"
 #include "gdt.hpp"
 #include "idt.hpp"
@@ -25,6 +24,7 @@
 #include "trap_handler.hpp"
 #include "frame_manager.hpp"
 #include "rts.hpp"
+#include "kernel_allocator.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;

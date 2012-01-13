@@ -53,11 +53,11 @@ namespace lilycall {
   }
 
   inline aid_t
-  create (bid_t automaton_bid,
+  create (const void* automaton_buffer,
 	  size_t automaton_size)
   {
     aid_t aid;
-    asm ("int $0x81\n" : "=a"(aid) : "a"(CREATE), "b"(automaton_bid), "c"(automaton_size) :);
+    asm ("int $0x81\n" : "=a"(aid) : "a"(CREATE), "b"(automaton_buffer), "c"(automaton_size) :);
     return aid;
   }
 

@@ -403,7 +403,7 @@ namespace elf {
 		      return false;
 		    }
 
-		    actions_.push_back (new (kernel_alloc ()) paction (a, d->name (), d->desc (), static_cast<compare_method_t> (d->compare_method), static_cast<action_type_t> (d->action_type), reinterpret_cast<const void*> (d->action_entry_point), static_cast<parameter_mode_t> (d->parameter_mode)));
+		    actions_.push_back (new paction (a, d->name (), d->desc (), static_cast<compare_method_t> (d->compare_method), static_cast<action_type_t> (d->action_type), reinterpret_cast<const void*> (d->action_entry_point), static_cast<parameter_mode_t> (d->parameter_mode)));
 		  }
 		  break;
 		default:
@@ -426,7 +426,7 @@ namespace elf {
       return true;
     }
 
-    typedef std::vector<program_header_entry, kernel_allocator<program_header_entry> > program_header_list_type;
+    typedef std::vector<program_header_entry> program_header_list_type;
     typedef program_header_list_type::const_iterator program_header_iterator;
 
     program_header_iterator
@@ -441,7 +441,7 @@ namespace elf {
       return program_headers_.end ();
     }
 
-    typedef std::vector<paction*, kernel_allocator<paction*> > action_list_type;
+    typedef std::vector<paction*> action_list_type;
     typedef action_list_type::const_iterator action_iterator;
 
     action_iterator

@@ -99,13 +99,13 @@ private:
   // Physical address that contains the automaton's page directory.
   physical_address_t const page_directory_;
   // Map from action entry point (aep) to action.
-  typedef std::unordered_map<const void*, const paction* const, std::hash<const void*>, std::equal_to<const void*>, kernel_allocator<std::pair<const void* const, const paction* const> > > aep_to_action_map_type;
+  typedef std::unordered_map<const void*, const paction* const> aep_to_action_map_type;
   aep_to_action_map_type aep_to_action_map_;
   // Map from name to action.
-  typedef std::unordered_map<kstring, const paction* const, kstring_hash, std::equal_to<kstring>, kernel_allocator<std::pair<kstring const, const paction* const> > > name_to_action_map_type;
+  typedef std::unordered_map<std::string, const paction* const> name_to_action_map_type;
   name_to_action_map_type name_to_action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
-  typedef std::vector<vm_area_base*, kernel_allocator<vm_area_base*> > memory_map_type;
+  typedef std::vector<vm_area_base*> memory_map_type;
   memory_map_type memory_map_;
   // Heap area.
   vm_area_base* heap_area_;
@@ -114,23 +114,23 @@ private:
 
   // Bound outputs.
 public:
-  typedef std::unordered_set <input_act, input_act_hash, std::equal_to<input_act>, kernel_allocator<input_act> > input_action_set_type;
+  typedef std::unordered_set <input_act, input_act_hash> input_action_set_type;
 private:
-  typedef std::unordered_map <caction, input_action_set_type, caction_hash, std::equal_to<caction>, kernel_allocator<std::pair<const caction, input_action_set_type> > > bound_outputs_map_type;
+  typedef std::unordered_map <caction, input_action_set_type, caction_hash> bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
 
   // Bound inputs.
-  typedef std::unordered_map<caction, output_act, caction_hash, std::equal_to<caction>, kernel_allocator<std::pair<const caction, output_act> > > bound_inputs_map_type;
+  typedef std::unordered_map<caction, output_act, caction_hash> bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
 
   // Bindings.
-  typedef std::unordered_set<binding, binding_hash, std::equal_to<binding>, kernel_allocator<binding> > bindings_set_type;
+  typedef std::unordered_set<binding, binding_hash> bindings_set_type;
   bindings_set_type bindings_set_;
 
   // Next bid to allocate.
   bid_t current_bid_;
   // Map from bid_t to buffer*.
-  typedef std::unordered_map<bid_t, buffer*, std::hash<bid_t>, std::equal_to<bid_t>, kernel_allocator<std::pair<const bid_t, buffer*> > > bid_to_buffer_map_type;
+  typedef std::unordered_map<bid_t, buffer*> bid_to_buffer_map_type;
   bid_to_buffer_map_type bid_to_buffer_map_;
 
   struct compare_vm_area {
@@ -186,7 +186,7 @@ public:
     current_bid_ (0)
   {
     // Add a stack.
-    stack_area_ = new (kernel_alloc ()) vm_area_base (STACK_BEGIN, STACK_END);
+    stack_area_ = new vm_area_base (STACK_BEGIN, STACK_END);
     insert_vm_area (stack_area_);
 
     // TODO:  Might want to defer these operations since it involves switching page directories.
@@ -369,7 +369,7 @@ public:
   }
 
   const paction*
-  find_action (const kstring& name) const
+  find_action (const std::string& name) const
   {
     name_to_action_map_type::const_iterator pos = name_to_action_map_.find (name);
     if (pos != name_to_action_map_.end ()) {
@@ -508,7 +508,7 @@ public:
     bid_t bid = generate_bid ();
     
     // Create the buffer and insert it into the map.
-    buffer* b = new (kernel_alloc ()) buffer (size);
+    buffer* b = new buffer (size);
     bid_to_buffer_map_.insert (std::make_pair (bid, b));
     
     return bid;
@@ -530,7 +530,7 @@ public:
 	bid_t bid = generate_bid ();
 	
 	// Create the buffer and insert it into the map.
-	buffer* n = new (kernel_alloc ()) buffer (*b, offset, length);
+	buffer* n = new buffer (*b, offset, length);
 	bid_to_buffer_map_.insert (std::make_pair (bid, n));
 	
 	return bid;
@@ -553,7 +553,7 @@ public:
     bid_t bid = generate_bid ();
     
     // Create the buffer and insert it into the map.
-    buffer* b = new (kernel_alloc ()) buffer (other);
+    buffer* b = new buffer (other);
     bid_to_buffer_map_.insert (std::make_pair (bid, b));
     
     return bid;
@@ -770,7 +770,7 @@ public:
       bid_to_buffer_map_.erase (bpos);
 
       // Destroy it.
-      kdestroy (b, kernel_alloc ());
+      delete b;
 
       return 0;
     }

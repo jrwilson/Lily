@@ -17,6 +17,7 @@
 #include "kassert.hpp"
 #include "vm_def.hpp"
 #include "scheduler.hpp"
+#include "kernel_allocator.hpp"
 
 extern "C" void exception0 ();
 extern "C" void exception1 ();

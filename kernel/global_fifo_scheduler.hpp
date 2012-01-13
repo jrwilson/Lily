@@ -79,9 +79,9 @@ private:
 
   private:
     status_t status_;
-    typedef std::deque<caction, kernel_allocator<caction> > queue_type;
+    typedef std::deque<caction> queue_type;
     queue_type queue_;
-    typedef std::unordered_set<caction, caction_hash, std::equal_to<caction>, kernel_allocator<caction> > set_type;
+    typedef std::unordered_set<caction, caction_hash> set_type;
     set_type set_;
   };
   
@@ -149,7 +149,7 @@ private:
 	  // Finished executing input actions.
 	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
-	    kdestroy (output_buffer_, kernel_alloc ());
+	    delete output_buffer_;
 	    output_buffer_ = 0;
 	  }
 	  break;
@@ -175,7 +175,7 @@ private:
 	  // There were no inputs.
 	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
-	    kdestroy (output_buffer_, kernel_alloc ());
+	    delete output_buffer_;
 	    output_buffer_ = 0;
 	  }
 	  break;
@@ -279,9 +279,9 @@ private:
 
   /* TODO:  Need one per core. */
   static execution_context exec_context_;
-  typedef std::deque<automaton_context*, kernel_allocator<automaton_context*> > queue_type;
+  typedef std::deque<automaton_context*> queue_type;
   static queue_type ready_queue_;
-  typedef std::unordered_map<automaton*, automaton_context*, std::hash<automaton*>, std::equal_to<automaton*>, kernel_allocator<std::pair<automaton* const, automaton_context*> > > context_map_type;
+  typedef std::unordered_map<automaton*, automaton_context*> context_map_type;
   static context_map_type context_map_;
 
 public:

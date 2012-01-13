@@ -106,8 +106,19 @@ trap_dispatch (volatile registers regs)
     switch (regs.eax) {
     case lilycall::CREATE:
       {
-	regs.eax = rts::create (regs.ebx, regs.ecx);
-	return;
+	const void* automaton_buffer = reinterpret_cast<const void*> (regs.ebx);
+	size_t automaton_size = regs.ecx;
+
+	const caction& current = scheduler::current_action ();
+
+	if (current.action->automaton->verify_span (automaton_buffer, automaton_size)) {
+	  regs.eax = rts::create (automaton_buffer, automaton_size);
+	  return;
+	}
+	else {
+	  // TODO:  The automaton specified a bad buffer.
+	  kassert (0);
+	}
       }
       break;
     case lilycall::BIND:

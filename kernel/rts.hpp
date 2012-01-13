@@ -27,7 +27,7 @@ namespace rts {
 			 size_t data_size);
   
   aid_t
-  create (bid_t automaton_bid,
+  create (const void* automaton_buffer,
 	  size_t automaton_size);
 
   void

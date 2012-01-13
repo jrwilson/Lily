@@ -92,6 +92,21 @@ memcmp (const void* p,
   return 0;
 }
 
+const void*
+memchr (const void* s,
+	int c,
+	size_t n)
+{
+  const unsigned char* str = static_cast<const unsigned char*> (s);
+  for (; n != 0; --n, ++str) {
+    if (*str == c) {
+      return str;
+    }
+  }
+
+  return 0;
+}
+
 extern "C" void*
 __memcpy_chk (void* dst,
 	      const void* src,

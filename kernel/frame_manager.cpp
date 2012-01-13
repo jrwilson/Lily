@@ -27,7 +27,7 @@ frame_manager::add (physical_address_t begin,
   size_t size = end - begin;
   while (size != 0) {
     size_t sz = std::min (size_t (stack_allocator::MAX_REGION_SIZE), size);
-    allocator_list_.push_back (new (kernel_alloc ()) stack_allocator (physical_address_to_frame (begin), physical_address_to_frame (begin + sz)));
+    allocator_list_.push_back (new stack_allocator (physical_address_to_frame (begin), physical_address_to_frame (begin + sz)));
     size -= sz;
     begin += sz;
   }
