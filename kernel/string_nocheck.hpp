@@ -11,6 +11,8 @@
    This option turns on error checking in string functions which fails when manipulating regions of memory that exist outside of nice and cozy C environment.
  */
 
+#include <stddef.h>
+
 inline void*
 memset_nocheck (void* ptr,
 		int value,

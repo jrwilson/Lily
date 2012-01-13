@@ -14,23 +14,18 @@
   Justin R. Wilson
 */
 
-#include "automaton.hpp"
+#include "vm_def.hpp"
+#include "aid.hpp"
+#include "bid.hpp"
 
 namespace rts {
 
-  extern automaton* system_automaton;
-
-  extern bid_t automaton_bid;
-  extern size_t automaton_size;
-  extern bid_t data_bid;
-  extern size_t data_size;
-
   void
-  create_system_automaton (buffer* automaton_buffer,
-			   size_t automaton_size,
-			   buffer* data_buffer,
-			   size_t data_size);
-
+  create_init_automaton (frame_t automaton_frame,
+			 size_t automaton_size,
+			 frame_t data_frame,
+			 size_t data_size);
+  
   aid_t
   create (bid_t automaton_bid,
 	  size_t automaton_size);

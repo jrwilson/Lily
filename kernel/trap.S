@@ -42,5 +42,3 @@ trap_common_stub:
 
 TRAP 0 0x80
 TRAP 1 0x81
-TRAP 2 0x82
-	

@@ -799,7 +799,7 @@ public:
     return bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ();
   }
 
-  const buffer*
+  buffer*
   lookup_buffer (bid_t bid)
   {
     bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);

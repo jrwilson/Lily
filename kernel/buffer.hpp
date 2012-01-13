@@ -37,18 +37,6 @@ public:
     }
   }
 
-  // Used for creating a buffer from raw memory.
-  buffer (frame_t begin,
-  	  frame_t end) :
-    vm_area_base (0, 0),
-    frame_list_ (end - begin)
-  {
-    for (frame_list_type::iterator pos = frame_list_.begin (); pos != frame_list_.end (); ++pos) {
-      // Note:  Not incrementing the reference count of the frame.
-      *pos = begin++;
-    }    
-  }
-
   ~buffer ()
   {
     unmap ();
@@ -151,6 +139,16 @@ public:
 	vm::map (begin_ + (offset + idx) * PAGE_SIZE, frame_list_[offset + idx], vm::USER, vm::MAP_COPY_ON_WRITE);
       }
     }
+  }
+
+  void
+  append_frame (frame_t frame)
+  {
+    // Not mapped.
+    kassert (begin_ == 0);
+
+    frame_list_.push_back (frame);
+    frame_manager::incref (frame);
   }
 
 private:

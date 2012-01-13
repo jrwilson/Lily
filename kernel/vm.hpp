@@ -17,7 +17,6 @@
 #include "vm_def.hpp"
 #include "kassert.hpp"
 #include "frame_manager.hpp"
-#include "sacall.hpp"
 
 namespace vm {
   struct page_directory;

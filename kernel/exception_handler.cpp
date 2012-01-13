@@ -208,7 +208,7 @@ exception_dispatch (volatile registers regs)
 	  vm::supervisor_context (error) &&
 	  address >= kernel_alloc::heap_begin () &&
 	  address < kernel_alloc::heap_end ()) {
-	// It is possible that the kernel expanded since the current page directory was created.
+	// The kernel expanded since the current page directory was created.
 	// Consequently, we may encounter a page fault when trying to access something in the kernel.
 	// We only need to map the page table, however.
 	const size_t idx = vm::get_page_directory_entry (address);

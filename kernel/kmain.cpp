@@ -13,6 +13,7 @@
   Justin R. Wilson
 */
 
+#include "string_nocheck.hpp"
 #include "kout.hpp"
 #include "multiboot_parser.hpp"
 #include "kernel_allocator.hpp"
@@ -24,8 +25,6 @@
 #include "trap_handler.hpp"
 #include "frame_manager.hpp"
 #include "rts.hpp"
-#include "scheduler.hpp"
-#include "string_nocheck.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -94,9 +93,9 @@ kmain (uint32_t multiboot_magic,
   // Print a welcome message.
   kout << "Lily" << endl;
 
-  buffer* automaton_buffer;
+  frame_t automaton_frame;
   size_t automaton_size;
-  buffer* data_buffer;
+  frame_t data_frame;
   size_t data_size;
 
   {
@@ -248,20 +247,22 @@ kmain (uint32_t multiboot_magic,
 	  true,
 	  vm::MAP_READ_WRITE);
 
+    // Mark but don't map the initial automaton.
     mark (automaton_module->mod_start + KERNEL_VIRTUAL_BASE,
 	  automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
 	  false,
 	  vm::MAP_READ_ONLY);
 
+    // Mark but don't map the initial automaton's data.
     mark (data_module->mod_start + KERNEL_VIRTUAL_BASE,
 	  data_module->mod_end + KERNEL_VIRTUAL_BASE,
 	  false,
 	  vm::MAP_READ_ONLY);
     
     // Convert the modules into buffers.
-    automaton_buffer = new (kernel_alloc ()) buffer (physical_address_to_frame (automaton_module->mod_start), physical_address_to_frame (align_up (automaton_module->mod_end, PAGE_SIZE)));
+    automaton_frame = physical_address_to_frame (automaton_module->mod_start);
     automaton_size = automaton_module->mod_end - automaton_module->mod_start;
-    data_buffer = new (kernel_alloc ()) buffer (physical_address_to_frame (data_module->mod_start), physical_address_to_frame (align_up (data_module->mod_end, PAGE_SIZE)));
+    data_frame = physical_address_to_frame (data_module->mod_start);
     data_size = data_module->mod_end - data_module->mod_start;
 
     // Sweep away logical addresses that aren't in use.
@@ -271,13 +272,6 @@ kmain (uint32_t multiboot_magic,
   // Tell the system allocator that it must allocate frames and map them.
   kernel_alloc::engage_vm (PAGING_AREA);
 
-  // Create the system automaton.
-  rts::create_system_automaton (automaton_buffer, automaton_size, data_buffer, data_size);
-
-  // Release the buffers.
-  kdestroy (automaton_buffer, kernel_alloc ());
-  kdestroy (data_buffer, kernel_alloc ());
-
-  // Start the scheduler.  Doesn't return.
-  scheduler::finish (0, 0, -1, 0);
+  // Create the initial automaton.  (Doesn't return.)
+  rts::create_init_automaton (automaton_frame, automaton_size, data_frame, data_size);
 }

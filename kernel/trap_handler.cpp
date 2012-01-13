@@ -31,18 +31,15 @@ using namespace std::rel_ops;
 
 static const unsigned int FINISH_INTERRUPT = 0x80;
 static const unsigned int SYSCALL_INTERRUPT = 0x81;
-static const unsigned int SACALL_INTERRUPT = 0x82;
 
 extern "C" void trap0 ();
 extern "C" void trap1 ();
-extern "C" void trap2 ();
 
 void
 trap_handler::install ()
 {
   idt::set (FINISH_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
   idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap1, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
-  idt::set (SACALL_INTERRUPT, make_trap_gate (trap2, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
 }
 
 extern "C" void
@@ -107,6 +104,30 @@ trap_dispatch (volatile registers regs)
     break;
   case SYSCALL_INTERRUPT:
     switch (regs.eax) {
+    case lilycall::CREATE:
+      {
+	regs.eax = rts::create (regs.ebx, regs.ecx);
+	return;
+      }
+      break;
+    case lilycall::BIND:
+      {
+	rts::bind ();
+	return;
+      }
+      break;
+    case lilycall::LOOSE:
+      {
+	rts::loose ();
+	return;
+      }
+      break;
+    case lilycall::DESTROY:
+      {
+	rts::destroy ();
+	return;
+      }
+      break;
     case lilycall::SBRK:
       {
 	regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->sbrk (regs.ebx));
@@ -173,32 +194,6 @@ trap_dispatch (volatile registers regs)
 	return;
       }
       break;
-    }
-    break;
-  case SACALL_INTERRUPT:
-    if (scheduler::current_action ().action->automaton == rts::system_automaton) {
-      switch (regs.eax) {
-      case sacall::CREATE:
-	regs.eax = rts::create (regs.ebx, regs.ecx);
-	return;
-      	break;
-      case sacall::BIND:
-	rts::bind ();
-	return;
-      	break;
-      case sacall::LOOSE:
-	rts::loose ();
-	return;
-      	break;
-      case sacall::DESTROY:
-	rts::destroy ();
-	return;
-      	break;
-      }
-    }
-    else {
-      // TODO: An automaton other than the system automaton tried to execute a special instruction.
-      kassert (0);
     }
     break;
   }

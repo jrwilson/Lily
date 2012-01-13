@@ -21,17 +21,24 @@
 namespace lilycall {
 
   enum {
-    SBRK = 0,
-    BINDING_COUNT = 1,
-    BUFFER_CREATE = 2,
-    BUFFER_COPY = 3,
-    BUFFER_GROW = 4,
-    BUFFER_APPEND = 5,
-    BUFFER_ASSIGN = 6,
-    BUFFER_MAP = 7,
-    BUFFER_UNMAP = 8,
-    BUFFER_DESTROY = 9,
-    BUFFER_SIZE = 10,
+    CREATE = 0,
+    BIND = 1,
+    LOOSE = 2,
+    DESTROY = 3,
+    
+    SBRK = 4,
+
+    BINDING_COUNT = 5,
+
+    BUFFER_CREATE = 6,
+    BUFFER_COPY = 7,
+    BUFFER_GROW = 8,
+    BUFFER_APPEND = 9,
+    BUFFER_ASSIGN = 10,
+    BUFFER_MAP = 11,
+    BUFFER_UNMAP = 12,
+    BUFFER_DESTROY = 13,
+    BUFFER_SIZE = 14,
   };
 
   inline void
@@ -43,6 +50,33 @@ namespace lilycall {
 	  size_t buffer_size)
   {
     asm ("int $0x80\n" : : "a"(action_entry_point), "b"(parameter), "c"(copy_value), "d"(copy_value_size), "S"(buffer), "D"(buffer_size) :);
+  }
+
+  inline aid_t
+  create (bid_t automaton_bid,
+	  size_t automaton_size)
+  {
+    aid_t aid;
+    asm ("int $0x81\n" : "=a"(aid) : "a"(CREATE), "b"(automaton_bid), "c"(automaton_size) :);
+    return aid;
+  }
+
+  inline void
+  bind (void)
+  {
+    asm ("int $0x81\n" : : "a"(BIND) :);
+  }
+
+  inline void
+  loose (void)
+  {
+    asm ("int $0x81\n" : : "a"(LOOSE) :);
+  }
+
+  inline void
+  destroy (void)
+  {
+    asm ("int $0x81\n" : : "a"(DESTROY) :);
   }
   
   inline void*

@@ -17,7 +17,7 @@ kernel_alloc::sbrk (size_t size)
   // Check to make sure we don't run out of logical address space.
   kassert (heap_end_ <= heap_limit_);
   if (backing_) {
-    // Switch to the kernel page directory.
+    // Switch to the kernel page directory.  All other page directories will get the change through page faults.
     physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
     // Back with frames.
     for (size_t x = 0; x != size; x += PAGE_SIZE) {

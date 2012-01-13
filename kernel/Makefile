@@ -28,8 +28,7 @@ stack_allocator.o \
 frame_manager.o \
 rts.o \
 global_fifo_scheduler.o \
-kmain.o \
-system_automaton.o
+kmain.o
 
 KERNEL=lily
 

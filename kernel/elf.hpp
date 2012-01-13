@@ -133,11 +133,11 @@ namespace elf {
   public:
     bool
     parse (automaton* a,
-	   const void* ptr,
-	   size_t size)
+	   logical_address_t begin,
+	   logical_address_t end)
     {
-      const preamble* const preamble_ = static_cast<const preamble*> (ptr);
-      const void* const end_ = static_cast<const uint8_t*> (ptr) + size;
+      const preamble* const preamble_ = reinterpret_cast<const preamble*> (begin);
+      const void* const end_ = reinterpret_cast<const void*> (end);
 
       // Ensure we have enough data to process.
       if (preamble_ + 1 > end_) {
