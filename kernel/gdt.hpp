@@ -14,8 +14,8 @@
   Justin R. Wilson
 */
 
-#include <stdint.h>
 #include "descriptor.hpp"
+#include "types.hpp"
 
 class gdt {
 public:

@@ -1,16 +1,43 @@
 #ifndef __action_descriptor_hpp__
 #define __action_descriptor_hpp__
 
-#include "action_traits.hpp"
-#include <string>
+#include "kstring.hpp"
 
 class automaton;
+
+#define M_NO_COMPARE 0
+#define M_EQUAL 1
+
+#define M_INPUT 0
+#define M_OUTPUT 1
+#define M_INTERNAL 2
+
+enum action_type_t {
+  INPUT = M_INPUT,
+  OUTPUT = M_OUTPUT,
+  INTERNAL = M_INTERNAL,
+};
+
+enum compare_method_t {
+  NO_COMPARE = M_NO_COMPARE,
+  EQUAL = M_EQUAL,
+};
+
+#define M_NO_PARAMETER 0
+#define M_PARAMETER 1
+#define M_AUTO_PARAMETER 2
+
+enum parameter_mode_t {
+  NO_PARAMETER = M_NO_PARAMETER,
+  PARAMETER = M_PARAMETER,
+  AUTO_PARAMETER = M_AUTO_PARAMETER,
+};
 
 // Partial action.
 struct paction {
   ::automaton* const automaton;
-  std::string const name;
-  std::string const description;
+  kstring const name;
+  kstring const description;
   compare_method_t const compare_method;
   action_type_t const type;
   const void* const action_entry_point;

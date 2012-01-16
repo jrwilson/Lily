@@ -1,5 +1,5 @@
 #include <action_traits.hpp>
-#include <lilycall.hpp>
+#include <fifo_scheduler.hpp>
 
 typedef action_traits<internal_action, parameter<bid_t> > init_traits;
 #define INIT_TRAITS init_traits
@@ -9,8 +9,11 @@ typedef action_traits<internal_action, parameter<bid_t> > init_traits;
 #define INIT_ACTION M_INTERNAL
 #define INIT_PARAMETER M_PARAMETER
 
-int x;
-int y = 1;
+// The scheduler.
+//static fifo_scheduler scheduler_;
+
+static int x;
+static int y = 1;
 
 extern "C" void
 init (bid_t)
@@ -19,102 +22,6 @@ init (bid_t)
   lilycall::finish (0, -1, 0, 0, -1, 0);
 }
 ACTION_DESCRIPTOR (INIT, init);
-
-
-// /*
-//   File
-//   ----
-//   system_automaton.cpp
-  
-//   Description
-//   -----------
-//   The system automaton.
-
-//   Authors:
-//   Justin R. Wilson
-// */
-
-// #include "system_automaton_private.hpp"
-// #include "fifo_scheduler.hpp"
-// #include <queue>
-// #include "kassert.hpp"
-// #include "rts.hpp"
-
-// // Forward declaration to initialize the memory allocator.
-// void
-// initialize_allocator (void);
-
-// // The scheduler.
-// typedef fifo_scheduler scheduler_type;
-// static scheduler_type* scheduler_ = 0;
-
-// enum privilege_t {
-//   NORMAL,
-//   PRIVILEGED,
-// };
-
-// // Queue of create requests.
-// struct create_request_item {
-//   aid_t const parent;			// Automaton creating this automaton.
-//   bid_t const bid;			// Buffer containing the text and initialization data.
-//   size_t const automaton_offset;	// Offset and size of the automaton.
-//   size_t const automaton_size;
-//   size_t const data_offset;		// Offset and size of the automaton.
-//   size_t const data_size;
-//   privilege_t const privilege;		// Requested privilege level.
-
-//   create_request_item (aid_t p,
-// 		       bid_t b,
-// 		       size_t a_o,
-// 		       size_t a_s,
-// 		       size_t d_o,
-// 		       size_t d_s,
-// 		       privilege_t priv) :
-//     parent (p),
-//     bid (b),
-//     automaton_offset (a_o),
-//     automaton_size (a_s),
-//     data_offset (d_o),
-//     data_size (d_s),
-//     privilege (priv)
-//   { }
-// };
-// typedef std::queue<create_request_item> create_request_queue_type;
-// static create_request_queue_type* create_request_queue_ = 0;
-
-// // Queue of automata that need to be initialized.
-// struct init_item {
-//   aid_t const parent;
-//   aid_t const child;
-//   bid_t const bid;
-//   size_t const bid_size;
-
-//   init_item (aid_t p,
-// 	     aid_t c,
-// 	     bid_t b,
-// 	     size_t s) :
-//     parent (p),
-//     child (c),
-//     bid (b),
-//     bid_size (s)
-//   { }
-// };
-// typedef std::queue<init_item> init_queue_type;
-// static init_queue_type* init_queue_ = 0;
-
-// // Queue of automata that have been initialized.
-// struct create_response_item {
-//   aid_t const parent;
-//   aid_t const child;
-
-//   create_response_item (aid_t p,
-// 			aid_t c) :
-//     parent (p),
-//     child (c)
-//   { }
-// };
-// typedef std::queue<create_response_item> create_response_queue_type;
-// static create_response_queue_type* create_response_queue_ = 0;
 
 // static void
 // schedule ();

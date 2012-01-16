@@ -15,9 +15,8 @@
   Justin R. Wilson
 */
 
-#include <vector>
-#include <algorithm>
 #include "stack_allocator.hpp"
+#include "slist.hpp"
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -48,7 +47,7 @@ public:
   alloc ()
   {
     /* Find an allocator with a free frame. */
-    allocator_list_type::iterator pos = std::find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
+    allocator_list_type::iterator pos = find_if (allocator_list_.begin (), allocator_list_.end (), stack_allocator_not_full ());
     
     /* Out of frames. */
     kassert (pos != allocator_list_.end ());
@@ -82,7 +81,7 @@ public:
   }
 
 private:
-  typedef std::vector<stack_allocator*> allocator_list_type;
+  typedef slist<stack_allocator*> allocator_list_type;
   static allocator_list_type allocator_list_;
 
   struct contains_frame {
@@ -103,7 +102,7 @@ private:
   find_allocator (frame_t frame)
   {
     // TODO:  Sort the stack allocators and use binary search.
-    return std::find_if (allocator_list_.begin (), allocator_list_.end (), contains_frame (frame));
+    return find_if (allocator_list_.begin (), allocator_list_.end (), contains_frame (frame));
   }
 
   struct stack_allocator_not_full {

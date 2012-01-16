@@ -1,142 +1,144 @@
 #include "rts.hpp"
 #include "kassert.hpp"
-#include "scheduler.hpp"
-#include "elf.hpp"
+#include "vm.hpp"
+#include "automaton.hpp"
+//#include "scheduler.hpp"
+//#include "elf.hpp"
 
 namespace rts {
   
-  // For creating automata and allocating them an aid.
-  static aid_t current_aid_;
-  typedef std::unordered_map<aid_t, automaton*> aid_map_type;
-  static aid_map_type aid_map_;
+  // // For creating automata and allocating them an aid.
+  // static aid_t current_aid_;
+  // typedef std::unordered_map<aid_t, automaton*> aid_map_type;
+  // static aid_map_type aid_map_;
 
-  struct map_op {
-    logical_address_t logical_address;
-    frame_t frame;
-    vm::map_mode_t map_mode;
+  // struct map_op {
+  //   logical_address_t logical_address;
+  //   frame_t frame;
+  //   vm::map_mode_t map_mode;
 
-    map_op (logical_address_t la,
-	    frame_t f,
-	    vm::map_mode_t m) :
-      logical_address (la),
-      frame (f),
-      map_mode (m)
-    { }
-  };
+  //   map_op (logical_address_t la,
+  // 	    frame_t f,
+  // 	    vm::map_mode_t m) :
+  //     logical_address (la),
+  //     frame (f),
+  //     map_mode (m)
+  //   { }
+  // };
 
-  // A list of frames used when creating automata.
-  typedef std::vector<map_op> frame_list_type;
-  static frame_list_type frame_list_;
+  // // A list of frames used when creating automata.
+  // typedef std::vector<map_op> frame_list_type;
+  // static frame_list_type frame_list_;
 
-  typedef std::vector<std::pair<logical_address_t, logical_address_t> > clear_list_type;
-  static clear_list_type clear_list_;
+  // typedef std::vector<std::pair<logical_address_t, logical_address_t> > clear_list_type;
+  // static clear_list_type clear_list_;
 
-  static automaton*
-  create_automaton (logical_address_t text_begin,
-		    logical_address_t text_end)
-  {
-    // Create the automaton.
+  // static automaton*
+  // create_automaton (logical_address_t text_begin,
+  // 		    logical_address_t text_end)
+  // {
+  //   // Create the automaton.
 
-    // Allocate a frame.
-    frame_t frame = frame_manager::alloc ();
-    // Map the page directory.
-    vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE);
-    vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
-    // Initialize the page directory with a copy of the kernel.
-    // Since the second argument is vm::SUPERVISOR, the automaton cannot access the paging area, i.e., manipulate virtual memory.
-    // If the third argument is vm::USER, the automaton gains access to kernel data.
-    // If the third argument is vm::SUPERVISOR, the automaton does not gain access to kernel data.
-    new (pd) vm::page_directory (frame, vm::SUPERVISOR, vm::SUPERVISOR);
-    // Unmap.
-    vm::unmap (vm::get_stub1 ());
-    // Drop the reference count from allocation.
-    size_t count = frame_manager::decref (frame);
-    kassert (count == 1);
+  //   // Allocate a frame.
+  //   frame_t frame = frame_manager::alloc ();
+  //   // Map the page directory.
+  //   vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE);
+  //   vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
+  //   // Initialize the page directory with a copy of the kernel.
+  //   // Since the second argument is vm::SUPERVISOR, the automaton cannot access the paging area, i.e., manipulate virtual memory.
+  //   // If the third argument is vm::USER, the automaton gains access to kernel data.
+  //   // If the third argument is vm::SUPERVISOR, the automaton does not gain access to kernel data.
+  //   new (pd) vm::page_directory (frame, vm::SUPERVISOR, vm::SUPERVISOR);
+  //   // Unmap.
+  //   vm::unmap (vm::get_stub1 ());
+  //   // Drop the reference count from allocation.
+  //   size_t count = frame_manager::decref (frame);
+  //   kassert (count == 1);
 
-    // Generate an id.
-    aid_t aid = current_aid_;
-    while (aid_map_.find (aid) != aid_map_.end ()) {
-      aid = std::max (aid + 1, 0); // Handles overflow.
-    }
-    current_aid_ = std::max (aid + 1, 0);
+  //   // Generate an id.
+  //   aid_t aid = current_aid_;
+  //   while (aid_map_.find (aid) != aid_map_.end ()) {
+  //     aid = std::max (aid + 1, 0); // Handles overflow.
+  //   }
+  //   current_aid_ = std::max (aid + 1, 0);
     
-    // Create the automaton and insert it into the map.
-    automaton* a = new automaton (aid, frame);
-    aid_map_.insert (std::make_pair (aid, a));
+  //   // Create the automaton and insert it into the map.
+  //   automaton* a = new automaton (aid, frame);
+  //   aid_map_.insert (std::make_pair (aid, a));
     
-    // Add to the scheduler.
-    scheduler::add_automaton (a);
+  //   // Add to the scheduler.
+  //   scheduler::add_automaton (a);
 
-    // Parse the file.
-    elf::parser hp;
-    if (!hp.parse (a, text_begin, text_end)) {
-      // TODO
-      kassert (0);
-    }
+  //   // Parse the file.
+  //   elf::parser hp;
+  //   if (!hp.parse (a, text_begin, text_end)) {
+  //     // TODO
+  //     kassert (0);
+  //   }
 
-    // Add the actions to the automaton.
-    for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
-      if (!a->add_action (*pos)) {
-    	// TODO:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
-    	kassert (0);
-      }
-    }
+  //   // Add the actions to the automaton.
+  //   for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
+  //     if (!a->add_action (*pos)) {
+  //   	// TODO:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
+  //   	kassert (0);
+  //     }
+  //   }
 
-    // Create the memory map for the automaton.
-    frame_list_.clear ();
-    clear_list_.clear ();
-    for (elf::parser::program_header_iterator e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
-      vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
+  //   // Create the memory map for the automaton.
+  //   frame_list_.clear ();
+  //   clear_list_.clear ();
+  //   for (elf::parser::program_header_iterator e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
+  //     vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
       
-      size_t s;
-      // Initialized data.
-      for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-    	frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (text_begin + e->offset + s), map_mode));
-      }
+  //     size_t s;
+  //     // Initialized data.
+  //     for (s = 0; s < e->file_size; s += PAGE_SIZE) {
+  //   	frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (text_begin + e->offset + s), map_mode));
+  //     }
       
-      // Clear the tiny region between the end of initialized data and the first unitialized page.
-      if (e->file_size < e->memory_size) {
-    	logical_address_t begin = e->virtual_address + e->file_size;
-    	logical_address_t end = e->virtual_address + e->memory_size;
-    	clear_list_.push_back (std::make_pair (begin, end));
-      }
+  //     // Clear the tiny region between the end of initialized data and the first unitialized page.
+  //     if (e->file_size < e->memory_size) {
+  //   	logical_address_t begin = e->virtual_address + e->file_size;
+  //   	logical_address_t end = e->virtual_address + e->memory_size;
+  //   	clear_list_.push_back (std::make_pair (begin, end));
+  //     }
       
-      // Uninitialized data.
-      for (; s < e->memory_size; s += PAGE_SIZE) {
-    	frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
-      }
+  //     // Uninitialized data.
+  //     for (; s < e->memory_size; s += PAGE_SIZE) {
+  //   	frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
+  //     }
       
-      vm_area_base* area = new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
-      if (!a->insert_vm_area (area)) {
-    	// TODO:  The area conflicts with the existing memory map.
-    	kassert (0);
-      }
-    }
+  //     vm_area_base* area = new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
+  //     if (!a->insert_vm_area (area)) {
+  //   	// TODO:  The area conflicts with the existing memory map.
+  //   	kassert (0);
+  //     }
+  //   }
 
-    // Switch to the automaton.
-    physical_address_t old = vm::switch_to_directory (a->page_directory_physical_address ());
+  //   // Switch to the automaton.
+  //   physical_address_t old = vm::switch_to_directory (a->page_directory_physical_address ());
     
-    // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
+  //   // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
     
-    // Map all the frames.
-    for (frame_list_type::const_iterator pos = frame_list_.begin ();
-    	 pos != frame_list_.end ();
-    	 ++pos) {
-      vm::map (pos->logical_address, pos->frame, vm::USER, pos->map_mode);
-    }
+  //   // Map all the frames.
+  //   for (frame_list_type::const_iterator pos = frame_list_.begin ();
+  //   	 pos != frame_list_.end ();
+  //   	 ++pos) {
+  //     vm::map (pos->logical_address, pos->frame, vm::USER, pos->map_mode);
+  //   }
 
-    // Clear.
-    for (clear_list_type::const_iterator pos = clear_list_.begin ();
-    	 pos != clear_list_.end ();
-    	 ++pos) {
-      memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
-    }
+  //   // Clear.
+  //   for (clear_list_type::const_iterator pos = clear_list_.begin ();
+  //   	 pos != clear_list_.end ();
+  //   	 ++pos) {
+  //     memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
+  //   }
 
-    // Switch back.
-    vm::switch_to_directory (old);
+  //   // Switch back.
+  //   vm::switch_to_directory (old);
 
-    return a;
-  }
+  //   return a;
+  // }
 
   // static bool
   // bind_actions (automaton* output_automaton,
@@ -302,8 +304,9 @@ namespace rts {
   create (const void* automaton_buffer,
 	  size_t automaton_size)
   {
-    const automaton* a = create_automaton (reinterpret_cast<logical_address_t> (automaton_buffer), reinterpret_cast<logical_address_t> (automaton_buffer) + automaton_size);
-    return a->aid ();
+    kassert (0);
+    // const automaton* a = create_automaton (reinterpret_cast<logical_address_t> (automaton_buffer), reinterpret_cast<logical_address_t> (automaton_buffer) + automaton_size);
+    // return a->aid ();
   }
 
   void

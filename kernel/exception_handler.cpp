@@ -16,8 +16,8 @@
 #include "gdt.hpp"
 #include "kassert.hpp"
 #include "vm_def.hpp"
-#include "scheduler.hpp"
-#include "kernel_allocator.hpp"
+//#include "scheduler.hpp"
+#include "kernel_alloc.hpp"
 
 extern "C" void exception0 ();
 extern "C" void exception1 ();
@@ -174,49 +174,51 @@ exception_dispatch (volatile registers regs)
     break; 
   case PAGE_FAULT:
     {
-      // Get the faulting address.
-      logical_address_t address;
-      asm ("mov %%cr2, %0\n" : "=r"(address));
-      // Get the error.
-      vm::page_fault_error_t error = regs.error;
+      kassert (0);
 
-      if (!vm::not_present (error) &&
-	  vm::protection_violation (error) &&
-	  vm::write_context (error) &&
-	  vm::data_context (error) &&
-	  vm::get_copy_on_write (address) == vm::COPY_ON_WRITE) {
-	// Copy-on-write.
-	// Allocate a frame.
-	frame_t dst_frame = frame_manager::alloc ();
-	// Map it in at the stub.
-	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE);
-	// Copy.
-	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
-	// Unmap the source.
-	vm::unmap (address);
-	// Map in the destination.
-	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE);
-	// Unmap the stub.
-	vm::unmap (vm::get_stub1 ());
-	// Remove the reference from allocation.
-	frame_manager::decref (dst_frame);
+      // // Get the faulting address.
+      // logical_address_t address;
+      // asm ("mov %%cr2, %0\n" : "=r"(address));
+      // // Get the error.
+      // vm::page_fault_error_t error = regs.error;
 
-	// Done.
-	return;
-      }
+      // if (!vm::not_present (error) &&
+      // 	  vm::protection_violation (error) &&
+      // 	  vm::write_context (error) &&
+      // 	  vm::data_context (error) &&
+      // 	  vm::get_copy_on_write (address) == vm::COPY_ON_WRITE) {
+      // 	// Copy-on-write.
+      // 	// Allocate a frame.
+      // 	frame_t dst_frame = frame_manager::alloc ();
+      // 	// Map it in at the stub.
+      // 	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE);
+      // 	// Copy.
+      // 	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
+      // 	// Unmap the source.
+      // 	vm::unmap (address);
+      // 	// Map in the destination.
+      // 	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE);
+      // 	// Unmap the stub.
+      // 	vm::unmap (vm::get_stub1 ());
+      // 	// Remove the reference from allocation.
+      // 	frame_manager::decref (dst_frame);
 
-      if (vm::not_present (error) &&
-	  vm::supervisor_context (error) &&
-	  address >= kernel_alloc::heap_begin () &&
-	  address < kernel_alloc::heap_end ()) {
-	// The kernel expanded since the current page directory was created.
-	// Consequently, we may encounter a page fault when trying to access something in the kernel.
-	// We only need to map the page table, however.
-	const size_t idx = vm::get_page_directory_entry (address);
-	vm::get_page_directory ()->entry[idx] = vm::get_kernel_page_directory ()->entry[idx];
-	asm ("invlpg (%0)\n" : : "r"(address));
-	return;
-      }
+      // 	// Done.
+      // 	return;
+      // }
+
+      // if (vm::not_present (error) &&
+      // 	  vm::supervisor_context (error) &&
+      // 	  address >= kernel_alloc::heap_begin () &&
+      // 	  address < kernel_alloc::heap_end ()) {
+      // 	// The kernel expanded since the current page directory was created.
+      // 	// Consequently, we may encounter a page fault when trying to access something in the kernel.
+      // 	// We only need to map the page table, however.
+      // 	const size_t idx = vm::get_page_directory_entry (address);
+      // 	vm::get_page_directory ()->entry[idx] = vm::get_kernel_page_directory ()->entry[idx];
+      // 	asm ("invlpg (%0)\n" : : "r"(address));
+      // 	return;
+      // }
 
       // TODO:  We only know how to deal with copy-on-write page faults and kernel data.
       kassert (0);

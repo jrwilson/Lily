@@ -1,7 +1,5 @@
 #include "kout.hpp"
 
-#include "vm.hpp"
-
 char console::left_buffer_[3];
 size_t console::left_buffer_size_ = 0;
 

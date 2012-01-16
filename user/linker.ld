@@ -19,7 +19,7 @@ SECTIONS
 	. = SIZEOF_HEADERS;
 
 	/* Start at 1M. */
-	/*. = 0x00100000;*/
+	. = 0x00100000;
 
 	.text :
 	{

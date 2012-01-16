@@ -1,14 +1,14 @@
 #ifndef __vm_def_hpp__
 #define __vm_def_hpp__
 
-#include <stdint.h>
 #include <stddef.h>
+#include "types.hpp"
 
-typedef uint32_t physical_address_t;
-typedef uint32_t logical_address_t;
-typedef uint32_t frame_t;
+typedef uintptr_t physical_address_t;
+typedef uintptr_t logical_address_t;
+typedef uintptr_t frame_t;
 
-typedef uint_fast16_t page_table_idx_t;
+typedef size_t page_table_idx_t;
 
 static const size_t PAGE_SIZE = 0x1000;
 

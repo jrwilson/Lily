@@ -14,10 +14,9 @@
   Justin R. Wilson
 */
 
-#include <memory>
-#include <algorithm>
 #include "vm_def.hpp"
 #include "kassert.hpp"
+#include "new.hpp"
 
 // TODO:  We assume a 32-bit architecture.
 
@@ -184,7 +183,7 @@ private:
       return size / 8;
     }
     else {
-      return 65 + std::lower_bound (bin_size, bin_size + 63, size) - bin_size;
+      return 65 + lower_bound (bin_size, bin_size + 63, size) - bin_size;
     }
   }
 
@@ -330,7 +329,7 @@ public:
 
     // Increase the size to the minimum and align.
     const size_t m = ALLOC_MIN;
-    size = align_up (std::max (size, m), ALLOC_ALIGN);
+    size = align_up (max (size, m), ALLOC_ALIGN);
 
     // Try to allocate a chunk from the list of free chunks.
     for (size_t idx = size_to_bin (size); idx != BIN_COUNT; ++idx) {

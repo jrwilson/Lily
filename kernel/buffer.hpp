@@ -153,7 +153,7 @@ public:
 
 private:
   // The frames.
-  typedef std::vector<frame_t> frame_list_type;
+  typedef vector<frame_t> frame_list_type;
   frame_list_type frame_list_;
 
   // Synchronize part of a buffer making it copy-on-write.

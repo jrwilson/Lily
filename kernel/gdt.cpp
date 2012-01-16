@@ -12,7 +12,7 @@
 */
 
 #include "gdt.hpp"
-#include <string.h>
+#include "string.hpp"
 
 extern uint32_t stack_end;
 

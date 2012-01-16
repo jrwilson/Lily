@@ -1,7 +1,7 @@
-#include "kernel_allocator.hpp"
+#include "kernel_alloc.hpp"
 #include "vm.hpp"
 
-// Defined here to break a circulat dependency.
+// Defined here to break a circular dependency.
 // -> means depends on
 // kernel_alloc -> vm
 // vm -> frame_manager

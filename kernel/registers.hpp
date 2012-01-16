@@ -2,20 +2,12 @@
 #define __registers_hpp__
 
 /*
-  File
-  ----
-  registers.hpp
-  
-  Description
-  -----------
   Exceptions/interrupts/traps push this data structure onto the stack.
 
   Authors:
   http://www.jamesmolloy.co.uk/tutorial_html/4.-The%20GDT%20and%20IDT.html
   Justin R. Wilson
 */
-
-#include <stdint.h>
 
 struct registers {
   uint32_t ds;

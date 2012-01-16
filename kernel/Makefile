@@ -1,20 +1,23 @@
-AS=as
-CXX=g++
+AS=i586-elf-as
+CXX=i586-elf-g++
 OFLAG=-O0
 # Add -Werror at some point	
-CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -std=c++0x -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include
+CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -ffreestanding -fno-rtti -fno-exceptions -fno-stack-protector
+
+# -std=c++0x -ffreestanding -fno-exceptions -fno-stack-protector -fno-rtti -I. -I../include -I/usr/include -I/usr/include/c++/4.4 -I/usr/include/c++/4.4/i486-linux-gnu
+# -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include -I/usr/include -I/usr/include/c++/4.4 -I/usr/include/c++/4.4/i486-linux-gnu
 # -nostdinc -fno-rtti
 LD=ld
 LDFLAGS=$(OFLAG) -T linker.ld
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=loader.o \
-cpp_runtime.o \
-string.o \
-ceil.o \
-ceilf.o \
+kmain.o \
 kout.o \
 kernel_allocator.o \
+frame_manager.o \
+stack_allocator.o \
+cpp_runtime.o \
 gdt.o \
 gdt_flush.o \
 idt.o \
@@ -24,11 +27,12 @@ irq_handler.o \
 irq.o \
 trap_handler.o \
 trap.o \
-stack_allocator.o \
-frame_manager.o \
-rts.o \
-global_fifo_scheduler.o \
-kmain.o
+rts.o
+
+# string.o \
+# ceil.o \
+# ceilf.o \
+# global_fifo_scheduler.o
 
 KERNEL=lily
 
@@ -42,7 +46,7 @@ $(KERNEL) : $(OBJECTS)
 	$(CXX) -o $@ -c $< $(CXXFLAGS)
 
 %.o : %.S
-	as -o $@ $<
+	$(AS) -o $@ $<
 
 .PHONY : clean
 clean :

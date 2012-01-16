@@ -16,7 +16,7 @@
 */
 
 #include "descriptor.hpp"
-#include <stdint.h>
+#include "types.hpp"
 
 class idt {
 public:

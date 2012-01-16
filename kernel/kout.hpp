@@ -15,12 +15,11 @@
 */
 
 #include <stddef.h>
-#include <stdint.h>
-#include <algorithm>
-#include "registers.hpp"
 #include "vm_def.hpp"
+#include "algorithm.hpp"
+#include "registers.hpp"
 
-// TODO:  Perhpas this could be simpler to match its intended use.
+// TODO:  Perhpas this could be simpler to match its intended use.  Maybe remove inlines, etc.
 
 class console {
 private:
@@ -50,7 +49,7 @@ private:
   
 public:
   typedef int streamsize;
-  typedef uint_fast16_t fmtflags;
+  typedef unsigned int fmtflags;
 
   static const fmtflags left = (1 << 0);
   static const fmtflags right = (1 << 1);
@@ -158,7 +157,7 @@ public:
   inline console&
   operator<< (const void* p)
   {
-    *this << reinterpret_cast<uintptr_t> (p);
+    *this << reinterpret_cast<size_t> (p);
     width_ = 0;
     return *this;
   }
@@ -269,7 +268,7 @@ public:
   static inline streamsize
   width (streamsize w)
   {
-    std::swap (w, width_);
+    swap (w, width_);
     return w;
   }
 
@@ -282,7 +281,7 @@ public:
   static inline char
   fill (char c)
   {
-    std::swap (c, fill_);
+    swap (c, fill_);
     return c;
   }
 
@@ -340,7 +339,7 @@ private:
     }
   }
 
-  static inline int_fast8_t
+  static inline int
   base ()
   {
     switch (flags_ & basefield) {
@@ -356,7 +355,7 @@ private:
   }
   
   static inline char
-  digit (int_fast8_t value)
+  digit (int value)
   {
     switch (flags_ & basefield) {
     case dec:
@@ -389,7 +388,7 @@ private:
   template <typename T>
   inline void
   print_integer (T n,
-		 int_fast8_t base)
+		 int base)
   {
     if (flags_ & showbase) {
       switch (flags_ & basefield) {
@@ -438,7 +437,7 @@ private:
   template <typename T>
   static inline void
   push_digits (T n,
-	       int_fast8_t base)
+	       int base)
   {
     do {
       const T rem = n % base;

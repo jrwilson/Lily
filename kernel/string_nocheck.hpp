@@ -14,18 +14,6 @@
 #include <stddef.h>
 
 inline void*
-memset_nocheck (void* ptr,
-		int value,
-		size_t size)
-{
-  unsigned char* p = static_cast<unsigned char*> (ptr);
-  while (size-- > 0) {
-    *p++ = value;
-  }
-  return ptr;
-}
-
-inline void*
 memcpy_nocheck (void* dst,
 		const void* src,
 		size_t size)

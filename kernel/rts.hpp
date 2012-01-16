@@ -15,8 +15,7 @@
 */
 
 #include "vm_def.hpp"
-#include "aid.hpp"
-#include "bid.hpp"
+#include "types.hpp"
 
 namespace rts {
 

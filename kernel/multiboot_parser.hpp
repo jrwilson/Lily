@@ -16,16 +16,16 @@
 
 #include "multiboot.hpp"
 #include "vm_def.hpp"
-#include <algorithm>
-#include "kassert.hpp"
-#include <string.h>
+#include "iterator.hpp"
+#include "algorithm.hpp"
+#include "string.hpp"
 
 class multiboot_parser {
 private:
   uint32_t magic_;
   multiboot_info* info_;
 
-  class mmap_iter : std::iterator<std::forward_iterator_tag, const multiboot_memory_map_t> {
+  class mmap_iter : iterator<forward_iterator_tag, const multiboot_memory_map_t> {
   private:
     multiboot_memory_map_t* entry;
 
@@ -53,13 +53,13 @@ private:
       return *this;
     }
 
-    std::iterator<std::forward_iterator_tag, const multiboot_memory_map_t>::pointer
+    iterator<forward_iterator_tag, const multiboot_memory_map_t>::pointer
     operator-> () const
     {
       return entry;
     }
 
-    std::iterator<std::forward_iterator_tag, const multiboot_memory_map_t>::reference
+    iterator<forward_iterator_tag, const multiboot_memory_map_t>::reference
     operator* () const
     {
       return *entry;
@@ -72,7 +72,7 @@ private:
 	      physical_address_t limit)
   {
     if (temp < limit) {
-      return std::max (end, temp);
+      return max (end, temp);
     }
     else {
       return end;

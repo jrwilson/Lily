@@ -15,8 +15,6 @@
 */
 
 #include "action.hpp"
-#include <deque>
-#include <unordered_set>
 #include "vm.hpp"
 #include "automaton.hpp"
 

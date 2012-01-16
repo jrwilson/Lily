@@ -14,7 +14,7 @@
   Justin R. Wilson
 */
 
-#include <stdint.h>
+#include "types.hpp"
 
 class irq_handler {
 public:

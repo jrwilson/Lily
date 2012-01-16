@@ -15,11 +15,8 @@
 */
 
 #include "kassert.hpp"
-#include <utility>
 #include "vm_def.hpp"
 #include <stddef.h>
-
-using namespace std::rel_ops;
 
 /*
   A frame entry stores the next entry on the free list or the reference count.

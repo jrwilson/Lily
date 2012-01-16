@@ -18,7 +18,6 @@
 #include "vm.hpp"
 #include "frame_manager.hpp"
 #include "kassert.hpp"
-#include <string.h>
 
 class vm_area_base {
 protected:

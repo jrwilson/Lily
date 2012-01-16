@@ -13,18 +13,19 @@
   Justin R. Wilson
 */
 
-#include "string_nocheck.hpp"
-#include "kout.hpp"
+#include "types.hpp"
 #include "multiboot_parser.hpp"
-#include "vm.hpp"
+#include "kout.hpp"
+#include "kernel_alloc.hpp"
 #include "gdt.hpp"
 #include "idt.hpp"
 #include "exception_handler.hpp"
 #include "irq_handler.hpp"
 #include "trap_handler.hpp"
 #include "frame_manager.hpp"
+#include "vm.hpp"
 #include "rts.hpp"
-#include "kernel_allocator.hpp"
+#include "halt.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -85,8 +86,8 @@ kmain (uint32_t multiboot_magic,
        multiboot_info_t* multiboot_info)  // Physical address.
 {
   // Zero uninitialized memory avoiding the stack.
-  memset_nocheck (&bss_begin, 0, &stack_begin - &bss_begin);
-  memset_nocheck (&stack_end, 0, &bss_end - &stack_end);
+  memset (&bss_begin, 0, &stack_begin - &bss_begin);
+  memset (&stack_end, 0, &bss_end - &stack_end);
 
   kout.initialize ();
 
@@ -123,13 +124,13 @@ kmain (uint32_t multiboot_magic,
     const multiboot_module_t* data_module = 0;
 
     for (const multiboot_module_t* mod = multiboot_parser.module_begin ();
-	 mod != multiboot_parser.module_end ();
-	 ++mod) {
+  	 mod != multiboot_parser.module_end ();
+  	 ++mod) {
       if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
-	automaton_module = mod;
+  	automaton_module = mod;
       }
       else if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
-	data_module = mod;
+  	data_module = mod;
       }
     }
 
@@ -189,9 +190,9 @@ kmain (uint32_t multiboot_magic,
       case MULTIBOOT_MEMORY_AVAILABLE:
   	kout << " AVAILABLE" << endl;
   	{
-	  // Intersect the region of memory with usable memory.
-	  uint64_t begin = std::max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), pos->addr);
-  	  uint64_t end = std::min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), pos->addr + pos->len);
+  	  // Intersect the region of memory with usable memory.
+  	  uint64_t begin = max (static_cast<multiboot_uint64_t> (USABLE_MEMORY_BEGIN), pos->addr);
+  	  uint64_t end = min (static_cast<multiboot_uint64_t> (USABLE_MEMORY_END), pos->addr + pos->len);
   	  begin = align_down (begin, PAGE_SIZE);
   	  end = align_up (end, PAGE_SIZE);
   	  if (begin < end) {
@@ -213,51 +214,51 @@ kmain (uint32_t multiboot_magic,
 
     // Mark frames and logical addresses that are in use.
     mark (KERNEL_VIRTUAL_BASE,
-	  KERNEL_VIRTUAL_BASE + ONE_MEGABYTE,
-	  true,
-	  vm::MAP_READ_WRITE);
+  	  KERNEL_VIRTUAL_BASE + ONE_MEGABYTE,
+  	  true,
+  	  vm::MAP_READ_WRITE);
 
     mark (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE,
-	  reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_directory),
-	  true,
-	  vm::MAP_READ_WRITE);
+  	  reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_directory),
+  	  true,
+  	  vm::MAP_READ_WRITE);
   
     mark (reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE,
-	  reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_table),
-	  false,
-	  vm::MAP_READ_WRITE);
+  	  reinterpret_cast<logical_address_t> (&kernel_page_table) + KERNEL_VIRTUAL_BASE + sizeof (vm::page_table),
+  	  false,
+  	  vm::MAP_READ_WRITE);
   
     mark (reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE,
-	  reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE + PAGE_SIZE,
-	  false,
-	  vm::MAP_READ_ONLY);
+  	  reinterpret_cast<logical_address_t> (&zero_page) + KERNEL_VIRTUAL_BASE + PAGE_SIZE,
+  	  false,
+  	  vm::MAP_READ_ONLY);
   
     mark (reinterpret_cast<logical_address_t> (&text_begin),
-	  reinterpret_cast<logical_address_t> (&text_end),
-	  true,
-	  vm::MAP_READ_ONLY);
+  	  reinterpret_cast<logical_address_t> (&text_end),
+  	  true,
+  	  vm::MAP_READ_ONLY);
   
     mark (reinterpret_cast<logical_address_t> (&data_begin),
-	  reinterpret_cast<logical_address_t> (&data_end),
-	  true,
-	  vm::MAP_READ_WRITE);
+  	  reinterpret_cast<logical_address_t> (&data_end),
+  	  true,
+  	  vm::MAP_READ_WRITE);
   
     mark (kernel_alloc::heap_begin (),
-	  kernel_alloc::heap_end (),
-	  true,
-	  vm::MAP_READ_WRITE);
+  	  kernel_alloc::heap_end (),
+  	  true,
+  	  vm::MAP_READ_WRITE);
 
     // Mark but don't map the initial automaton.
     mark (automaton_module->mod_start + KERNEL_VIRTUAL_BASE,
-	  automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
-	  false,
-	  vm::MAP_READ_ONLY);
+  	  automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
+  	  false,
+  	  vm::MAP_READ_ONLY);
 
     // Mark but don't map the initial automaton's data.
     mark (data_module->mod_start + KERNEL_VIRTUAL_BASE,
-	  data_module->mod_end + KERNEL_VIRTUAL_BASE,
-	  false,
-	  vm::MAP_READ_ONLY);
+  	  data_module->mod_end + KERNEL_VIRTUAL_BASE,
+  	  false,
+  	  vm::MAP_READ_ONLY);
     
     // Convert the modules into buffers.
     automaton_frame = physical_address_to_frame (automaton_module->mod_start);

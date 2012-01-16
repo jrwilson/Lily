@@ -15,17 +15,10 @@
 */
 
 #include "vm_area.hpp"
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
 #include "descriptor.hpp"
-#include "action_traits.hpp"
-#include <type_traits>
 #include "gdt.hpp"
 #include "action.hpp"
-#include "bid.hpp"
 #include "buffer.hpp"
-#include <algorithm>
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
