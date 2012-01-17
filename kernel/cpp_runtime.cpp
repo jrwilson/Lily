@@ -32,6 +32,12 @@ operator delete (void* ptr)
   kernel_alloc::free (ptr);
 }
 
+void
+operator delete[] (void* ptr)
+{
+  kernel_alloc::free (ptr);
+}
+
 void *__dso_handle;
 
 extern "C" int

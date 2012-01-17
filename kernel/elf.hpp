@@ -1,6 +1,8 @@
 #ifndef __elf_hpp__
 #define __elf_hpp__
 
+#include "types.hpp"
+
 // I stole this from Linkers and Loaders (John R. Levine, p. 64).
 namespace elf {    
   static const char MAGIC[4] = { '\177', 'E', 'L', 'F' };
@@ -426,7 +428,7 @@ namespace elf {
       return true;
     }
 
-    typedef std::vector<program_header_entry> program_header_list_type;
+    typedef vector<program_header_entry> program_header_list_type;
     typedef program_header_list_type::const_iterator program_header_iterator;
 
     program_header_iterator
@@ -441,7 +443,7 @@ namespace elf {
       return program_headers_.end ();
     }
 
-    typedef std::vector<paction*> action_list_type;
+    typedef vector<paction*> action_list_type;
     typedef action_list_type::const_iterator action_iterator;
 
     action_iterator

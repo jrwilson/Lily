@@ -19,6 +19,8 @@
 #include "gdt.hpp"
 #include "action.hpp"
 #include "buffer.hpp"
+#include "unordered_map.hpp"
+#include "unordered_set.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -92,13 +94,13 @@ private:
   // Physical address that contains the automaton's page directory.
   physical_address_t const page_directory_;
   // Map from action entry point (aep) to action.
-  typedef std::unordered_map<const void*, const paction* const> aep_to_action_map_type;
+  typedef unordered_map<const void*, const paction* const> aep_to_action_map_type;
   aep_to_action_map_type aep_to_action_map_;
   // Map from name to action.
-  typedef std::unordered_map<std::string, const paction* const> name_to_action_map_type;
+  typedef unordered_map<kstring, const paction* const, kstring_hash> name_to_action_map_type;
   name_to_action_map_type name_to_action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
-  typedef std::vector<vm_area_base*> memory_map_type;
+  typedef vector<vm_area_base*> memory_map_type;
   memory_map_type memory_map_;
   // Heap area.
   vm_area_base* heap_area_;
@@ -107,23 +109,23 @@ private:
 
   // Bound outputs.
 public:
-  typedef std::unordered_set <input_act, input_act_hash> input_action_set_type;
+  typedef unordered_set <input_act, input_act_hash> input_action_set_type;
 private:
-  typedef std::unordered_map <caction, input_action_set_type, caction_hash> bound_outputs_map_type;
+  typedef unordered_map <caction, input_action_set_type, caction_hash> bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
 
   // Bound inputs.
-  typedef std::unordered_map<caction, output_act, caction_hash> bound_inputs_map_type;
+  typedef unordered_map<caction, output_act, caction_hash> bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
 
   // Bindings.
-  typedef std::unordered_set<binding, binding_hash> bindings_set_type;
+  typedef unordered_set<binding, binding_hash> bindings_set_type;
   bindings_set_type bindings_set_;
 
   // Next bid to allocate.
   bid_t current_bid_;
   // Map from bid_t to buffer*.
-  typedef std::unordered_map<bid_t, buffer*> bid_to_buffer_map_type;
+  typedef unordered_map<bid_t, buffer*> bid_to_buffer_map_type;
   bid_to_buffer_map_type bid_to_buffer_map_;
 
   struct compare_vm_area {
@@ -139,7 +141,7 @@ private:
   find_address (logical_address_t address) const
   {
     vm_area_base k (address, address);
-    memory_map_type::const_iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
+    memory_map_type::const_iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
     // We know that area->begin () < (*pos)->begin ().
 
     if (pos != memory_map_.begin ()) {
@@ -156,7 +158,7 @@ private:
   find_address (logical_address_t address)
   {
     vm_area_base k (address, address);
-    memory_map_type::iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
+    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), &k, compare_vm_area ());
     // We know that area->begin () < (*pos)->begin ().
 
     if (pos != memory_map_.begin ()) {
@@ -225,7 +227,7 @@ public:
     kassert (area != 0);
     
     // Find the location to insert.
-    memory_map_type::iterator pos = std::upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
+    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
     // We know that area->begin () < (*pos)->begin ().
 
     // Ensure that the areas don't conflict.
@@ -267,7 +269,7 @@ public:
       logical_address_t const old_end = heap_area_->end ();
       logical_address_t const new_end = old_end + size;
       // Find the heap.
-      memory_map_type::const_iterator pos = std::find (memory_map_.begin (), memory_map_.end (), heap_area_);
+      memory_map_type::const_iterator pos = find (memory_map_.begin (), memory_map_.end (), heap_area_);
       kassert (pos != memory_map_.end ());
       // Move to the next.
       ++pos;
@@ -340,8 +342,8 @@ public:
 
     if (name_to_action_map_.find (action->name) == name_to_action_map_.end () &&
 	aep_to_action_map_.find (action->action_entry_point) == aep_to_action_map_.end ()) {
-      name_to_action_map_.insert (std::make_pair (action->name, action));
-      aep_to_action_map_.insert (std::make_pair (action->action_entry_point, action));
+      name_to_action_map_.insert (make_pair (action->name, action));
+      aep_to_action_map_.insert (make_pair (action->action_entry_point, action));
       return true;
     }
     else {
@@ -362,7 +364,7 @@ public:
   }
 
   const paction*
-  find_action (const std::string& name) const
+  find_action (const kstring& name) const
   {
     name_to_action_map_type::const_iterator pos = name_to_action_map_.find (name);
     if (pos != name_to_action_map_.end ()) {
@@ -399,7 +401,7 @@ public:
   {
     kassert (output_action.action->automaton == this);
 
-    std::pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (std::make_pair (output_action, input_action_set_type ()));
+    pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (output_action, input_action_set_type ()));
     r.first->second.insert (input_act (input_action, owner));
   }
   
@@ -418,7 +420,7 @@ public:
   {
     kassert (input_action.action->automaton == this);
 
-    bound_inputs_map_.insert (std::make_pair (input_action, output_act (output_action, owner)));
+    bound_inputs_map_.insert (make_pair (input_action, output_act (output_action, owner)));
   }
 
   void
@@ -483,9 +485,9 @@ private:
     // Generate an id.
     bid_t bid = current_bid_;
     while (bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ()) {
-      bid = std::max (bid + 1, 0); // Handles overflow.
+      bid = max (bid + 1, 0); // Handles overflow.
     }
-    current_bid_ = std::max (bid + 1, 0);
+    current_bid_ = max (bid + 1, 0);
     return bid;
   }
 
@@ -502,7 +504,7 @@ public:
     
     // Create the buffer and insert it into the map.
     buffer* b = new buffer (size);
-    bid_to_buffer_map_.insert (std::make_pair (bid, b));
+    bid_to_buffer_map_.insert (make_pair (bid, b));
     
     return bid;
   }
@@ -524,7 +526,7 @@ public:
 	
 	// Create the buffer and insert it into the map.
 	buffer* n = new buffer (*b, offset, length);
-	bid_to_buffer_map_.insert (std::make_pair (bid, n));
+	bid_to_buffer_map_.insert (make_pair (bid, n));
 	
 	return bid;
       }
@@ -547,7 +549,7 @@ public:
     
     // Create the buffer and insert it into the map.
     buffer* b = new buffer (other);
-    bid_to_buffer_map_.insert (std::make_pair (bid, b));
+    bid_to_buffer_map_.insert (make_pair (bid, b));
     
     return bid;
   }
@@ -656,13 +658,14 @@ public:
 	  // Map the buffer.
 	  
 	  // Find the heap.
-	  memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (std::find (memory_map_.begin (), memory_map_.end (), heap_area_));
+	  memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (find (memory_map_.begin (), memory_map_.end (), heap_area_));
+
 	  kassert (heap_pos != memory_map_.rbegin ());
 	  --heap_pos;
 	  kassert (heap_pos != memory_map_.rend ());
 	  
 	  // Find the stack.
-	  memory_map_type::reverse_iterator stack_pos = std::find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
+	  memory_map_type::reverse_iterator stack_pos = find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
 	  kassert (stack_pos != memory_map_.rend ());
 	  
 	  // Find a hole and map.

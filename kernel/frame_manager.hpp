@@ -16,7 +16,7 @@
 */
 
 #include "stack_allocator.hpp"
-#include "slist.hpp"
+#include "vector.hpp"
 
 /*
   The frame manager was designed under the following requirements and assumptions:
@@ -81,7 +81,7 @@ public:
   }
 
 private:
-  typedef slist<stack_allocator*> allocator_list_type;
+  typedef vector<stack_allocator*> allocator_list_type;
   static allocator_list_type allocator_list_;
 
   struct contains_frame {

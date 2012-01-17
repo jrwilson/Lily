@@ -52,8 +52,8 @@ public:
   }
 
   static inline void
-  deallocator (pointer p,
-	       size_type n)
+  deallocate (pointer p,
+	      size_type)
   {
     ::operator delete (p);
   }

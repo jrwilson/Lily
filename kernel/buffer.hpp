@@ -2,6 +2,7 @@
 #define __buffer_hpp__
 
 #include "vm_area.hpp"
+#include "vector.hpp"
 
 // TODO:  Don't increment/decrement the zero frame.
 

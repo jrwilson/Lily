@@ -17,6 +17,8 @@
 #include "action.hpp"
 #include "vm.hpp"
 #include "automaton.hpp"
+#include "deque.hpp"
+#include "string.hpp"
 
 class global_fifo_scheduler {
 private:
@@ -77,9 +79,9 @@ private:
 
   private:
     status_t status_;
-    typedef std::deque<caction> queue_type;
+    typedef deque<caction> queue_type;
     queue_type queue_;
-    typedef std::unordered_set<caction, caction_hash> set_type;
+    typedef unordered_set<caction, caction_hash> set_type;
     set_type set_;
   };
   
@@ -277,9 +279,9 @@ private:
 
   /* TODO:  Need one per core. */
   static execution_context exec_context_;
-  typedef std::deque<automaton_context*> queue_type;
+  typedef deque<automaton_context*> queue_type;
   static queue_type ready_queue_;
-  typedef std::unordered_map<automaton*, automaton_context*> context_map_type;
+  typedef unordered_map<automaton*, automaton_context*> context_map_type;
   static context_map_type context_map_;
 
 public:

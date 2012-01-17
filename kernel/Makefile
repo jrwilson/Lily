@@ -1,6 +1,6 @@
 AS=i586-elf-as
 CXX=i586-elf-g++
-OFLAG=-O0
+OFLAG=-O2
 # Add -Werror at some point	
 CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -ffreestanding -fno-rtti -fno-exceptions -fno-stack-protector
 
@@ -27,12 +27,8 @@ irq_handler.o \
 irq.o \
 trap_handler.o \
 trap.o \
-rts.o
-
-# string.o \
-# ceil.o \
-# ceilf.o \
-# global_fifo_scheduler.o
+rts.o \
+global_fifo_scheduler.o
 
 KERNEL=lily
 
