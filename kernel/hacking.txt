@@ -72,6 +72,8 @@ $ ../gcc-4.4.3/configure --target=$TARGET --prefix=$PREFIX --disable-nls --enabl
 $ make all-gcc
 $ make install-gcc
 
+Update your path to include $PREFIX/bin.
+
 Containers and Algorithms
 -------------------------
 

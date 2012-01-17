@@ -1,6 +1,8 @@
 #ifndef __uno_assoc_impl_hpp__
 #define __uno_assoc_impl_hpp__
 
+/* Unordered Associative Container Implementation for unordered_set and unordered_map. */
+
 #include "functional.hpp"
 #include "utility.hpp"
 
@@ -261,7 +263,33 @@ public:
     bucket->next = lookup_[lookup_key];
     lookup_[lookup_key] = bucket;
 
-    kout << "Rehash" << endl;
+    // Rehash when size_ / lookup_size_ > .80
+    // Rehash when size_ / lookup_size_ > 80 / 100
+    // Rehash when 100 * size_ > 80 * lookup_size_
+    if (100 * size_ > 80 * lookup_size_) {
+      size_type new_lookup_size = 2 * lookup_size_;
+      bucket_type** new_lookup = lookup_allocator::allocate (new_lookup_size);
+      for (size_type idx = 0; idx < new_lookup_size; ++idx) {
+	new_lookup[idx] = 0;
+      }
+
+      for (size_type idx = 0; idx < lookup_size_; ++idx) {
+	while (lookup_[idx] != 0) {
+	  // Remove from the old lookup table.
+	  bucket_type* tmp = lookup_[idx];
+	  lookup_[idx] = tmp->next;
+	  // Compute the new lookup index.
+	  size_type new_idx = tmp->hash % new_lookup_size;
+	  // Insert into the new table.
+	  tmp->next = new_lookup[new_idx];
+	  new_lookup[new_idx] = tmp;
+	}
+      }
+
+      lookup_allocator::deallocate (lookup_, lookup_size_);
+      lookup_ = new_lookup;
+      lookup_size_ = new_lookup_size;
+    }
 
     return make_pair (iterator (this, bucket), true);
   }
