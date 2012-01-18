@@ -1,0 +1,18 @@
+Toolchain
+---------
+
+The purpose of this section is to set up a toolchain for compiling programs for Lily.
+From http://wiki.osdev.org/OS_Specific_Toolchain
+
+Set up environment variables.
+
+$ export TARGET=i586-pc-lily
+$ export PREFIX=/home/jrwilson/lilycc
+
+$ pwd
+/home/jrwilson/src2
+
+Download binutils and extract it.
+
+$ tar xjf binutils-2.20.1.tar.bz2
+
