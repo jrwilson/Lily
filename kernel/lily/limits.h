@@ -1,0 +1,6 @@
+#ifndef LILY_LIMITS_H
+#define LILY_LIMITS_H
+
+#define LILY_LIMITS_MAX_VALUE_SIZE 512
+
+#endif /* LILY_LIMITS_H */

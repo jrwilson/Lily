@@ -1,5 +1,5 @@
-#ifndef __quote_h__
-#define __quote_h__
+#ifndef QUOTE_H
+#define QUOTE_H
 
 /*
   File
@@ -17,4 +17,4 @@
 #define quote_(expr) #expr
 #define quote(expr) quote_(expr)
 
-#endif /* __quote_h__ */
+#endif /* QUOTE_H */

@@ -15,7 +15,7 @@
 */
 
 #include "vm_def.hpp"
-#include "types.hpp"
+#include "lily/types.h"
 
 namespace rts {
 

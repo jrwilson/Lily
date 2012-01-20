@@ -1,7 +1,7 @@
 .PHONY : all
 all : lily.iso
 
-kernel/lily :
+kernel/klily :
 	cd kernel; $(MAKE) $(MFLAGS)
 
 user/init_automaton :
@@ -17,7 +17,7 @@ depclean :
 	cd kernel; $(MAKE) $(MFLAGS) depclean
 	cd user; $(MAKE) $(MFLAGS) depclean
 
-lily : kernel/lily
+klily : kernel/klily
 	strip $^ -o $@
 
 initautomaton : user/init_automaton
@@ -37,11 +37,11 @@ core.img :
 eltorito.img : core.img
 	cat /usr/lib/grub/i386-pc/cdboot.img $^ > $@
 
-lily.iso : eltorito.img grub.cfg lily initautomaton initdata
+lily.iso : eltorito.img grub.cfg klily initautomaton initdata
 	mkdir -p isofiles/boot/grub
 	cp eltorito.img isofiles/boot/grub/
 	cp grub.cfg isofiles/boot/grub/
-	cp lily isofiles/boot/
+	cp klily isofiles/boot/
 	cp initautomaton isofiles/boot/
 	cp initdata isofiles/boot/
 	genisoimage -R -b boot/grub/eltorito.img -no-emul-boot -boot-load-size 4 -boot-info-table -o $@ isofiles

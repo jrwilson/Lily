@@ -1,7 +1,7 @@
 #ifndef __elf_hpp__
 #define __elf_hpp__
 
-#include "types.hpp"
+#include "integer_types.hpp"
 
 // I stole this from Linkers and Loaders (John R. Levine, p. 64).
 namespace elf {    

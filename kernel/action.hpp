@@ -1,9 +1,28 @@
 #ifndef __action_descriptor_hpp__
 #define __action_descriptor_hpp__
 
+#include <lily/types.h>
+#include <lily/action.h>
 #include "kstring.hpp"
 
 class automaton;
+
+enum action_type_t {
+  INPUT = LILY_ACTION_INPUT,
+  OUTPUT = LILY_ACTION_OUTPUT,
+  INTERNAL = LILY_ACTION_INTERNAL,
+};
+
+enum compare_method_t {
+  NO_COMPARE = LILY_ACTION_NO_COMPARE,
+  EQUAL = LILY_ACTION_EQUAL,
+};
+
+enum parameter_mode_t {
+  NO_PARAMETER = LILY_ACTION_NO_PARAMETER,
+  PARAMETER = LILY_ACTION_PARAMETER,
+  AUTO_PARAMETER = LILY_ACTION_AUTO_PARAMETER,
+};
 
 // Partial action.
 struct paction {

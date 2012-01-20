@@ -2,7 +2,7 @@
 #define __vm_def_hpp__
 
 #include <stddef.h>
-#include "types.hpp"
+#include "integer_types.hpp"
 
 typedef uintptr_t physical_address_t;
 typedef uintptr_t logical_address_t;

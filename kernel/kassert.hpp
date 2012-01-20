@@ -16,7 +16,7 @@
 
 #include "kout.hpp"
 #include "halt.hpp"
-#include "quote.hpp"
+#include "lily/quote.h"
 
 #define kassert(expr) do { if (!(expr)) { kout << "Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr; halt (); } } while (0);
 

@@ -85,7 +85,7 @@ The STL is incredibly powerful.
 I've reimplemented pieces of the STL to build various pieces of the kernel.
 I would qualify my efforts as a lesser artist or bad poet as my goal is not to implement a production version of the STL but implement a kernel.
 Consequently, if you reach for something in the STL don't be surprised if...
-1.  It's not effficient.  (Feel free to optimize.)
+1.  It's not efficient.  (Feel free to optimize.)
 2.  It's not correct.  (Feel free to fix bugs.)
 3.  It's not there.  (Feel free to implement.)
 

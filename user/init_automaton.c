@@ -1,27 +1,18 @@
-#include <action_traits.hpp>
-#include <fifo_scheduler.hpp>
+#include <action.h>
+#include <finish.h>
 
-typedef action_traits<internal_action, parameter<bid_t> > init_traits;
-#define INIT_TRAITS init_traits
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION ""
-#define INIT_COMPARE M_NO_COMPARE
-#define INIT_ACTION M_INTERNAL
-#define INIT_PARAMETER M_PARAMETER
+#define INIT_COMPARE NO_COMPARE
+#define INIT_ACTION INTERNAL
+#define INIT_PARAMETER PARAMETER
 
-// The scheduler.
-//static fifo_scheduler scheduler_;
-
-static int x;
-static int y = 1;
-
-extern "C" void
-init (bid_t)
+void
+init (void)
 {
-  x = y + 3;
-  lilycall::finish (0, -1, 0, 0, -1, 0);
+  finish (0, 0, 0, 0, -1, 0);
 }
-ACTION_DESCRIPTOR (INIT, init);
+EMBED_ACTION_DESCRIPTOR (INIT, init);
 
 // static void
 // schedule ();

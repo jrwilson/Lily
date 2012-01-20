@@ -19,6 +19,7 @@
 #include "automaton.hpp"
 #include "deque.hpp"
 #include "string.hpp"
+#include <lily/limits.h>
 
 class global_fifo_scheduler {
 private:
@@ -93,7 +94,7 @@ private:
     buffer* output_buffer_;
     bid_t input_buffer_;
     size_t buffer_size_;
-    uint8_t copy_value_[MAX_COPY_VALUE_SIZE];
+    uint8_t copy_value_[LILY_LIMITS_MAX_VALUE_SIZE];
     size_t copy_value_size_;
 
   public:

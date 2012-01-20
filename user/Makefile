@@ -1,22 +1,15 @@
-AS=as
-CXX=g++
-OFLAG=-O0
-# Add -Werror at some point	
-CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -std=c++0x -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include
-# -nostdinc -fno-rtti
-LD=ld
-LDFLAGS=$(OFLAG) -T linker.ld
-
+CC=i586-pc-lily-gcc
+CFLAGS=-g -Wall -MD
 TARGETS=init_automaton
 
 .PHONY : all
 all : $(TARGETS)
 
 init_automaton : init_automaton.o
-	$(LD) $(LDFLAGS) -o $@ $^
+	$(CC) -o $@ $^
 
-%.o : %.cpp
-	$(CXX) -o $@ -c $< $(CXXFLAGS)
+%.o : %.c
+	$(CC) $(CFLAGS) -o $@ -c $<
 
 .PHONY : clean
 clean :

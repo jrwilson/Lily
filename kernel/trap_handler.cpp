@@ -28,6 +28,27 @@
 static const unsigned int FINISH_INTERRUPT = 0x80;
 static const unsigned int SYSCALL_INTERRUPT = 0x81;
 
+enum {
+  CREATE = 0,
+  BIND = 1,
+  LOOSE = 2,
+  DESTROY = 3,
+  
+  SBRK = 4,
+  
+  BINDING_COUNT = 5,
+  
+  BUFFER_CREATE = 6,
+  BUFFER_COPY = 7,
+  BUFFER_GROW = 8,
+  BUFFER_APPEND = 9,
+  BUFFER_ASSIGN = 10,
+  BUFFER_MAP = 11,
+  BUFFER_UNMAP = 12,
+  BUFFER_DESTROY = 13,
+  BUFFER_SIZE = 14,
+};
+
 extern "C" void trap0 ();
 extern "C" void trap1 ();
 
@@ -44,6 +65,7 @@ trap_dispatch (volatile registers regs)
   switch (regs.number) {
   case FINISH_INTERRUPT:
     {
+      kassert (0);
       const void* const action_entry_point = reinterpret_cast<const void*> (regs.eax);
       aid_t const parameter = static_cast<aid_t> (regs.ebx);
       const void* copy_value = reinterpret_cast<const void*> (regs.ecx);
@@ -69,7 +91,7 @@ trap_dispatch (volatile registers regs)
       if (current.action->type == OUTPUT) {
   	// Check the data produced by an output.
   	if (copy_value != 0) {
-  	  if (copy_value_size > MAX_COPY_VALUE_SIZE || (copy_value_size != 0 && !current.action->automaton->verify_span (copy_value, copy_value_size))) {
+  	  if (copy_value_size > LILY_LIMITS_MAX_VALUE_SIZE || (copy_value_size != 0 && !current.action->automaton->verify_span (copy_value, copy_value_size))) {
   	    // TODO:  The automaton produced a bad copy value.
   	    kassert (0);
   	  }

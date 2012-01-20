@@ -15,7 +15,7 @@
 */
 
 #include "descriptor.hpp"
-#include "types.hpp"
+#include "integer_types.hpp"
 
 class gdt {
 public:

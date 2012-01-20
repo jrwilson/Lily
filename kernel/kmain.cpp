@@ -13,7 +13,6 @@
   Justin R. Wilson
 */
 
-#include "types.hpp"
 #include "multiboot_parser.hpp"
 #include "kout.hpp"
 #include "kernel_alloc.hpp"
