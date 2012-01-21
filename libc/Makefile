@@ -1,5 +1,4 @@
 CC=i586-pc-lily-gcc
-
 # AS=i586-elf-as
 # CXX=i586-elf-g++
 # OFLAG=-O2
@@ -27,7 +26,7 @@ all : $(OBJECTS)
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $< 
 
-libc.a : syscall.o
+libc.a : finish.o
 	$(AR) cr libc.a $^
 	ranlib libc.a
 

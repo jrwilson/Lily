@@ -41,4 +41,4 @@ trap_common_stub:
 	iret
 
 TRAP 0 0x80
-TRAP 1 0x81
+

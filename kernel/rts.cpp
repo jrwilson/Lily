@@ -27,8 +27,8 @@ namespace rts {
   };
 
   // A list of frames used when creating automata.
-  typedef vector<map_op> frame_list_type;
-  static frame_list_type frame_list_;
+  typedef unordered_map<logical_address_t, pair<frame_t, vm::map_mode_t> > frame_map_type;
+  static frame_map_type frame_map_;
 
   typedef vector<pair<logical_address_t, logical_address_t> > clear_list_type;
   static clear_list_type clear_list_;
@@ -85,7 +85,7 @@ namespace rts {
     }
 
     // Create the memory map for the automaton.
-    frame_list_.clear ();
+    frame_map_.clear ();
     clear_list_.clear ();
     for (elf::parser::program_header_iterator e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
       vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
@@ -93,7 +93,11 @@ namespace rts {
       size_t s;
       // Initialized data.
       for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-    	frame_list_.push_back (map_op (e->virtual_address + s, vm::logical_address_to_frame (text_begin + e->offset + s), map_mode));
+    	pair<frame_map_type::iterator, bool> r = frame_map_.insert (make_pair (align_down (e->virtual_address + s, PAGE_SIZE), make_pair (vm::logical_address_to_frame (text_begin + e->offset + s), map_mode)));
+	if (!r.second && map_mode == vm::MAP_COPY_ON_WRITE) {
+	  // Already existed and needs to be copy-on-write.
+	  r.first->second.second = vm::MAP_COPY_ON_WRITE;
+	}
       }
       
       // Clear the tiny region between the end of initialized data and the first unitialized page.
@@ -105,7 +109,11 @@ namespace rts {
       
       // Uninitialized data.
       for (; s < e->memory_size; s += PAGE_SIZE) {
-    	frame_list_.push_back (map_op (e->virtual_address + s, vm::zero_frame (), map_mode));
+   	pair<frame_map_type::iterator, bool> r = frame_map_.insert (make_pair (align_down (e->virtual_address + s, PAGE_SIZE), make_pair (vm::zero_frame (), map_mode)));
+	if (!r.second && map_mode == vm::MAP_COPY_ON_WRITE) {
+	  // Already existed and needs to be copy-on-write.
+	  r.first->second.second = vm::MAP_COPY_ON_WRITE;
+	}
       }
       
       vm_area_base* area = new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
@@ -121,10 +129,10 @@ namespace rts {
     // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
     
     // Map all the frames.
-    for (frame_list_type::const_iterator pos = frame_list_.begin ();
-    	 pos != frame_list_.end ();
+    for (frame_map_type::const_iterator pos = frame_map_.begin ();
+    	 pos != frame_map_.end ();
     	 ++pos) {
-      vm::map (pos->logical_address, pos->frame, vm::USER, pos->map_mode);
+      vm::map (pos->first, pos->second.first, vm::USER, pos->second.second);
     }
 
     // Clear.
@@ -294,7 +302,7 @@ namespace rts {
       halt ();
     }
 
-    scheduler::schedule (caction (action, data_bid));
+    scheduler::schedule (caction (action, reinterpret_cast<const void*> (data_bid)));
 
     // Start the scheduler.  Doesn't return.
     scheduler::finish (0, 0, -1, 0);

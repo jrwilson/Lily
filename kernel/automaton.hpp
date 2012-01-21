@@ -444,7 +444,7 @@ public:
 
   size_t
   binding_count (const void* aep,
-		 aid_t parameter) const
+		 const void* parameter) const
   {
     aep_to_action_map_type::const_iterator pos = aep_to_action_map_.find (aep);
     if (pos != aep_to_action_map_.end ()) {

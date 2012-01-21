@@ -238,7 +238,7 @@ private:
       }
       
       // Push the parameter.
-      *--stack_pointer = static_cast<uint32_t> (action_.parameter);
+      *--stack_pointer = reinterpret_cast<uint32_t> (action_.parameter);
 
       // Push a bogus instruction pointer so we can use the cdecl calling convention.
       *--stack_pointer = 0;

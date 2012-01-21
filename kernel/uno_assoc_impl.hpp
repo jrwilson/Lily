@@ -149,7 +149,8 @@ public:
     }
   }
 
-  ~uno_assoc_cont ()
+  void
+  clear ()
   {
     for (size_type idx = 0; idx < lookup_size_; ++idx) {
       while (lookup_[idx] != 0) {
@@ -159,7 +160,12 @@ public:
 	bucket_allocator::deallocate (tmp, 1);
       }
     }
+    size_ = 0;
+  }
 
+  ~uno_assoc_cont ()
+  {
+    clear ();
     lookup_allocator::deallocate (lookup_, lookup_size_);
   }
 
