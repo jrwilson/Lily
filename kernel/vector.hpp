@@ -67,6 +67,12 @@ public:
     return end_ - begin_;
   }
 
+  bool
+  empty () const
+  {
+    return begin_ == end_;
+  }
+
   iterator
   begin ()
   {
@@ -119,6 +125,30 @@ public:
   operator[] (size_type idx)
   {
     return begin_[idx];
+  }
+
+  reference
+  front ()
+  {
+    return *begin_;
+  }
+
+  const_reference
+  front () const
+  {
+    return *begin_;
+  }
+
+  reference
+  back ()
+  {
+    return *(end_ - 1);
+  }
+
+  const_reference
+  back () const
+  {
+    return *(end_ - 1);
   }
 
   void

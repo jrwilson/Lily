@@ -44,6 +44,12 @@ struct finish_args {
   size_t buffer_size;
 };
 
+struct buffer_map_args {
+  uint32_t ebp;
+  uint32_t eip;
+  bid_t buffer;
+};
+
 struct map_args {
   uint32_t ebp;
   uint32_t eip;
@@ -171,9 +177,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_MAP:
     {
-      // BUG
-      kassert (0);
-      regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->buffer_map (regs.ebx));
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_map_args* ptr = reinterpret_cast<buffer_map_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_map_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<void*, int> r = a->buffer_map (ptr->buffer);
+      regs.eax = reinterpret_cast<uint32_t> (r.first);
+      regs.ebx = r.second;
       return;
     }
     break;
@@ -203,13 +215,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_MAP:
     {
-      const caction& current = scheduler::current_action ();
+      automaton* a = scheduler::current_action ().action->automaton;
       map_args* ptr = reinterpret_cast<map_args*> (regs.useresp);
-      if (!current.action->automaton->verify_span (ptr, sizeof (map_args))) {
+      if (!a->verify_span (ptr, sizeof (map_args))) {
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      regs.eax = rts::map (current, ptr->destination, ptr->source, ptr->size);
+      pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
+      regs.eax = r.first;
+      regs.ebx = r.second;
       return;
     }
   default:

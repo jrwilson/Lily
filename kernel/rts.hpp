@@ -17,6 +17,7 @@
 #include "vm_def.hpp"
 #include "lily/types.h"
 #include "action.hpp"
+#include "utility.hpp"
 
 namespace rts {
 
@@ -48,8 +49,8 @@ namespace rts {
   void
   destroy (void);
 
-  int
-  map (const caction& current,
+  pair<int, int>
+  map (automaton* a,
        const void* destination,
        const void* source,
        size_t size);

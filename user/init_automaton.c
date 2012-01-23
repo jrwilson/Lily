@@ -1,6 +1,7 @@
 #include <action.h>
 #include <finish.h>
 #include <io.h>
+#include <buffer.h>
 
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION ""
@@ -8,32 +9,85 @@
 #define INIT_ACTION INTERNAL
 #define INIT_PARAMETER PARAMETER
 
+#define ATTRIBUTE ((0 << 12) | (0xF << 8))
+#define HEIGHT 25
+#define WIDTH 80
+
+unsigned short* video_ram = (unsigned short*)0xB8000;
+unsigned int x_location = 0;
+unsigned int y_location = 0;
+
 void
-init (void)
+put (char c)
+{
+  // TODO:  Can we scroll with hardware?
+  /* Scroll if we are at the bottom of the screen. */
+  if (y_location == HEIGHT) {
+    unsigned int y;
+    for (y = 0; y < HEIGHT - 1; ++y) {
+      for (unsigned int x = 0; x < WIDTH; ++x) {
+	video_ram[y * WIDTH + x] = video_ram[(y + 1) * WIDTH + x];
+      }
+    }
+    /* Fill last line with spaces. */
+    for (unsigned int x = 0; x < WIDTH; ++x) {
+      video_ram[y * WIDTH + x] = ATTRIBUTE | ' ';
+    }
+    --y_location;
+  }
+  
+  switch (c) {
+  case '\b':
+    if (x_location > 0) {
+      --x_location;
+    }
+    break;
+  case '\t':
+    /* A tab is a position divisible by 8. */
+    x_location = (x_location + 8) & ~(8-1);
+    break;
+  case '\n':
+    x_location = 0;
+    ++y_location;
+    break;
+  case '\r':
+    x_location = 0;
+    break;
+  default:
+    /* Print the character using black on white. */
+    video_ram[y_location * WIDTH + x_location] = ATTRIBUTE | c;
+    /* Advance the cursor. */
+    ++x_location;
+    if (x_location == WIDTH) {
+      ++y_location;
+      x_location = 0;
+    }
+  }
+}
+
+void
+print (const char* s)
+{
+  for (; *s != 0; ++s) {
+    put (*s);
+  }
+}
+
+void
+init (bid_t buffer)
 {
   // Identity map in the VGA buffer for a "Hello, world!" program.
   // The buffer starts at 0xB8000.
   // We assume an 80x25 buffer where each character requires 2 bytes: one for the character and one for the attribute (foreground and background color).
-  map ((const void*)0xB8000, (const void*)0xB8000, 80*25*2);
+  map (video_ram, video_ram, WIDTH * HEIGHT * 2);
 
-  unsigned short* ptr = (unsigned short*)0xB8000;
   // Clear the screen.
   for (size_t idx = 0; idx < 2000; ++idx) {
-    ptr[idx] = (0 << 12) | (0xF << 8) | ' ';
+    video_ram[idx] = ATTRIBUTE | ' ';
   }
-  // Say hello to the world.
-  ptr[0] = (0 << 12) | (0xF << 8) | 'H';
-  ptr[1] = (0 << 12) | (0xF << 8) | 'e';
-  ptr[2] = (0 << 12) | (0xF << 8) | 'l';
-  ptr[3] = (0 << 12) | (0xF << 8) | 'l';
-  ptr[4] = (0 << 12) | (0xF << 8) | 'o';
-  ptr[5] = (0 << 12) | (0xF << 8) | ' ';
-  ptr[6] = (0 << 12) | (0xF << 8) | 'w';
-  ptr[7] = (0 << 12) | (0xF << 8) | 'o';
-  ptr[8] = (0 << 12) | (0xF << 8) | 'r';
-  ptr[9] = (0 << 12) | (0xF << 8) | 'l';
-  ptr[10] = (0 << 12) | (0xF << 8) | 'd';
-  ptr[11] = (0 << 12) | (0xF << 8) | '!';
+
+  const char* message = buffer_map (buffer);
+  print (message);
 
   finish (0, 0, 0, 0, -1, 0);
 }

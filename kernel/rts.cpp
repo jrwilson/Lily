@@ -6,9 +6,15 @@
 #include "elf.hpp"
 #include "bitset.hpp"
 #include "mapped_area.hpp"
+#include "lily/syscall.h"
 
 namespace rts {
   
+  // Bitset marking which frames are used for memory-mapped I/O.
+  // I assume the region from 0x0 to 0x00100000 is used for memory-mapped I/O.
+  // Need one bit for each frame.
+  static bitset<ONE_MEGABYTE / PAGE_SIZE> mmapped_frames_;
+
   // For creating automata and allocating them an aid.
   static aid_t current_aid_;
   typedef unordered_map<aid_t, automaton*> aid_map_type;
@@ -119,11 +125,17 @@ namespace rts {
 	}
       }
       
-      vm_area_base* area = new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
-      if (!a->insert_vm_area (area)) {
+      if (!a->vm_area_is_free (e->virtual_address, e->virtual_address + e->memory_size)) {
     	// BUG:  The area conflicts with the existing memory map.
     	kassert (0);
       }
+
+      a->insert_vm_area (new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size));
+    }
+
+    if (!a->insert_heap_and_stack ()) {
+      // BUG
+      kassert (0);
     }
 
     // Switch to the automaton.
@@ -144,6 +156,9 @@ namespace rts {
     	 ++pos) {
       memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
     }
+
+    // Map the heap and stack while using the automaton's page directory.
+    a->map_heap_and_stack ();
 
     // Switch back.
     vm::switch_to_directory (old);
@@ -416,11 +431,6 @@ namespace rts {
     kassert (0);
   }
 
-  // Bitset marking which frames are used for memory-mapped I/O.
-  // I assume the region from 0x0 to 0x00100000 is used for memory-mapped I/O.
-  // Need one bit for each frame.
-  static bitset<ONE_MEGABYTE / PAGE_SIZE> mmapped_frames_;
-
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.
   // The destination and source are aligned to a page boundary and the size is rounded up to a multiple of the page size.
   // Map can fail for the following reasons:
@@ -430,57 +440,49 @@ namespace rts {
   // *  Part of the source lies outside the regions of memory marked for memory-mapped I/O.
   // *  Part of the source is already claimed by some other automaton.  (Mapping the same region twice is an error.)
   // *  The destination address is not available.
-  int
-  map (const caction& current,
+  pair<int, int>
+  map (automaton* a,
        const void* destination,
        const void* source,
        size_t size)
   {
-    automaton* const a = current.action->automaton;
     logical_address_t const destination_begin = align_down (reinterpret_cast<logical_address_t> (destination), PAGE_SIZE);
     logical_address_t const destination_end = align_up (reinterpret_cast<logical_address_t> (destination) + size, PAGE_SIZE);
     physical_address_t const source_begin = align_down (reinterpret_cast<physical_address_t> (source), PAGE_SIZE);
     physical_address_t const source_end = align_up (reinterpret_cast<physical_address_t> (source) + size, PAGE_SIZE);
 
     if (!a->privileged ()) {
-      // BUG
-      kassert (0);
+      return make_pair (-1, LILY_SYSCALL_EPERM);
     }
 
     if ((reinterpret_cast<logical_address_t> (destination) & (PAGE_SIZE - 1)) != (reinterpret_cast<physical_address_t> (source) & (PAGE_SIZE - 1))) {
-      // BUG
-      kassert (0);
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
 
     if (size == 0) {
-      // BUG
-      kassert (0);
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
 
     // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
     if (source_end > ONE_MEGABYTE) {
-      // BUG
-      kassert (0);
+      return make_pair (-1, LILY_SYSCALL_EADDRNOTAVAIL);
     }
 
     for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {
       if (mmapped_frames_[physical_address_to_frame (address)]) {
-	// BUG
-	kassert (0);
+	return make_pair (-1, LILY_SYSCALL_EADDRINUSE);
       }
     }
 
-    if (!a->vm_area_free (destination_begin, destination_end)) {
-      // BUG
-      kassert (0);
+    if (!a->vm_area_is_free (destination_begin, destination_end)) {
+      return make_pair (-1, LILY_SYSCALL_EADDRINUSE);
     }
 
     mapped_area* area = new mapped_area (destination_begin,
 					 destination_end,
 					 source_begin,
 					 source_end);
-    bool r = a->insert_mapped_area (area);
-    kassert (r);
+    a->insert_mapped_area (area);
 
     physical_address_t pa = source_begin;
     for (logical_address_t la = destination_begin; la != destination_end; la += PAGE_SIZE, pa += PAGE_SIZE) {
@@ -489,7 +491,7 @@ namespace rts {
     }
 
     // Success.
-    return 0;
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
 }

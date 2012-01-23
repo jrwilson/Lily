@@ -417,6 +417,15 @@ namespace vm {
   }
 
   inline physical_address_t
+  get_directory ()
+  {
+    /* Switch to the page directory returning the old one. */
+    physical_address_t old;
+    asm ("mov %%cr3, %0\n" : "=r"(old));
+    return old;
+  }
+
+  inline physical_address_t
   switch_to_directory (physical_address_t n)
   {
     /* Switch to the page directory returning the old one. */

@@ -1,9 +1,6 @@
 #ifndef __types_hpp__
 #define __types_hpp__
 
-#include <stddef.h>
-#include "lily/limits.h"
-
 // TODO:  Currently, <stdint.h> is not available.
 typedef char int8_t;
 typedef unsigned char uint8_t;

@@ -19,7 +19,6 @@
 #include "automaton.hpp"
 #include "deque.hpp"
 #include "string.hpp"
-#include <lily/limits.h>
 
 class global_fifo_scheduler {
 private:

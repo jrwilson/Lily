@@ -22,6 +22,7 @@
 #include "unordered_map.hpp"
 #include "unordered_set.hpp"
 #include "mapped_area.hpp"
+#include "lily/syscall.h"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -183,23 +184,9 @@ public:
     privileged_ (privileged),
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
+    stack_area_ (0),
     current_bid_ (0)
-  {
-    // Add a stack.
-    stack_area_ = new vm_area_base (STACK_BEGIN, STACK_END);
-    insert_vm_area (stack_area_);
-
-    // TODO:  Defer these operations since it involves switching page directories.
-
-    // Map the stack using copy-on-write of the zero page.
-    physical_address_t old = vm::switch_to_directory (page_directory_);
-    
-    for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
-      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
-    }
-
-    vm::switch_to_directory (old);
-  }
+  { }
 
   ~automaton ()
   {
@@ -232,8 +219,8 @@ public:
   }
 
   bool
-  vm_area_free (logical_address_t begin,
-		logical_address_t end)
+  vm_area_is_free (logical_address_t begin,
+		   logical_address_t end)
   {
     vm_area_base area (begin, end);
     
@@ -258,55 +245,65 @@ public:
     return true;
   }
 
-  bool
+  void
   insert_vm_area (vm_area_base* area)
   {
     kassert (area != 0);
     
     // Find the location to insert.
     memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
-    // We know that area->begin () < (*pos)->begin ().
-
-    // Ensure that the areas don't conflict.
-    if (pos != memory_map_.begin ()) {
-      memory_map_type::const_iterator prev = pos - 1;
-      if (area->begin () < (*prev)->end ()) {
-	return false;
-      }
-    }
-
-    if (pos != memory_map_.end ()) {
-      if ((*pos)->begin () < area->end ()) {
-	return false;
-      }
-    }
-    
     memory_map_.insert (pos, area);
+  }
+
+  bool
+  insert_heap_and_stack ()
+  {
+    kassert (heap_area_ == 0);
+    kassert (stack_area_ == 0);
+
+    if (memory_map_.empty ()) {
+      // No virtual memory areas.
+      return false;
+    }
+
+    if (!vm_area_is_free (STACK_BEGIN, STACK_END)) {
+      // No space for a stack.
+      return false;
+    }
+
+    heap_area_ = new vm_area_base (memory_map_.back ()->end (), memory_map_.back ()->end ());
+    insert_vm_area (heap_area_);
+
+    stack_area_ = new vm_area_base (STACK_BEGIN, STACK_END);
+    insert_vm_area (stack_area_);
+
     return true;
   }
   
-  bool
-  insert_heap_area (vm_area_base* area)
+  void
+  map_heap_and_stack ()
   {
-    if (insert_vm_area (area)) {
-      heap_area_ = area;
-      return true;
+    kassert (heap_area_ != 0);
+    kassert (stack_area_ != 0);
+    kassert (page_directory_ == vm::get_directory ());
+
+    if (!is_aligned (heap_area_->begin (), PAGE_SIZE)) {
+      // The heap is not page aligned.
+      // We are going to remap it copy-on-write.
+      vm::remap (heap_area_->begin (), vm::USER, vm::MAP_COPY_ON_WRITE);
     }
-    else {
-      return false;
+
+    // Map the stack using copy-on-write of the zero page.
+    for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
+      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
     }
   }
 
-  bool
+  void
   insert_mapped_area (mapped_area* area)
   {
-    if (insert_vm_area (area)) {
-      mapped_areas_.push_back (area);
-      return true;
-    }
-    else {
-      return false;
-    }
+    insert_vm_area (area);
+    mapped_areas_.push_back (area);
   }
 
   void*
@@ -692,59 +689,57 @@ public:
     }
   }
 
-  void*
+  pair<void*, int>
   buffer_map (bid_t bid)
   {
     kassert (heap_area_ != 0);
     kassert (stack_area_ != 0);
 
     bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
-    if (bpos != bid_to_buffer_map_.end ()) {
-      buffer* b = bpos->second;
-
-      if (b->size () != 0) {
-	if (b->begin () == 0) {
-	  // Map the buffer.
-	  
-	  // Find the heap.
-	  memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (find (memory_map_.begin (), memory_map_.end (), heap_area_));
-
-	  kassert (heap_pos != memory_map_.rbegin ());
-	  --heap_pos;
-	  kassert (heap_pos != memory_map_.rend ());
-	  
-	  // Find the stack.
-	  memory_map_type::reverse_iterator stack_pos = find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
-	  kassert (stack_pos != memory_map_.rend ());
-	  
-	  // Find a hole and map.
-	  for (; stack_pos != heap_pos; ++stack_pos) {
-	    memory_map_type::reverse_iterator prev = stack_pos + 1;
-	    size_t size = (*stack_pos)->begin () - (*prev)->end ();
-	    if (size >= b->size ()) {
-	      b->map ((*stack_pos)->begin ());
-	      memory_map_.insert (prev.base (), b);
-	      return reinterpret_cast<void*> (b->begin ());
-	    }
-	  }
-	  
-	  // Couldn't find a big enough hole.
-	  return 0;
-	}
-	else {
-	  // The buffer is already mapped.  Return the address.
-	  return reinterpret_cast<void*> (b->begin ());
-	}
-      }
-      else {
-	// The buffer has size == 0.
-	return 0;
-      }
-    }
-    else {
+    if (bpos == bid_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return 0;
+      return make_pair ((void*)0, LILY_SYSCALL_EBADBID);
     }
+
+    buffer* b = bpos->second;
+    
+    if (b->size () == 0) {
+      // The buffer is empty.
+      return make_pair ((void*)0, LILY_SYSCALL_EBADBID);
+    }
+
+    if (b->begin () != 0) {
+      // The buffer is already mapped.  Return the address.
+      return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_SYSCALL_ESUCCESS);
+    }
+
+    // Map the buffer.
+    
+    // Find the heap.
+    memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (find (memory_map_.begin (), memory_map_.end (), heap_area_));
+    
+    kassert (heap_pos != memory_map_.rbegin ());
+    --heap_pos;
+    kassert (heap_pos != memory_map_.rend ());
+    
+    // Find the stack.
+    memory_map_type::reverse_iterator stack_pos = find (memory_map_.rbegin (), memory_map_.rend (), stack_area_);
+    kassert (stack_pos != memory_map_.rend ());
+    
+    // Find a hole and map.
+    for (; stack_pos != heap_pos; ++stack_pos) {
+      memory_map_type::reverse_iterator prev = stack_pos + 1;
+      size_t size = (*stack_pos)->begin () - (*prev)->end ();
+      if (size >= b->size ()) {
+	b->map ((*stack_pos)->begin ());
+	memory_map_.insert (prev.base (), b);
+	// Success.
+	return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_SYSCALL_ESUCCESS);
+      }
+    }
+    
+    // Couldn't find a big enough hole.
+    return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
   }
 
   int

@@ -31,7 +31,7 @@ rts.o \
 global_fifo_scheduler.o
 
 # Headers that will be installed.
-HEADERS=lily/action.h lily/limits.h lily/quote.h lily/syscall.h lily/types.h
+HEADERS=lily/action.h lily/quote.h lily/syscall.h lily/types.h
 
 KERNEL=klily
 
