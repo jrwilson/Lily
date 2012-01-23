@@ -56,7 +56,7 @@ public:
       begin_ = end_ - size ();
       
       for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
-	vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE);
+	vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
       }
     }
   }
@@ -137,7 +137,7 @@ public:
       frame_manager::incref (frame_list_[offset + idx]);
       if (begin_ != 0) {
 	// Map.
-	vm::map (begin_ + (offset + idx) * PAGE_SIZE, frame_list_[offset + idx], vm::USER, vm::MAP_COPY_ON_WRITE);
+	vm::map (begin_ + (offset + idx) * PAGE_SIZE, frame_list_[offset + idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
       }
     }
   }

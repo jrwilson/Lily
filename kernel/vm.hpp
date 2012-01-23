@@ -289,7 +289,8 @@ namespace vm {
   map (logical_address_t logical_addr,
        frame_t fr,
        page_privilege_t privilege,
-       map_mode_t map_mode)
+       map_mode_t map_mode,
+       bool not_in_frame_manager)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* pt = get_page_table (logical_addr);
@@ -318,7 +319,9 @@ namespace vm {
       pt->entry[table_entry] = page_table_entry (fr, vm::COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
       break;
     }
-    frame_manager::incref (fr);
+    if (!not_in_frame_manager) {
+      frame_manager::incref (fr);
+    }
     // Flush the TLB.
     asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }

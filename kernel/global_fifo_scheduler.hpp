@@ -286,8 +286,15 @@ private:
   static context_map_type context_map_;
 
 public:
-  static void
-  add_automaton (automaton* automaton);
+  static inline void
+  add_automaton (automaton* automaton)
+  {
+    // Allocate a new context and insert it into the map.
+    // Inserting should succeed.
+    automaton_context* c = new automaton_context ();
+    pair<context_map_type::iterator, bool> r = context_map_.insert (make_pair (automaton, c));
+    kassert (r.second);
+  }
 
   static inline const caction&
   current_action ()

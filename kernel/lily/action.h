@@ -16,7 +16,7 @@
 
 /* A macro for embedding the action information. */
 #define EMBED_ACTION_DESCRIPTOR(base, func_name)				\
-  asm (".pushsection .action_info, \"\", @note\n"		   \
+  __asm__ (".pushsection .action_info, \"\", @note\n"		   \
   ".balign 4\n"							   \
   ".long 1f - 0f\n"		/* Length of the author string. */ \
   ".long 3f - 2f\n"		/* Length of the description. */ \

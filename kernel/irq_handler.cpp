@@ -157,7 +157,7 @@ irq_handler::install ()
 extern "C" void
 irq_handler (volatile registers regs)
 {
-  // TODO
+  // BUG
   kassert (0);
   //dispatcher.dispatch (&regs);
 

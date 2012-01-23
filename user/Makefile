@@ -1,5 +1,5 @@
 CC=i586-pc-lily-gcc
-CFLAGS=-g -Wall -MD
+CFLAGS=-g -Wall -MD -std=c99
 TARGETS=init_automaton
 
 .PHONY : all

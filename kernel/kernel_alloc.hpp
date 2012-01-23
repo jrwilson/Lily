@@ -355,14 +355,12 @@ public:
       // The last chunk is not available.
       // Create one.
       size_t request_size = align_up (size + 2 * sizeof (header), PAGE_SIZE);
-      // TODO:  Check the return value.
       last_header_ = new (sbrk (request_size)) header (request_size - 2 * sizeof (header));
     }
     else if (last_header_->size () < size) {
       // The last chunk is available but too small.
       // Resize the last chunk.
       size_t request_size = align_up (size - last_header_->size (), PAGE_SIZE);
-	// TODO:  Check the return value.
       sbrk (request_size);
       new (last_header_) header (last_header_->size () + request_size);
     }

@@ -1,5 +1,6 @@
 #include <action.h>
 #include <finish.h>
+#include <io.h>
 
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION ""
@@ -10,6 +11,30 @@
 void
 init (void)
 {
+  // Identity map in the VGA buffer for a "Hello, world!" program.
+  // The buffer starts at 0xB8000.
+  // We assume an 80x25 buffer where each character requires 2 bytes: one for the character and one for the attribute (foreground and background color).
+  map ((const void*)0xB8000, (const void*)0xB8000, 80*25*2);
+
+  unsigned short* ptr = (unsigned short*)0xB8000;
+  // Clear the screen.
+  for (size_t idx = 0; idx < 2000; ++idx) {
+    ptr[idx] = (0 << 12) | (0xF << 8) | ' ';
+  }
+  // Say hello to the world.
+  ptr[0] = (0 << 12) | (0xF << 8) | 'H';
+  ptr[1] = (0 << 12) | (0xF << 8) | 'e';
+  ptr[2] = (0 << 12) | (0xF << 8) | 'l';
+  ptr[3] = (0 << 12) | (0xF << 8) | 'l';
+  ptr[4] = (0 << 12) | (0xF << 8) | 'o';
+  ptr[5] = (0 << 12) | (0xF << 8) | ' ';
+  ptr[6] = (0 << 12) | (0xF << 8) | 'w';
+  ptr[7] = (0 << 12) | (0xF << 8) | 'o';
+  ptr[8] = (0 << 12) | (0xF << 8) | 'r';
+  ptr[9] = (0 << 12) | (0xF << 8) | 'l';
+  ptr[10] = (0 << 12) | (0xF << 8) | 'd';
+  ptr[11] = (0 << 12) | (0xF << 8) | '!';
+
   finish (0, 0, 0, 0, -1, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INIT, init);

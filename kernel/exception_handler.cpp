@@ -18,7 +18,6 @@
 #include "vm_def.hpp"
 #include "vm.hpp"
 #include "string.hpp"
-//#include "scheduler.hpp"
 #include "kernel_alloc.hpp"
 
 extern "C" void exception0 ();
@@ -113,63 +112,63 @@ exception_dispatch (volatile registers regs)
 {
   switch (regs.number) {
   case DIVIDE_ERROR:
-    // TODO
+    // BUG
     kout << "Divide error" << endl;
     kout << regs << endl;
     kassert (0);
     break;
   case SINGLE_STEP:
-    // TODO
+    // BUG
     kassert (0);
     break;
   case NON_MASKABLE_INTERRUPT:
-    // TODO
+    // BUG
     kassert (0);
     break;
   case BREAKPOINT:
-    // TODO
+    // BUG
     kassert (0);
     break;
   case OVERFLOW_ERROR:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case BOUND:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case INVALID_OPCODE:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case COPROCESSOR_NA:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case DOUBLE_FAULT:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case COPROCESSOR_SEGMENT_OVERRUN:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case INVALID_TASK_STATE_SEGMENT:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case SEGMENT_NOT_PRESENT:
-    // TODO
+    // BUG
     kout << "Segment not present" << endl;
     kout << regs << endl;
     kassert (0);
     break; 
   case STACK_SEGMENT_OVERRUN:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   case GENERAL_PROTECTION_FAULT:
-    // TODO
+    // BUG
     kout << "General Protection Fault" << endl;
     kout << regs << endl;
     kassert (0);
@@ -191,13 +190,13 @@ exception_dispatch (volatile registers regs)
       	// Allocate a frame.
       	frame_t dst_frame = frame_manager::alloc ();
       	// Map it in at the stub.
-      	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE);
+      	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Copy.
       	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
       	// Unmap the source.
       	vm::unmap (address);
       	// Map in the destination.
-      	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE);
+      	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Unmap the stub.
       	vm::unmap (vm::get_stub1 ());
       	// Remove the reference from allocation.
@@ -220,12 +219,12 @@ exception_dispatch (volatile registers regs)
       	return;
       }
 
-      // TODO:  We only know how to deal with copy-on-write page faults and kernel data.
+      // BUG:  We only know how to deal with copy-on-write page faults and kernel data.
       kassert (0);
     }
     break; 
   case COPROCESSOR_ERROR:
-    // TODO
+    // BUG
     kassert (0);
     break; 
   }

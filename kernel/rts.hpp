@@ -16,6 +16,7 @@
 
 #include "vm_def.hpp"
 #include "lily/types.h"
+#include "action.hpp"
 
 namespace rts {
 
@@ -24,6 +25,15 @@ namespace rts {
 			 size_t automaton_size,
 			 frame_t data_frame,
 			 size_t data_size);
+
+  void
+  finish (const caction& current,
+	  const void* action_entry_point,
+	  const void* parameter,
+	  const void* value,
+	  size_t value_size,
+	  bid_t buffer,
+	  size_t buffer_size);
   
   aid_t
   create (const void* automaton_buffer,
@@ -37,6 +47,12 @@ namespace rts {
 
   void
   destroy (void);
+
+  int
+  map (const caction& current,
+       const void* destination,
+       const void* source,
+       size_t size);
 }
 
 #endif /* __rts_hpp__ */

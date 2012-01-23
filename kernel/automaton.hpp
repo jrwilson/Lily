@@ -21,6 +21,7 @@
 #include "buffer.hpp"
 #include "unordered_map.hpp"
 #include "unordered_set.hpp"
+#include "mapped_area.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -91,6 +92,7 @@ private:
   };
 
   aid_t aid_;
+  bool privileged_;
   // Physical address that contains the automaton's page directory.
   physical_address_t const page_directory_;
   // Map from action entry point (aep) to action.
@@ -106,7 +108,8 @@ private:
   vm_area_base* heap_area_;
   // Stack area.
   vm_area_base* stack_area_;
-
+  // Memory mapped areas.
+  vector<mapped_area*> mapped_areas_;
   // Bound outputs.
 public:
   typedef unordered_set <input_act, input_act_hash> input_action_set_type;
@@ -174,8 +177,10 @@ private:
 public:
 
   automaton (aid_t aid,
+	     bool privileged,
 	     frame_t page_directory_frame) :
     aid_ (aid),
+    privileged_ (privileged),
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
     current_bid_ (0)
@@ -184,13 +189,13 @@ public:
     stack_area_ = new vm_area_base (STACK_BEGIN, STACK_END);
     insert_vm_area (stack_area_);
 
-    // TODO:  Might want to defer these operations since it involves switching page directories.
+    // TODO:  Defer these operations since it involves switching page directories.
 
     // Map the stack using copy-on-write of the zero page.
     physical_address_t old = vm::switch_to_directory (page_directory_);
     
     for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
-      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
+      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
     }
 
     vm::switch_to_directory (old);
@@ -198,7 +203,7 @@ public:
 
   ~automaton ()
   {
-    // TODO:  Destroy vm_areas, buffers, etc.
+    // BUG:  Destroy vm_areas, buffers, etc.
     kassert (0);
   }
 
@@ -206,6 +211,12 @@ public:
   aid () const
   {
     return aid_;
+  }
+
+  bool
+  privileged () const
+  {
+    return privileged_;
   }
 
   physical_address_t
@@ -220,7 +231,33 @@ public:
     return stack_area_->end ();
   }
 
-  // TODO:  Return an iterator.
+  bool
+  vm_area_free (logical_address_t begin,
+		logical_address_t end)
+  {
+    vm_area_base area (begin, end);
+    
+    // Find the location to insert.
+    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), &area, compare_vm_area ());
+    // We know that area->begin () < (*pos)->begin ().
+
+    // Ensure that the areas don't conflict.
+    if (pos != memory_map_.begin ()) {
+      memory_map_type::const_iterator prev = pos - 1;
+      if (area.begin () < (*prev)->end ()) {
+	return false;
+      }
+    }
+
+    if (pos != memory_map_.end ()) {
+      if ((*pos)->begin () < area.end ()) {
+	return false;
+      }
+    }
+    
+    return true;
+  }
+
   bool
   insert_vm_area (vm_area_base* area)
   {
@@ -260,6 +297,18 @@ public:
     }
   }
 
+  bool
+  insert_mapped_area (mapped_area* area)
+  {
+    if (insert_vm_area (area)) {
+      mapped_areas_.push_back (area);
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
   void*
   sbrk (ptrdiff_t size)
   {
@@ -280,7 +329,7 @@ public:
 
 	// Map the zero frame.
 	for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
-	  vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
+	  vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
 	}
 
 	return reinterpret_cast<void*> (old_end);
@@ -296,7 +345,7 @@ public:
       // 	// Fail.
       // 	return 0;
       // }
-      // TODO:  Negative sbrk argument.
+      // BUG:  Negative sbrk argument.
       kassert (0);
       return 0;
     }
@@ -329,7 +378,7 @@ public:
   //     kout << "Page Fault" << endl;
   //     kout << "address = " << hexformat (address) << " error = " << hexformat (error) << endl;
   //     kout << *regs << endl;
-  //     // TODO:  Handle page fault for address not in memory map.
+  //     // BUG:  Handle page fault for address not in memory map.
   //     kassert (0);
   //   }
   // }
@@ -492,7 +541,7 @@ private:
   }
 
 public:
-  // TODO:  Limit the number of buffers.
+  // BUG:  Limit the number of buffers.
 
   bid_t
   buffer_create (size_t size)

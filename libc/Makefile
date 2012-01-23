@@ -12,7 +12,7 @@ CC=i586-pc-lily-gcc
 # LDFLAGS=$(OFLAG) -T linker.ld
 
 # Headers that will be installed.
-HEADERS=action.h finish.h
+HEADERS=action.h finish.h io.h
 
 # Loader should be first so the bootloader can find the magic number.
 OBJECTS=crt0.o libc.a
@@ -26,13 +26,13 @@ all : $(OBJECTS)
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $< 
 
-libc.a : finish.o
+libc.a : finish.o io.o
 	$(AR) cr libc.a $^
 	ranlib libc.a
 
 .PHONY : clean
 clean :
-	-rm -f $(OBJECTS)
+	-rm -f $(OBJECTS) *.o
 
 .PHONY : depclean
 depclean :

@@ -4,6 +4,8 @@
 #include "automaton.hpp"
 #include "scheduler.hpp"
 #include "elf.hpp"
+#include "bitset.hpp"
+#include "mapped_area.hpp"
 
 namespace rts {
   
@@ -34,7 +36,8 @@ namespace rts {
   static clear_list_type clear_list_;
 
   static automaton*
-  create_automaton (logical_address_t text_begin,
+  create_automaton (bool privileged,
+		    logical_address_t text_begin,
   		    logical_address_t text_end)
   {
     // Create the automaton.
@@ -42,7 +45,7 @@ namespace rts {
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
     // Map the page directory.
-    vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE);
+    vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE, false);
     vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
     // Initialize the page directory with a copy of the kernel.
     // Since the second argument is vm::SUPERVISOR, the automaton cannot access the paging area, i.e., manipulate virtual memory.
@@ -63,7 +66,7 @@ namespace rts {
     current_aid_ = max (aid + 1, 0);
     
     // Create the automaton and insert it into the map.
-    automaton* a = new automaton (aid, frame);
+    automaton* a = new automaton (aid, privileged, frame);
     aid_map_.insert (make_pair (aid, a));
     
     // Add to the scheduler.
@@ -72,14 +75,14 @@ namespace rts {
     // Parse the file.
     elf::parser hp;
     if (!hp.parse (a, text_begin, text_end)) {
-      // TODO
+      // BUG:  Couldn't parse the program.
       kassert (0);
     }
 
     // Add the actions to the automaton.
     for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
       if (!a->add_action (*pos)) {
-    	// TODO:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
+    	// BUG:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
     	kassert (0);
       }
     }
@@ -118,7 +121,7 @@ namespace rts {
       
       vm_area_base* area = new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size);
       if (!a->insert_vm_area (area)) {
-    	// TODO:  The area conflicts with the existing memory map.
+    	// BUG:  The area conflicts with the existing memory map.
     	kassert (0);
       }
     }
@@ -132,7 +135,7 @@ namespace rts {
     for (frame_map_type::const_iterator pos = frame_map_.begin ();
     	 pos != frame_map_.end ();
     	 ++pos) {
-      vm::map (pos->first, pos->second.first, vm::USER, pos->second.second);
+      vm::map (pos->first, pos->second.first, vm::USER, pos->second.second, false);
     }
 
     // Clear.
@@ -258,13 +261,13 @@ namespace rts {
 
     logical_address_t address = text_begin;
     for (size_t frame = automaton_frame_begin; frame != automaton_frame_end; ++frame, address += PAGE_SIZE) {
-      vm::map (address, frame, vm::USER, vm::MAP_READ_ONLY);
+      vm::map (address, frame, vm::USER, vm::MAP_READ_ONLY, false);
       // Drop the reference count back to 1.
       size_t count = frame_manager::decref (frame);
       kassert (count == 1);
     }
 
-    automaton* child = create_automaton (text_begin, text_end);
+    automaton* child = create_automaton (true, text_begin, text_end);
 
     // Unmap the program text.
     for (address = text_begin; address < text_end; address += PAGE_SIZE) {
@@ -308,33 +311,185 @@ namespace rts {
     scheduler::finish (0, 0, -1, 0);
   }
 
+  // The automaton has finished the current action.
+  // The parameters are interrupted as follows:
+  //
+  //   action_entry_point and parameter can be used to schedule another action.
+  //   These are ignored if action_entry_point is 0.
+  //
+  //   value and value_size specify the value produced by an output action.
+  //   These are ignored for input and internal actions.
+  //   For an output action, they are ignored if value is 0.
+  //   The range [value, value + value_size) must appear in the addres space of the automaton.
+  //   value_size must be less than or equal to LILY_LIMITS_MAX_VALUE_SIZE.
+  //   
+  //   buffer and buffer_size specify the buffer produced by an output action.
+  //   These are ignored for input and internal actions.
+  //   For an output action, they are ignored if buffer refers to a buffer that does not exist.
+  //   -1 always refers to a buffer that doesn't exist.
+  //   buffer_size must be less than or equal to the physical size of the buffer.
+  //   
+  //   If either a value or a buffer is specified, the output is said to have "fired."
+  //   An output can "fire" without producing a value or buffer by specifying a value that is not zero with a value_size that is zero.
+  void
+  finish (const caction& current,
+	  const void* action_entry_point,
+	  const void* parameter,
+	  const void* value,
+	  size_t value_size,
+	  bid_t buffer,
+	  size_t buffer_size)
+  {
+    if (action_entry_point != 0) {
+      const paction* action = current.action->automaton->find_action (action_entry_point);
+      if (action != 0) {
+	scheduler::schedule (caction (action, parameter));
+      }
+      else {
+	// BUG:  Automaton scheduled a bad action.
+	kout << "aep = " << hexformat (action_entry_point) << endl;
+	kassert (0);
+      }
+    }
+    
+    if (current.action->type == OUTPUT) {
+      // Check the data produced by an output.
+      if (value != 0) {
+	if (value_size > LILY_LIMITS_MAX_VALUE_SIZE || (value_size != 0 && !current.action->automaton->verify_span (value, value_size))) {
+	  // BUG:  The automaton produced a bad copy value.
+	  kassert (0);
+	}
+      }
+      else {
+	// No copy value was produced.
+	// We know that value = 0.
+	// Rectify the size.
+	value_size = 0;
+      }
+      
+      const size_t s = current.action->automaton->buffer_size (buffer);
+      if (s != static_cast<size_t> (-1)) {
+	if (buffer_size > s) {
+	  // BUG:  The action produced a value buffer but claims the size is larger than the size in memory.
+	  kassert (0);
+	}
+      }
+      else {
+	// No buffer was produced.
+	// Rectify the buffer and size.
+	buffer = -1;
+	buffer_size = 0;
+      }
+    }
+    
+    scheduler::finish (value, value_size, buffer, buffer_size);
+  }
+
   aid_t
   create (const void* automaton_buffer,
 	  size_t automaton_size)
   {
-    const automaton* a = create_automaton (reinterpret_cast<logical_address_t> (automaton_buffer), reinterpret_cast<logical_address_t> (automaton_buffer) + automaton_size);
-    return a->aid ();
+    // BUG
+    kassert (0);
+    // const automaton* a = create_automaton (reinterpret_cast<logical_address_t> (automaton_buffer), reinterpret_cast<logical_address_t> (automaton_buffer) + automaton_size);
+    // return a->aid ();
   }
 
   void
   bind (void)
   {
-    // TODO
+    // BUG
     kassert (0);
   }
 
   void
   loose (void)
   {
-    // TODO
+    // BUG
     kassert (0);
   }
 
   void
   destroy (void)
   {
-    // TODO
+    // BUG
     kassert (0);
+  }
+
+  // Bitset marking which frames are used for memory-mapped I/O.
+  // I assume the region from 0x0 to 0x00100000 is used for memory-mapped I/O.
+  // Need one bit for each frame.
+  static bitset<ONE_MEGABYTE / PAGE_SIZE> mmapped_frames_;
+
+  // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.
+  // The destination and source are aligned to a page boundary and the size is rounded up to a multiple of the page size.
+  // Map can fail for the following reasons:
+  // *  The automaton is not privileged.
+  // *  The low order bits of the destination and source do not agree when interpretted using the page size.
+  // *  Size is zero.
+  // *  Part of the source lies outside the regions of memory marked for memory-mapped I/O.
+  // *  Part of the source is already claimed by some other automaton.  (Mapping the same region twice is an error.)
+  // *  The destination address is not available.
+  int
+  map (const caction& current,
+       const void* destination,
+       const void* source,
+       size_t size)
+  {
+    automaton* const a = current.action->automaton;
+    logical_address_t const destination_begin = align_down (reinterpret_cast<logical_address_t> (destination), PAGE_SIZE);
+    logical_address_t const destination_end = align_up (reinterpret_cast<logical_address_t> (destination) + size, PAGE_SIZE);
+    physical_address_t const source_begin = align_down (reinterpret_cast<physical_address_t> (source), PAGE_SIZE);
+    physical_address_t const source_end = align_up (reinterpret_cast<physical_address_t> (source) + size, PAGE_SIZE);
+
+    if (!a->privileged ()) {
+      // BUG
+      kassert (0);
+    }
+
+    if ((reinterpret_cast<logical_address_t> (destination) & (PAGE_SIZE - 1)) != (reinterpret_cast<physical_address_t> (source) & (PAGE_SIZE - 1))) {
+      // BUG
+      kassert (0);
+    }
+
+    if (size == 0) {
+      // BUG
+      kassert (0);
+    }
+
+    // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
+    if (source_end > ONE_MEGABYTE) {
+      // BUG
+      kassert (0);
+    }
+
+    for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {
+      if (mmapped_frames_[physical_address_to_frame (address)]) {
+	// BUG
+	kassert (0);
+      }
+    }
+
+    if (!a->vm_area_free (destination_begin, destination_end)) {
+      // BUG
+      kassert (0);
+    }
+
+    mapped_area* area = new mapped_area (destination_begin,
+					 destination_end,
+					 source_begin,
+					 source_end);
+    bool r = a->insert_mapped_area (area);
+    kassert (r);
+
+    physical_address_t pa = source_begin;
+    for (logical_address_t la = destination_begin; la != destination_end; la += PAGE_SIZE, pa += PAGE_SIZE) {
+      mmapped_frames_[physical_address_to_frame (pa)] = true;
+      vm::map (la, physical_address_to_frame (pa), vm::USER, vm::MAP_READ_WRITE, true);
+    }
+
+    // Success.
+    return 0;
   }
 
 }
