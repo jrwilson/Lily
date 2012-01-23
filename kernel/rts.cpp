@@ -291,6 +291,7 @@ namespace rts {
 
     // Create a buffer to contain the initializationd data.
     bid_t data_bid = child->buffer_create (0);
+    kassert (data_bid == 0);
     buffer* data_buffer = child->lookup_buffer (data_bid);
     
     // Add the frames manually.
@@ -320,7 +321,7 @@ namespace rts {
       halt ();
     }
 
-    scheduler::schedule (caction (action, reinterpret_cast<const void*> (data_bid)));
+    scheduler::schedule (caction (action, reinterpret_cast<const void*> (data_size)));
 
     // Start the scheduler.  Doesn't return.
     scheduler::finish (0, 0, -1, 0);

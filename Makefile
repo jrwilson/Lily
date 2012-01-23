@@ -7,6 +7,9 @@ kernel/klily :
 user/init_automaton :
 	cd user; $(MAKE) $(MFLAGS)
 
+user/init_data :
+	cd user; $(MAKE) $(MFLAGS)
+
 .PHONY : clean
 clean :
 	cd kernel; $(MAKE) $(MFLAGS) clean
@@ -23,10 +26,8 @@ klily : kernel/klily
 initautomaton : user/init_automaton
 	strip $^ -o $@
 
-#	echo "This is the initial automaton!!" > $@
-
-initdata :
-	echo "This is the initial data!!" > $@
+initdata : user/init_data
+	cp $^ $@
 
 core.img :
 	grub-mkimage -p /boot/grub -o $@ biosdisk iso9660 multiboot sh

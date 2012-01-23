@@ -2,6 +2,8 @@
 #include <finish.h>
 #include <io.h>
 #include <buffer.h>
+#include <stdbool.h>
+#include <string.h>
 
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION ""
@@ -68,13 +70,215 @@ put (char c)
 void
 print (const char* s)
 {
-  for (; *s != 0; ++s) {
-    put (*s);
+  while (*s != 0) {
+    put (*s++);
   }
 }
 
 void
-init (bid_t buffer)
+printn (const char* s,
+	size_t n)
+{
+  while (n != 0) {
+    put (*s++);
+    --n;
+  }
+}
+
+const char*
+align_up (const char* address,
+	  unsigned int radix)
+{
+  return (const char*) (((size_t)address + radix - 1) & ~(radix - 1));
+}
+
+unsigned int
+from_hex (const char* s)
+{
+  unsigned int retval = 0;
+
+  for (int idx = 0; idx < 8; ++idx) {
+    retval <<= 4;
+    if (s[idx] >= '0' && s[idx] <= '9') {
+      retval |= s[idx] - '0';
+    }
+    else if (s[idx] >= 'A' && s[idx] <= 'F') {
+      retval |= s[idx] - 'A' + 10;
+    }
+  }
+
+  return retval;
+}
+
+/* c_magic	      6 bytes		 The string "070701" or "070702" */
+/* c_ino	      8 bytes		 File inode number */
+/* c_mode	      8 bytes		 File mode and permissions */
+/* c_uid	      8 bytes		 File uid */
+/* c_gid	      8 bytes		 File gid */
+/* c_nlink	      8 bytes		 Number of links */
+/* c_mtime	      8 bytes		 Modification time */
+/* c_filesize    8 bytes		 Size of data field */
+/* c_maj	      8 bytes		 Major part of file device number */
+/* c_min	      8 bytes		 Minor part of file device number */
+/* c_rmaj	      8 bytes		 Major part of device node reference */
+/* c_rmin	      8 bytes		 Minor part of device node reference */
+/* c_namesize    8 bytes		 Length of filename, including final \0 */
+/* c_chksum      8 bytes		 Checksum of data field if c_magic is 070702; */
+/* 				 otherwise zero */
+
+void
+parse_cpio_header (const char* begin,
+		   const char* end)
+{
+  if (begin >= end) {
+    return;
+  }
+
+  /* Align to a 4-byte boundary. */
+  begin = align_up (begin, 4);
+
+  if (begin + 6 > end) {
+    /* Underflow. */
+    return;
+  }
+  bool do_checksum;
+  if (memcmp (begin, "070701", 6) == 0) {
+    do_checksum = false;
+  }
+  else if (memcmp (begin, "070702", 6) == 0) {
+    do_checksum = true;
+  }
+  else {
+    /* Bad magic number. */
+    return;
+  }
+  //print ("magic = "); printn (begin, 6); put ('\n');
+  begin += 6;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("inode = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("mode = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("uid = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("gid = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("nlink = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("mtime = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  unsigned int filesize = from_hex (begin);
+  print ("filesize = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("file_major = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("file_minor = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("device_major = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("device_minor = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  unsigned int namesize = from_hex (begin);
+  //print ("namesize = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + 8 > end) {
+    /* Underflow. */
+    return;
+  }
+  //print ("checksum = "); printn (begin, 8); put ('\n');
+  begin += 8;
+
+  if (begin + namesize > end) {
+    /* Underflow. */
+    return;
+  }
+  if (begin[namesize - 1] != 0) {
+    /* Name is not null terminated. */
+    return;
+  }
+  if (strcmp (begin, "TRAILER!!!") == 0) {
+    /* Done. */
+    return;
+  }
+  print ("name = "); printn (begin, namesize - 1); put ('\n');
+  begin += namesize;
+
+  /* Align to a 4-byte boundary. */
+  begin = align_up (begin, 4);
+
+  if (begin + filesize > end) {
+    /* Underflow. */
+    return;
+  }
+  print ("data = "); printn (begin, filesize); put ('\n');
+  begin += filesize;
+
+  /* Recur. */
+  parse_cpio_header (begin, end);
+}
+
+void
+init (size_t buffer_size)
 {
   // Identity map in the VGA buffer for a "Hello, world!" program.
   // The buffer starts at 0xB8000.
@@ -86,8 +290,11 @@ init (bid_t buffer)
     video_ram[idx] = ATTRIBUTE | ' ';
   }
 
-  const char* message = buffer_map (buffer);
-  print (message);
+  // Initial data is in buffer 0 by convention.
+  const char* begin = buffer_map (0);
+  const char* end = begin + buffer_size;
+
+  parse_cpio_header (begin, end);
 
   finish (0, 0, 0, 0, -1, 0);
 }
