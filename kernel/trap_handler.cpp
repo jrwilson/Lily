@@ -34,7 +34,6 @@ trap_handler::install ()
 }
 
 struct finish_args {
-  uint32_t ebp;
   uint32_t eip;
   const void* action_entry_point;
   const void* parameter;
@@ -44,18 +43,26 @@ struct finish_args {
   size_t buffer_size;
 };
 
+struct sbrk_args {
+  uint32_t eip;
+  size_t size;
+};
+
 struct buffer_map_args {
-  uint32_t ebp;
   uint32_t eip;
   bid_t buffer;
 };
 
 struct map_args {
-  uint32_t ebp;
   uint32_t eip;
   const void* destination;
   const void* source;
   size_t size;
+};
+
+struct sysconf_args {
+  uint32_t eip;
+  int name;
 };
 
 // The goal of this function is to demarshall system calls and dispatch.
@@ -121,12 +128,18 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_SBRK:
     {
-      // BUG
-      kassert (0);
-      regs.eax = reinterpret_cast<uint32_t> (scheduler::current_action ().action->automaton->sbrk (regs.ebx));
+      automaton* a = scheduler::current_action ().action->automaton;
+      sbrk_args* ptr = reinterpret_cast<sbrk_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (sbrk_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<void*, int> r = a->sbrk (ptr->size);
+      regs.eax = reinterpret_cast<uint32_t> (r.first);
+      regs.ecx = r.second;
       return;
     }
-      break;
+    break;
   case LILY_SYSCALL_BINDING_COUNT:
     {
       // BUG
@@ -185,7 +198,7 @@ trap_dispatch (volatile registers regs)
       }
       pair<void*, int> r = a->buffer_map (ptr->buffer);
       regs.eax = reinterpret_cast<uint32_t> (r.first);
-      regs.ebx = r.second;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -223,7 +236,29 @@ trap_dispatch (volatile registers regs)
       }
       pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
       regs.eax = r.first;
-      regs.ebx = r.second;
+      regs.ecx = r.second;
+      return;
+    }
+  case LILY_SYSCALL_SYSCONF:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      sysconf_args* ptr = reinterpret_cast<sysconf_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (sysconf_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      switch (ptr->name) {
+      case LILY_SYSCALL_SYSCONF_PAGESIZE:
+	regs.eax = PAGE_SIZE;
+	regs.ecx = LILY_SYSCALL_ESUCCESS;
+	return;
+	break;
+      default:
+	regs.eax = 0;
+	regs.ecx = LILY_SYSCALL_EINVAL;
+	return;
+	break;
+      }
       return;
     }
   default:

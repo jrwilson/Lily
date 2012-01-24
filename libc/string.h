@@ -3,12 +3,12 @@
 
 #include <stddef.h>
 
-extern int
+int
 memcmp (const void* s1,
 	const void* s2,
 	size_t n);
 
-extern int
+int
 strcmp (const char* s1,
 	const char* s2);
 

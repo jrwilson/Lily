@@ -466,17 +466,17 @@ namespace rts {
 
     // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
     if (source_end > ONE_MEGABYTE) {
-      return make_pair (-1, LILY_SYSCALL_EADDRNOTAVAIL);
+      return make_pair (-1, LILY_SYSCALL_ESRCRANGE);
     }
 
     for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {
       if (mmapped_frames_[physical_address_to_frame (address)]) {
-	return make_pair (-1, LILY_SYSCALL_EADDRINUSE);
+	return make_pair (-1, LILY_SYSCALL_ESRCINUSE);
       }
     }
 
     if (!a->vm_area_is_free (destination_begin, destination_end)) {
-      return make_pair (-1, LILY_SYSCALL_EADDRINUSE);
+      return make_pair (-1, LILY_SYSCALL_EDSTINUSE);
     }
 
     mapped_area* area = new mapped_area (destination_begin,
@@ -494,5 +494,4 @@ namespace rts {
     // Success.
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
-
 }

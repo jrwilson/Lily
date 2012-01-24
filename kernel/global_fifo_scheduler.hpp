@@ -135,6 +135,8 @@ private:
 	case INPUT:
 	  if (input_buffer_ != -1) {
 	    // Destroy the buffer.
+	    // BUG  Don't destroy the buffer.
+	    kassert (0);
 	    action_.action->automaton->buffer_destroy (input_buffer_);
 	    input_buffer_ = -1;
 	  }
@@ -149,6 +151,8 @@ private:
 	  // Finished executing input actions.
 	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
+	    // BUG  Don't destroy the buffer.
+	    kassert (0);
 	    delete output_buffer_;
 	    output_buffer_ = 0;
 	  }
@@ -158,6 +162,8 @@ private:
 	  buffer_size_ = buffer_size;
 	  if (buffer != -1) {
 	    // The output action produced a buffer.  Remove it from the automaton.
+	    // BUG  Don't destroy the buffer.
+	    kassert (0);
 	    output_buffer_ = action_.action->automaton->buffer_output_destroy (buffer);
 	  }
 	  input_actions_ = action_.action->automaton->get_bound_inputs (action_);
@@ -175,6 +181,8 @@ private:
 	  // There were no inputs.
 	  if (output_buffer_ != 0) {
 	    // Destroy the buffer.
+	    // BUG  Don't destroy the buffer.
+	    kassert (0);
 	    delete output_buffer_;
 	    output_buffer_ = 0;
 	  }

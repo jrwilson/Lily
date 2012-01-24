@@ -1,34 +1,40 @@
 CC=i586-pc-lily-gcc
-# AS=i586-elf-as
-# CXX=i586-elf-g++
-# OFLAG=-O2
-# # Add -Werror at some point	
-# CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -ffreestanding -fno-rtti -fno-exceptions -fno-stack-protector
-
-# # -std=c++0x -ffreestanding -fno-exceptions -fno-stack-protector -fno-rtti -I. -I../include -I/usr/include -I/usr/include/c++/4.4 -I/usr/include/c++/4.4/i486-linux-gnu
-# # -nostdlib -fno-builtin -nostartfiles -nodefaultlibs -fno-exceptions -fno-stack-protector -I. -I../include -I/usr/include -I/usr/include/c++/4.4 -I/usr/include/c++/4.4/i486-linux-gnu
-# # -nostdinc -fno-rtti
-# LD=ld
-# LDFLAGS=$(OFLAG) -T linker.ld
+AS=i586-elf-as
+CFLAGS=-MD -O2 -g -Wall -std=c99
 
 # Headers that will be installed.
-HEADERS=action.h buffer.h finish.h io.h string.h
+HEADERS=action.h buffer.h finish.h io.h string.h dymem.h
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=crt0.o libc.a
+OBJECTS=crt0.o libc.a libstring.a libbuffer.a libio.a libdymem.a libsysconf.a
 
 .PHONY : all
 all : $(OBJECTS)
 
+libc.a : finish.o
+
+libstring.a : string.o
+
+libbuffer.a : buffer.o
+
+libio.a : io.o
+
+libdymem.a : dymem.o sbrk.o
+
+libsysconf.a : sysconf.o
+
 %.o : %.s
 	$(AS) $(ASFLAGS) -o $@ $<
+
+%.o : %.S
+	$(CC) $(CFLAGS) -o $@ -c $< 
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $< 
 
-libc.a : buffer.o finish.o io.o string.o syscall_errno.o
-	$(AR) cr libc.a $^
-	ranlib libc.a
+%.a :
+	$(AR) cr $@ $^
+	ranlib $@
 
 .PHONY : clean
 clean :
@@ -45,5 +51,5 @@ install :
 	install -d $(PREFIX)/sysroot/usr/lib
 	install -m 644 -t $(PREFIX)/sysroot/usr/lib $(OBJECTS)
 
-# # Include the dependencies
-# -include *.d
+# Include the dependencies
+-include *.d

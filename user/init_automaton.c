@@ -4,6 +4,7 @@
 #include <buffer.h>
 #include <stdbool.h>
 #include <string.h>
+#include <dymem.h>
 
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION ""
@@ -295,6 +296,8 @@ init (size_t buffer_size)
   const char* end = begin + buffer_size;
 
   parse_cpio_header (begin, end);
+
+  int* x = malloc (sizeof (int));
 
   finish (0, 0, 0, 0, -1, 0);
 }

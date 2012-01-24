@@ -306,48 +306,55 @@ public:
     mapped_areas_.push_back (area);
   }
 
-  void*
+  pair<void*, int>
   sbrk (ptrdiff_t size)
   {
     kassert (heap_area_ != 0);
 
-    if (size > 0) {
+    if (size != 0) {
       logical_address_t const old_end = heap_area_->end ();
-      logical_address_t const new_end = old_end + size;
-      // Find the heap.
-      memory_map_type::const_iterator pos = find (memory_map_.begin (), memory_map_.end (), heap_area_);
-      kassert (pos != memory_map_.end ());
-      // Move to the next.
-      ++pos;
-      kassert (pos != memory_map_.end ());
-      if (new_end <= (*pos)->begin ()) {
-	// The allocation does not interfere with next area.  Success.
-	heap_area_->set_end (new_end);
-
-	// Map the zero frame.
-	for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
-	  vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
+      logical_address_t new_end = old_end + size;
+      
+      if (size > 0) {
+	// Find the heap.
+	memory_map_type::const_iterator pos = find (memory_map_.begin (), memory_map_.end (), heap_area_);
+	kassert (pos != memory_map_.end ());
+	// Move to the next.
+	++pos;
+	kassert (pos != memory_map_.end ());
+	if (new_end <= (*pos)->begin ()) {
+	  // The allocation does not interfere with next area.  Success.
+	  heap_area_->set_end (new_end);
+	  
+	  // Map the zero frame.
+	  for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
+	    vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
+	  }
+	  
+	  return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
 	}
-
-	return reinterpret_cast<void*> (old_end);
+	else {
+	  // Failure.
+	  return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
+	}
       }
       else {
-	// Failure.
-	return 0;
+	if (new_end < heap_area_->begin ()) {
+	  // Can't shrink beyond the beginning of the heap.
+	  new_end = heap_area_->begin ();
+	}
+	heap_area_->set_end (new_end);
+
+	// Unmap.
+	for (logical_address_t address = align_up (new_end, PAGE_SIZE); address < old_end; address += PAGE_SIZE) {
+	  vm::unmap (address);
+	}
+
+	return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
       }
     }
-    else if (size < 0) {
-      // if (new_end < heap_area_->begin ()) {
-      // 	// Shrunk too much.
-      // 	// Fail.
-      // 	return 0;
-      // }
-      // BUG:  Negative sbrk argument.
-      kassert (0);
-      return 0;
-    }
     else {
-      return reinterpret_cast<void*> (heap_area_->end ());
+      return make_pair (reinterpret_cast<void*> (heap_area_->end ()), LILY_SYSCALL_ESUCCESS);
     }
   }
 

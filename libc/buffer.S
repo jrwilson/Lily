@@ -1,7 +1,12 @@
-#include "buffer.h"
-#include "syscall_errno.h"
 #include <lily/syscall.h>
 
+	.section .data
+	.global buffererrno
+buffererrno:	
+	.long 0
+
+	.section .text
+	
 /* inline bid_t */
 /* buffer_create (size_t size) */
 /* { */
@@ -52,12 +57,21 @@
 /*   return result; */
 /* } */
 
-void*
-buffer_map (bid_t bid)
-{
-  asm ("int $0x80\n"
-       "mov %%ebx, %0\n": "=m"(syscall_errno) : "a"(LILY_SYSCALL_BUFFER_MAP));
-}
+	.global buffer_map
+buffer_map:
+	mov $LILY_SYSCALL_BUFFER_MAP, %eax
+	int $0x80
+	mov %ecx, buffererrno
+	ret
+	
+	/*
+;; void*
+;; buffer_map (bid_t bid)
+;; {
+;;   asm ("int $0x80\n"
+;;        "mov %%ebx, %0\n": "=m"(syscall_errno) : "a"(LILY_SYSCALL_BUFFER_MAP));
+;; }
+	*/
 
 /* inline int */
 /* buffer_unmap (bid_t bid) */

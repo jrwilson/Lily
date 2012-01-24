@@ -220,6 +220,10 @@ exception_dispatch (volatile registers regs)
       }
 
       // BUG:  We only know how to deal with copy-on-write page faults and kernel data.
+      kout << "Page Fault" << endl;
+      kout << "address = " << hexformat (address) << endl;
+      kout << "not_present = " << vm::not_present (error) << endl;
+      kout << regs << endl;
       kassert (0);
     }
     break; 

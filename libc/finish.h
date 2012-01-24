@@ -4,7 +4,7 @@
 #include <lily/types.h>
 #include <stddef.h>
 
-extern void
+void
 finish (const void* action_entry_point,
 	const void* parameter,
 	const void* value,
