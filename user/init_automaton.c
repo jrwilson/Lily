@@ -297,7 +297,11 @@ init (size_t buffer_size)
 
   parse_cpio_header (begin, end);
 
-  int* x = malloc (sizeof (int));
+  size_t size = (1 << 14);
+  char* x = malloc (size);
+  for (size_t i = 0; i != size; ++i) {
+    x[i] = 'A';
+  }
 
   finish (0, 0, 0, 0, -1, 0);
 }
