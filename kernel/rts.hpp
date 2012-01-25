@@ -33,12 +33,14 @@ namespace rts {
 	  const void* parameter,
 	  const void* value,
 	  size_t value_size,
-	  bid_t buffer,
+	  bd_t bd,
 	  size_t buffer_size);
   
-  aid_t
-  create (const void* automaton_buffer,
-	  size_t automaton_size);
+  pair<aid_t, int>
+  create (automaton* a,
+	  bd_t bd,
+	  size_t buffer_size,
+	  bool retain_privilege);
 
   void
   bind (void);

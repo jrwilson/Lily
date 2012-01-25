@@ -126,11 +126,11 @@ private:
   typedef unordered_set<binding, binding_hash> bindings_set_type;
   bindings_set_type bindings_set_;
 
-  // Next bid to allocate.
-  bid_t current_bid_;
-  // Map from bid_t to buffer*.
-  typedef unordered_map<bid_t, buffer*> bid_to_buffer_map_type;
-  bid_to_buffer_map_type bid_to_buffer_map_;
+  // Next buffer descriptor to allocate.
+  bd_t current_bd_;
+  // Map from bd_t to buffer*.
+  typedef unordered_map<bd_t, buffer*> bd_to_buffer_map_type;
+  bd_to_buffer_map_type bd_to_buffer_map_;
 
   struct compare_vm_area {
     bool
@@ -185,7 +185,7 @@ public:
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
     stack_area_ (0),
-    current_bid_ (0)
+    current_bd_ (0)
   { }
 
   ~automaton ()
@@ -532,56 +532,56 @@ public:
   }
 
 private:
-  bid_t
-  generate_bid ()
+  bd_t
+  generate_bd ()
   {
     // Generate an id.
-    bid_t bid = current_bid_;
-    while (bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ()) {
-      bid = max (bid + 1, 0); // Handles overflow.
+    bd_t bd = current_bd_;
+    while (bd_to_buffer_map_.find (bd) != bd_to_buffer_map_.end ()) {
+      bd = max (bd + 1, 0); // Handles overflow.
     }
-    current_bid_ = max (bid + 1, 0);
-    return bid;
+    current_bd_ = max (bd + 1, 0);
+    return bd;
   }
 
 public:
   // BUG:  Limit the number of buffers.
 
-  bid_t
+  pair<bd_t, int>
   buffer_create (size_t size)
   {
     size = align_up (size, PAGE_SIZE);
 
     // Generate an id.
-    bid_t bid = generate_bid ();
+    bd_t bd = generate_bd ();
     
     // Create the buffer and insert it into the map.
     buffer* b = new buffer (size);
-    bid_to_buffer_map_.insert (make_pair (bid, b));
-    
-    return bid;
+    bd_to_buffer_map_.insert (make_pair (bd, b));
+
+    return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
   
-  bid_t
-  buffer_copy (bid_t other,
+  bd_t
+  buffer_copy (bd_t other,
 	       size_t offset,
 	       size_t length)
   {
     offset = align_down (offset, PAGE_SIZE);
     length = align_up (length, PAGE_SIZE);
 
-    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (other);
-    if (bpos != bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
+    if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
       if (offset + length <= b->size ()) {
 	// Generate an id.
-	bid_t bid = generate_bid ();
+	bd_t bd = generate_bd ();
 	
 	// Create the buffer and insert it into the map.
 	buffer* n = new buffer (*b, offset, length);
-	bid_to_buffer_map_.insert (make_pair (bid, n));
+	bd_to_buffer_map_.insert (make_pair (bd, n));
 	
-	return bid;
+	return bd;
       }
       else {
 	// Offset is past end of buffer.
@@ -594,27 +594,27 @@ public:
     }
   }
 
-  bid_t
+  bd_t
   buffer_create (const buffer& other)
   {
     // Generate an id.
-    bid_t bid = generate_bid ();
+    bd_t bd = generate_bd ();
     
     // Create the buffer and insert it into the map.
     buffer* b = new buffer (other);
-    bid_to_buffer_map_.insert (make_pair (bid, b));
+    bd_to_buffer_map_.insert (make_pair (bd, b));
     
-    return bid;
+    return bd;
   }
 
   size_t
-  buffer_grow (bid_t bid,
+  buffer_grow (bd_t bd,
 	       size_t size)
   {
     size = align_up (size, PAGE_SIZE);
 
-    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
-    if (bpos != bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
       if (b->begin () == 0) {
 	return b->grow (size);
@@ -631,18 +631,18 @@ public:
   }
 
   size_t
-  buffer_append (bid_t dst,
-		 bid_t src,
+  buffer_append (bd_t dst,
+		 bd_t src,
 		 size_t offset,
 		 size_t length)
   {
     offset = align_down (offset, PAGE_SIZE);
     length = align_up (length, PAGE_SIZE);
 
-    bid_to_buffer_map_type::const_iterator dst_pos = bid_to_buffer_map_.find (dst);
-    bid_to_buffer_map_type::const_iterator src_pos = bid_to_buffer_map_.find (src);
-    if (dst_pos != bid_to_buffer_map_.end () &&
-	src_pos != bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::const_iterator dst_pos = bd_to_buffer_map_.find (dst);
+    bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+    if (dst_pos != bd_to_buffer_map_.end () &&
+	src_pos != bd_to_buffer_map_.end ()) {
       buffer* dst = dst_pos->second;
       buffer* src = src_pos->second;
       if (offset + length <= src->size ()) {
@@ -667,16 +667,16 @@ public:
   }
 
   int
-  buffer_assign (bid_t dest,
+  buffer_assign (bd_t dest,
 		 size_t dest_offset,
-		 bid_t src,
+		 bd_t src,
 		 size_t src_offset,
 		 size_t length)
   {
-    bid_to_buffer_map_type::const_iterator dest_pos = bid_to_buffer_map_.find (dest);
-    bid_to_buffer_map_type::const_iterator src_pos = bid_to_buffer_map_.find (src);
-    if (dest_pos != bid_to_buffer_map_.end () &&
-	src_pos != bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
+    bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+    if (dest_pos != bd_to_buffer_map_.end () &&
+	src_pos != bd_to_buffer_map_.end ()) {
       buffer* dest_b = dest_pos->second;
       buffer* src_b = src_pos->second;
       if (dest_offset + length <= dest_b->size () &&
@@ -697,22 +697,22 @@ public:
   }
 
   pair<void*, int>
-  buffer_map (bid_t bid)
+  buffer_map (bd_t bd)
   {
     kassert (heap_area_ != 0);
     kassert (stack_area_ != 0);
 
-    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
-    if (bpos == bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos == bd_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return make_pair ((void*)0, LILY_SYSCALL_EBADBID);
+      return make_pair ((void*)0, LILY_SYSCALL_EBADBD);
     }
 
     buffer* b = bpos->second;
     
     if (b->size () == 0) {
       // The buffer is empty.
-      return make_pair ((void*)0, LILY_SYSCALL_EBADBID);
+      return make_pair ((void*)0, LILY_SYSCALL_EBADBD);
     }
 
     if (b->begin () != 0) {
@@ -738,7 +738,7 @@ public:
       memory_map_type::reverse_iterator prev = stack_pos + 1;
       size_t size = (*stack_pos)->begin () - (*prev)->end ();
       if (size >= b->size ()) {
-	b->map ((*stack_pos)->begin ());
+	b->map_end ((*stack_pos)->begin ());
 	memory_map_.insert (prev.base (), b);
 	// Success.
 	return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_SYSCALL_ESUCCESS);
@@ -749,38 +749,33 @@ public:
     return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
   }
 
-  int
-  buffer_unmap (bid_t bid)
+  pair<int, int>
+  buffer_unmap (bd_t bd)
   {
-    bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
-    if (bpos != bid_to_buffer_map_.end ()) {
-      buffer* b = bpos->second;
-
-      if (b->begin () != 0) {
-	// Remove from the memory map.
-	memory_map_.erase (find_address (b->begin ()));
-
-	// Unmap the buffer.	
-	b->unmap ();
-
-	return 0;
-      }
-      else {
-	// The buffer was not mapped.
-	return -1;
-      }
-    }
-    else {
+    bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos == bd_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBADBD);
     }
+    
+    buffer* b = bpos->second;
+    
+    if (b->begin () != 0) {
+      // Remove from the memory map.
+      memory_map_.erase (find_address (b->begin ()));
+      
+      // Unmap the buffer.	
+      b->unmap ();
+    }
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   buffer*
-  buffer_output_destroy (bid_t bid)
+  buffer_output_destroy (bd_t bd)
   {
-    bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
-    kassert (bpos != bid_to_buffer_map_.end ());
+    bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
+    kassert (bpos != bd_to_buffer_map_.end ());
 
     buffer* b = bpos->second;
     
@@ -792,17 +787,17 @@ public:
       b->unmap ();
     }
     
-    // Remove from the bid map.
-    bid_to_buffer_map_.erase (bpos);
+    // Remove from the bd map.
+    bd_to_buffer_map_.erase (bpos);
     
     return b;
   }
 
   int
-  buffer_destroy (bid_t bid)
+  buffer_destroy (bd_t bd)
   {
-    bid_to_buffer_map_type::iterator bpos = bid_to_buffer_map_.find (bid);
-    if (bpos != bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
 
       if (b->begin () != 0) {
@@ -813,8 +808,8 @@ public:
 	b->unmap ();
       }
 
-      // Remove from the bid map.
-      bid_to_buffer_map_.erase (bpos);
+      // Remove from the bd map.
+      bd_to_buffer_map_.erase (bpos);
 
       // Destroy it.
       delete b;
@@ -828,10 +823,10 @@ public:
   }
 
   size_t
-  buffer_size (bid_t bid)
+  buffer_size (bd_t bd)
   {
-    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
-    if (bpos != bid_to_buffer_map_.end ()) {
+    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos != bd_to_buffer_map_.end ()) {
       return bpos->second->size ();
     }
     else {
@@ -841,17 +836,21 @@ public:
   }
 
   bool
-  buffer_exists (bid_t bid)
+  buffer_exists (bd_t bd)
   {
-    return bid_to_buffer_map_.find (bid) != bid_to_buffer_map_.end ();
+    return bd_to_buffer_map_.find (bd) != bd_to_buffer_map_.end ();
   }
 
   buffer*
-  lookup_buffer (bid_t bid)
+  lookup_buffer (bd_t bd)
   {
-    bid_to_buffer_map_type::const_iterator bpos = bid_to_buffer_map_.find (bid);
-    kassert (bpos != bid_to_buffer_map_.end ());
-    return bpos->second;
+    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos != bd_to_buffer_map_.end ()) {
+      return bpos->second;
+    }
+    else {
+      return 0;
+    }
   }
 
 };

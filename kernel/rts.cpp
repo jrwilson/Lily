@@ -42,10 +42,15 @@ namespace rts {
   static clear_list_type clear_list_;
 
   static automaton*
-  create_automaton (bool privileged,
-		    logical_address_t text_begin,
-  		    logical_address_t text_end)
+  create_automaton (buffer* text,
+		    size_t text_size,
+		    bool privileged)
   {
+    // Map the text of the initial automaton just after low memory.
+    const logical_address_t text_begin = INITIAL_LOGICAL_LIMIT - KERNEL_VIRTUAL_BASE;
+    const logical_address_t text_end = text_begin + text_size;
+    text->map_begin (text_begin);
+
     // Create the automaton.
 
     // Allocate a frame.
@@ -163,6 +168,9 @@ namespace rts {
     // Switch back.
     vm::switch_to_directory (old);
 
+    // Unmap the text.
+    text->unmap ();
+
     return a;
   }
 
@@ -269,32 +277,25 @@ namespace rts {
 			 frame_t data_frame_begin,
 			 size_t data_size)
   {
-    // Map the text of the initial automaton right below the paging area to avoid the heap.
-    const logical_address_t text_begin = PAGING_AREA - align_up (automaton_size, PAGE_SIZE);
-    const logical_address_t text_end = text_begin + automaton_size;
+    // Create a buffer containing the text of the initial automaton.
     const size_t automaton_frame_end = automaton_frame_begin + align_up (automaton_size, PAGE_SIZE) / PAGE_SIZE;
-
-    logical_address_t address = text_begin;
-    for (size_t frame = automaton_frame_begin; frame != automaton_frame_end; ++frame, address += PAGE_SIZE) {
-      vm::map (address, frame, vm::USER, vm::MAP_READ_ONLY, false);
-      // Drop the reference count back to 1.
+    buffer text (0);
+    for (size_t frame = automaton_frame_begin; frame != automaton_frame_end; ++frame) {
+      text.append_frame (frame);
+      // Drop the reference count.
       size_t count = frame_manager::decref (frame);
       kassert (count == 1);
     }
 
-    automaton* child = create_automaton (true, text_begin, text_end);
+    // Create the automaton.
+    automaton* child = create_automaton (&text, automaton_size, true);
 
-    // Unmap the program text.
-    for (address = text_begin; address < text_end; address += PAGE_SIZE) {
-      vm::unmap (address);
-    }
-
-    // Create a buffer to contain the initializationd data.
-    bid_t data_bid = child->buffer_create (0);
+    // Create a buffer to contain the initial data.
+    pair<bd_t, int> r = child->buffer_create (0);
+    bd_t data_bid = r.first;
     kassert (data_bid == 0);
     buffer* data_buffer = child->lookup_buffer (data_bid);
-    
-    // Add the frames manually.
+    kassert (data_buffer != 0);
     const size_t data_frame_end = data_frame_begin + align_up (data_size, PAGE_SIZE) / PAGE_SIZE;
     for (frame_t frame = data_frame_begin; frame != data_frame_end; ++frame) {
       data_buffer->append_frame (frame);
@@ -353,7 +354,7 @@ namespace rts {
 	  const void* parameter,
 	  const void* value,
 	  size_t value_size,
-	  bid_t buffer,
+	  bd_t buffer,
 	  size_t buffer_size)
   {
     if (action_entry_point != 0) {
@@ -401,14 +402,58 @@ namespace rts {
     scheduler::finish (value, value_size, buffer, buffer_size);
   }
 
-  aid_t
-  create (const void* automaton_buffer,
-	  size_t automaton_size)
+  pair<aid_t, int>
+  create (automaton* a,
+	  bd_t bd,
+	  size_t buffer_size,
+	  bool retain_privilege)
   {
-    // BUG
-    kassert (0);
-    // const automaton* a = create_automaton (reinterpret_cast<logical_address_t> (automaton_buffer), reinterpret_cast<logical_address_t> (automaton_buffer) + automaton_size);
-    // return a->aid ();
+    // Find the buffer.
+    buffer* b = a->lookup_buffer (bd);
+
+    if (b == 0) {
+      // Buffer does not exist.
+      return make_pair (-1, LILY_SYSCALL_EBADBD);
+    }
+
+    if (!(buffer_size <= b->size ())) {
+      // They claim that the buffer is bigger than it really is.
+      return make_pair (-1, LILY_SYSCALL_EBADBD);
+    }
+
+    // Synchronize the buffer so the frames listed in the buffer are correct.
+    b->sync (0, buffer_size);
+
+    // If the buffer is not mapped, there are no problems.
+    // If the buffer is mapped, we have three options:
+    // 1.  Copy the buffer.
+    // 2.  Unmap the buffer and then map it back at it original location.
+    // 3.  Save the location of the buffer and temporatily override it.
+    // Option 3 has the least overhead so that's what we'll do.
+
+    logical_address_t const begin = b->begin ();
+    logical_address_t const end = b->end ();
+
+    b->override (0, 0);
+
+    // Switch to the kernel page directory.  So we can map the text of the automaton.
+    physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
+
+    // Create the automaton.
+    const automaton* child = create_automaton (b, buffer_size, retain_privilege && a->privileged ());
+
+    // Switch back.
+    vm::switch_to_directory (old);
+
+    b->override (begin, end);
+
+    // Schedule the init action.
+    const paction* action = child->find_action (kstring ("init"));
+    if (action != 0) {
+      scheduler::schedule (caction (action, 0));
+    }
+    
+    return make_pair (child->aid (), LILY_SYSCALL_ESUCCESS);
   }
 
   void

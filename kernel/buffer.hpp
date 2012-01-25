@@ -49,7 +49,20 @@ public:
   }
 
   void
-  map (logical_address_t end)
+  map_begin (logical_address_t begin)
+  {
+    kassert (begin_ == 0);
+    begin_ = align_down (begin, PAGE_SIZE);
+    end_ = begin_ + size ();
+
+    for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
+      vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
+    }
+  }
+  
+
+  void
+  map_end (logical_address_t end)
   {
     if (begin_ == 0) {
       end_ = align_down (end, PAGE_SIZE);
@@ -74,6 +87,14 @@ public:
       begin_ = 0;
       end_ = 0;
     }
+  }
+
+  void
+  override (logical_address_t begin,
+	    logical_address_t end)
+  {
+    begin_ = begin;
+    end_ = end;
   }
 
   size_t
@@ -152,11 +173,6 @@ public:
     frame_manager::incref (frame);
   }
 
-private:
-  // The frames.
-  typedef vector<frame_t> frame_list_type;
-  frame_list_type frame_list_;
-
   // Synchronize part of a buffer making it copy-on-write.
   void
   sync (size_t offset,
@@ -168,12 +184,17 @@ private:
 	if (frame_list_[idx] != actual) {
 	  frame_manager::decref (frame_list_[idx]);
 	  frame_list_[idx] = actual;
+	  frame_manager::incref (actual);
 	  vm::remap (begin_ + idx * PAGE_SIZE, vm::USER, vm::MAP_COPY_ON_WRITE);
 	}
       }
     }
   }
 
+private:
+  // The frames.
+  typedef vector<frame_t> frame_list_type;
+  frame_list_type frame_list_;
 };
 
 #endif /* __buffer_hpp__ */

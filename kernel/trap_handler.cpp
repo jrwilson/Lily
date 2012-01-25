@@ -39,8 +39,15 @@ struct finish_args {
   const void* parameter;
   const void* value;
   size_t value_size;
-  bid_t buffer;
+  bd_t buffer;
   size_t buffer_size;
+};
+
+struct create_args {
+  uint32_t eip;
+  bd_t buffer;
+  size_t buffer_size;
+  bool retain_privilege;
 };
 
 struct sbrk_args {
@@ -48,9 +55,19 @@ struct sbrk_args {
   size_t size;
 };
 
+struct buffer_create_args {
+  uint32_t eip;
+  size_t size;
+};
+
 struct buffer_map_args {
   uint32_t eip;
-  bid_t buffer;
+  bd_t buffer;
+};
+
+struct buffer_unmap_args {
+  uint32_t eip;
+  bd_t buffer;
 };
 
 struct map_args {
@@ -76,7 +93,7 @@ trap_dispatch (volatile registers regs)
       const caction& current = scheduler::current_action ();
       finish_args* ptr = reinterpret_cast<finish_args*> (regs.useresp);
       if (!current.action->automaton->verify_span (ptr, sizeof (finish_args))) {
-	// BUG:  Can't get the arguments from the stack.
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
       rts::finish (current, ptr->action_entry_point, ptr->parameter, ptr->value, ptr->value_size, ptr->buffer, ptr->buffer_size);
@@ -85,21 +102,16 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_CREATE:
     {
-      // BUG
-      kassert (0);
-      const void* automaton_buffer = reinterpret_cast<const void*> (regs.ebx);
-      size_t automaton_size = regs.ecx;
-      
-      const caction& current = scheduler::current_action ();
-      
-      if (current.action->automaton->verify_span (automaton_buffer, automaton_size)) {
-	regs.eax = rts::create (automaton_buffer, automaton_size);
-	return;
-      }
-      else {
-	// BUG:  The automaton specified a bad buffer.
+      automaton* a = scheduler::current_action ().action->automaton;
+      create_args* ptr = reinterpret_cast<create_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (create_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
+      pair<aid_t, int> r = rts::create (a, ptr->buffer, ptr->buffer_size, ptr->retain_privilege);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
     }
     break;
   case LILY_SYSCALL_BIND:
@@ -131,7 +143,7 @@ trap_dispatch (volatile registers regs)
       automaton* a = scheduler::current_action ().action->automaton;
       sbrk_args* ptr = reinterpret_cast<sbrk_args*> (regs.useresp);
       if (!a->verify_span (ptr, sizeof (sbrk_args))) {
-	// BUG:  Can't get the arguments from the stack.
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
       pair<void*, int> r = a->sbrk (ptr->size);
@@ -150,9 +162,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_CREATE:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_create (regs.ebx);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_create_args* ptr = reinterpret_cast<buffer_create_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_create_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<bd_t, int> r = a->buffer_create (ptr->size);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -193,7 +211,7 @@ trap_dispatch (volatile registers regs)
       automaton* a = scheduler::current_action ().action->automaton;
       buffer_map_args* ptr = reinterpret_cast<buffer_map_args*> (regs.useresp);
       if (!a->verify_span (ptr, sizeof (buffer_map_args))) {
-	// BUG:  Can't get the arguments from the stack.
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
       pair<void*, int> r = a->buffer_map (ptr->buffer);
@@ -204,9 +222,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_UNMAP:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_unmap (regs.ebx);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_unmap_args* ptr = reinterpret_cast<buffer_unmap_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_unmap_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = a->buffer_unmap (ptr->buffer);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -231,7 +255,7 @@ trap_dispatch (volatile registers regs)
       automaton* a = scheduler::current_action ().action->automaton;
       map_args* ptr = reinterpret_cast<map_args*> (regs.useresp);
       if (!a->verify_span (ptr, sizeof (map_args))) {
-	// BUG:  Can't get the arguments from the stack.
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
       pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
@@ -244,7 +268,7 @@ trap_dispatch (volatile registers regs)
       automaton* a = scheduler::current_action ().action->automaton;
       sysconf_args* ptr = reinterpret_cast<sysconf_args*> (regs.useresp);
       if (!a->verify_span (ptr, sizeof (sysconf_args))) {
-	// BUG:  Can't get the arguments from the stack.
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
       switch (ptr->name) {

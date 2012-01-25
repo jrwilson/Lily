@@ -6,14 +6,13 @@ buffererrno:
 	.long 0
 
 	.section .text
-	
-/* inline bid_t */
-/* buffer_create (size_t size) */
-/* { */
-/*   bid_t bid; */
-/*   asm ("int $0x81\n" : "=a"(bid) : "0"(BUFFER_CREATE), "b"(size) :); */
-/*   return bid; */
-/* } */
+
+	.global buffer_create
+buffer_create:
+	mov $LILY_SYSCALL_BUFFER_CREATE, %eax
+	int $0x80
+	mov %ecx, buffererrno
+	ret
 
 /* inline bid_t */
 /* buffer_copy (bid_t b, */
@@ -63,23 +62,13 @@ buffer_map:
 	int $0x80
 	mov %ecx, buffererrno
 	ret
-	
-	/*
-;; void*
-;; buffer_map (bid_t bid)
-;; {
-;;   asm ("int $0x80\n"
-;;        "mov %%ebx, %0\n": "=m"(syscall_errno) : "a"(LILY_SYSCALL_BUFFER_MAP));
-;; }
-	*/
 
-/* inline int */
-/* buffer_unmap (bid_t bid) */
-/* { */
-/*   int result; */
-/*   asm ("int $0x81\n" : "=a"(result) : "0"(BUFFER_UNMAP), "b"(bid) :); */
-/*   return result; */
-/* } */
+	.global buffer_unmap
+buffer_unmap:
+	mov $LILY_SYSCALL_BUFFER_UNMAP, %eax
+	int $0x80
+	mov %ecx, buffererrno
+	ret
 
 /* inline int */
 /* buffer_destroy (bid_t bid) */

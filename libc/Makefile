@@ -3,10 +3,10 @@ AS=i586-elf-as
 CFLAGS=-MD -O2 -g -Wall -std=c99
 
 # Headers that will be installed.
-HEADERS=action.h buffer.h finish.h io.h string.h dymem.h
+HEADERS=action.h automaton.h buffer.h finish.h io.h string.h dymem.h
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=crt0.o libc.a libstring.a libbuffer.a libio.a libdymem.a libsysconf.a
+OBJECTS=crt0.o libc.a libstring.a libbuffer.a libio.a libdymem.a libsysconf.a libautomaton.a
 
 .PHONY : all
 all : $(OBJECTS)
@@ -22,6 +22,9 @@ libio.a : io.o
 libdymem.a : dymem.o sbrk.o
 
 libsysconf.a : sysconf.o
+
+libautomaton.a : automaton.o
+
 
 %.o : %.s
 	$(AS) $(ASFLAGS) -o $@ $<

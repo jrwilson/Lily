@@ -245,6 +245,7 @@ namespace vm {
     return get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_;
   }
 
+  // BUG:  This is a shared resource.
   inline logical_address_t
   get_stub1 (void)
   {

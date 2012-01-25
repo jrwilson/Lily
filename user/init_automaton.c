@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <dymem.h>
+#include <automaton.h>
 
 #define INIT_NAME "init"
 #define INIT_DESCRIPTION ""
@@ -12,15 +13,26 @@
 #define INIT_ACTION INTERNAL
 #define INIT_PARAMETER PARAMETER
 
+typedef struct file file_t;
+struct file {
+  char* name;
+  size_t name_size;
+  bd_t buffer;
+  size_t buffer_size;
+  file_t* next;
+};
+
+static file_t* head = 0;
+
 #define ATTRIBUTE ((0 << 12) | (0xF << 8))
 #define HEIGHT 25
 #define WIDTH 80
 
-unsigned short* video_ram = (unsigned short*)0xB8000;
-unsigned int x_location = 0;
-unsigned int y_location = 0;
+static unsigned short* video_ram = (unsigned short*)0xB8000;
+static unsigned int x_location = 0;
+static unsigned int y_location = 0;
 
-void
+static void
 put (char c)
 {
   // TODO:  Can we scroll with hardware?
@@ -68,7 +80,7 @@ put (char c)
   }
 }
 
-void
+static void
 print (const char* s)
 {
   while (*s != 0) {
@@ -76,7 +88,7 @@ print (const char* s)
   }
 }
 
-void
+static void
 printn (const char* s,
 	size_t n)
 {
@@ -86,14 +98,14 @@ printn (const char* s,
   }
 }
 
-const char*
+static const char*
 align_up (const char* address,
 	  unsigned int radix)
 {
   return (const char*) (((size_t)address + radix - 1) & ~(radix - 1));
 }
 
-unsigned int
+static unsigned int
 from_hex (const char* s)
 {
   unsigned int retval = 0;
@@ -111,23 +123,24 @@ from_hex (const char* s)
   return retval;
 }
 
-/* c_magic	      6 bytes		 The string "070701" or "070702" */
-/* c_ino	      8 bytes		 File inode number */
-/* c_mode	      8 bytes		 File mode and permissions */
-/* c_uid	      8 bytes		 File uid */
-/* c_gid	      8 bytes		 File gid */
-/* c_nlink	      8 bytes		 Number of links */
-/* c_mtime	      8 bytes		 Modification time */
-/* c_filesize    8 bytes		 Size of data field */
-/* c_maj	      8 bytes		 Major part of file device number */
-/* c_min	      8 bytes		 Minor part of file device number */
-/* c_rmaj	      8 bytes		 Major part of device node reference */
-/* c_rmin	      8 bytes		 Minor part of device node reference */
-/* c_namesize    8 bytes		 Length of filename, including final \0 */
-/* c_chksum      8 bytes		 Checksum of data field if c_magic is 070702; */
-/* 				 otherwise zero */
+typedef struct {
+  char magic[6];
+  char inode[8];
+  char mode[8];
+  char uid[8];
+  char gid[8];
+  char nlink[8];
+  char mtime[8];
+  char filesize[8];
+  char dev_major[8];
+  char dev_minor[8];
+  char rdev_major[8];
+  char rdev_minor[8];
+  char namesize[8];
+  char checksum[8];
+} cpio_header_t;
 
-void
+static void
 parse_cpio_header (const char* begin,
 		   const char* end)
 {
@@ -138,116 +151,25 @@ parse_cpio_header (const char* begin,
   /* Align to a 4-byte boundary. */
   begin = align_up (begin, 4);
 
-  if (begin + 6 > end) {
+  if (begin + sizeof (cpio_header_t) > end) {
     /* Underflow. */
     return;
   }
-  bool do_checksum;
-  if (memcmp (begin, "070701", 6) == 0) {
-    do_checksum = false;
+  cpio_header_t* h = (cpio_header_t*)begin;
+
+  if (memcmp (h->magic, "070701", 6) == 0) {
+
   }
-  else if (memcmp (begin, "070702", 6) == 0) {
-    do_checksum = true;
+  else if (memcmp (h->magic, "070702", 6) == 0) {
+
   }
   else {
     /* Bad magic number. */
     return;
   }
-  //print ("magic = "); printn (begin, 6); put ('\n');
-  begin += 6;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("inode = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("mode = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("uid = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("gid = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("nlink = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("mtime = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  unsigned int filesize = from_hex (begin);
-  print ("filesize = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("file_major = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("file_minor = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("device_major = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("device_minor = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  unsigned int namesize = from_hex (begin);
-  //print ("namesize = "); printn (begin, 8); put ('\n');
-  begin += 8;
-
-  if (begin + 8 > end) {
-    /* Underflow. */
-    return;
-  }
-  //print ("checksum = "); printn (begin, 8); put ('\n');
-  begin += 8;
+  size_t filesize = from_hex (h->filesize);
+  size_t namesize = from_hex (h->namesize);
+  begin += sizeof (cpio_header_t);
 
   if (begin + namesize > end) {
     /* Underflow. */
@@ -257,11 +179,7 @@ parse_cpio_header (const char* begin,
     /* Name is not null terminated. */
     return;
   }
-  if (strcmp (begin, "TRAILER!!!") == 0) {
-    /* Done. */
-    return;
-  }
-  print ("name = "); printn (begin, namesize - 1); put ('\n');
+  const char* name = begin;
   begin += namesize;
 
   /* Align to a 4-byte boundary. */
@@ -271,8 +189,45 @@ parse_cpio_header (const char* begin,
     /* Underflow. */
     return;
   }
-  print ("data = "); printn (begin, filesize); put ('\n');
+  const char* data = begin;
   begin += filesize;
+
+  /* Check for the trailer. */
+  if (strcmp (name, "TRAILER!!!") == 0) {
+    /* Done. */
+    return;
+  }
+
+  /* print ("magic = "); printn (h->magic, 6); put ('\n'); */
+  /* print ("inode = "); printn (h->inode, 8); put ('\n'); */
+  /* print ("mode = "); printn (h->mode, 8); put ('\n'); */
+  /* print ("uid = "); printn (h->uid, 8); put ('\n'); */
+  /* print ("gid = "); printn (h->gid, 8); put ('\n'); */
+  /* print ("nlink = "); printn (h->nlink, 8); put ('\n'); */
+  /* print ("mtime = "); printn (h->mtime, 8); put ('\n'); */
+  /* print ("filesize = "); printn (h->filesize, 8); put ('\n'); */
+  /* print ("dev_major = "); printn (h->dev_major, 8); put ('\n'); */
+  /* print ("dev_minor = "); printn (h->dev_minor, 8); put ('\n'); */
+  /* print ("rdev_major = "); printn (h->rdev_major, 8); put ('\n'); */
+  /* print ("rdev_minor = "); printn (h->rdev_minor, 8); put ('\n'); */
+  /* print ("namesize = "); printn (h->namesize, 8); put ('\n'); */
+  /* print ("checksum = "); printn (h->checksum, 8); put ('\n'); */
+  /* print ("name = "); printn (name, namesize - 1); put ('\n'); */
+  /* print ("data = "); printn (data, filesize); put ('\n'); */
+
+  /* Create a new entry. */
+  file_t* f = malloc (sizeof (file_t));
+  /* Record the name. */
+  f->name = malloc (namesize);
+  memcpy (f->name, name, namesize);
+  f->name_size = namesize;
+  /* Create a buffer and copy the file content. */
+  f->buffer = buffer_create (filesize);
+  memcpy (buffer_map (f->buffer), data, filesize);
+  buffer_unmap (f->buffer);
+  f->buffer_size = filesize;
+  f->next = head;
+  head = f;
 
   /* Recur. */
   parse_cpio_header (begin, end);
@@ -297,11 +252,14 @@ init (size_t buffer_size)
 
   parse_cpio_header (begin, end);
 
-  size_t size = (1 << 14);
-  char* x = malloc (size);
-  for (size_t i = 0; i != size; ++i) {
-    x[i] = 'A';
+  for (file_t* f = head; f != 0; f = f->next) {
+    if (strcmp (f->name, "first_automaton") == 0) {
+      print ("name = "); print (f->name); put ('\n');
+      create (f->buffer, f->buffer_size, true);
+    }
   }
+
+  /* TODO:  Destroy the buffer containing the initial data. */
 
   finish (0, 0, 0, 0, -1, 0);
 }

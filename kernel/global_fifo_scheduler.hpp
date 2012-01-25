@@ -91,7 +91,7 @@ private:
     const automaton::input_action_set_type* input_actions_;
     automaton::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
-    bid_t input_buffer_;
+    bd_t input_buffer_;
     size_t buffer_size_;
     uint8_t copy_value_[LILY_LIMITS_MAX_VALUE_SIZE];
     size_t copy_value_size_;
@@ -127,7 +127,7 @@ private:
     inline void
     finish_action (const void* copy_value,
 		   size_t copy_value_size,
-		   bid_t buffer,
+		   bd_t buffer,
 		   size_t buffer_size)
     {
       if (action_.action != 0) {	
@@ -328,7 +328,7 @@ public:
   static inline void
   finish (const void* copy_value,
 	  size_t copy_value_size,
-	  bid_t buffer,
+	  bd_t buffer,
 	  size_t buffer_size)
   {
     // This call won't return when executing input actions.

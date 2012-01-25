@@ -9,7 +9,7 @@ finish (const void* action_entry_point,
 	const void* parameter,
 	const void* value,
 	size_t value_size,
-	bid_t buffer,
+	bd_t buffer,
 	size_t buffer_size);
 
 #endif /* FINISH_H */
