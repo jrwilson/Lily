@@ -70,4 +70,13 @@ struct hash<unsigned int> : public unary_function<unsigned int, size_t> {
   }
 };
 
+template <>
+struct hash<unsigned long> : public unary_function<unsigned long, size_t> {
+  size_t
+  operator() (unsigned long value) const
+  {
+    return value;
+  }
+};
+
 #endif /* __functional_hpp__ */

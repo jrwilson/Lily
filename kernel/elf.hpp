@@ -110,24 +110,10 @@ namespace elf {
   };
 
   struct action_descriptor {
-    uint32_t name_size;
-    uint32_t desc_size;
-    uint32_t compare_method;
     uint32_t action_type;
-    uint32_t action_entry_point;
     uint32_t parameter_mode;
-
-    const char*
-    name () const
-    {
-      return reinterpret_cast<const char*> (this + 1);
-    }
-
-    const char*
-    desc () const
-    {
-      return name () + name_size;
-    }
+    uint32_t id;
+    uint32_t action_entry_point;
   };
 
   // Interpret a region of memory as an ELF file.
@@ -352,39 +338,6 @@ namespace elf {
 		      return false;
 		    }
 		    
-		    if (d->name () > static_cast<const void*> (n->next ())) {
-		      return false;
-		    }
-		    
-		    if (d->name () + d->name_size > static_cast<const void*> (n->next ())) {
-		      return false;
-		    }
-		    
-		    if (d->name ()[d->name_size - 1] != 0) {
-		      return false;
-		    }
-		    
-		    if (d->desc () > static_cast<const void*> (n->next ())) {
-		      return false;
-		    }
-		    
-		    if (d->desc () + d->desc_size > static_cast<const void*> (n->next ())) {
-		      return false;
-		    }
-		    
-		    if (d->desc ()[d->desc_size - 1] != 0) {
-		      return false;
-		    }
-		    
-		    switch (d->compare_method) {
-		    case NO_COMPARE:
-		    case EQUAL:
-		      break;
-		    default:
-		      // Unknown method.
-		      return false;
-		    }
-		    
 		    switch (d->action_type) {
 		    case INPUT:
 		    case OUTPUT:
@@ -405,7 +358,11 @@ namespace elf {
 		      return false;
 		    }
 
-		    actions_.push_back (new paction (a, d->name (), d->desc (), static_cast<compare_method_t> (d->compare_method), static_cast<action_type_t> (d->action_type), reinterpret_cast<const void*> (d->action_entry_point), static_cast<parameter_mode_t> (d->parameter_mode)));
+		    actions_.push_back (new paction (a,
+						     static_cast<action_type_t> (d->action_type),
+						     static_cast<parameter_mode_t> (d->parameter_mode),
+						     d->id,
+						     reinterpret_cast<const void*> (d->action_entry_point)));
 		  }
 		  break;
 		default:

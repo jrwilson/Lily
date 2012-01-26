@@ -305,7 +305,7 @@ namespace rts {
     }
 
     // Schedule the init action.
-    const paction* action = child->find_action (kstring ("init"));
+    const paction* action = child->find_action ((size_t)0);
 
     if (action == 0) {
       kout << "The initial automaton does not contain an init action.  Halting." << endl;
@@ -448,7 +448,7 @@ namespace rts {
     b->override (begin, end);
 
     // Schedule the init action.
-    const paction* action = child->find_action (kstring ("init"));
+    const paction* action = child->find_action ((size_t)0);
     if (action != 0) {
       scheduler::schedule (caction (action, 0));
     }

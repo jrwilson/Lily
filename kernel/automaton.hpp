@@ -99,9 +99,9 @@ private:
   // Map from action entry point (aep) to action.
   typedef unordered_map<const void*, const paction* const> aep_to_action_map_type;
   aep_to_action_map_type aep_to_action_map_;
-  // Map from name to action.
-  typedef unordered_map<kstring, const paction* const, kstring_hash> name_to_action_map_type;
-  name_to_action_map_type name_to_action_map_;
+  // Map from id to action.
+  typedef unordered_map<size_t, const paction* const> id_to_action_map_type;
+  id_to_action_map_type id_to_action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef vector<vm_area_base*> memory_map_type;
   memory_map_type memory_map_;
@@ -393,9 +393,9 @@ public:
     kassert (action != 0);
     kassert (action->automaton == this);
 
-    if (name_to_action_map_.find (action->name) == name_to_action_map_.end () &&
+    if (id_to_action_map_.find (action->id) == id_to_action_map_.end () &&
 	aep_to_action_map_.find (action->action_entry_point) == aep_to_action_map_.end ()) {
-      name_to_action_map_.insert (make_pair (action->name, action));
+      id_to_action_map_.insert (make_pair (action->id, action));
       aep_to_action_map_.insert (make_pair (action->action_entry_point, action));
       return true;
     }
@@ -417,10 +417,10 @@ public:
   }
 
   const paction*
-  find_action (const kstring& name) const
+  find_action (size_t id) const
   {
-    name_to_action_map_type::const_iterator pos = name_to_action_map_.find (name);
-    if (pos != name_to_action_map_.end ()) {
+    id_to_action_map_type::const_iterator pos = id_to_action_map_.find (id);
+    if (pos != id_to_action_map_.end ()) {
       return pos->second;
     }
     else {

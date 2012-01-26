@@ -208,7 +208,7 @@ private:
 	break;
       }
 
-      kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->name.c_str () << "\t" << action_.parameter << endl;
+      kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->id << "\t" << action_.parameter << endl;
 
       // Switch page directories.
       vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());

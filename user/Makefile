@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
-PROGRAMS=first_automaton
+PROGRAMS=producer consumer
 TARGETS=init_automaton init_data
 
 .PHONY : all
@@ -9,12 +9,16 @@ all : $(TARGETS)
 init_automaton : init_automaton.o
 	$(CC) -o $@ $^ -lstring -lio -lbuffer -ldymem -lautomaton
 
-init_data : PROGRAMS
+init_data : $(PROGRAMS)
 	mkdir -p init_fs
 	cp -t init_fs $^
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
-first_automaton : first_automaton.o
+
+producer : producer.o
+	$(CC) -o $@ $^ 
+
+consumer : consumer.o
 	$(CC) -o $@ $^ 
 
 %.o : %.c

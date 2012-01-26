@@ -15,11 +15,6 @@ enum action_type_t {
   INTERNAL = LILY_ACTION_INTERNAL,
 };
 
-enum compare_method_t {
-  NO_COMPARE = LILY_ACTION_NO_COMPARE,
-  EQUAL = LILY_ACTION_EQUAL,
-};
-
 enum parameter_mode_t {
   NO_PARAMETER = LILY_ACTION_NO_PARAMETER,
   PARAMETER = LILY_ACTION_PARAMETER,
@@ -29,27 +24,21 @@ enum parameter_mode_t {
 // Partial action.
 struct paction {
   ::automaton* const automaton;
-  kstring const name;
-  kstring const description;
-  compare_method_t const compare_method;
   action_type_t const type;
-  const void* const action_entry_point;
   parameter_mode_t const parameter_mode;
+  size_t const id;
+  const void* const action_entry_point;
 
   paction (::automaton* a,
-	   const char* n,
-	   const char* d,
-	   compare_method_t cm,
 	   action_type_t t,
-	   const void* aep,
-	   parameter_mode_t pm) :
+	   parameter_mode_t pm,
+	   size_t i,
+	   const void* aep) :
     automaton (a),
-    name (n),
-    description (d),
-    compare_method (cm),
     type (t),
-    action_entry_point (aep),
-    parameter_mode (pm)
+    parameter_mode (pm),
+    id (i),
+    action_entry_point (aep)
   { }
 
 private:

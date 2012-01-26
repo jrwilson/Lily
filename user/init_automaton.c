@@ -7,12 +7,6 @@
 #include <dymem.h>
 #include <automaton.h>
 
-#define INIT_NAME "init"
-#define INIT_DESCRIPTION ""
-#define INIT_COMPARE NO_COMPARE
-#define INIT_ACTION INTERNAL
-#define INIT_PARAMETER PARAMETER
-
 typedef struct file file_t;
 struct file {
   char* name;
@@ -241,10 +235,10 @@ init (size_t buffer_size)
   // We assume an 80x25 buffer where each character requires 2 bytes: one for the character and one for the attribute (foreground and background color).
   map (video_ram, video_ram, WIDTH * HEIGHT * 2);
 
-  // Clear the screen.
-  for (size_t idx = 0; idx < 2000; ++idx) {
-    video_ram[idx] = ATTRIBUTE | ' ';
-  }
+  /* // Clear the screen. */
+  /* for (size_t idx = 0; idx < 2000; ++idx) { */
+  /*   video_ram[idx] = ATTRIBUTE | ' '; */
+  /* } */
 
   // Initial data is in buffer 0 by convention.
   const char* begin = buffer_map (0);
@@ -252,18 +246,29 @@ init (size_t buffer_size)
 
   parse_cpio_header (begin, end);
 
+  aid_t producer = -1;
   for (file_t* f = head; f != 0; f = f->next) {
-    if (strcmp (f->name, "first_automaton") == 0) {
-      print ("name = "); print (f->name); put ('\n');
-      create (f->buffer, f->buffer_size, true);
+    if (strcmp (f->name, "producer") == 0) {
+      //print ("name = "); print (f->name); put ('\n');
+      producer = create (f->buffer, f->buffer_size, true);
     }
   }
+
+  aid_t consumer = -1;
+  for (file_t* f = head; f != 0; f = f->next) {
+    if (strcmp (f->name, "consumer") == 0) {
+      //print ("name = "); print (f->name); put ('\n');
+      consumer = create (f->buffer, f->buffer_size, true);
+    }
+  }
+
+  /* bid_t bid = bind (producer, 1, 0, consumer, 1, 0); */
 
   /* TODO:  Destroy the buffer containing the initial data. */
 
   finish (0, 0, 0, 0, -1, 0);
 }
-EMBED_ACTION_DESCRIPTOR (INIT, init);
+EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, 0, init);
 
 // static void
 // schedule ();
