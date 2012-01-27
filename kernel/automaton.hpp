@@ -96,10 +96,7 @@ private:
   bool privileged_;
   // Physical address that contains the automaton's page directory.
   physical_address_t const page_directory_;
-  // Map from action entry point (aep) to action.
-  typedef unordered_map<const void*, const paction* const> aep_to_action_map_type;
-  aep_to_action_map_type aep_to_action_map_;
-  // Map from id to action.
+  // Map from action number to action.
   typedef unordered_map<ano_t, const paction* const> ano_to_action_map_type;
   ano_to_action_map_type ano_to_action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
@@ -397,26 +394,12 @@ public:
     kassert (action != 0);
     kassert (action->automaton == this);
 
-    if (ano_to_action_map_.find (action->action_number) == ano_to_action_map_.end () &&
-	aep_to_action_map_.find (action->action_entry_point) == aep_to_action_map_.end ()) {
+    if (ano_to_action_map_.find (action->action_number) == ano_to_action_map_.end ()) {
       ano_to_action_map_.insert (make_pair (action->action_number, action));
-      aep_to_action_map_.insert (make_pair (action->action_entry_point, action));
       return true;
     }
     else {
       return false;
-    }
-  }
-
-  const paction*
-  find_action (const void* action_entry_point) const
-  {
-    aep_to_action_map_type::const_iterator pos = aep_to_action_map_.find (action_entry_point);
-    if (pos != aep_to_action_map_.end ()) {
-      return pos->second;
-    }
-    else {
-      return 0;
     }
   }
 
@@ -508,11 +491,11 @@ public:
   }
 
   size_t
-  binding_count (const void* aep,
+  binding_count (ano_t action_number,
 		 const void* parameter) const
   {
-    aep_to_action_map_type::const_iterator pos = aep_to_action_map_.find (aep);
-    if (pos != aep_to_action_map_.end ()) {
+    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (action_number);
+    if (pos != ano_to_action_map_.end ()) {
       const caction act (pos->second, parameter);
       switch (pos->second->type) {
       case OUTPUT:

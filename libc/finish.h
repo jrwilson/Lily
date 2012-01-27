@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 void
-finish (const void* action_entry_point,
+finish (ano_t action_number,
 	const void* parameter,
 	const void* value,
 	size_t value_size,

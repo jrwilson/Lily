@@ -35,7 +35,7 @@ trap_handler::install ()
 
 struct finish_args {
   uint32_t eip;
-  const void* action_entry_point;
+  ano_t action_number;
   const void* parameter;
   const void* value;
   size_t value_size;
@@ -106,7 +106,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      rts::finish (current, ptr->action_entry_point, ptr->parameter, ptr->value, ptr->value_size, ptr->buffer, ptr->buffer_size);
+      rts::finish (current, ptr->action_number, ptr->parameter, ptr->value, ptr->value_size, ptr->buffer, ptr->buffer_size);
       return;
     }
     break;
@@ -172,7 +172,7 @@ trap_dispatch (volatile registers regs)
     {
       // BUG
       kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->binding_count (reinterpret_cast<const void*> (regs.ebx), reinterpret_cast<const void*> (regs.ecx));
+      regs.eax = scheduler::current_action ().action->automaton->binding_count (regs.ebx, reinterpret_cast<const void*> (regs.ecx));
       return;
     }
     break;

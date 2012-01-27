@@ -234,8 +234,8 @@ namespace rts {
   // The automaton has finished the current action.
   // The parameters are interrupted as follows:
   //
-  //   action_entry_point and parameter can be used to schedule another action.
-  //   These are ignored if action_entry_point is 0.
+  //   action_number and parameter can be used to schedule another action.
+  //   These are ignored if the action does not exist.
   //
   //   value and value_size specify the value produced by an output action.
   //   These are ignored for input and internal actions.
@@ -253,23 +253,16 @@ namespace rts {
   //   An output can "fire" without producing a value or buffer by specifying a value that is not zero with a value_size that is zero.
   void
   finish (const caction& current,
-	  const void* action_entry_point,
+	  ano_t action_number,
 	  const void* parameter,
 	  const void* value,
 	  size_t value_size,
 	  bd_t buffer,
 	  size_t buffer_size)
   {
-    if (action_entry_point != 0) {
-      const paction* action = current.action->automaton->find_action (action_entry_point);
-      if (action != 0) {
-	scheduler::schedule (caction (action, parameter));
-      }
-      else {
-	// BUG:  Automaton scheduled a bad action.
-	kout << "aep = " << hexformat (action_entry_point) << endl;
-	kassert (0);
-      }
+    const paction* action = current.action->automaton->find_action (action_number);
+    if (action != 0) {
+      scheduler::schedule (caction (action, parameter));
     }
     
     if (current.action->type == OUTPUT) {

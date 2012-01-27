@@ -14,7 +14,7 @@ LDFLAGS=$(OFLAG) -T linker.ld
 OBJECTS=loader.o \
 kmain.o \
 kout.o \
-kernel_allocator.o \
+kernel_alloc.o \
 frame_manager.o \
 stack_allocator.o \
 cpp_runtime.o \

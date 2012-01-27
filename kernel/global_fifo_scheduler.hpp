@@ -17,8 +17,9 @@
 #include "action.hpp"
 #include "vm.hpp"
 #include "automaton.hpp"
-#include "deque.hpp"
 #include "string.hpp"
+#include "linear_set.hpp"
+#include "deque.hpp"
 
 class global_fifo_scheduler {
 private:
@@ -51,37 +52,30 @@ private:
     inline void
     push (const caction& ap)
     {
-      if (set_.find (ap) == set_.end ()) {
-  	set_.insert (ap);
-  	queue_.push_back (ap);
-      }	
+      set_.push_back (ap);
     }
 
     inline void
     pop ()
     {
-      const size_t count = set_.erase (queue_.front ());
-      kassert (count == 1);
-      queue_.pop_front ();
+      set_.pop_front ();
     }
 
     inline const caction&
     front () const
     {
-      return queue_.front ();
+      return set_.front ();
     }
 
     inline bool
     empty () const
     {
-      return queue_.empty ();
+      return set_.empty ();
     }
 
   private:
     status_t status_;
-    typedef deque<caction> queue_type;
-    queue_type queue_;
-    typedef unordered_set<caction, caction_hash> set_type;
+    typedef linear_set<caction, caction_hash> set_type;
     set_type set_;
   };
   

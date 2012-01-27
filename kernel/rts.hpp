@@ -29,7 +29,7 @@ namespace rts {
 
   void
   finish (const caction& current,
-	  const void* action_entry_point,
+	  ano_t action_number,
 	  const void* parameter,
 	  const void* value,
 	  size_t value_size,

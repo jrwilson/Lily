@@ -1,16 +1,16 @@
-#ifndef __unordered_set_hpp__
-#define __unordered_set_hpp__
+#ifndef __linear_set_hpp__
+#define __linear_set_hpp__
 
-#include "uno_assoc_impl.hpp"
+#include "lin_assoc_impl.hpp"
 #include "identity_selector.hpp"
 
 template <typename T,
 	  typename Hash = hash<T>,
 	  typename Equal = equal_to<T>,
 	  typename Allocator = allocator<T> >
-class unordered_set : public uno_assoc_cont<T, T, identity_selector<T>, Hash, Equal, Allocator> {
+class linear_set : public lin_assoc_cont<T, T, identity_selector<T>, Hash, Equal, Allocator> {
 private:
-  typedef uno_assoc_cont<T, T, identity_selector<T>, Hash, Equal, Allocator> impl_type;
+  typedef lin_assoc_cont<T, T, identity_selector<T>, Hash, Equal, Allocator> impl_type;
 public:
   typedef typename impl_type::allocator_type allocator_type;
 
@@ -33,4 +33,4 @@ public:
   typedef typename impl_type::const_iterator const_iterator;
 };
 
-#endif /* __unordered_set_hpp__ */
+#endif /* __linear_set_hpp__ */
