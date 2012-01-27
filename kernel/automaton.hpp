@@ -490,7 +490,7 @@ public:
     }
   }
 
-  size_t
+  pair<size_t, int>
   binding_count (ano_t action_number,
 		 const void* parameter) const
   {
@@ -502,28 +502,28 @@ public:
 	{
 	  bound_outputs_map_type::const_iterator pos2 = bound_outputs_map_.find (act);
 	  if (pos2 != bound_outputs_map_.end ()) {
-	    return pos2->second.size ();
+	    return make_pair (pos2->second.size (), LILY_SYSCALL_ESUCCESS);
 	  }
 	  else {
-	    return 0;
+	    return make_pair (0, LILY_SYSCALL_ESUCCESS);
 	  }
 	}
 	break;
       case INPUT:
 	if (bound_inputs_map_.find (act) != bound_inputs_map_.end ()) {
-	  return 1;
+	  return make_pair (1, LILY_SYSCALL_ESUCCESS);
 	}
 	else {
-	  return 0;
+	  return make_pair (0, LILY_SYSCALL_ESUCCESS);
 	}
 	break;
       case INTERNAL:
-	return 0;
+	return make_pair (0, LILY_SYSCALL_ESUCCESS);
 	break;
       }
     }
     // Action does not exist.
-    return -1;
+    return make_pair (-1, LILY_SYSCALL_EBADANO);
   }
 
 private:

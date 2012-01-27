@@ -30,10 +30,41 @@ memcpy (void* dest,
   return dest;
 }
 
+void*
+memmove (void* dest,
+	 const void* src,
+	 size_t n)
+{
+  unsigned char* d = dest;
+  const unsigned char* s = src;
+  
+  if (s >= d || s + n <= d) {
+    // No overlap.
+    memcpy (dest, src, n);
+  }
+  else {
+    s += n;
+    d += n;
+    while (n-- != 0) {
+      *(--d) = *(--s);
+    }
+  }
+  
+  return dest;
+}
+
 int
 strcmp (const char* s1,
 	const char* s2)
 {
   while (*s1 != 0 && *s2 != 0 && *(s1++) == *(s2++));;
   return *s1 - *s2;
+}
+
+size_t
+strlen (const char* s)
+{
+  size_t retval = 0;
+  for (; *s != 0; ++retval, ++s) ;;
+  return retval;
 }

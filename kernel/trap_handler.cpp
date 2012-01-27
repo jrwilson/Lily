@@ -43,6 +43,12 @@ struct finish_args {
   size_t buffer_size;
 };
 
+struct binding_count_args {
+  uint32_t eip;
+  ano_t action_number;
+  const void* parameter;
+};
+
 struct create_args {
   uint32_t eip;
   bd_t buffer;
@@ -170,9 +176,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BINDING_COUNT:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->binding_count (regs.ebx, reinterpret_cast<const void*> (regs.ecx));
+      automaton* a = scheduler::current_action ().action->automaton;
+      binding_count_args* ptr = reinterpret_cast<binding_count_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (binding_count_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<size_t, int> r = a->binding_count (ptr->action_number, ptr->parameter);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

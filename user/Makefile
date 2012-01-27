@@ -7,7 +7,7 @@ TARGETS=init_automaton init_data
 all : $(TARGETS)
 
 init_automaton : init_automaton.o
-	$(CC) -o $@ $^ -lstring -lbuffer -ldymem -lautomaton
+	$(CC) -o $@ $^ -lstring -ldymem
 
 init_data : $(PROGRAMS)
 	mkdir -p init_fs
@@ -16,10 +16,10 @@ init_data : $(PROGRAMS)
 
 
 producer : producer.o
-	$(CC) -o $@ $^ 
+	$(CC) -o $@ $^ -lstring
 
 consumer : consumer.o
-	$(CC) -o $@ $^ -lio
+	$(CC) -o $@ $^ -lio -ldymem -lstring
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

@@ -190,19 +190,19 @@ private:
     inline void
     execute ()
     {
-      switch (action_.action->type) {
-      case INPUT:
-	kout << "?";
-	break;
-      case OUTPUT:
-	kout << "!";
-	break;
-      case INTERNAL:
-	kout << "#";
-	break;
-      }
+      // switch (action_.action->type) {
+      // case INPUT:
+      // 	kout << "?";
+      // 	break;
+      // case OUTPUT:
+      // 	kout << "!";
+      // 	break;
+      // case INTERNAL:
+      // 	kout << "#";
+      // 	break;
+      // }
 
-      kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+      // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
 
       // Switch page directories.
       vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());

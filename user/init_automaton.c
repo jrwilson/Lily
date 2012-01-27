@@ -1,11 +1,11 @@
-#include <action.h>
-#include <finish.h>
 #include <io.h>
-#include <buffer.h>
 #include <stdbool.h>
 #include <string.h>
 #include <dymem.h>
 #include <automaton.h>
+
+#include "producer.h"
+#include "consumer.h"
 
 typedef struct file file_t;
 struct file {
@@ -178,7 +178,8 @@ init (size_t buffer_size)
     }
   }
 
-  bid_t bid = bind (producer, 1, 0, consumer, 1, 0);
+  bind (consumer, CONSUMER_PRINT_SENSE, 0, producer, PRODUCER_PRINT_SENSE, 0);
+  bind (producer, PRODUCER_PRINT, 0, consumer, CONSUMER_PRINT, 0);
 
   /* TODO:  Destroy the buffer containing the initial data. */
 
