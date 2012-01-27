@@ -116,11 +116,10 @@ public:
     const_iterator&
     operator++ ()
     {
-      size_type lookup_idx = bucket_->hash % map_->lookup_size_;
+      size_type lookup_idx = (bucket_->hash % map_->lookup_size_) + 1;
       bucket_ = bucket_->next;
-      
-      ++lookup_idx;
-      for (; bucket_ == 0 && lookup_idx < map_->lookup_size_; ++lookup_idx) {
+
+      for (; bucket_ == 0 && lookup_idx != map_->lookup_size_; ++lookup_idx) {
 	bucket_ = map_->lookup_[lookup_idx];
       }
 
@@ -137,8 +136,8 @@ private:
   size_type lookup_size_;
   size_type size_;
 
-public:
 
+public:
   uno_assoc_cont ()
   {
     lookup_ = lookup_allocator::allocate (2);
@@ -146,6 +145,26 @@ public:
     size_ = 0;
     for (size_type idx = 0; idx != lookup_size_; ++idx) {
       lookup_[idx] = 0;
+    }
+  }
+
+  uno_assoc_cont (const uno_assoc_cont& other) :
+    bucket_allocator (other),
+    Allocator::template rebind<uno_assoc_bucket<Value*> >::other (other)
+  {
+    lookup_ = lookup_allocator::allocate (other.lookup_size_);
+    lookup_size_ = other.lookup_size_;
+    size_ = other.size_;
+    for (size_type idx = 0; idx != lookup_size_; ++idx) {
+      lookup_[idx] = 0;
+
+      for (bucket_type* ptr = other.lookup_[idx]; ptr != 0; ptr = ptr->next) {
+	bucket_type* bucket = bucket_allocator::allocate (1);
+	Allocator::construct (&bucket->value, ptr->value);
+	bucket->hash = ptr->hash;
+	bucket->next = lookup_[idx];
+	lookup_[idx] = bucket;
+      }
     }
   }
 
@@ -276,20 +295,20 @@ public:
       size_type new_lookup_size = 2 * lookup_size_;
       bucket_type** new_lookup = lookup_allocator::allocate (new_lookup_size);
       for (size_type idx = 0; idx < new_lookup_size; ++idx) {
-	new_lookup[idx] = 0;
+    	new_lookup[idx] = 0;
       }
 
       for (size_type idx = 0; idx < lookup_size_; ++idx) {
-	while (lookup_[idx] != 0) {
-	  // Remove from the old lookup table.
-	  bucket_type* tmp = lookup_[idx];
-	  lookup_[idx] = tmp->next;
-	  // Compute the new lookup index.
-	  size_type new_idx = tmp->hash % new_lookup_size;
-	  // Insert into the new table.
-	  tmp->next = new_lookup[new_idx];
-	  new_lookup[new_idx] = tmp;
-	}
+    	while (lookup_[idx] != 0) {
+    	  // Remove from the old lookup table.
+    	  bucket_type* tmp = lookup_[idx];
+    	  lookup_[idx] = tmp->next;
+    	  // Compute the new lookup index.
+    	  size_type new_idx = tmp->hash % new_lookup_size;
+    	  // Insert into the new table.
+    	  tmp->next = new_lookup[new_idx];
+    	  new_lookup[new_idx] = tmp;
+    	}
       }
 
       lookup_allocator::deallocate (lookup_, lookup_size_);

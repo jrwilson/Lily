@@ -24,6 +24,8 @@ private:
     }
   }
 
+  deque (const deque&) { }
+
 public:
   typedef Allocator allocator_type;
 

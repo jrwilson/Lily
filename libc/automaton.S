@@ -14,3 +14,9 @@ create:
 	mov %ecx, automatonerrno
 	ret
 
+	.global bind
+bind:
+	mov $LILY_SYSCALL_BIND, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret

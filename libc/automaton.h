@@ -15,4 +15,12 @@ create (bd_t buffer,
 	size_t buffer_size,
 	bool retain_privilege);
 
+bid_t
+bind (aid_t output_automaton,
+      ano_t output_action,
+      const void* output_parameter,
+      aid_t input_automaton,
+      ano_t input_action,
+      const void* input_parameter);
+
 #endif /* AUTOMATON_H */

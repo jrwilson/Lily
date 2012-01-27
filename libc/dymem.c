@@ -509,8 +509,7 @@ free (void* ptr)
     return;
   }
 
-  header_t* h = ptr;
-  --ptr;
+  header_t* h = (header_t*) ((char*)(ptr) - HEADER_SIZE);
 
   if (h >= first_header_ &&
       h <= last_header_ &&

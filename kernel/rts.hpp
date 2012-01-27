@@ -42,8 +42,14 @@ namespace rts {
 	  size_t buffer_size,
 	  bool retain_privilege);
 
-  void
-  bind (void);
+  pair<bid_t, int>
+  bind (automaton* a,
+	aid_t output_automaton,
+	ano_t output_action,
+	const void* output_parameter,
+	aid_t input_automaton,
+	ano_t input_action,
+	const void* input_parameter);
 
   void
   loose (void);

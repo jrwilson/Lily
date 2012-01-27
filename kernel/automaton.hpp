@@ -100,8 +100,8 @@ private:
   typedef unordered_map<const void*, const paction* const> aep_to_action_map_type;
   aep_to_action_map_type aep_to_action_map_;
   // Map from id to action.
-  typedef unordered_map<size_t, const paction* const> id_to_action_map_type;
-  id_to_action_map_type id_to_action_map_;
+  typedef unordered_map<ano_t, const paction* const> ano_to_action_map_type;
+  ano_to_action_map_type ano_to_action_map_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef vector<vm_area_base*> memory_map_type;
   memory_map_type memory_map_;
@@ -122,7 +122,10 @@ private:
   typedef unordered_map<caction, output_act, caction_hash> bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
 
-  // Bindings.
+  // Next binding id to allocate.
+  bid_t current_bid_;
+  typedef unordered_map<bid_t, binding> bid_to_binding_map_type;
+  bid_to_binding_map_type bid_to_binding_map_;
   typedef unordered_set<binding, binding_hash> bindings_set_type;
   bindings_set_type bindings_set_;
 
@@ -185,6 +188,7 @@ public:
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
     stack_area_ (0),
+    current_bid_ (0),
     current_bd_ (0)
   { }
 
@@ -393,9 +397,9 @@ public:
     kassert (action != 0);
     kassert (action->automaton == this);
 
-    if (id_to_action_map_.find (action->id) == id_to_action_map_.end () &&
+    if (ano_to_action_map_.find (action->action_number) == ano_to_action_map_.end () &&
 	aep_to_action_map_.find (action->action_entry_point) == aep_to_action_map_.end ()) {
-      id_to_action_map_.insert (make_pair (action->id, action));
+      ano_to_action_map_.insert (make_pair (action->action_number, action));
       aep_to_action_map_.insert (make_pair (action->action_entry_point, action));
       return true;
     }
@@ -417,10 +421,10 @@ public:
   }
 
   const paction*
-  find_action (size_t id) const
+  find_action (ano_t ano) const
   {
-    id_to_action_map_type::const_iterator pos = id_to_action_map_.find (id);
-    if (pos != id_to_action_map_.end ()) {
+    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (ano);
+    if (pos != ano_to_action_map_.end ()) {
       return pos->second;
     }
     else {
@@ -476,11 +480,19 @@ public:
     bound_inputs_map_.insert (make_pair (input_action, output_act (output_action, owner)));
   }
 
-  void
+  bid_t
   bind (const caction& output_action,
 	const caction& input_action)
   {
-    bindings_set_.insert (binding (output_action, input_action));
+    const binding b (output_action, input_action);
+
+    // Generate an id.
+    bid_t bid = generate_bid ();
+    bid_to_binding_map_.insert (make_pair (bid, b));
+
+    bindings_set_.insert (b);
+
+    return bid;
   }
 
   const input_action_set_type*
@@ -542,6 +554,18 @@ private:
     }
     current_bd_ = max (bd + 1, 0);
     return bd;
+  }
+
+  bid_t
+  generate_bid ()
+  {
+    // Generate an id.
+    bid_t bid = current_bid_;
+    while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
+      bid = max (bid + 1, 0); // Handles overflow.
+    }
+    current_bid_ = max (bid + 1, 0);
+    return bid;
   }
 
 public:

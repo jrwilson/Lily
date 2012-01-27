@@ -262,13 +262,13 @@ init (size_t buffer_size)
     }
   }
 
-  /* bid_t bid = bind (producer, 1, 0, consumer, 1, 0); */
+  bid_t bid = bind (producer, 0, 0, consumer, 0, 0);
 
   /* TODO:  Destroy the buffer containing the initial data. */
 
   finish (0, 0, 0, 0, -1, 0);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, 0, init);
+EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, LILY_ACTION_INIT, init);
 
 // static void
 // schedule ();

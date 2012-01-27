@@ -3,6 +3,10 @@
 
 /* Automaton identifier. */
 typedef int aid_t;
+/* Binding identifier. */
+typedef int bid_t;
+/* Action number. */
+typedef int ano_t;
 /* Buffer descriptor. */
 typedef int bd_t;
 

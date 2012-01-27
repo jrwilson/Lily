@@ -50,6 +50,16 @@ struct create_args {
   bool retain_privilege;
 };
 
+struct bind_args {
+  uint32_t eip;
+  aid_t output_automaton;
+  ano_t output_action;
+  const void* output_parameter;
+  aid_t input_automaton;
+  ano_t input_action;
+  const void* input_parameter;
+};
+
 struct sbrk_args {
   uint32_t eip;
   size_t size;
@@ -116,9 +126,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BIND:
     {
-      // BUG
-      kassert (0);
-      rts::bind ();
+      automaton* a = scheduler::current_action ().action->automaton;
+      bind_args* ptr = reinterpret_cast<bind_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (bind_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<bid_t, int> r = rts::bind (a, ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

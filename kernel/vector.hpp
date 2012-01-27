@@ -12,6 +12,7 @@ private:
   T* begin_;
   T* end_;
   T* limit_;
+
 public:
   typedef Allocator allocator_type;
 
@@ -44,6 +45,18 @@ public:
     limit_ = begin_ + count;
     for (end_ = begin_; n != 0; --n) {
       Allocator::construct (end_++, value);
+    }
+  }
+
+  vector (const vector& other) :
+    allocator_type (other)
+  {
+    size_type count = max (other.size (), size_type (2));
+    begin_ = Allocator::allocate (count);
+    end_ = begin_;
+    limit_ = begin_ + count;
+    for (T* p = other.begin_; p != other.end_; ++p) {
+      Allocator::construct (end_++, *p);
     }
   }
 

@@ -26,18 +26,18 @@ struct paction {
   ::automaton* const automaton;
   action_type_t const type;
   parameter_mode_t const parameter_mode;
-  size_t const id;
+  ano_t const action_number;
   const void* const action_entry_point;
 
   paction (::automaton* a,
 	   action_type_t t,
 	   parameter_mode_t pm,
-	   size_t i,
+	   ano_t an,
 	   const void* aep) :
     automaton (a),
     type (t),
     parameter_mode (pm),
-    id (i),
+    action_number (an),
     action_entry_point (aep)
   { }
 

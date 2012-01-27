@@ -174,103 +174,6 @@ namespace rts {
     return a;
   }
 
-  // static bool
-  // bind_actions (automaton* output_automaton,
-  // 		const kstring& output_action_name,
-  // 		aid_t output_parameter,
-  // 		automaton* input_automaton,
-  // 		const kstring& input_action_name,
-  // 		aid_t input_parameter,
-  // 		automaton* owner)
-  // {
-  //   kassert (output_automaton != 0);
-  //   kassert (input_automaton != 0);
-  //   kassert (owner != 0);
-
-  //   if (output_automaton == input_automaton) {
-  //     // The output and input automata must be different.
-  //     return false;
-  //   }
-
-  //   // Check the output action dynamically.
-  //   const paction* output_action = output_automaton->find_action (output_action_name);
-  //   if (output_action == 0 ||
-  // 	output_action->type != OUTPUT) {
-  //     // Output action does not exist or has the wrong type.
-  //     return false;
-  //   }
-
-  //   // Check the input action dynamically.
-  //   const paction* input_action = input_automaton->find_action (input_action_name);
-  //   if (input_action == 0 ||
-  // 	input_action->type != INPUT) {
-  //     // Input action does not exist or has the wrong type.
-  //     return false;
-  //   }
-
-  //   // Check the descriptions.
-  //   if (output_action->compare_method != input_action->compare_method) {
-  //     return false;
-  //   }
-
-  //   switch (output_action->compare_method) {
-  //   case NO_COMPARE:
-  //     // Okay.  I won't.
-  //     break;
-  //   case EQUAL:
-  //     // Simple string equality.
-  //     if (output_action->description != input_action->description) {
-  // 	return false;
-  //     }
-  //     break;
-  //   }
-
-  //   // Adust the parameters.
-  //   switch (output_action->parameter_mode) {
-  //   case NO_PARAMETER:
-  //     output_parameter = 0;
-  //     break;
-  //   case PARAMETER:
-  //     break;
-  //   case AUTO_PARAMETER:
-  //     output_parameter = input_automaton->aid ();
-  //     break;
-  //   }
-
-  //   switch (input_action->parameter_mode) {
-  //   case NO_PARAMETER:
-  //     input_parameter = 0;
-  //     break;
-  //   case PARAMETER:
-  //     break;
-  //   case AUTO_PARAMETER:
-  //     input_parameter = output_automaton->aid ();
-  //     break;
-  //   }
-
-  //   // Form complete actions.
-  //   caction oa (output_action, output_parameter);
-  //   caction ia (input_action, input_parameter);
-
-  //   // Check that the input action is not bound.
-  //   // (Also checks that the binding does not exist.)
-  //   if (input_automaton->is_input_bound (ia)) {
-  //     return false;
-  //   }
-
-  //   // Check that the output action is not bound to an action in the input automaton.
-  //   if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
-  //     return false;
-  //   }
-
-  //   // Bind.
-  //   output_automaton->bind_output (oa, ia, owner);
-  //   input_automaton->bind_input (oa, ia, owner);
-  //   owner->bind (oa, ia);
-
-  //   return true;
-  // }
-
   void
   create_init_automaton (frame_t automaton_frame_begin,
 			 size_t automaton_size,
@@ -305,7 +208,7 @@ namespace rts {
     }
 
     // Schedule the init action.
-    const paction* action = child->find_action ((size_t)0);
+    const paction* action = child->find_action (LILY_ACTION_INIT);
 
     if (action == 0) {
       kout << "The initial automaton does not contain an init action.  Halting." << endl;
@@ -413,12 +316,12 @@ namespace rts {
 
     if (b == 0) {
       // Buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBADBD);
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
     if (!(buffer_size <= b->size ())) {
       // They claim that the buffer is bigger than it really is.
-      return make_pair (-1, LILY_SYSCALL_EBADBD);
+      return make_pair (-1, LILY_SYSCALL_EBDSIZE);
     }
 
     // Synchronize the buffer so the frames listed in the buffer are correct.
@@ -448,7 +351,7 @@ namespace rts {
     b->override (begin, end);
 
     // Schedule the init action.
-    const paction* action = child->find_action ((size_t)0);
+    const paction* action = child->find_action (LILY_ACTION_INIT);
     if (action != 0) {
       scheduler::schedule (caction (action, 0));
     }
@@ -456,11 +359,99 @@ namespace rts {
     return make_pair (child->aid (), LILY_SYSCALL_ESUCCESS);
   }
 
-  void
-  bind (void)
+  pair<bid_t, int>
+  bind (automaton* a,
+	aid_t output_aid,
+	ano_t output_ano,
+	const void* output_parameter,
+	aid_t input_aid,
+	ano_t input_ano,
+	const void* input_parameter)
   {
-    // BUG
-    kassert (0);
+    aid_map_type::const_iterator output_pos = aid_map_.find (output_aid);
+    if (output_pos == aid_map_.end ()) {
+      // BUG:  Output automaton DNE.
+      kassert (0);
+    }
+    automaton* output_automaton = output_pos->second;
+
+    aid_map_type::const_iterator input_pos = aid_map_.find (input_aid);
+    if (input_pos == aid_map_.end ()) {
+      // BUG:  Input automaton DNE.
+      kassert (0);
+    }
+    automaton* input_automaton = input_pos->second;
+
+    if (output_automaton == input_automaton) {
+      // BUG:  The output and input automata must be different.
+      kassert (0);
+    }
+
+    // Check the output action dynamically.
+    const paction* output_action = output_automaton->find_action (output_ano);
+    if (output_action == 0 ||
+  	output_action->type != OUTPUT) {
+      // BUG:  Output action does not exist or has the wrong type.
+      kassert (0);
+    }
+
+    // Check the input action dynamically.
+    const paction* input_action = input_automaton->find_action (input_ano);
+    if (input_action == 0 ||
+  	input_action->type != INPUT) {
+      // BUG:  Input action does not exist or has the wrong type.
+      kassert (0);
+    }
+
+    // Adust the parameters.
+    switch (output_action->parameter_mode) {
+    case NO_PARAMETER:
+      output_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      output_parameter = reinterpret_cast<const void*> (input_automaton->aid ());
+      break;
+    }
+
+    switch (input_action->parameter_mode) {
+    case NO_PARAMETER:
+      input_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      input_parameter = reinterpret_cast<const void*> (output_automaton->aid ());
+      break;
+    }
+
+    // Form complete actions.
+    caction oa (output_action, output_parameter);
+    caction ia (input_action, input_parameter);
+
+    // Check that the input action is not bound.
+    // (Also checks that the binding does not exist.)
+    if (input_automaton->is_input_bound (ia)) {
+      // BUG
+      kassert (0);
+    }
+
+    // Check that the output action is not bound to an action in the input automaton.
+    if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
+      // BUG
+      kassert (0);
+    }
+
+    // Bind.
+    output_automaton->bind_output (oa, ia, a);
+    input_automaton->bind_input (oa, ia, a);
+    bid_t bid = a->bind (oa, ia);
+
+    // Schedule the output action.
+    scheduler::schedule (caction (output_action, output_parameter));
+
+    return make_pair (bid, LILY_SYSCALL_ESUCCESS);
   }
 
   void
@@ -502,16 +493,16 @@ namespace rts {
     }
 
     if ((reinterpret_cast<logical_address_t> (destination) & (PAGE_SIZE - 1)) != (reinterpret_cast<physical_address_t> (source) & (PAGE_SIZE - 1))) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_SYSCALL_EALIGN);
     }
 
     if (size == 0) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_SYSCALL_ESIZE);
     }
 
     // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
     if (source_end > ONE_MEGABYTE) {
-      return make_pair (-1, LILY_SYSCALL_ESRCRANGE);
+      return make_pair (-1, LILY_SYSCALL_ESRCNA);
     }
 
     for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {

@@ -1,6 +1,6 @@
 AS=i586-elf-as
 CXX=i586-elf-g++
-OFLAG=-O2
+OFLAG=-O0
 # Add -Werror at some point	
 CXXFLAGS=-MD $(OFLAG) -g -Wall -Wextra -ffreestanding -fno-rtti -fno-exceptions -fno-stack-protector -I.
 
