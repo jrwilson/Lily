@@ -15,7 +15,17 @@
   Justin R. Wilson
 */
 
+#include "kout.hpp"
+
 namespace io {
+
+  inline uint8_t
+  inb (uint16_t port)
+  {
+    uint8_t value;
+    asm ("inb %1, %0" : "=a" (value) : "dN" (port));
+    return value;
+  }
   
   inline void
   outb (uint16_t port,

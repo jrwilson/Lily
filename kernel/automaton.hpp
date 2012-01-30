@@ -23,6 +23,7 @@
 #include "unordered_set.hpp"
 #include "mapped_area.hpp"
 #include "lily/syscall.h"
+#include "io.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -108,6 +109,9 @@ private:
   vm_area_base* stack_area_;
   // Memory mapped areas.
   vector<mapped_area*> mapped_areas_;
+  // Reserved I/O ports.
+  typedef unordered_set<unsigned short> port_set_type;
+  port_set_type port_set_;
   // Bound outputs.
 public:
   typedef unordered_set <input_act, input_act_hash> input_action_set_type;
@@ -305,6 +309,36 @@ public:
   {
     insert_vm_area (area);
     mapped_areas_.push_back (area);
+  }
+
+  void
+  reserve_port (unsigned short port)
+  {
+    port_set_.insert (port);
+  }
+
+  pair<unsigned char, int>
+  inb (unsigned short port)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      return make_pair (io::inb (port), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  outb (unsigned short port,
+	unsigned char value)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      io::outb (port, value);
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
   }
 
   pair<void*, int>

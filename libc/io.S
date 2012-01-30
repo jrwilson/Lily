@@ -13,3 +13,23 @@ map:
 	mov %ecx, ioerrno
 	ret
 	
+	.global reserve_port
+reserve_port:
+	mov $LILY_SYSCALL_RESERVE_PORT, %eax
+	int $0x80
+	mov %ecx, ioerrno
+	ret
+
+	.global inb
+inb:
+	mov $LILY_SYSCALL_INB, %eax
+	int $0x80
+	mov %ecx, ioerrno
+	ret
+
+	.global outb
+outb:
+	mov $LILY_SYSCALL_OUTB, %eax
+	int $0x80
+	mov %ecx, ioerrno
+	ret

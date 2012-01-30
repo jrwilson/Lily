@@ -93,6 +93,22 @@ struct map_args {
   size_t size;
 };
 
+struct reserve_port_args {
+  uint32_t eip;
+  uint32_t port;
+};
+
+struct inb_args {
+  uint32_t eip;
+  uint32_t port;
+};
+
+struct outb_args {
+  uint32_t eip;
+  uint32_t port;
+  uint32_t value;
+};
+
 struct sysconf_args {
   uint32_t eip;
   int name;
@@ -287,6 +303,45 @@ trap_dispatch (volatile registers regs)
 	kassert (0);
       }
       pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+  case LILY_SYSCALL_RESERVE_PORT:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      reserve_port_args* ptr = reinterpret_cast<reserve_port_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (reserve_port_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = rts::reserve_port (a, ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+  case LILY_SYSCALL_INB:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      inb_args* ptr = reinterpret_cast<inb_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (inb_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->inb (ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+  case LILY_SYSCALL_OUTB:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      outb_args* ptr = reinterpret_cast<outb_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (outb_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->outb (ptr->port, ptr->value);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

@@ -18,4 +18,14 @@ map (const void* destination,
      const void* source,
      size_t size);
 
+int
+reserve_port (unsigned short port);
+
+unsigned char
+inb (unsigned short port);
+
+void
+outb (unsigned short port,
+      unsigned char value);
+
 #endif /* IO_H */

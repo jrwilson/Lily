@@ -14,6 +14,9 @@ namespace rts {
   // I assume the region from 0x0 to 0x00100000 is used for memory-mapped I/O.
   // Need one bit for each frame.
   static bitset<ONE_MEGABYTE / PAGE_SIZE> mmapped_frames_;
+  
+  // Bitset marking which I/O ports are reserved.
+  static bitset<65536> reserved_ports_;
 
   // For creating automata and allocating them an aid.
   static aid_t current_aid_;
@@ -523,4 +526,26 @@ namespace rts {
     // Success.
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
+
+  // The automaton is requesting access to the specified I/O port.
+  pair<int, int>
+  reserve_port (automaton* a,
+		unsigned short port)
+  {
+    if (!a->privileged ()) {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+
+    if (reserved_ports_[port]) {
+      // Port is already reserved.
+      return make_pair (-1, LILY_SYSCALL_EPORTINUSE);
+    }
+
+    // Reserve the port.
+    a->reserve_port (port);
+    reserved_ports_[port] = true;
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
 }

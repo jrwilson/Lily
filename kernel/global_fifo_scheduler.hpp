@@ -152,33 +152,36 @@ private:
 	  }
 	  break;
 	case OUTPUT:
-	  copy_value_size_ = copy_value_size;
-	  buffer_size_ = buffer_size;
-	  if (buffer != -1) {
-	    // The output action produced a buffer.  Remove it from the automaton.
-	    // BUG  Don't destroy the buffer.
-	    kassert (0);
-	    output_buffer_ = action_.action->automaton->buffer_output_destroy (buffer);
-	  }
-	  input_actions_ = action_.action->automaton->get_bound_inputs (action_);
-	  if (input_actions_ != 0) {
-	    if (copy_value_size_ != 0) {
-	      // Copy the value.
-	      memcpy (copy_value_, copy_value, copy_value_size_);
+	  if (copy_value != 0 || buffer != -1) {
+	    // The output did something.
+	    copy_value_size_ = copy_value_size;
+	    buffer_size_ = buffer_size;
+	    if (buffer != -1) {
+	      // The output action produced a buffer.  Remove it from the automaton.
+	      // BUG  Don't destroy the buffer.
+	      kassert (0);
+	      output_buffer_ = action_.action->automaton->buffer_output_destroy (buffer);
 	    }
-	    /* Load the execution context. */
-	    input_action_pos_ = input_actions_->begin ();
-	    action_ = input_action_pos_->input;
-	    /* Execute.  (This does not return). */
-	    execute ();
-	  }
-	  // There were no inputs.
-	  if (output_buffer_ != 0) {
-	    // Destroy the buffer.
-	    // BUG  Don't destroy the buffer.
-	    kassert (0);
-	    delete output_buffer_;
-	    output_buffer_ = 0;
+	    input_actions_ = action_.action->automaton->get_bound_inputs (action_);
+	    if (input_actions_ != 0) {
+	      if (copy_value_size_ != 0) {
+		// Copy the value.
+		memcpy (copy_value_, copy_value, copy_value_size_);
+	      }
+	      /* Load the execution context. */
+	      input_action_pos_ = input_actions_->begin ();
+	      action_ = input_action_pos_->input;
+	      /* Execute.  (This does not return). */
+	      execute ();
+	    }
+	    // There were no inputs.
+	    if (output_buffer_ != 0) {
+	      // Destroy the buffer.
+	      // BUG  Don't destroy the buffer.
+	      kassert (0);
+	      delete output_buffer_;
+	      output_buffer_ = 0;
+	    }
 	  }
 	  break;
 	case INTERNAL:

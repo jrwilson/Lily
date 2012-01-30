@@ -62,6 +62,10 @@ namespace rts {
        const void* destination,
        const void* source,
        size_t size);
+
+  pair<int, int>
+  reserve_port (automaton* a,
+		unsigned short port);
 }
 
 #endif /* __rts_hpp__ */

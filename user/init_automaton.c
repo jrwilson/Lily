@@ -4,8 +4,8 @@
 #include <dymem.h>
 #include <automaton.h>
 
-#include "producer.h"
-#include "consumer.h"
+#include "console.h"
+#include "vga.h"
 
 typedef struct file file_t;
 struct file {
@@ -162,24 +162,24 @@ init (size_t buffer_size)
 
   parse_cpio_header (begin, end);
 
-  aid_t producer = -1;
+  aid_t console = -1;
   for (file_t* f = head; f != 0; f = f->next) {
-    if (strcmp (f->name, "producer") == 0) {
+    if (strcmp (f->name, "console") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      producer = create (f->buffer, f->buffer_size, true);
+      console = create (f->buffer, f->buffer_size, true);
     }
   }
 
-  aid_t consumer = -1;
+  aid_t vga = -1;
   for (file_t* f = head; f != 0; f = f->next) {
-    if (strcmp (f->name, "consumer") == 0) {
+    if (strcmp (f->name, "vga") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      consumer = create (f->buffer, f->buffer_size, true);
+      vga = create (f->buffer, f->buffer_size, true);
     }
   }
 
-  bind (consumer, CONSUMER_PRINT_SENSE, 0, producer, PRODUCER_PRINT_SENSE, 0);
-  bind (producer, PRODUCER_PRINT, 0, consumer, CONSUMER_PRINT, 0);
+  bind (vga, VGA_OP_SENSE, 0, console, CONSOLE_OP_SENSE, 0);
+  bind (console, CONSOLE_OP, 0, vga, VGA_OP, 0);
 
   /* TODO:  Destroy the buffer containing the initial data. */
 

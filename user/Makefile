@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
-PROGRAMS=producer consumer
+PROGRAMS=producer consumer console vga
 TARGETS=init_automaton init_data
 
 .PHONY : all
@@ -19,6 +19,12 @@ producer : producer.o
 	$(CC) -o $@ $^ -lstring
 
 consumer : consumer.o
+	$(CC) -o $@ $^ -lio -ldymem -lstring
+
+console : console.o
+	$(CC) -o $@ $^ -ldymem -lstring
+
+vga : vga.o
 	$(CC) -o $@ $^ -lio -ldymem -lstring
 
 %.o : %.c
