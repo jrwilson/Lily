@@ -4,61 +4,12 @@
 #include <dymem.h>
 #include <string.h>
 
+#define VIDEO_RAM 0xB8000
 #define ATTRIBUTE ((0 << 12) | (0xF << 8))
 #define HEIGHT 25
 #define WIDTH 80
 
 static bool initialized = false;
-
-static unsigned short* video_ram = (unsigned short*)0xB8000;
-
-/* static void */
-/* put (char c) */
-/* { */
-/*   // TODO:  Can we scroll with hardware?  Use REP MOVS. */
-/*   /\* Scroll if we are at the bottom of the screen. *\/ */
-/*   if (y_location == HEIGHT) { */
-/*     unsigned int y; */
-/*     for (y = 0; y < HEIGHT - 1; ++y) { */
-/*       for (unsigned int x = 0; x < WIDTH; ++x) { */
-/* 	video_ram[y * WIDTH + x] = video_ram[(y + 1) * WIDTH + x]; */
-/*       } */
-/*     } */
-/*     /\* Fill last line with spaces. *\/ */
-/*     for (unsigned int x = 0; x < WIDTH; ++x) { */
-/*       video_ram[y * WIDTH + x] = ATTRIBUTE | ' '; */
-/*     } */
-/*     --y_location; */
-/*   } */
-  
-/*   switch (c) { */
-/*   case '\b': */
-/*     if (x_location > 0) { */
-/*       --x_location; */
-/*     } */
-/*     break; */
-/*   case '\t': */
-/*     /\* A tab is a position divisible by 8. *\/ */
-/*     x_location = (x_location + 8) & ~(8-1); */
-/*     break; */
-/*   case '\n': */
-/*     x_location = 0; */
-/*     ++y_location; */
-/*     break; */
-/*   case '\r': */
-/*     x_location = 0; */
-/*     break; */
-/*   default: */
-/*     /\* Print the character using black on white. *\/ */
-/*     video_ram[y_location * WIDTH + x_location] = ATTRIBUTE | c; */
-/*     /\* Advance the cursor. *\/ */
-/*     ++x_location; */
-/*     if (x_location == WIDTH) { */
-/*       ++y_location; */
-/*       x_location = 0; */
-/*     } */
-/*   } */
-/* } */
   
 typedef struct display_page display_page_t;
 typedef struct client_context client_context_t;
@@ -80,6 +31,14 @@ struct client_context {
 static client_context_t* context_list_head = 0;
 static display_page_t dp;
 
+static void
+clear_buffer (unsigned short* buffer)
+{
+  for (size_t idx = 0; idx < WIDTH * HEIGHT; ++idx) {
+    buffer[idx] = ATTRIBUTE | ' ';
+  }
+}
+
 static client_context_t*
 create_client_context (aid_t aid)
 {
@@ -87,9 +46,7 @@ create_client_context (aid_t aid)
   context->aid = aid;
   context->bd = buffer_create (2 * WIDTH * HEIGHT);
   context->buffer = buffer_map (context->bd);
-  for (size_t idx = 0; idx < WIDTH * HEIGHT; ++idx) {
-    context->buffer[idx] = ATTRIBUTE | ' ';
-  }
+  clear_buffer (context->buffer);
   context->display_page = &dp; //0;
   context->x_location = 0;
   context->y_location = 0;
@@ -112,45 +69,6 @@ find_client_context (aid_t aid)
   return ptr;
 }
 
-static size_t
-count_lines (client_context_t* context,
-	     const char* string,
-	     size_t length)
-{
-  size_t x_location = context->x_location;
-  size_t lines = 0;
-
-  for (; length != 0; --length, ++string) {
-    switch (*string) {
-    case '\b':
-      if (x_location > 0) {
-	--x_location;
-      }
-      break;
-    case '\t':
-      /* A tab is a position divisible by 8. */
-      x_location = (x_location + 8) & ~(8-1);
-      break;
-    case '\n':
-      x_location = 0;
-      ++lines;
-      break;
-    case '\r':
-      x_location = 0;
-      break;
-    default:
-      /* Advance the cursor. */
-      ++x_location;
-      if (x_location == WIDTH) {
-	++lines;
-	x_location = 0;
-      }
-    }
-  }
-
-  return lines;
-}
-
 static void
 scroll_buffer (client_context_t* context,
 	       unsigned short* buffer,
@@ -170,59 +88,60 @@ scroll_buffer (client_context_t* context,
 }
 
 /* Works like a circular buffer. */
-static void
-print_on_buffer (client_context_t* context,
+static size_t
+print_on_buffer (size_t* x_location,
+		 size_t* y_location,
 		 unsigned short* buffer,
+		 size_t line_limit,
 		 const char* string,
-		 size_t length)
+		 size_t length,
+		 const char** mark)
 {
-  for (; length != 0; --length, ++string) {
+  size_t lines = 0;
+  size_t x_loc = *x_location;
+  size_t y_loc = *y_location;
+
+  for (; length != 0 && lines != line_limit; --length, ++string) {
     switch (*string) {
     case '\b':
-      if (context->x_location > 0) {
-	--context->x_location;
+      if (x_loc > 0) {
+	--x_loc;
       }
       break;
     case '\t':
       /* A tab is a position divisible by 8. */
-      context->x_location = (context->x_location + 8) & ~(8-1);
+      x_loc = (x_loc + 8) & ~(8-1);
       break;
     case '\n':
-      context->x_location = 0;
-      ++context->y_location;
+      x_loc = 0;
+      ++y_loc;
+      ++lines;
       break;
     case '\r':
-      context->x_location = 0;
+      x_loc = 0;
       break;
     default:
       /* Print the character using black on white. */
-      buffer[context->y_location * WIDTH + context->x_location] = ATTRIBUTE | *string;
+      if (buffer != 0) {
+	buffer[y_loc * WIDTH + x_loc] = ATTRIBUTE | *string;
+      }
       /* Advance the cursor. */
-      ++context->x_location;
-      if (context->x_location == WIDTH) {
-	context->x_location = 0;
-	++context->y_location;
+      ++x_loc;
+      if (x_loc == WIDTH) {
+	x_loc = 0;
+	++y_loc;
+	++lines;
       }
     }
   }
-}
 
-static void
-fill (client_context_t* context)
-{
-  size_t x_location = context->x_location;
-  size_t y_location = context->y_location;
+  *x_location = x_loc;
+  *y_location = y_loc;
 
-  for (size_t x_location = context->x_location; x_location != WIDTH; ++x_location) {
-    context->buffer[y_location * WIDTH + x_location] = ATTRIBUTE | ' ';
+  if (mark != 0) {
+    *mark = string;
   }
-  ++y_location;
-
-  for (; y_location != HEIGHT; ++y_location) {
-    for (x_location = 0; x_location != WIDTH; ++x_location) {
-      context->buffer[y_location * WIDTH + x_location] = ATTRIBUTE | ' ';
-    }
-  }
+  return lines;
 }
 
 static void
@@ -237,11 +156,13 @@ print_on_context (client_context_t* context,
   }
 
   /* Count the lines. */
-  size_t lines = count_lines (context, string, length);
+  size_t x_loc = context->x_location;
+  size_t y_loc = context->y_location;
+  size_t lines = print_on_buffer (&x_loc, &y_loc, 0, -1, string, length, 0);
 
   if (context->y_location + lines < HEIGHT) {
     /* There is enough space, just print. */
-    print_on_buffer (context, output_buffer, string, length);
+    print_on_buffer (&context->x_location, &context->y_location, output_buffer, -1, string, length, 0);
   }
   else if (lines < HEIGHT) {
     /*
@@ -250,38 +171,38 @@ print_on_context (client_context_t* context,
       scroll == y_location + lines - (HEIGHT - 1)
      */
     scroll_buffer (context, output_buffer, context->y_location + lines - (HEIGHT - 1));
-    print_on_buffer (context, output_buffer, string, length);
+    print_on_buffer (&context->x_location, &context->y_location, output_buffer, -1, string, length, 0);
   }
   else {
     /* The entire buffer will be discarded. */
-    /* Reset. */
+
+    /* Clear the buffer. */
+    clear_buffer (output_buffer);
+
+    /* Simulate the first (lines - HEIGHT) lines. */
+    const char* ptr;
+    print_on_buffer (&context->x_location, &context->y_location, 0, lines - HEIGHT + 1, string, length, &ptr);
+
+    context->y_location = 0;
+
+    /* Print the remaining lines. */
+    print_on_buffer (&context->x_location, &context->y_location, output_buffer, -1, ptr, length - (ptr - string), 0);
   }
-
-  /* We need to adjust the y_location so that: */
-  /*    (y_location + adjust + lines == HEIGHT - 1) mod HEIGHT */
-  /*    (adjust == HEIGHT - 1 - y_location - lines) mod HEIGHT */
-  /* size_t adjust = (((HEIGHT - 1 - (int)context->y_location - (int)lines) % HEIGHT) + HEIGHT) % HEIGHT; */
-
-  /* /\* Print the text. *\/ */
-
-  /* /\* Fill remainder with spaces. *\/ */
-  /* fill (context); */
 }
 
 static void
 initialize (void)
 {
   if (!initialized) {
+
+    dp.buffer = (unsigned short*)VIDEO_RAM;
+
     // Memory map the video ram.
     // Each element is two bytes corresponding to the character and attribute.
-    map (video_ram, video_ram, WIDTH * HEIGHT * 2);
+    map (dp.buffer, dp.buffer, WIDTH * HEIGHT * 2);
 
     // Clear the screen.
-    for (size_t idx = 0; idx < WIDTH * HEIGHT; ++idx) {
-      video_ram[idx] = ATTRIBUTE | ' ';
-    }
-
-    dp.buffer = video_ram;
+    clear_buffer (dp.buffer);
     
     initialized = true;
   }
