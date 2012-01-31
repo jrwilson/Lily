@@ -9,6 +9,9 @@
 
 /* Import the Lily namespace. */
 
+#define FINISH_DESTROY LILY_SYSCALL_FINISH_DESTROY
+#define FINISH_RETAIN LILY_SYSCALL_FINISH_RETAIN
+
 #define INPUT LILY_ACTION_INPUT
 #define OUTPUT LILY_ACTION_OUTPUT
 #define INTERNAL LILY_ACTION_INTERNAL
@@ -16,6 +19,11 @@
 #define NO_PARAMETER LILY_ACTION_NO_PARAMETER
 #define PARAMETER LILY_ACTION_PARAMETER
 #define AUTO_PARAMETER LILY_ACTION_AUTO_PARAMETER
+
+#define NO_ACTION LILY_ACTION_NO_ACTION
+#define INIT LILY_ACTION_INIT
+#define LOOSED LILY_ACTION_LOOSED
+#define DESTROYED LILY_ACTION_DESTROYED
 
 /* #define AUTOMATON_ESUCCESS LILY_SYSCALL_ESUCCESS */
 /* #define AUTOMATON_EBADBID LILY_SYSCALL_EBADBID */
@@ -44,14 +52,9 @@ extern int automatonerrno;
 void
 finish (ano_t action_number,
 	const void* parameter,
-	const void* value,
-	size_t value_size,
 	bd_t buffer,
-	size_t buffer_size);
-
-size_t
-binding_count (ano_t action_number,
-	       const void* parameter);
+	size_t buffer_size,
+	int flags);
 
 aid_t
 create (bd_t buffer,
@@ -66,7 +69,8 @@ bind (aid_t output_automaton,
       ano_t input_action,
       const void* input_parameter);
 
-extern int buffererrno;
+int
+subscribe (aid_t aid);
 
 bd_t
 buffer_create (size_t size);
@@ -123,7 +127,7 @@ int
 buffer_destroy (bd_t bd);
 
   /* inline size_t */
-  /* buffer_size (bd_t bd) */
+  /* buffer_capacity (bd_t bd) */
   /* { */
   /*   size_t size; */
   /*   asm ("int $0x81\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bd) :); */

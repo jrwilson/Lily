@@ -311,6 +311,8 @@ create_client_context (aid_t aid)
   context->next = context_list_head;
   context_list_head = context;
 
+  subscribe (aid);
+
   return context;
 }
 
@@ -402,9 +404,9 @@ init (void)
 {
   initialize ();
 
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, LILY_ACTION_INIT, init);
+EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, INIT, init);
 
 typedef struct {
   aid_t aid;
@@ -424,45 +426,19 @@ focus (const void* param,
     }
   }
 
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, VGA_FOCUS, focus);
 
 void
-op_sense (aid_t aid)
-{
-  initialize ();
-
-  size_t count = binding_count (VGA_OP_SENSE, (const void*)aid);
-  if (count != 0) {
-    /* Create client context if necessary. */
-    if (find_client_context (aid) == 0) {
-      create_client_context (aid);
-    }
-  }
-  else {
-    /* Destroy client context if necessary. */
-    client_context_t** ptr = &context_list_head;
-    for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;;
-    if (*ptr != 0) {
-      client_context_t* temp = *ptr;
-      *ptr = temp->next;
-      destroy_client_context (temp);
-    }
-  }
-
-  finish (0, 0, 0, 0, -1, 0);
-}
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, VGA_OP_SENSE, op_sense);
-
-void
 op (aid_t aid,
-    const op_t* a,
-    size_t a_size)
+    bd_t bd,
+    size_t buffer_size,
+    op_t* op)
 {
   initialize ();
 
-  if (binding_count (VGA_OP_SENSE, (const void*)aid) != 0 && a != 0 && a_size == sizeof (op_t)) {
+  if (bd != -1 && buffer_size == sizeof (op_t) && op != 0) {
     client_context_t* context = find_client_context (aid);
     if (context == 0) {
       context = create_client_context (aid);
@@ -471,10 +447,10 @@ op (aid_t aid,
     /* TODO:  Remove this line. */
     switch_to_context (context);
 
-    switch (a->type) {
+    switch (op->type) {
     case ASSIGN_VALUE:
-      if (a->arg.assign_value.count <= 128) {
-  	assign (context, a->arg.assign_value.offset, a->arg.assign_value.data, a->arg.assign_value.count);
+      if (op->arg.assign_value.count <= 128) {
+  	assign (context, op->arg.assign_value.offset, op->arg.assign_value.data, op->arg.assign_value.count);
       }
       break;
     case ASSIGN_BUFFER:
@@ -486,6 +462,25 @@ op (aid_t aid,
     }
   }
   
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, VGA_OP, op);
+
+void
+destroyed (aid_t aid)
+{
+  initialize ();
+
+  /* Destroy the client context. */
+  client_context_t** ptr = &context_list_head;
+  for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;;
+  if (*ptr != 0) {
+    client_context_t* temp = *ptr;
+    *ptr = temp->next;
+    destroy_client_context (temp);
+  }
+
+  finish (NO_ACTION, 0, -1, 0, 0);
+}
+EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, DESTROYED, destroyed);
+

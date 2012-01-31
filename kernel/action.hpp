@@ -5,8 +5,6 @@
 #include <lily/action.h>
 #include "kstring.hpp"
 
-#define LILY_LIMITS_MAX_VALUE_SIZE 512
-
 class automaton;
 
 enum action_type_t {

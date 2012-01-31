@@ -112,6 +112,12 @@ private:
   // Reserved I/O ports.
   typedef unordered_set<unsigned short> port_set_type;
   port_set_type port_set_;
+  // Automata to which this automaton is subscribed.
+  typedef unordered_set<automaton*> subscriptions_set_type;
+  subscriptions_set_type subscriptions_;
+  // Automata that receive notification when this automaton is destroyed.
+  typedef unordered_set<automaton*> subscribers_set_type;
+  subscribers_set_type subscribers_;
   // Bound outputs.
 public:
   typedef unordered_set <input_act, input_act_hash> input_action_set_type;
@@ -524,40 +530,16 @@ public:
     }
   }
 
-  pair<size_t, int>
-  binding_count (ano_t action_number,
-		 const void* parameter) const
+  void
+  add_subscriber (automaton* a)
   {
-    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (action_number);
-    if (pos != ano_to_action_map_.end ()) {
-      const caction act (pos->second, parameter);
-      switch (pos->second->type) {
-      case OUTPUT:
-	{
-	  bound_outputs_map_type::const_iterator pos2 = bound_outputs_map_.find (act);
-	  if (pos2 != bound_outputs_map_.end ()) {
-	    return make_pair (pos2->second.size (), LILY_SYSCALL_ESUCCESS);
-	  }
-	  else {
-	    return make_pair (0, LILY_SYSCALL_ESUCCESS);
-	  }
-	}
-	break;
-      case INPUT:
-	if (bound_inputs_map_.find (act) != bound_inputs_map_.end ()) {
-	  return make_pair (1, LILY_SYSCALL_ESUCCESS);
-	}
-	else {
-	  return make_pair (0, LILY_SYSCALL_ESUCCESS);
-	}
-	break;
-      case INTERNAL:
-	return make_pair (0, LILY_SYSCALL_ESUCCESS);
-	break;
-      }
-    }
-    // Action does not exist.
-    return make_pair (-1, LILY_SYSCALL_EBADANO);
+    subscribers_.insert (a);
+  }
+
+  void
+  add_subscription (automaton* a)
+  {
+    subscriptions_.insert (a);
   }
 
 private:
@@ -614,7 +596,7 @@ public:
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
     if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
-      if (offset + length <= b->size ()) {
+      if (offset + length <= b->capacity ()) {
 	// Generate an id.
 	bd_t bd = generate_bd ();
 	
@@ -686,7 +668,7 @@ public:
 	src_pos != bd_to_buffer_map_.end ()) {
       buffer* dst = dst_pos->second;
       buffer* src = src_pos->second;
-      if (offset + length <= src->size ()) {
+      if (offset + length <= src->capacity ()) {
 	if (dst->begin () == 0) {
 	  // Append.
 	  return dst->append (*src, offset, length);
@@ -720,8 +702,8 @@ public:
 	src_pos != bd_to_buffer_map_.end ()) {
       buffer* dest_b = dest_pos->second;
       buffer* src_b = src_pos->second;
-      if (dest_offset + length <= dest_b->size () &&
-	  src_offset + length <= src_b->size ()) {
+      if (dest_offset + length <= dest_b->capacity () &&
+	  src_offset + length <= src_b->capacity ()) {
 	// Assign.
 	dest_b->assign (dest_offset, *src_b, src_offset, length);
 	return 0;
@@ -751,7 +733,7 @@ public:
 
     buffer* b = bpos->second;
     
-    if (b->size () == 0) {
+    if (b->capacity () == 0) {
       // The buffer is empty.
       return make_pair ((void*)0, LILY_SYSCALL_EBADBD);
     }
@@ -778,7 +760,7 @@ public:
     for (; stack_pos != heap_pos; ++stack_pos) {
       memory_map_type::reverse_iterator prev = stack_pos + 1;
       size_t size = (*stack_pos)->begin () - (*prev)->end ();
-      if (size >= b->size ()) {
+      if (size >= b->capacity ()) {
 	b->map_end ((*stack_pos)->begin ());
 	memory_map_.insert (prev.base (), b);
 	// Success.
@@ -819,18 +801,18 @@ public:
     kassert (bpos != bd_to_buffer_map_.end ());
 
     buffer* b = bpos->second;
-    
+
     if (b->begin () != 0) {
       // Remove from the memory map.
       memory_map_.erase (find_address (b->begin ()));
       
-      // Unmap the buffer.	
+      // Unmap the buffer.
       b->unmap ();
     }
     
     // Remove from the bd map.
     bd_to_buffer_map_.erase (bpos);
-    
+
     return b;
   }
 
@@ -864,11 +846,11 @@ public:
   }
 
   size_t
-  buffer_size (bd_t bd)
+  buffer_capacity (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos != bd_to_buffer_map_.end ()) {
-      return bpos->second->size ();
+      return bpos->second->capacity ();
     }
     else {
       // The buffer does not exist.

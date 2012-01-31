@@ -212,7 +212,7 @@ void
 init (void)
 {
   initialize ();
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, LILY_ACTION_INIT, init);
 
@@ -220,7 +220,7 @@ void
 focus (void)
 {
   initialize ();
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, CONSUMER_FOCUS, focus);
 
@@ -231,46 +231,46 @@ print (aid_t aid,
 {
   initialize ();
   
-  if (binding_count (CONSUMER_PRINT_SENSE, (const void*)aid) != 0) {
-    client_context_t* context = find_client_context (aid);
-    if (context == 0) {
-      context = create_client_context (aid);
-    }
+  /* if (binding_count (CONSUMER_PRINT_SENSE, (const void*)aid) != 0) { */
+  /*   client_context_t* context = find_client_context (aid); */
+  /*   if (context == 0) { */
+  /*     context = create_client_context (aid); */
+  /*   } */
 
-    if (string != 0 && length != 0) {
-      print_on_context (context, string, length);
-    }
-  }
+  /*   if (string != 0 && length != 0) { */
+  /*     print_on_context (context, string, length); */
+  /*   } */
+  /* } */
   
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, CONSUMER_PRINT, print);
 
-void
-print_sense (aid_t aid)
-{
-  initialize ();
+/* void */
+/* print_sense (aid_t aid) */
+/* { */
+/*   initialize (); */
 
-  size_t count = binding_count (CONSUMER_PRINT_SENSE, (const void*)aid);
-  if (count != 0) {
-    /* Create client context if necessary. */
-    if (find_client_context (aid) == 0) {
-      client_context_t* context = create_client_context (aid);
-      context->next = context_list_head;
-      context_list_head = context;
-    }
-  }
-  else {
-    /* Destroy client context if necessary. */
-    client_context_t** ptr = &context_list_head;
-    for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;;
-    if (*ptr != 0) {
-      client_context_t* temp = *ptr;
-      *ptr = temp->next;
-      destroy_client_context (temp);
-    }
-  }
+/*   size_t count = binding_count (CONSUMER_PRINT_SENSE, (const void*)aid); */
+/*   if (count != 0) { */
+/*     /\* Create client context if necessary. *\/ */
+/*     if (find_client_context (aid) == 0) { */
+/*       client_context_t* context = create_client_context (aid); */
+/*       context->next = context_list_head; */
+/*       context_list_head = context; */
+/*     } */
+/*   } */
+/*   else { */
+/*     /\* Destroy client context if necessary. *\/ */
+/*     client_context_t** ptr = &context_list_head; */
+/*     for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;; */
+/*     if (*ptr != 0) { */
+/*       client_context_t* temp = *ptr; */
+/*       *ptr = temp->next; */
+/*       destroy_client_context (temp); */
+/*     } */
+/*   } */
 
-  finish (0, 0, 0, 0, -1, 0);
-}
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, CONSUMER_PRINT_SENSE, print_sense);
+/*   finish (NO_ACTION, 0, -1, 0, 0); */
+/* } */
+/* EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, CONSUMER_PRINT_SENSE, print_sense); */

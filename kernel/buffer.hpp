@@ -53,7 +53,7 @@ public:
   {
     kassert (begin_ == 0);
     begin_ = align_down (begin, PAGE_SIZE);
-    end_ = begin_ + size ();
+    end_ = begin_ + capacity ();
 
     for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
       vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
@@ -66,7 +66,7 @@ public:
   {
     if (begin_ == 0) {
       end_ = align_down (end, PAGE_SIZE);
-      begin_ = end_ - size ();
+      begin_ = end_ - capacity ();
       
       for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
 	vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
@@ -78,7 +78,7 @@ public:
   unmap ()
   {
     if (begin_ != 0) {
-      sync (0, size ());
+      sync (0, capacity ());
 
       for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
 	vm::unmap (begin_ + idx * PAGE_SIZE);
@@ -98,7 +98,7 @@ public:
   }
 
   size_t
-  size () const
+  capacity () const
   {
     return frame_list_.size () * PAGE_SIZE;
   }
@@ -108,7 +108,7 @@ public:
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
-    size_t retval = this->size ();
+    size_t retval = this->capacity ();
     size_t begin = frame_list_.size ();
     frame_list_.resize (begin + size / PAGE_SIZE, vm::zero_frame ());
     frame_manager::incref (vm::zero_frame (), frame_list_.size () - begin);
@@ -123,7 +123,7 @@ public:
     // Cannot be mapped.
     kassert (begin_ == 0);
     other.sync (offset, length);
-    size_t retval = this->size ();
+    size_t retval = this->capacity ();
     size_t begin = frame_list_.size ();
     frame_list_.insert (frame_list_.end (), other.frame_list_.begin () + offset / PAGE_SIZE, other.frame_list_.begin () + (offset + length) / PAGE_SIZE);
     for (; begin != frame_list_.size (); ++begin) {

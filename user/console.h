@@ -1,7 +1,6 @@
 #ifndef CONSOLE_H
 #define CONSOLE_H
 
-#define CONSOLE_OP_SENSE 1
-#define CONSOLE_OP 2
+#define CONSOLE_OP 1
 
 #endif /* CONSOLE_H */

@@ -12,12 +12,6 @@ finish:
 	mov $LILY_SYSCALL_FINISH, %eax
 	int $0x80
 
-	.global binding_count
-binding_count:
-	mov $LILY_SYSCALL_BINDING_COUNT, %eax
-	mov %ecx, automatonerrno
-	int $0x80
-
 	.global create
 create:
 	mov $LILY_SYSCALL_CREATE, %eax
@@ -32,6 +26,13 @@ bind:
 	mov %ecx, automatonerrno
 	ret
 
+	.global subscribe
+subscribe:
+	mov $LILY_SYSCALL_SUBSCRIBE, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+	
 	.global buffer_create
 buffer_create:
 	mov $LILY_SYSCALL_BUFFER_CREATE, %eax

@@ -178,14 +178,13 @@ init (size_t buffer_size)
     }
   }
 
-  bind (vga, VGA_OP_SENSE, 0, console, CONSOLE_OP_SENSE, 0);
   bind (console, CONSOLE_OP, 0, vga, VGA_OP, 0);
 
   /* TODO:  Destroy the buffer containing the initial data. */
 
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, LILY_ACTION_INIT, init);
+EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, INIT, init);
 
 // static void
 // schedule ();

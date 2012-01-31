@@ -336,6 +336,7 @@ public:
 	Allocator::destroy (&tmp->value);
 	bucket_allocator::deallocate (tmp, 1);
 	--size_;
+	break;
       }
     }
   }

@@ -19,7 +19,6 @@ typedef struct {
 } op_t;
 
 #define VGA_FOCUS 1
-#define VGA_OP_SENSE 2
-#define VGA_OP 3
+#define VGA_OP 2
 
 #endif /* VGA_H */

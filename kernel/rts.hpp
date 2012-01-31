@@ -31,10 +31,9 @@ namespace rts {
   finish (const caction& current,
 	  ano_t action_number,
 	  const void* parameter,
-	  const void* value,
-	  size_t value_size,
 	  bd_t bd,
-	  size_t buffer_size);
+	  size_t buffer_size,
+	  int flags);
   
   pair<aid_t, int>
   create (automaton* a,
@@ -56,6 +55,10 @@ namespace rts {
 
   void
   destroy (void);
+
+  pair<int, int>
+  subscribe (automaton* a,
+	     aid_t aid);
 
   pair<int, int>
   map (automaton* a,

@@ -85,10 +85,8 @@ private:
     const automaton::input_action_set_type* input_actions_;
     automaton::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
-    bd_t input_buffer_;
     size_t buffer_size_;
-    uint8_t copy_value_[LILY_LIMITS_MAX_VALUE_SIZE];
-    size_t copy_value_size_;
+    int flags_;
 
   public:
     execution_context ()
@@ -102,7 +100,8 @@ private:
       action_.action = 0;
       action_.parameter = 0;
       output_buffer_ = 0;
-      input_buffer_ = -1;
+      buffer_size_ = 0;
+      flags_ = 0;
     }
 
     inline const caction&
@@ -116,24 +115,20 @@ private:
     load (const caction& ad)
     {
       action_ = ad;
+      if (action_.action->type == OUTPUT) {
+	// Lookup the input actions.
+	input_actions_ = action_.action->automaton->get_bound_inputs (action_);
+      }
     }
 
     inline void
-    finish_action (const void* copy_value,
-		   size_t copy_value_size,
-		   bd_t buffer,
-		   size_t buffer_size)
+    finish_action (bd_t bd,
+		   size_t buffer_size,
+		   int flags)
     {
       if (action_.action != 0) {	
 	switch (action_.action->type) {
 	case INPUT:
-	  if (input_buffer_ != -1) {
-	    // Destroy the buffer.
-	    // BUG  Don't destroy the buffer.
-	    kassert (0);
-	    action_.action->automaton->buffer_destroy (input_buffer_);
-	    input_buffer_ = -1;
-	  }
 	  /* Move to the next input. */
 	  ++input_action_pos_;
 	  if (input_action_pos_ != input_actions_->end ()) {
@@ -143,42 +138,37 @@ private:
 	    execute ();
 	  }
 	  // Finished executing input actions.
-	  if (output_buffer_ != 0) {
+	  if (flags_ == LILY_SYSCALL_FINISH_DESTROY) {
+	    // The buffer must exist.
+	    kassert (output_buffer_ != 0);
 	    // Destroy the buffer.
-	    // BUG  Don't destroy the buffer.
-	    kassert (0);
 	    delete output_buffer_;
 	    output_buffer_ = 0;
 	  }
 	  break;
 	case OUTPUT:
-	  if (copy_value != 0 || buffer != -1) {
+	  if (flags == LILY_SYSCALL_FINISH_YES || flags == LILY_SYSCALL_FINISH_DESTROY) {
 	    // The output did something.
-	    copy_value_size_ = copy_value_size;
-	    buffer_size_ = buffer_size;
-	    if (buffer != -1) {
-	      // The output action produced a buffer.  Remove it from the automaton.
-	      // BUG  Don't destroy the buffer.
-	      kassert (0);
-	      output_buffer_ = action_.action->automaton->buffer_output_destroy (buffer);
+	    if (flags == LILY_SYSCALL_FINISH_YES) {
+	      output_buffer_ = action_.action->automaton->lookup_buffer (bd);
 	    }
-	    input_actions_ = action_.action->automaton->get_bound_inputs (action_);
+	    else {
+	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bd);
+	    }
+	    buffer_size_ = buffer_size;
+	    flags_ = flags;
 	    if (input_actions_ != 0) {
-	      if (copy_value_size_ != 0) {
-		// Copy the value.
-		memcpy (copy_value_, copy_value, copy_value_size_);
-	      }
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
-	      action_ = input_action_pos_->input;
+	      load (input_action_pos_->input);
 	      /* Execute.  (This does not return). */
 	      execute ();
 	    }
 	    // There were no inputs.
-	    if (output_buffer_ != 0) {
+	    if (flags_ == LILY_SYSCALL_FINISH_DESTROY) {
+	      // The buffer must exist.
+	      kassert (output_buffer_ != 0);
 	      // Destroy the buffer.
-	      // BUG  Don't destroy the buffer.
-	      kassert (0);
 	      delete output_buffer_;
 	      output_buffer_ = 0;
 	    }
@@ -216,29 +206,44 @@ private:
       // First, they set up the cdecl calling convention for actions.
       // Second, they force the stack to be created if it is not.
 
-      if (action_.action->type == INPUT) {
-	void* copy_value = 0;
-	if (copy_value_size_ != 0) {
-	  // Copy the value to the stack.
-	  stack_pointer = static_cast<uint32_t*> (const_cast<void*> (align_down (reinterpret_cast<uint8_t*> (stack_pointer) - copy_value_size_, STACK_ALIGN)));
-	  copy_value = stack_pointer;
-	  memcpy (copy_value, copy_value_, copy_value_size_);
+      switch (action_.action->type) {
+      case INPUT:
+	{
+	  bd_t input_buffer;
+	  const void* buf;
+	  
+	  if (output_buffer_ != 0) {
+	    // Copy the buffer to the input automaton and try to map it.
+	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
+	    buf = action_.action->automaton->buffer_map (input_buffer).first;
+	  }
+	  else {
+	    input_buffer = -1;
+	    buf = 0;
+	  }
+	  
+	  // Push the address.
+	  *--stack_pointer = reinterpret_cast<uint32_t> (buf);
+	  // Push the buffer size.
+	  *--stack_pointer = buffer_size_;
+	  // Push the buffer.
+	  *--stack_pointer = input_buffer;	
 	}
-
-	if (output_buffer_ != 0) {
-	  // Copy the buffer to the input automaton.
-	  input_buffer_ = action_.action->automaton->buffer_create (*output_buffer_);
+	break;
+      case OUTPUT:
+	{
+	  // Push the binding count.
+	  if (input_actions_ != 0) {
+	    *--stack_pointer = input_actions_->size ();
+	  }
+	  else {
+	    *--stack_pointer = 0;
+	  }
 	}
-
-	// Push the buffer size.
-	*--stack_pointer = buffer_size_;
-	// Push the buffer.
-	*--stack_pointer = input_buffer_;	
-
-	// Push the copy value size.
-	*--stack_pointer = copy_value_size_;
-	// Push the pointer to the copy value.
-	*--stack_pointer = reinterpret_cast<uint32_t> (copy_value);
+	break;
+      case INTERNAL:
+	// Do nothing.
+	break;
       }
       
       // Push the parameter.
@@ -323,13 +328,12 @@ public:
   }
   
   static inline void
-  finish (const void* copy_value,
-	  size_t copy_value_size,
-	  bd_t buffer,
-	  size_t buffer_size)
+  finish (bd_t bd,
+	  size_t buffer_size,
+	  int flags)
   {
     // This call won't return when executing input actions.
-    exec_context_.finish_action (copy_value, copy_value_size, buffer, buffer_size);
+    exec_context_.finish_action (bd, buffer_size, flags);
 
     if (!ready_queue_.empty ()) {
       // Get the automaton context and remove it from the ready queue.

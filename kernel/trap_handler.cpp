@@ -37,10 +37,9 @@ struct finish_args {
   uint32_t eip;
   ano_t action_number;
   const void* parameter;
-  const void* value;
-  size_t value_size;
-  bd_t buffer;
+  bd_t bd;
   size_t buffer_size;
+  int flags;
 };
 
 struct binding_count_args {
@@ -64,6 +63,11 @@ struct bind_args {
   aid_t input_automaton;
   ano_t input_action;
   const void* input_parameter;
+};
+
+struct subscribe_args {
+  uint32_t eip;
+  aid_t aid;
 };
 
 struct sbrk_args {
@@ -128,7 +132,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      rts::finish (current, ptr->action_number, ptr->parameter, ptr->value, ptr->value_size, ptr->buffer, ptr->buffer_size);
+      rts::finish (current, ptr->action_number, ptr->parameter, ptr->bd, ptr->buffer_size, ptr->flags);
       return;
     }
     break;
@@ -176,6 +180,21 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
+  case LILY_SYSCALL_SUBSCRIBE:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      subscribe_args* ptr = reinterpret_cast<subscribe_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (subscribe_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<bid_t, int> r = rts::subscribe (a, ptr->aid);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+
+    }
+    break;
   case LILY_SYSCALL_SBRK:
     {
       automaton* a = scheduler::current_action ().action->automaton;
@@ -186,20 +205,6 @@ trap_dispatch (volatile registers regs)
       }
       pair<void*, int> r = a->sbrk (ptr->size);
       regs.eax = reinterpret_cast<uint32_t> (r.first);
-      regs.ecx = r.second;
-      return;
-    }
-    break;
-  case LILY_SYSCALL_BINDING_COUNT:
-    {
-      automaton* a = scheduler::current_action ().action->automaton;
-      binding_count_args* ptr = reinterpret_cast<binding_count_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (binding_count_args))) {
-	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
-	kassert (0);
-      }
-      pair<size_t, int> r = a->binding_count (ptr->action_number, ptr->parameter);
-      regs.eax = r.first;
       regs.ecx = r.second;
       return;
     }
@@ -286,11 +291,11 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_BUFFER_SIZE:
+  case LILY_SYSCALL_BUFFER_CAPACITY:
     {
       // BUG
       kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_size (regs.ebx);
+      regs.eax = scheduler::current_action ().action->automaton->buffer_capacity (regs.ebx);
       return;
     }
     break;

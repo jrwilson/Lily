@@ -11,45 +11,39 @@ void
 init (void)
 {
   /* Schedule produce. */
-  finish (CONSOLE_OP, 0, 0, 0, -1, 0);
+  finish (CONSOLE_OP, 0, -1, 0, 0);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, LILY_ACTION_INIT, init);
+EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, INIT, init);
 
 void
-op (void)
+op (const void* param,
+    size_t bc)
 {
-  if (count < LIMIT && binding_count (CONSOLE_OP, 0) != 0 && binding_count (CONSOLE_OP_SENSE, 0) != 0) {
+  if ((count < LIMIT) && bc != 0) {
     ++count;
-    op_t op;
-
-    op.type = ASSIGN_VALUE;
-    op.arg.assign_value.offset = offset;
+    bd_t bd = buffer_create (sizeof (op_t));
+    op_t* op = buffer_map (bd);
+    op->type = ASSIGN_VALUE;
+    op->arg.assign_value.offset = offset;
     offset += 12;
-    op.arg.assign_value.count = 12;
-    op.arg.assign_value.data[0] = 0x3400 | 'H';
-    op.arg.assign_value.data[1] = 0x3400 | 'e';
-    op.arg.assign_value.data[2] = 0x3400 | 'l';
-    op.arg.assign_value.data[3] = 0x3400 | 'l';
-    op.arg.assign_value.data[4] = 0x3400 | 'o';
-    op.arg.assign_value.data[5] = 0x3400 | ' ';
-    op.arg.assign_value.data[6] = 0x3400 | 'w';
-    op.arg.assign_value.data[7] = 0x3400 | 'o';
-    op.arg.assign_value.data[8] = 0x3400 | 'r';
-    op.arg.assign_value.data[9] = 0x3400 | 'l';
-    op.arg.assign_value.data[10] = 0x3400 | 'd';
-    op.arg.assign_value.data[11] = 0x3400 | '!';
+    op->arg.assign_value.count = 12;
+    op->arg.assign_value.data[0] = 0x3400 | 'H';
+    op->arg.assign_value.data[1] = 0x3400 | 'e';
+    op->arg.assign_value.data[2] = 0x3400 | 'l';
+    op->arg.assign_value.data[3] = 0x3400 | 'l';
+    op->arg.assign_value.data[4] = 0x3400 | 'o';
+    op->arg.assign_value.data[5] = 0x3400 | ' ';
+    op->arg.assign_value.data[6] = 0x3400 | 'w';
+    op->arg.assign_value.data[7] = 0x3400 | 'o';
+    op->arg.assign_value.data[8] = 0x3400 | 'r';
+    op->arg.assign_value.data[9] = 0x3400 | 'l';
+    op->arg.assign_value.data[10] = 0x3400 | 'd';
+    op->arg.assign_value.data[11] = 0x3400 | '!';
 
-    finish (CONSOLE_OP, 0, &op, sizeof (op_t), -1, 0);
+    finish (CONSOLE_OP, 0, bd, sizeof (op_t), FINISH_DESTROY);
   }
   else {
-    finish (0, 0, 0, 0, -1, 0);
+    finish (NO_ACTION, 0, -1, 0, 0);
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, CONSOLE_OP, op);
-
-void
-op_sense (void)
-{
-  finish (CONSOLE_OP, 0, 0, 0, -1, 0);
-}
-EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, CONSOLE_OP_SENSE, op_sense);

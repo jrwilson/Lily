@@ -11,7 +11,7 @@ void
 init (void)
 {
   /* Schedule produce. */
-  finish (PRODUCER_PRINT, 0, 0, 0, -1, 0);
+  finish (PRODUCER_PRINT, 0, -1, 0, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, LILY_ACTION_INIT, init);
 
@@ -20,10 +20,14 @@ print (void)
 {
   if (count < LIMIT) {
     ++count;
-    finish (PRODUCER_PRINT, 0, string, strlen (string), -1, 0);
+    size_t len = strlen (string);
+    bd_t bd = buffer_create (len);
+    char* buffer = buffer_map (bd);
+    memcpy (buffer, string, len);
+    finish (PRODUCER_PRINT, 0, bd, len, FINISH_DESTROY);
   }
   else {
-    finish (0, 0, 0, 0, -1, 0);
+    finish (NO_ACTION, 0, -1, 0, 0);
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, PRODUCER_PRINT, print);
@@ -31,6 +35,6 @@ EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, PRODUCER_PRINT, print);
 void
 print_sense (void)
 {
-  finish (0, 0, 0, 0, -1, 0);
+  finish (NO_ACTION, 0, -1, 0, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, PRODUCER_PRINT_SENSE, print_sense);
