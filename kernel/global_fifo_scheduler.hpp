@@ -219,7 +219,6 @@ private:
       // 	kout << "*";
       // 	break;
       // }
-
       // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
 
       // Switch page directories.

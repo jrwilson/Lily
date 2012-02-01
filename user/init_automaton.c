@@ -4,6 +4,7 @@
 #include <dymem.h>
 #include <automaton.h>
 
+#include "producer.h"
 #include "console.h"
 #include "vga.h"
 
@@ -163,6 +164,14 @@ init (int param,
 
   parse_cpio_header (begin, end);
 
+  aid_t producer = -1;
+  for (file_t* f = head; f != 0; f = f->next) {
+    if (strcmp (f->name, "producer") == 0) {
+      //print ("name = "); print (f->name); put ('\n');
+      producer = create (f->buffer, f->buffer_size, true, -1, 0);
+    }
+  }
+
   aid_t console = -1;
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "console") == 0) {
@@ -179,7 +188,8 @@ init (int param,
     }
   }
 
-  bind (console, CONSOLE_OP, 0, vga, VGA_OP, 0);
+  bind (producer, PRODUCER_CONSOLE_OP, 0, console, CONSOLE_OP, 0);
+  bind (console, CONSOLE_VGA_OP, 0, vga, VGA_OP, 0);
 
   finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }

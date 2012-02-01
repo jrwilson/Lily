@@ -1,22 +1,32 @@
 #ifndef VGA_H
 #define VGA_H
 
+#include <stddef.h>
+
 typedef enum {
-  ASSIGN_VALUE,
-  ASSIGN_BUFFER,
-  COPY
-} op_type_t;
+  VGA_SET_START,
+  VGA_ASSIGN,
+  VGA_COPY
+} vga_op_type_t;
 
 typedef struct {
-  op_type_t type;
+  vga_op_type_t type;
   union {
     struct {
-      unsigned short offset;
-      unsigned short count;
-      unsigned short data[128];
-    } assign_value;
+      size_t offset;
+    } set_start;
+    struct {
+      size_t offset;
+      size_t size;
+      unsigned char data[0];
+    } assign;
+    struct {
+      size_t dst_offset;
+      size_t src_offset;
+      size_t size;
+    } copy;
   } arg;
-} op_t;
+} vga_op_t;
 
 #define VGA_FOCUS 1
 #define VGA_OP 2

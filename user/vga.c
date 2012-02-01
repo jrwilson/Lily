@@ -145,27 +145,26 @@ static client_context_t* context_list_head = 0;
 /* Pointer to the active client. */
 static client_context_t* active_context = 0;
 
-static int x = 0;
-static int y = 0;
+/* static int x = 0; */
+/* static int y = 0; */
+/* static void */
+/* print (const char* s) */
+/* { */
+/*   unsigned short* dest = (unsigned short*) VIDEO_MEMORY_BEGIN; */
+/*   for (; *s != 0; ++s) { */
+/*     switch (*s) { */
+/*     case '\n': */
+/*       x = 0; */
+/*       ++y; */
+/*       break; */
+/*     default: */
+/*       dest[y * 80 + x] = 0x3400 | *s; */
+/*       ++x; */
+/*       break; */
+/*     } */
 
-static void
-print (const char* s)
-{
-  unsigned short* dest = (unsigned short*) VIDEO_MEMORY_BEGIN;
-  for (; *s != 0; ++s) {
-    switch (*s) {
-    case '\n':
-      x = 0;
-      ++y;
-      break;
-    default:
-      dest[y * 80 + x] = 0x3400 | *s;
-      ++x;
-      break;
-    }
-
-  }
-}
+/*   } */
+/* } */
 
 static void
 read_vga_registers (vga_registers_t* r)
@@ -270,11 +269,11 @@ destroy_vga_registers (vga_registers_t* r)
   /* Do nothing. */
 }
 
-static unsigned short
-get_start_address (vga_registers_t* r)
-{
-  return (r->start_address_high << 8) | r->start_address_low;
-}
+/* static unsigned short */
+/* get_start_address (vga_registers_t* r) */
+/* { */
+/*   return (r->start_address_high << 8) | r->start_address_low; */
+/* } */
 
 static void
 set_start_address (vga_registers_t* r,
@@ -282,7 +281,7 @@ set_start_address (vga_registers_t* r,
 {
   r->start_address_high = (address >> 8);
   r->start_address_low = address & (0xFF);
-
+  
   if (active_context != 0 && r == &active_context->registers) {
     /* Write through. */
     outb (CRT_ADDRESS_PORT, START_ADDRESS_HIGH_REGISTER);
@@ -344,27 +343,45 @@ switch_to_context (client_context_t* context)
 }
 
 static void
+set_start (client_context_t* context,
+	   size_t offset)
+{
+  if (offset < VIDEO_MEMORY_SIZE) {
+    set_start_address (&context->registers, VIDEO_MEMORY_BEGIN + offset);
+  }
+}
+
+static void
 assign (client_context_t* context,
 	size_t offset,
-	const unsigned short* data,
-	size_t count)
+	const void* data,
+	size_t size)
 {
-  unsigned short* dest = context->buffer;
-  if (context == active_context) {
-    dest = (unsigned short*)VIDEO_MEMORY_BEGIN;
+  if (offset < VIDEO_MEMORY_SIZE &&
+      offset + size <= VIDEO_MEMORY_SIZE) {
+    void* dst = context->buffer;
+    if (context == active_context) {
+      dst = (void*)VIDEO_MEMORY_BEGIN;
+    }
+    memcpy (dst + offset, data, size);
   }
+}
 
-  unsigned short* begin = &dest[offset];
-  unsigned short* end = &dest[offset + count];
-
-  if (end <= (unsigned short*)VIDEO_MEMORY_END) {
-    memcpy (begin, data, count * sizeof (unsigned short));
-  }
-  else {
-    /* Wrap around. */
-    size_t diff = offset + count - (VIDEO_MEMORY_SIZE / 2);
-    memcpy (begin, data, (count - diff) * sizeof (unsigned short));
-    memcpy (dest, &data[count - diff], diff * sizeof (unsigned short));
+static void
+copy (client_context_t* context,
+      size_t dst_offset,
+      size_t src_offset,
+      size_t size)
+{
+  if (dst_offset < VIDEO_MEMORY_SIZE &&
+      dst_offset + size <= VIDEO_MEMORY_SIZE &&
+      src_offset < VIDEO_MEMORY_SIZE &&
+      src_offset + size <= VIDEO_MEMORY_SIZE) {
+    void* dst = context->buffer;
+    if (context == active_context) {
+      dst = (void*)VIDEO_MEMORY_BEGIN;
+    }
+    memmove (dst + dst_offset, dst + src_offset, size);
   }
 }
 
@@ -416,32 +433,33 @@ typedef struct {
 } focus_arg_t;
 
 void
-focus (const void* param,
-       const focus_arg_t* a,
-       size_t a_size)
+vga_focus (int param,
+	   bd_t bd,
+	   size_t buffer_size,
+	   focus_arg_t* a)
 {
   initialize ();
 
-  if (a != 0 && a_size == sizeof (focus_arg_t)) {
+  if (a != 0 && buffer_size == sizeof (focus_arg_t)) {
     client_context_t* context = find_client_context (a->aid);
     if (context != 0) {
       switch_to_context (context);
     }
   }
 
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, VGA_FOCUS, focus);
+EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, VGA_FOCUS, vga_focus);
 
 void
-op (aid_t aid,
-    bd_t bd,
-    size_t buffer_size,
-    op_t* op)
+vga_op (aid_t aid,
+	bd_t bd,
+	size_t buffer_size,
+	vga_op_t* op)
 {
   initialize ();
 
-  if (bd != -1 && buffer_size == sizeof (op_t) && op != 0) {
+  if (op != 0 && buffer_size >= sizeof (vga_op_t)) {
     client_context_t* context = find_client_context (aid);
     if (context == 0) {
       context = create_client_context (aid);
@@ -451,23 +469,23 @@ op (aid_t aid,
     switch_to_context (context);
 
     switch (op->type) {
-    case ASSIGN_VALUE:
-      if (op->arg.assign_value.count <= 128) {
-  	assign (context, op->arg.assign_value.offset, op->arg.assign_value.data, op->arg.assign_value.count);
+    case VGA_SET_START:
+      set_start (context, op->arg.set_start.offset);
+      break;
+    case VGA_ASSIGN:
+      if (sizeof (vga_op_t) + op->arg.assign.size == buffer_size) {
+  	assign (context, op->arg.assign.offset, op->arg.assign.data, op->arg.assign.size);
       }
       break;
-    case ASSIGN_BUFFER:
-      // TODO
-      break;
-    case COPY:
-      // TODO
+    case VGA_COPY:
+      copy (context, op->arg.copy.dst_offset, op->arg.copy.src_offset, op->arg.copy.size);
       break;
     }
   }
   
   finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, VGA_OP, op);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, VGA_OP, vga_op);
 
 void
 destroyed (aid_t aid,
@@ -489,4 +507,3 @@ destroyed (aid_t aid,
   finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, DESTROYED, destroyed);
-

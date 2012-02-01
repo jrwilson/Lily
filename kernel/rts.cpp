@@ -273,7 +273,17 @@ namespace rts {
     automaton* a = current.action->automaton;
     const paction* action = a->find_action (action_number);
     if (action != 0) {
-      scheduler::schedule (caction (action, parameter));
+      switch (action->type) {
+      case OUTPUT:
+      case INTERNAL:
+	scheduler::schedule (caction (action, parameter));
+	break;
+      case INPUT:
+      case SYSTEM_INPUT:
+	// Can't schedule non-local actions.
+	kassert (0);
+	break;
+      }
     }
 
     switch (current.action->type) {
