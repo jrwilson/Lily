@@ -15,6 +15,7 @@
 #define INPUT LILY_ACTION_INPUT
 #define OUTPUT LILY_ACTION_OUTPUT
 #define INTERNAL LILY_ACTION_INTERNAL
+#define SYSTEM_INPUT LILY_ACTION_SYSTEM_INPUT
 
 #define NO_PARAMETER LILY_ACTION_NO_PARAMETER
 #define PARAMETER LILY_ACTION_PARAMETER
@@ -57,9 +58,11 @@ finish (ano_t action_number,
 	int flags);
 
 aid_t
-create (bd_t buffer,
-	size_t buffer_size,
-	bool retain_privilege);
+create (bd_t text_bd,
+	size_t text_buffer_size,
+	bool retain_privilege,
+	bd_t data_bd,
+	size_t data_buffer_size);
 
 bid_t
 bind (aid_t output_automaton,
@@ -70,7 +73,7 @@ bind (aid_t output_automaton,
       const void* input_parameter);
 
 int
-subscribe (aid_t aid);
+subscribe_destroyed (aid_t aid);
 
 bd_t
 buffer_create (size_t size);

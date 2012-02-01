@@ -3,7 +3,7 @@
 
 #include <lily/types.h>
 #include <lily/action.h>
-#include "kstring.hpp"
+#include "buffer.hpp"
 
 class automaton;
 
@@ -11,6 +11,7 @@ enum action_type_t {
   INPUT = LILY_ACTION_INPUT,
   OUTPUT = LILY_ACTION_OUTPUT,
   INTERNAL = LILY_ACTION_INTERNAL,
+  SYSTEM_INPUT = LILY_ACTION_SYSTEM_INPUT,
 };
 
 enum parameter_mode_t {
@@ -48,16 +49,32 @@ private:
 struct caction {
   const paction* action;
   const void* parameter;
+  buffer* system_input_buffer;
+  size_t system_input_buffer_size;
 
   caction () :
     action (0),
-    parameter (0)
+    parameter (0),
+    system_input_buffer (0),
+    system_input_buffer_size (0)
   { }
 
   caction (const paction* act,
 	   const void* p) :
     action (act),
-    parameter (p)
+    parameter (p),
+    system_input_buffer (0),
+    system_input_buffer_size (0)
+  { }
+
+  caction (const paction* act,
+	   const void* p,
+	   buffer* b,
+	   size_t s) :
+    action (act),
+    parameter (p),
+    system_input_buffer (b),
+    system_input_buffer_size (s)
   { }
   
   inline bool

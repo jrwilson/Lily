@@ -8,12 +8,15 @@ static int count = 0;
 static unsigned short offset = 0;
 
 void
-init (void)
+init (int param,
+      bd_t bd,
+      size_t buffer_size,
+      void* ptr)
 {
   /* Schedule produce. */
-  finish (CONSOLE_OP, 0, -1, 0, 0);
+  finish (CONSOLE_OP, 0, bd, buffer_size, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, INIT, init);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 void
 op (const void* param,

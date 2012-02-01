@@ -311,7 +311,7 @@ create_client_context (aid_t aid)
   context->next = context_list_head;
   context_list_head = context;
 
-  subscribe (aid);
+  subscribe_destroyed (aid);
 
   return context;
 }
@@ -400,13 +400,16 @@ initialize (void)
 }
 
 void
-init (void)
+init (int param,
+      bd_t bd,
+      size_t buffer_size,
+      void* ptr)
 {
   initialize ();
 
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, INIT, init);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 typedef struct {
   aid_t aid;
@@ -467,7 +470,10 @@ op (aid_t aid,
 EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, VGA_OP, op);
 
 void
-destroyed (aid_t aid)
+destroyed (aid_t aid,
+	   bd_t bd,
+	   size_t buffer_size,
+	   void* p)
 {
   initialize ();
 
@@ -480,7 +486,7 @@ destroyed (aid_t aid)
     destroy_client_context (temp);
   }
 
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, DESTROYED, destroyed);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, DESTROYED, destroyed);
 

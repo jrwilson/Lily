@@ -1,9 +1,9 @@
 #include <lily/syscall.h>
 
 	.section .text
-	.global sbrk
-sbrk:
-	mov $LILY_SYSCALL_SBRK, %eax
+	.global adjust_break
+adjust_break:
+	mov $LILY_SYSCALL_ADJUST_BREAK, %eax
 	int $0x80
 	ret
 	

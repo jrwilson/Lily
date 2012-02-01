@@ -50,9 +50,11 @@ struct binding_count_args {
 
 struct create_args {
   uint32_t eip;
-  bd_t buffer;
-  size_t buffer_size;
+  bd_t text_bd;
+  size_t text_buffer_size;
   bool retain_privilege;
+  bd_t data_bd;
+  size_t data_buffer_size;
 };
 
 struct bind_args {
@@ -65,12 +67,12 @@ struct bind_args {
   const void* input_parameter;
 };
 
-struct subscribe_args {
+struct subscribe_destroyed_args {
   uint32_t eip;
   aid_t aid;
 };
 
-struct sbrk_args {
+struct adjust_break_args {
   uint32_t eip;
   size_t size;
 };
@@ -144,7 +146,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<aid_t, int> r = rts::create (a, ptr->buffer, ptr->buffer_size, ptr->retain_privilege);
+      pair<aid_t, int> r = rts::create (a, ptr->text_bd, ptr->text_buffer_size, ptr->retain_privilege, ptr->data_bd, ptr->data_buffer_size);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -180,30 +182,30 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_SUBSCRIBE:
+  case LILY_SYSCALL_SUBSCRIBE_DESTROYED:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      subscribe_args* ptr = reinterpret_cast<subscribe_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (subscribe_args))) {
+      subscribe_destroyed_args* ptr = reinterpret_cast<subscribe_destroyed_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (subscribe_destroyed_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<bid_t, int> r = rts::subscribe (a, ptr->aid);
+      pair<bid_t, int> r = rts::subscribe_destroyed (a, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
 
     }
     break;
-  case LILY_SYSCALL_SBRK:
+  case LILY_SYSCALL_ADJUST_BREAK:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      sbrk_args* ptr = reinterpret_cast<sbrk_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (sbrk_args))) {
+      adjust_break_args* ptr = reinterpret_cast<adjust_break_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (adjust_break_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<void*, int> r = a->sbrk (ptr->size);
+      pair<void*, int> r = a->adjust_break (ptr->size);
       regs.eax = reinterpret_cast<uint32_t> (r.first);
       regs.ecx = r.second;
       return;

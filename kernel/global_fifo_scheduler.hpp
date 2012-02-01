@@ -115,9 +115,29 @@ private:
     load (const caction& ad)
     {
       action_ = ad;
-      if (action_.action->type == OUTPUT) {
+      switch (action_.action->type) {
+      case INPUT:
+	// Do nothing.
+	break;
+      case OUTPUT:
 	// Lookup the input actions.
 	input_actions_ = action_.action->automaton->get_bound_inputs (action_);
+	break;
+      case INTERNAL:
+	// Do nothing.
+	break;
+      case SYSTEM_INPUT:
+	// Load the buffer.
+	output_buffer_ = action_.system_input_buffer;
+	buffer_size_ = action_.system_input_buffer_size;
+	// Destroy it when finished.
+	if (output_buffer_ != 0) {
+	  flags_ = LILY_SYSCALL_FINISH_DESTROY;
+	}
+	else {
+	  flags_ = 0;
+	}
+	break;
       }
     }
 
@@ -137,6 +157,8 @@ private:
 	    /* Execute.  (This does not return). */
 	    execute ();
 	  }
+	  // Fall through.
+	case SYSTEM_INPUT:
 	  // Finished executing input actions.
 	  if (flags_ == LILY_SYSCALL_FINISH_DESTROY) {
 	    // The buffer must exist.
@@ -183,19 +205,22 @@ private:
     inline void
     execute ()
     {
-      // switch (action_.action->type) {
-      // case INPUT:
-      // 	kout << "?";
-      // 	break;
-      // case OUTPUT:
-      // 	kout << "!";
-      // 	break;
-      // case INTERNAL:
-      // 	kout << "#";
-      // 	break;
-      // }
+      switch (action_.action->type) {
+      case INPUT:
+      	kout << "?";
+      	break;
+      case OUTPUT:
+      	kout << "!";
+      	break;
+      case INTERNAL:
+      	kout << "#";
+      	break;
+      case SYSTEM_INPUT:
+	kout << "*";
+	break;
+      }
 
-      // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+      kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
 
       // Switch page directories.
       vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());
@@ -208,6 +233,7 @@ private:
 
       switch (action_.action->type) {
       case INPUT:
+      case SYSTEM_INPUT:
 	{
 	  bd_t input_buffer;
 	  const void* buf;

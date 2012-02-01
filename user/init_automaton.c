@@ -154,10 +154,11 @@ parse_cpio_header (const char* begin,
 }
 
 void
-init (size_t buffer_size)
+init (int param,
+      bd_t bd,
+      size_t buffer_size,
+      const char* begin)
 {
-  // Initial data is in buffer 0 by convention.
-  const char* begin = buffer_map (0);
   const char* end = begin + buffer_size;
 
   parse_cpio_header (begin, end);
@@ -166,7 +167,7 @@ init (size_t buffer_size)
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "console") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      console = create (f->buffer, f->buffer_size, true);
+      console = create (f->buffer, f->buffer_size, true, -1, 0);
     }
   }
 
@@ -174,17 +175,15 @@ init (size_t buffer_size)
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "vga") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      vga = create (f->buffer, f->buffer_size, true);
+      vga = create (f->buffer, f->buffer_size, true, -1, 0);
     }
   }
 
   bind (console, CONSOLE_OP, 0, vga, VGA_OP, 0);
 
-  /* TODO:  Destroy the buffer containing the initial data. */
-
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, PARAMETER, INIT, init);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 // static void
 // schedule ();

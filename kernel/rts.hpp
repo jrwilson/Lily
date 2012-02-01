@@ -37,9 +37,11 @@ namespace rts {
   
   pair<aid_t, int>
   create (automaton* a,
-	  bd_t bd,
-	  size_t buffer_size,
-	  bool retain_privilege);
+	  bd_t text_bd,
+	  size_t text_buffer_size,
+	  bool retain_privilege,
+	  bd_t data_bd,
+	  size_t data_buffer_size);
 
   pair<bid_t, int>
   bind (automaton* a,
@@ -57,8 +59,8 @@ namespace rts {
   destroy (void);
 
   pair<int, int>
-  subscribe (automaton* a,
-	     aid_t aid);
+  subscribe_destroyed (automaton* a,
+		       aid_t aid);
 
   pair<int, int>
   map (automaton* a,

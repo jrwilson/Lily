@@ -95,14 +95,27 @@ namespace rts {
 
     // Add the actions to the automaton.
     for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
-      if ((*pos)->action_number == LILY_ACTION_NO_ACTION) {
-    	// BUG:  The action number LILY_ACTIN_NO_ACTION is reserved.
+      switch ((*pos)->action_number) {
+      case LILY_ACTION_NO_ACTION:
+    	// BUG:  The action number LILY_ACTION_NO_ACTION is reserved.
    	kassert (0);
+	break;
+      case LILY_ACTION_INIT:
+      case LILY_ACTION_LOOSED:
+      case LILY_ACTION_DESTROYED:
+	if ((*pos)->type != LILY_ACTION_SYSTEM_INPUT) {
+	  // BUG:  These must have the correct type.
+	  kassert (0);
+	}
+	// Fall through.
+      default:
+	if (!a->add_action (*pos)) {
+	  // BUG:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
+	  kassert (0);
+	}
+	break;
       }
-      else if (!a->add_action (*pos)) {
-    	// BUG:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
-    	kassert (0);
-      }
+
     }
 
     // Create the memory map for the automaton.
@@ -201,10 +214,7 @@ namespace rts {
     automaton* child = create_automaton (&text, automaton_size, true);
 
     // Create a buffer to contain the initial data.
-    pair<bd_t, int> r = child->buffer_create (0);
-    bd_t data_bid = r.first;
-    kassert (data_bid == 0);
-    buffer* data_buffer = child->lookup_buffer (data_bid);
+    buffer* data_buffer = new buffer (0);
     kassert (data_buffer != 0);
     const size_t data_frame_end = data_frame_begin + align_up (data_size, PAGE_SIZE) / PAGE_SIZE;
     for (frame_t frame = data_frame_begin; frame != data_frame_end; ++frame) {
@@ -221,18 +231,8 @@ namespace rts {
       kout << "The initial automaton does not contain an init action.  Halting." << endl;
       halt ();
     }
-    
-    if (action->type != INTERNAL) {
-      kout << "The init action of the initial automaton is not an internal action.  Halting." << endl;
-      halt ();
-    }
 
-    if (action->parameter_mode != PARAMETER) {
-      kout << "The init action of the initial automaton must take a parameter.  Halting." << endl;
-      halt ();
-    }
-
-    scheduler::schedule (caction (action, reinterpret_cast<const void*> (data_size)));
+    scheduler::schedule (caction (action, 0, data_buffer, data_size));
 
     // Start the scheduler.  Doesn't return.
     scheduler::finish (-1, 0, LILY_SYSCALL_FINISH_NO);
@@ -279,6 +279,7 @@ namespace rts {
     switch (current.action->type) {
     case INPUT:
     case INTERNAL:
+    case SYSTEM_INPUT:
       // They wish to destroy a buffer.
       if (flags == LILY_SYSCALL_FINISH_DESTROY) {
 	// We don't care if this fails.  It just means the buffer didn't exist.
@@ -314,25 +315,27 @@ namespace rts {
 
   pair<aid_t, int>
   create (automaton* a,
-	  bd_t bd,
-	  size_t buffer_size,
-	  bool retain_privilege)
+	  bd_t text_bd,
+	  size_t text_buffer_size,
+	  bool retain_privilege,
+	  bd_t data_bd,
+	  size_t data_buffer_size)
   {
-    // Find the buffer.
-    buffer* b = a->lookup_buffer (bd);
+    // Find the text buffer.
+    buffer* text_buffer = a->lookup_buffer (text_bd);
 
-    if (b == 0) {
+    if (text_buffer == 0) {
       // Buffer does not exist.
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    if (!(buffer_size <= b->capacity ())) {
+    if (!(text_buffer_size <= text_buffer->capacity ())) {
       // They claim that the buffer is bigger than it really is.
       return make_pair (-1, LILY_SYSCALL_EBDSIZE);
     }
 
     // Synchronize the buffer so the frames listed in the buffer are correct.
-    b->sync (0, buffer_size);
+    text_buffer->sync (0, text_buffer_size);
 
     // If the buffer is not mapped, there are no problems.
     // If the buffer is mapped, we have three options:
@@ -341,26 +344,40 @@ namespace rts {
     // 3.  Save the location of the buffer and temporatily override it.
     // Option 3 has the least overhead so that's what we'll do.
 
-    logical_address_t const begin = b->begin ();
-    logical_address_t const end = b->end ();
+    logical_address_t const begin = text_buffer->begin ();
+    logical_address_t const end = text_buffer->end ();
 
-    b->override (0, 0);
+    text_buffer->override (0, 0);
 
     // Switch to the kernel page directory.  So we can map the text of the automaton.
     physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
 
     // Create the automaton.
-    const automaton* child = create_automaton (b, buffer_size, retain_privilege && a->privileged ());
+    const automaton* child = create_automaton (text_buffer, text_buffer_size, retain_privilege && a->privileged ());
 
     // Switch back.
     vm::switch_to_directory (old);
 
-    b->override (begin, end);
+    text_buffer->override (begin, end);
+
+    // Find the data buffer.
+    buffer* data_buffer = a->lookup_buffer (data_bd);
+    if (data_buffer != 0) {
+      // Correct the size.
+      data_buffer_size = min (data_buffer_size, data_buffer->capacity ());
+      // Synchronize the buffer so the frames listed in the buffer are correct.
+      data_buffer->sync (0, data_buffer_size);
+    }
 
     // Schedule the init action.
     const paction* action = child->find_action (LILY_ACTION_INIT);
     if (action != 0) {
-      scheduler::schedule (caction (action, 0));
+      if (data_buffer != 0) {
+	scheduler::schedule (caction (action, 0, new buffer (*data_buffer), data_buffer_size));
+      }
+      else {
+	scheduler::schedule (caction (action, 0));
+      }
     }
     
     return make_pair (child->aid (), LILY_SYSCALL_ESUCCESS);
@@ -466,8 +483,8 @@ namespace rts {
   // The automaton corresponding to aid must exist.
   // Not an error if already subscribed.
   pair<int, int>
-  subscribe (automaton* a,
-	     aid_t aid)
+  subscribe_destroyed (automaton* a,
+		       aid_t aid)
   {
     const paction* action = a->find_action (LILY_ACTION_DESTROYED);
     if (action == 0 || action->type != INTERNAL || action->parameter_mode != PARAMETER) {

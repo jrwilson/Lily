@@ -348,7 +348,7 @@ public:
   }
 
   pair<void*, int>
-  sbrk (ptrdiff_t size)
+  adjust_break (ptrdiff_t size)
   {
     kassert (heap_area_ != 0);
 
