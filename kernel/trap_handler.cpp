@@ -36,16 +36,10 @@ trap_handler::install ()
 struct finish_args {
   uint32_t eip;
   ano_t action_number;
-  const void* parameter;
+  int parameter;
   bd_t bd;
   size_t buffer_size;
   int flags;
-};
-
-struct binding_count_args {
-  uint32_t eip;
-  ano_t action_number;
-  const void* parameter;
 };
 
 struct create_args {
@@ -61,10 +55,10 @@ struct bind_args {
   uint32_t eip;
   aid_t output_automaton;
   ano_t output_action;
-  const void* output_parameter;
+  int output_parameter;
   aid_t input_automaton;
   ano_t input_action;
-  const void* input_parameter;
+  int input_parameter;
 };
 
 struct subscribe_destroyed_args {

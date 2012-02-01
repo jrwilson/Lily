@@ -52,7 +52,7 @@ extern int automatonerrno;
 
 void
 finish (ano_t action_number,
-	const void* parameter,
+	int parameter,
 	bd_t buffer,
 	size_t buffer_size,
 	int flags);
@@ -67,10 +67,10 @@ create (bd_t text_bd,
 bid_t
 bind (aid_t output_automaton,
       ano_t output_action,
-      const void* output_parameter,
+      int output_parameter,
       aid_t input_automaton,
       ano_t input_action,
-      const void* input_parameter);
+      int input_parameter);
 
 int
 subscribe_destroyed (aid_t aid);

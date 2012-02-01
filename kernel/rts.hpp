@@ -30,7 +30,7 @@ namespace rts {
   void
   finish (const caction& current,
 	  ano_t action_number,
-	  const void* parameter,
+	  int parameter,
 	  bd_t bd,
 	  size_t buffer_size,
 	  int flags);
@@ -47,10 +47,10 @@ namespace rts {
   bind (automaton* a,
 	aid_t output_automaton,
 	ano_t output_action,
-	const void* output_parameter,
+	int output_parameter,
 	aid_t input_automaton,
 	ano_t input_action,
-	const void* input_parameter);
+	int input_parameter);
 
   void
   loose (void);

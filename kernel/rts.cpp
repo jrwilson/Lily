@@ -232,7 +232,7 @@ namespace rts {
       halt ();
     }
 
-    scheduler::schedule (caction (action, 0, data_buffer, data_size));
+    scheduler::schedule (caction (action, child->aid (), data_buffer, data_size));
 
     // Start the scheduler.  Doesn't return.
     scheduler::finish (-1, 0, LILY_SYSCALL_FINISH_NO);
@@ -265,7 +265,7 @@ namespace rts {
   void
   finish (const caction& current,
 	  ano_t action_number,
-	  const void* parameter,
+	  int parameter,
 	  bd_t bd,
 	  size_t buffer_size,
 	  int flags)
@@ -373,10 +373,10 @@ namespace rts {
     const paction* action = child->find_action (LILY_ACTION_INIT);
     if (action != 0) {
       if (data_buffer != 0) {
-	scheduler::schedule (caction (action, 0, new buffer (*data_buffer), data_buffer_size));
+	scheduler::schedule (caction (action, child->aid (), new buffer (*data_buffer), data_buffer_size));
       }
       else {
-	scheduler::schedule (caction (action, 0));
+	scheduler::schedule (caction (action, child->aid ()));
       }
     }
     
@@ -387,10 +387,10 @@ namespace rts {
   bind (automaton* a,
 	aid_t output_aid,
 	ano_t output_ano,
-	const void* output_parameter,
+	int output_parameter,
 	aid_t input_aid,
 	ano_t input_ano,
-	const void* input_parameter)
+	int input_parameter)
   {
     aid_map_type::const_iterator output_pos = aid_map_.find (output_aid);
     if (output_pos == aid_map_.end ()) {
@@ -435,7 +435,7 @@ namespace rts {
     case PARAMETER:
       break;
     case AUTO_PARAMETER:
-      output_parameter = reinterpret_cast<const void*> (input_automaton->aid ());
+      output_parameter = input_automaton->aid ();
       break;
     }
 
@@ -446,7 +446,7 @@ namespace rts {
     case PARAMETER:
       break;
     case AUTO_PARAMETER:
-      input_parameter = reinterpret_cast<const void*> (output_automaton->aid ());
+      input_parameter = output_automaton->aid ();
       break;
     }
 

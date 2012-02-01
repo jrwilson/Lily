@@ -48,7 +48,7 @@ private:
 // Complete action.
 struct caction {
   const paction* action;
-  const void* parameter;
+  int parameter;
   buffer* system_input_buffer;
   size_t system_input_buffer_size;
 
@@ -60,7 +60,7 @@ struct caction {
   { }
 
   caction (const paction* act,
-	   const void* p) :
+	   int p) :
     action (act),
     parameter (p),
     system_input_buffer (0),
@@ -68,7 +68,7 @@ struct caction {
   { }
 
   caction (const paction* act,
-	   const void* p,
+	   int p,
 	   buffer* b,
 	   size_t s) :
     action (act),
@@ -89,7 +89,7 @@ struct caction_hash {
   size_t
   operator() (const caction& c) const
   {
-    return reinterpret_cast<uintptr_t> (c.action) ^ reinterpret_cast<uintptr_t> (c.parameter);
+    return reinterpret_cast<uintptr_t> (c.action) ^ c.parameter;
   }
 };
 

@@ -205,22 +205,22 @@ private:
     inline void
     execute ()
     {
-      switch (action_.action->type) {
-      case INPUT:
-      	kout << "?";
-      	break;
-      case OUTPUT:
-      	kout << "!";
-      	break;
-      case INTERNAL:
-      	kout << "#";
-      	break;
-      case SYSTEM_INPUT:
-	kout << "*";
-	break;
-      }
+      // switch (action_.action->type) {
+      // case INPUT:
+      // 	kout << "?";
+      // 	break;
+      // case OUTPUT:
+      // 	kout << "!";
+      // 	break;
+      // case INTERNAL:
+      // 	kout << "#";
+      // 	break;
+      // case SYSTEM_INPUT:
+      // 	kout << "*";
+      // 	break;
+      // }
 
-      kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+      // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
 
       // Switch page directories.
       vm::switch_to_directory (action_.action->automaton->page_directory_physical_address ());
@@ -273,7 +273,7 @@ private:
       }
       
       // Push the parameter.
-      *--stack_pointer = reinterpret_cast<uint32_t> (action_.parameter);
+      *--stack_pointer = action_.parameter;
 
       // Push a bogus instruction pointer so we can use the cdecl calling convention.
       *--stack_pointer = 0;
