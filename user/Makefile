@@ -22,7 +22,7 @@ consumer : consumer.o
 	$(CC) -o $@ $^ -lio -ldymem -lstring
 
 console : console.o
-	$(CC) -o $@ $^ -ldymem -lstring
+	$(CC) -o $@ $^ -ldymem -lstring -lfifosched
 
 vga : vga.o
 	$(CC) -o $@ $^ -lio -ldymem -lstring

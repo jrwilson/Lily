@@ -72,7 +72,7 @@ producer_console_op (const void* param,
       offset += sizeof (unsigned short) * 12;
       op->arg.assign.size = sizeof (unsigned short) * 12;
       unsigned short* data = (unsigned short*)&op->arg.assign.data[0];
-      data[0] = 0x3400 | 'J';
+      data[0] = 0x3400 | 'H';
       data[1] = 0x3400 | 'e';
       data[2] = 0x3400 | 'l';
       data[3] = 0x3400 | 'l';
