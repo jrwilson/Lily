@@ -4,11 +4,13 @@
 #include <dymem.h>
 #include <string.h>
 
-/* TODO:  We don't mess with fonts or attributes.  We also assume a 16-color 80x25 display starting at 0xB8000. */
-
-#define VIDEO_MEMORY_BEGIN 0xB8000
+#define VIDEO_MEMORY_BEGIN 0xA0000
 #define VIDEO_MEMORY_END   0xC0000
 #define VIDEO_MEMORY_SIZE (VIDEO_MEMORY_END - VIDEO_MEMORY_BEGIN)
+
+#define TEXT_MEMORY_BEGIN 0xB8000
+#define TEXT_MEMORY_END   0xC0000
+#define TEXT_MEMORY_SIZE  (TEXT_MEMORY_END - TEXT_MEMORY_BEGIN)
 
 /* General or external registers. */
 #define MISCELLANEOUS_OUTPUT_PORT_READ 0x3CC
@@ -97,9 +99,29 @@ typedef struct {
   unsigned char start_horizontal_retrace;
   unsigned char end_horizontal_retrace;
   unsigned char vertical_total;
-  unsigned char overflow;
+  union {
+    unsigned char overflow_byte;
+    struct {
+      unsigned char vertical_total_8 : 1;
+      unsigned char vertical_display_enable_8 : 1;
+      unsigned char vertical_retrace_start_8 : 1;
+      unsigned char start_vertical_blanking_8 : 1;
+      unsigned char line_compare_8 : 1;
+      unsigned char vertical_total_9 : 1;
+      unsigned char vertical_display_enable_end_9 : 1;
+      unsigned char vertical_retrace_start_9 : 1;
+    } overflow;
+  } overflow;
   unsigned char preset_row_scan;
-  unsigned char max_scan_line;
+  union {
+    unsigned char max_scan_line_byte;
+    struct {
+      unsigned char max_scan_line : 5;
+      unsigned char vbs : 1;
+      unsigned char line_compare_9 : 1;
+      unsigned char two_to_four : 1;
+    } max_scan_line;
+  } max_scan_line;
   unsigned char cursor_start;
   unsigned char cursor_end;
   unsigned char start_address_high;
@@ -200,11 +222,11 @@ read_vga_registers (vga_registers_t* r)
   outb (CRT_ADDRESS_PORT, VERTICAL_TOTAL_REGISTER);
   r->vertical_total = inb (CRT_DATA_PORT);
   outb (CRT_ADDRESS_PORT, OVERFLOW_REGISTER);
-  r->overflow = inb (CRT_DATA_PORT);
+  r->overflow.overflow_byte = inb (CRT_DATA_PORT);
   outb (CRT_ADDRESS_PORT, PRESET_ROW_SCAN_REGISTER);
   r->preset_row_scan = inb (CRT_DATA_PORT);
   outb (CRT_ADDRESS_PORT, MAX_SCAN_LINE_REGISTER);
-  r->max_scan_line = inb (CRT_DATA_PORT);
+  r->max_scan_line.max_scan_line_byte = inb (CRT_DATA_PORT);
   outb (CRT_ADDRESS_PORT, CURSOR_START_REGISTER);
   r->cursor_start = inb (CRT_DATA_PORT);
   outb (CRT_ADDRESS_PORT, CURSOR_END_REGISTER);
@@ -256,6 +278,94 @@ read_vga_registers (vga_registers_t* r)
   r->bitmask = inb (GRAPHICS_DATA_PORT);
 }
 
+static void
+write_vga_registers (const vga_registers_t* r)
+{
+  outb (MISCELLANEOUS_OUTPUT_PORT_WRITE, r->miscellaneous_output);
+  outb (FEATURE_CONTROL_PORT_WRITE, r->feature_control);
+
+  outb (SEQUENCER_ADDRESS_PORT, RESET_REGISTER);
+  outb (SEQUENCER_DATA_PORT, r->reset);
+  outb (SEQUENCER_ADDRESS_PORT, CLOCKING_MODE_REGISTER);
+  outb (SEQUENCER_DATA_PORT, r->clocking_mode);
+  outb (SEQUENCER_ADDRESS_PORT, MAP_MASK_REGISTER);
+  outb (SEQUENCER_DATA_PORT, r->map_mask);
+  outb (SEQUENCER_ADDRESS_PORT, CHARACTER_MAP_SELECT_REGISTER);
+  outb (SEQUENCER_DATA_PORT, r->character_map_select);
+  outb (SEQUENCER_ADDRESS_PORT, MEMORY_MODE_REGISTER);
+  outb (SEQUENCER_DATA_PORT, r->memory_mode);
+
+  outb (CRT_ADDRESS_PORT, HORIZONTAL_TOTAL_REGISTER);
+  outb (CRT_DATA_PORT, r->horizontal_total);
+  outb (CRT_ADDRESS_PORT, HORIZONTAL_DISPLAY_END_REGISTER);
+  outb (CRT_DATA_PORT, r->horizontal_display_end);
+  outb (CRT_ADDRESS_PORT, START_HORIZONTAL_BLANK_REGISTER);
+  outb (CRT_DATA_PORT, r->start_horizontal_blank);
+  outb (CRT_ADDRESS_PORT, END_HORIZONTAL_BLANK_REGISTER);
+  outb (CRT_DATA_PORT, r->end_horizontal_blank);
+  outb (CRT_ADDRESS_PORT, START_HORIZONTAL_RETRACE_REGISTER);
+  outb (CRT_DATA_PORT, r->start_horizontal_retrace);
+  outb (CRT_ADDRESS_PORT, END_HORIZONTAL_RETRACE_REGISTER);
+  outb (CRT_DATA_PORT, r->end_horizontal_retrace);
+  outb (CRT_ADDRESS_PORT, VERTICAL_TOTAL_REGISTER);
+  outb (CRT_DATA_PORT, r->vertical_total);
+  outb (CRT_ADDRESS_PORT, OVERFLOW_REGISTER);
+  outb (CRT_DATA_PORT, r->overflow.overflow_byte);
+  outb (CRT_ADDRESS_PORT, PRESET_ROW_SCAN_REGISTER);
+  outb (CRT_DATA_PORT, r->preset_row_scan);
+  outb (CRT_ADDRESS_PORT, MAX_SCAN_LINE_REGISTER);
+  outb (CRT_DATA_PORT, r->max_scan_line.max_scan_line_byte);
+  outb (CRT_ADDRESS_PORT, CURSOR_START_REGISTER);
+  outb (CRT_DATA_PORT, r->cursor_start);
+  outb (CRT_ADDRESS_PORT, CURSOR_END_REGISTER);
+  outb (CRT_DATA_PORT, r->cursor_end);
+  outb (CRT_ADDRESS_PORT, START_ADDRESS_HIGH_REGISTER);
+  outb (CRT_DATA_PORT, r->start_address_high);
+  outb (CRT_ADDRESS_PORT, START_ADDRESS_LOW_REGISTER);
+  outb (CRT_DATA_PORT, r->start_address_low);
+  outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_HIGH_REGISTER);
+  outb (CRT_DATA_PORT, r->cursor_location_high);
+  outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_LOW_REGISTER);
+  outb (CRT_DATA_PORT, r->cursor_location_low);
+  outb (CRT_ADDRESS_PORT, VERTICAL_RETRACE_START_REGISTER);
+  outb (CRT_DATA_PORT, r->vertical_retrace_start);
+  outb (CRT_ADDRESS_PORT, VERTICAL_RETRACE_LOW_REGISTER);
+  outb (CRT_DATA_PORT, r->vertical_retrace_low);
+  outb (CRT_ADDRESS_PORT, VERTICAL_DISPLAY_END_REGISTER);
+  outb (CRT_DATA_PORT, r->vertical_display_end);
+  outb (CRT_ADDRESS_PORT, OFFSET_REGISTER);
+  outb (CRT_DATA_PORT, r->offset);
+  outb (CRT_ADDRESS_PORT, UNDERLINE_LOCATION_REGISTER);
+  outb (CRT_DATA_PORT, r->underline_location);
+  outb (CRT_ADDRESS_PORT, START_VERTICAL_BLANK_REGISTER);
+  outb (CRT_DATA_PORT, r->start_vertical_blank);
+  outb (CRT_ADDRESS_PORT, END_VERTICAL_BLANK_REGISTER);
+  outb (CRT_DATA_PORT, r->end_vertical_blank);
+  outb (CRT_ADDRESS_PORT, MODE_CONTROL_REGISTER);
+  outb (CRT_DATA_PORT, r->mode_control);
+  outb (CRT_ADDRESS_PORT, LINE_COMPARE_REGISTER);
+  outb (CRT_DATA_PORT, r->line_compare);
+
+  outb (GRAPHICS_ADDRESS_PORT, SET_RESET_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->set_reset);
+  outb (GRAPHICS_ADDRESS_PORT, ENABLE_SET_RESET_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->enable_set_reset);
+  outb (GRAPHICS_ADDRESS_PORT, COLOR_COMPARE_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->color_compare);
+  outb (GRAPHICS_ADDRESS_PORT, DATA_ROTATE_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->data_rotate);
+  outb (GRAPHICS_ADDRESS_PORT, READ_MAP_SELECT_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->read_map_select);
+  outb (GRAPHICS_ADDRESS_PORT, MODE_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->mode);
+  outb (GRAPHICS_ADDRESS_PORT, MISCELLANEOUS_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->miscellaneous);
+  outb (GRAPHICS_ADDRESS_PORT, COLOR_DONT_CARE_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->color_dont_care);
+  outb (GRAPHICS_ADDRESS_PORT, BITMASK_REGISTER);
+  outb (GRAPHICS_DATA_PORT, r->bitmask);
+}
+
 void
 copy_vga_registers (vga_registers_t* dst,
 		    const vga_registers_t* src)
@@ -290,6 +400,25 @@ set_start_address (vga_registers_t* r,
     outb (CRT_DATA_PORT, r->start_address_low);
   }
 }
+
+/* static void */
+/* set_line_compare (vga_registers_t* r, */
+/* 		  unsigned short line) */
+/* { */
+/*   r->line_compare = line & (0xFF); */
+/*   r->overflow.overflow.line_compare_8 = (line >> 8) & 1; */
+/*   r->max_scan_line.max_scan_line.line_compare_9 = (line >> 9) & 1; */
+  
+/*   if (active_context != 0 && r == &active_context->registers) { */
+/*     /\* Write through. *\/ */
+/*     outb (CRT_ADDRESS_PORT, LINE_COMPARE_REGISTER); */
+/*     outb (CRT_DATA_PORT, r->line_compare); */
+/*     outb (CRT_ADDRESS_PORT, OVERFLOW_REGISTER); */
+/*     outb (CRT_DATA_PORT, r->overflow.overflow_byte); */
+/*     outb (CRT_ADDRESS_PORT, MAX_SCAN_LINE_REGISTER); */
+/*     outb (CRT_DATA_PORT, r->max_scan_line.max_scan_line_byte); */
+/*   } */
+/* } */
 
 static client_context_t*
 find_client_context (aid_t aid)
@@ -331,11 +460,15 @@ switch_to_context (client_context_t* context)
 {
   if (context != active_context) {
     if (active_context != 0) {
-      /* Save the existing context. */
+      /* Save the video memory. */
       memcpy (active_context->buffer, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE);
+      /* The registers are already saved. */
     }
 
-    /* Restore the given context. */
+    /* Restore the registers. */
+    write_vga_registers (&context->registers);
+
+    /* Restore the video memory. */
     memcpy ((void*)VIDEO_MEMORY_BEGIN, context->buffer, VIDEO_MEMORY_SIZE);
 
     active_context = context;
@@ -343,45 +476,18 @@ switch_to_context (client_context_t* context)
 }
 
 static void
-set_start (client_context_t* context,
-	   size_t offset)
-{
-  if (offset < VIDEO_MEMORY_SIZE) {
-    set_start_address (&context->registers, VIDEO_MEMORY_BEGIN + offset);
-  }
-}
-
-static void
 assign (client_context_t* context,
-	size_t offset,
+	size_t address,
 	const void* data,
 	size_t size)
 {
-  if (offset < VIDEO_MEMORY_SIZE &&
-      offset + size <= VIDEO_MEMORY_SIZE) {
-    void* dst = context->buffer;
+  if (address < TEXT_MEMORY_SIZE &&
+      address + size <= TEXT_MEMORY_SIZE) {
+    unsigned char* dst = context->buffer;
     if (context == active_context) {
-      dst = (void*)VIDEO_MEMORY_BEGIN;
+      dst = (unsigned char*)TEXT_MEMORY_BEGIN;
     }
-    memcpy (dst + offset, data, size);
-  }
-}
-
-static void
-copy (client_context_t* context,
-      size_t dst_offset,
-      size_t src_offset,
-      size_t size)
-{
-  if (dst_offset < VIDEO_MEMORY_SIZE &&
-      dst_offset + size <= VIDEO_MEMORY_SIZE &&
-      src_offset < VIDEO_MEMORY_SIZE &&
-      src_offset + size <= VIDEO_MEMORY_SIZE) {
-    void* dst = context->buffer;
-    if (context == active_context) {
-      dst = (void*)VIDEO_MEMORY_BEGIN;
-    }
-    memmove (dst + dst_offset, dst + src_offset, size);
+    memcpy (dst + address, data, size);
   }
 }
 
@@ -469,16 +575,13 @@ vga_op (aid_t aid,
     switch_to_context (context);
 
     switch (op->type) {
-    case VGA_SET_START:
-      set_start (context, op->arg.set_start.offset);
+    case VGA_SET_START_ADDRESS:
+      set_start_address (&context->registers, op->arg.set_start_address.address);
       break;
     case VGA_ASSIGN:
       if (sizeof (vga_op_t) + op->arg.assign.size == buffer_size) {
-  	assign (context, op->arg.assign.offset, op->arg.assign.data, op->arg.assign.size);
+    	assign (context, op->arg.assign.address, op->arg.assign.data, op->arg.assign.size);
       }
-      break;
-    case VGA_COPY:
-      copy (context, op->arg.copy.dst_offset, op->arg.copy.src_offset, op->arg.copy.size);
       break;
     }
   }

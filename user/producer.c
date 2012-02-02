@@ -40,9 +40,10 @@
 /* } */
 /* EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, PRODUCER_PRINT_SENSE, print_sense); */
 
-#define LIMIT 4
+#define LIMIT 204
 static int count = 0;
-static unsigned short offset = 0;
+
+#define WIDTH 80
 
 void
 init (int param,
@@ -63,38 +64,24 @@ producer_console_op (const void* param,
 
     bd_t bd;
     size_t size;
-    if (count % 2 != 0) {
-      size = sizeof (console_op_t) + sizeof (unsigned short) * 12;
-      bd = buffer_create (size);
-      console_op_t* op = buffer_map (bd);
-      op->type = CONSOLE_ASSIGN;
-      op->arg.assign.offset = offset;
-      offset += sizeof (unsigned short) * 12;
-      op->arg.assign.size = sizeof (unsigned short) * 12;
-      unsigned short* data = (unsigned short*)&op->arg.assign.data[0];
-      data[0] = 0x3400 | 'H';
-      data[1] = 0x3400 | 'e';
-      data[2] = 0x3400 | 'l';
-      data[3] = 0x3400 | 'l';
-      data[4] = 0x3400 | 'o';
-      data[5] = 0x3400 | ' ';
-      data[6] = 0x3400 | 'w';
-      data[7] = 0x3400 | 'o';
-      data[8] = 0x3400 | 'r';
-      data[9] = 0x3400 | 'l';
-      data[10] = 0x3400 | 'd';
-      data[11] = 0x3400 | '!';
-    }
-    else {
-      size = sizeof (console_op_t);
-      bd = buffer_create (size);
-      console_op_t* op = buffer_map (bd);
-      op->type = CONSOLE_COPY;
-      op->arg.copy.dst_offset = offset;
-      offset += sizeof (unsigned short) * 12;
-      op->arg.copy.src_offset = 0;
-      op->arg.copy.size = sizeof (unsigned short) * 12;
-    }
+    size = sizeof (console_op_t) + 2 * WIDTH;
+    bd = buffer_create (size);
+    console_op_t* op = buffer_map (bd);
+    op->type = CONSOLE_APPEND;
+    op->arg.append.line_count = 1;
+    unsigned short* data = (unsigned short*)&op->arg.append.data[0];
+    data[0] = 0x3400 | 'H';
+    data[1] = 0x3400 | 'e';
+    data[2] = 0x3400 | 'l';
+    data[3] = 0x3400 | 'l';
+    data[4] = 0x3400 | 'o';
+    data[5] = 0x3400 | ' ';
+    data[6] = 0x3400 | 'w';
+    data[7] = 0x3400 | 'o';
+    data[8] = 0x3400 | 'r';
+    data[9] = 0x3400 | 'l';
+    data[10] = 0x3400 | 'd';
+    data[11] = 0x3400 | '!';
     finish (PRODUCER_CONSOLE_OP, 0, bd, size, FINISH_DESTROY);
   }
   else {

@@ -4,23 +4,20 @@
 #include <stddef.h>
 
 typedef enum {
-  CONSOLE_ASSIGN,
-  CONSOLE_COPY
+  CONSOLE_APPEND,
+  CONSOLE_REPLACE_LAST,
 } console_op_type_t;
 
 typedef struct {
   console_op_type_t type;
   union {
     struct {
-      size_t offset;
-      size_t size;
+      size_t line_count;
       unsigned char data[0];
-    } assign;
+    } append;
     struct {
-      size_t dst_offset;
-      size_t src_offset;
-      size_t size;
-    } copy;
+      unsigned char data[0];
+    } replace_last;
   } arg;
 } console_op_t;
 

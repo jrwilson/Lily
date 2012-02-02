@@ -5,22 +5,34 @@
 #include <dymem.h>
 #include <fifo_scheduler.h>
 
-#define DISPLAY_PAGE_COUNT 8
-#define DISPLAY_PAGE_SIZE 4096
+/* Number of rows. */
+#define HEIGHT 25
 
-typedef struct display_page display_page_t;
+/* Number of columns. */
+#define WIDTH_CHAR 80
+
+/* Number of columns in bytes.  The 2 comes from the fact that each character is two bytes:  one for the character and one for the attributes. */
+#define WIDTH_BYTE (2 * WIDTH_CHAR)
+
+/* Number of bytes in one screen. */
+#define SCREEN_SIZE_BYTE (HEIGHT * WIDTH_BYTE)
+
+/* The VGA has 32,768 bytes of memory.
+   The maximum number of lines 204 = 32,768 / WIDTH_BYTE.
+   The largest address is then 204 * WIDTH_BYTE = 32,640.
+ */
+#define VGA_ADDRESS_LIMIT 32640
+
+/* /\* A screen contains this many characters. *\/ */
+/* #define SCREEN_SIZE_CHAR (HEIGHT * WIDTH_CHAR) */
+/* /\* There is enough memory in the VGA to support this many screens. *\/ */
+/* #define SCREEN_COUNT 8 */
+/* /\* The total number of characters that can be stored in the VGA memory. *\/ */
+/* #define SCREEN_MEMORY_CHAR (SCREEN_COUNT * SCREEN_SIZE_CHAR) */
+
+/* #define SCREEN_MEMORY_BYTE (SCREEN_COUNT * SCREEN_SIZE_BYTE) */
+
 typedef struct client_context client_context_t;
-
-struct display_page {
-  /* Offset in display memory. */
-  size_t offset;
-  /* Client currently using this display page. */
-  client_context_t* client;
-  /* The pages form a list where the front contains the least recently activated page. */
-  display_page_t* next;
-  display_page_t* prev;
-};
-
 struct client_context {
   /* Associated aid. */
   aid_t aid;
@@ -28,8 +40,8 @@ struct client_context {
   bd_t bd;
   /* Same only mapped in. */
   unsigned char* buffer;
-  /* Display page allocated to this client. */
-  display_page_t* display_page;
+  /* The current line.  This is the last line displayed. */
+  size_t line;
   /* Next on the list. */
   client_context_t* next;
 };
@@ -42,64 +54,15 @@ struct vga_op_item {
 };
 
 static bool initialized = false;
-static display_page_t display_page[DISPLAY_PAGE_COUNT];
-static display_page_t* display_page_queue_front = 0;
-static display_page_t* display_page_queue_back = 0;
 static client_context_t* context_list_head = 0;
+static client_context_t* active_client = 0;
 static vga_op_item_t* vga_op_queue_front = 0;
 static vga_op_item_t** vga_op_queue_back = &vga_op_queue_front;
 /* Non-zero to start. */
 static size_t console_vga_op_binding_count = 1;
 
-/* We assume the queue is constant size and non-empty.
-   Thus, the front and back are always valid and never equal. */
-
-static void
-display_page_queue_remove (display_page_t* dp)
-{
-  display_page_t* prev = dp->prev;
-  display_page_t* next = dp->next;
-
-  if (prev != 0) {
-    prev->next = next;
-  }
-
-  if (next != 0) {
-    next->prev = prev;
-  }
-   
-  dp->next = 0;
-  dp->prev = 0;
-}
-
-static void
-display_page_queue_push_front (display_page_t* dp)
-{
-  display_page_queue_front->prev = dp;
-  dp->next = display_page_queue_front;
-  dp->prev = 0;
-  display_page_queue_front = dp;
-}
-
-static display_page_t*
-display_page_queue_pop_front (void)
-{
-  display_page_t* retval = display_page_queue_front;
-  display_page_queue_front = display_page_queue_front->next;
-  display_page_queue_front->prev = 0;
-  retval->next = 0;
-
-  return retval;
-}
-
-static void
-display_page_queue_push_back (display_page_t* dp)
-{
-  display_page_queue_back->next = dp;
-  dp->prev = display_page_queue_back;
-  dp->next = 0;
-  display_page_queue_back = dp;
-}
+/* The address where data will be written to the VGA. */
+static size_t vga_address = SCREEN_SIZE_BYTE;
 
 static bool
 vga_op_queue_empty (void)
@@ -127,7 +90,7 @@ vga_op_queue_pop (void)
 }
 
 static void
-vga_set_start (size_t offset)
+vga_set_start_address (size_t address)
 {
 
   vga_op_item_t* item = malloc (sizeof (vga_op_item_t));
@@ -135,15 +98,14 @@ vga_set_start (size_t offset)
   item->bd = buffer_create (buffer_size);
   item->buffer_size = buffer_size;
   vga_op_t* op = buffer_map (item->bd);
-  op->type = VGA_SET_START;
-  /* The odd/even operation of the VGA in alphanumeric mode requires us to use a start address in the lower half of its memory. */
-  op->arg.set_start.offset = offset / 2;
+  op->type = VGA_SET_START_ADDRESS;
+  op->arg.set_start_address.address = address;
 
   vga_op_queue_push (item);
 }
 
 static void
-vga_assign (size_t offset,
+vga_assign (size_t address,
 	    const void* data,
 	    size_t size)
 {
@@ -153,27 +115,9 @@ vga_assign (size_t offset,
   item->buffer_size = buffer_size;
   vga_op_t* op = buffer_map (item->bd);
   op->type = VGA_ASSIGN;
-  op->arg.assign.offset = offset;
+  op->arg.assign.address = address;
   op->arg.assign.size = size;
   memcpy (&op->arg.assign.data[0], data, size);
-
-  vga_op_queue_push (item);
-}
-
-static void
-vga_copy (size_t dst_offset,
-	  size_t src_offset,
-	  size_t size)
-{
-  vga_op_item_t* item = malloc (sizeof (vga_op_item_t));
-  size_t buffer_size = sizeof (vga_op_t);
-  item->bd = buffer_create (buffer_size);
-  item->buffer_size = buffer_size;
-  vga_op_t* op = buffer_map (item->bd);
-  op->type = VGA_COPY;
-  op->arg.copy.dst_offset = dst_offset;
-  op->arg.copy.src_offset = src_offset;
-  op->arg.copy.size = size;
 
   vga_op_queue_push (item);
 }
@@ -182,27 +126,6 @@ static void
 initialize (void)
 {
   if (!initialized) {
-    display_page_queue_front = &display_page[0];
-
-    display_page[0].offset = 0;
-    display_page[0].client = 0;
-    display_page[0].next = &display_page[1];
-    display_page[0].prev = 0;
-
-    for (size_t page = 1; page != (DISPLAY_PAGE_COUNT - 1); ++page) {
-      display_page[page].offset = page * DISPLAY_PAGE_SIZE;
-      display_page[page].client = 0;
-      display_page[page].next = &display_page[page + 1];
-      display_page[page].prev = &display_page[page - 1];
-    }
-
-    display_page[DISPLAY_PAGE_COUNT - 1].offset = (DISPLAY_PAGE_COUNT - 1) * DISPLAY_PAGE_SIZE;
-    display_page[DISPLAY_PAGE_COUNT - 1].client = 0;
-    display_page[DISPLAY_PAGE_COUNT - 1].next = 0;
-    display_page[DISPLAY_PAGE_COUNT - 1].prev = &display_page[DISPLAY_PAGE_COUNT - 2];
-    
-    display_page_queue_back = &display_page[DISPLAY_PAGE_COUNT - 1];
-
     initialized = true;
   }
 }
@@ -220,9 +143,9 @@ create_client_context (aid_t aid)
 {
   client_context_t* context = malloc (sizeof (client_context_t));
   context->aid = aid;
-  context->bd = buffer_create (DISPLAY_PAGE_SIZE);
+  context->bd = buffer_create (SCREEN_SIZE_BYTE);
   context->buffer = buffer_map (context->bd);
-  context->display_page = 0;
+  context->line = 0;
   context->next = context_list_head;
   context_list_head = context;
 
@@ -234,77 +157,91 @@ create_client_context (aid_t aid)
 static void
 destroy_client_context (client_context_t* context)
 {
-  if (context->display_page != 0) {
-    /* Client is no longer associated with the display page. */
-    context->display_page->client = 0;
-    /* Display page can be used immediately. */
-    display_page_queue_remove (context->display_page);
-    display_page_queue_push_front (context->display_page);
+  if (context == active_client) {
+    /* TODO:  Perhaps we should blank the screen. */
+    active_client = 0;
   }
   buffer_destroy (context->bd);
   free (context);
 }
 
 static void
+send_lines (client_context_t* context,
+	    size_t first_line,
+	    size_t count)
+{
+  if (count != 0) {
+    if (vga_address + count * WIDTH_BYTE > VGA_ADDRESS_LIMIT) {
+      /* Restart. */
+      vga_address = SCREEN_SIZE_BYTE;
+      first_line = (context->line + 1) % HEIGHT;
+      count = HEIGHT;
+    }
+
+    if (first_line + count <= HEIGHT) {
+      /* One step. */
+      vga_assign (vga_address, context->buffer + first_line * WIDTH_BYTE, WIDTH_BYTE * count);
+      vga_address += WIDTH_BYTE * count;
+    }
+    else {
+      /* Two steps. */
+      const size_t count1 = (HEIGHT - first_line);
+      const size_t count2 = count - count1;
+      vga_assign (vga_address, context->buffer + first_line * WIDTH_BYTE, WIDTH_BYTE * count1);
+      vga_address += WIDTH_BYTE * count1;
+      vga_assign (vga_address, context->buffer, WIDTH_BYTE * count2);
+      vga_address += WIDTH_BYTE * count2;
+    }
+    
+    vga_set_start_address ((vga_address - SCREEN_SIZE_BYTE) / 2);
+  }
+}
+
+static void
 switch_to_context (client_context_t* context)
 {
-  if (context->display_page != 0) {
-    /* Cache hit. */
-    vga_set_start (context->display_page->offset);
+  if (context != active_client) {
+    /* Send all of the lines. */
+    send_lines (context, (context->line + 1) % HEIGHT, HEIGHT);
+    active_client = context;
+  }
+}
+
+static void
+append (client_context_t* context,
+	const size_t line_count,
+	const unsigned char* data)
+{
+  if (line_count < HEIGHT) {
+    size_t first_line = (context->line + 1) % HEIGHT;
+    for (size_t count = line_count; count != 0; --count, data += WIDTH_BYTE) {
+      context->line = (context->line + 1) % HEIGHT;
+      memcpy (context->buffer + context->line * WIDTH_BYTE, data, WIDTH_BYTE);
+    }
+
+    if (context == active_client) {
+      send_lines (context, first_line, line_count);
+    }
   }
   else {
-    display_page_t* display_page = display_page_queue_pop_front ();
-    if (display_page->client != 0) {
-      /* The display page is associated with a client.
-	 Tell the client to forget about it. */
-      display_page->client->display_page = 0;
-    }
-
-    /* Associate with the display page. */
-    context->display_page = display_page;
-    display_page->client = context;
-
-    /* Replace. */
-    display_page_queue_push_back (display_page);
-
-    vga_assign (context->display_page->offset, context->buffer, DISPLAY_PAGE_SIZE);
-    vga_set_start (context->display_page->offset);
-  }
-}
-
-static void
-assign (client_context_t* context,
-	size_t offset,
-	const void* data,
-	size_t size)
-{
-  if (offset < DISPLAY_PAGE_SIZE &&
-      offset + size <= DISPLAY_PAGE_SIZE) {
-    memcpy (context->buffer + offset, data, size);
-    if (context->display_page != 0) {
-      /* Write through. */
-      /* TODO:  Maybe we should only write through if writing to the visible page. */
-      vga_assign (context->display_page->offset + offset, data, size);
+    /* Start over with the last HEIGHT lines. */
+    data += (line_count - HEIGHT) * WIDTH_BYTE;
+    memcpy (context->buffer, data, SCREEN_SIZE_BYTE);
+    context->line = HEIGHT - 1;
+    if (context == active_client) {
+      send_lines (context, 0, HEIGHT);
     }
   }
 }
 
 static void
-copy (client_context_t* context,
-      size_t dst_offset,
-      size_t src_offset,
-      size_t size)
+replace_last (client_context_t* context,
+	      const void* data)
 {
-  if (dst_offset < DISPLAY_PAGE_SIZE &&
-      dst_offset + size <= DISPLAY_PAGE_SIZE &&
-      src_offset < DISPLAY_PAGE_SIZE &&
-      src_offset + size <= DISPLAY_PAGE_SIZE) {
-    memmove (context->buffer + dst_offset, context->buffer + src_offset, size);
-    if (context->display_page != 0) {
-      /* Write through. */
-      /* TODO:  Maybe we should only write through if writing to the visible page. */
-      vga_copy (context->display_page->offset + dst_offset, context->display_page->offset + src_offset, size);
-    }
+  memcpy (context->buffer + context->line * WIDTH_BYTE, data, WIDTH_BYTE);
+
+  if (context == active_client) {
+    vga_assign (vga_address - WIDTH_BYTE, data, WIDTH_BYTE);
   }
 }
 
@@ -364,13 +301,15 @@ console_op (aid_t aid,
     switch_to_context (context);
 
     switch (op->type) {
-    case CONSOLE_ASSIGN:
-      if (sizeof (console_op_t) + op->arg.assign.size == buffer_size) {
-    	assign (context, op->arg.assign.offset, op->arg.assign.data, op->arg.assign.size);
+    case CONSOLE_APPEND:
+      if (buffer_size >= sizeof (console_op_t) + op->arg.append.line_count * WIDTH_BYTE) {
+    	append (context, op->arg.append.line_count, op->arg.append.data);
       }
       break;
-    case CONSOLE_COPY:
-      copy (context, op->arg.copy.dst_offset, op->arg.copy.src_offset, op->arg.copy.size);
+    case CONSOLE_REPLACE_LAST:
+      if (buffer_size >= sizeof (console_op_t) + WIDTH_BYTE) {
+    	replace_last (context, op->arg.replace_last.data);
+      }
       break;
     }
   }
