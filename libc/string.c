@@ -53,6 +53,19 @@ memmove (void* dest,
   return dest;
 }
 
+void*
+memset (void* s,
+	int c,
+	size_t n)
+{
+  
+  unsigned char* p = s;
+  while (n-- > 0) {
+    *p++ = c;
+  }
+  return s;
+}
+
 int
 strcmp (const char* s1,
 	const char* s2)

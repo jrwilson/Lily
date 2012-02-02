@@ -5,6 +5,7 @@
 #include <automaton.h>
 
 #include "producer.h"
+#include "printer.h"
 #include "console.h"
 #include "vga.h"
 
@@ -172,6 +173,14 @@ init (int param,
     }
   }
 
+  aid_t printer = -1;
+  for (file_t* f = head; f != 0; f = f->next) {
+    if (strcmp (f->name, "printer") == 0) {
+      //print ("name = "); print (f->name); put ('\n');
+      printer = create (f->buffer, f->buffer_size, true, -1, 0);
+    }
+  }
+
   aid_t console = -1;
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "console") == 0) {
@@ -188,7 +197,8 @@ init (int param,
     }
   }
 
-  bind (producer, PRODUCER_CONSOLE_OP, 0, console, CONSOLE_OP, 0);
+  bind (producer, PRODUCER_PRINTER_OP, 0, printer, PRINTER_PRINT, 0);
+  bind (printer, PRINTER_CONSOLE_OP, 0, console, CONSOLE_OP, 0);
   bind (console, CONSOLE_VGA_OP, 0, vga, VGA_OP, 0);
 
   finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);

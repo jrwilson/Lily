@@ -23,15 +23,6 @@
  */
 #define VGA_ADDRESS_LIMIT 32640
 
-/* /\* A screen contains this many characters. *\/ */
-/* #define SCREEN_SIZE_CHAR (HEIGHT * WIDTH_CHAR) */
-/* /\* There is enough memory in the VGA to support this many screens. *\/ */
-/* #define SCREEN_COUNT 8 */
-/* /\* The total number of characters that can be stored in the VGA memory. *\/ */
-/* #define SCREEN_MEMORY_CHAR (SCREEN_COUNT * SCREEN_SIZE_CHAR) */
-
-/* #define SCREEN_MEMORY_BYTE (SCREEN_COUNT * SCREEN_SIZE_BYTE) */
-
 typedef struct client_context client_context_t;
 struct client_context {
   /* Associated aid. */
@@ -53,7 +44,6 @@ struct vga_op_item {
   vga_op_item_t* next;
 };
 
-static bool initialized = false;
 static client_context_t* context_list_head = 0;
 static client_context_t* active_client = 0;
 static vga_op_item_t* vga_op_queue_front = 0;
@@ -120,14 +110,6 @@ vga_assign (size_t address,
   memcpy (&op->arg.assign.data[0], data, size);
 
   vga_op_queue_push (item);
-}
-
-static void
-initialize (void)
-{
-  if (!initialized) {
-    initialized = true;
-  }
 }
 
 static client_context_t*
@@ -247,18 +229,6 @@ replace_last (client_context_t* context,
 
 static void schedule (void);
 
-void
-init (int param,
-      bd_t bd,
-      size_t buffer_size,
-      void* ptr)
-{
-  initialize ();
-  schedule ();
-  scheduler_finish (bd, buffer_size, FINISH_DESTROY);
-}
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
-
 typedef struct {
   aid_t aid;
 } focus_arg_t;
@@ -269,8 +239,6 @@ console_focus (int param,
 	   size_t buffer_size,
 	   focus_arg_t* a)
 {
-  initialize ();
-
   if (a != 0 && buffer_size == sizeof (focus_arg_t)) {
     client_context_t* context = find_client_context (a->aid);
     if (context != 0) {
@@ -289,8 +257,6 @@ console_op (aid_t aid,
 	    size_t buffer_size,
 	    console_op_t* op)
 {
-  initialize ();
-
   if (op != 0 && buffer_size >= sizeof (console_op_t)) {
     client_context_t* context = find_client_context (aid);
     if (context == 0) {
@@ -353,8 +319,6 @@ destroyed (aid_t aid,
 	   size_t buffer_size,
 	   void* p)
 {
-  initialize ();
-
   /* Destroy the client context. */
   client_context_t** ptr = &context_list_head;
   for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;;
