@@ -585,7 +585,7 @@ public:
     return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
   
-  bd_t
+  pair<bd_t, int>
   buffer_copy (bd_t other,
 	       size_t offset,
 	       size_t length)
@@ -604,16 +604,16 @@ public:
 	buffer* n = new buffer (*b, offset, length);
 	bd_to_buffer_map_.insert (make_pair (bd, n));
 	
-	return bd;
+	return make_pair (bd, LILY_SYSCALL_ESUCCESS);
       }
       else {
 	// Offset is past end of buffer.
-	return -1;
+	return make_pair (-1, LILY_SYSCALL_EINVAL);
       }
     }
     else {
       // Buffer does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBADBD);
     }
   }
 
@@ -653,7 +653,7 @@ public:
     }
   }
 
-  size_t
+  pair<size_t, int>
   buffer_append (bd_t dst,
 		 bd_t src,
 		 size_t offset,
@@ -671,21 +671,21 @@ public:
       if (offset + length <= src->capacity ()) {
 	if (dst->begin () == 0) {
 	  // Append.
-	  return dst->append (*src, offset, length);
+	  return make_pair (dst->append (*src, offset, length), LILY_SYSCALL_ESUCCESS);
 	}
 	else {
 	  // The destination is mapped.
-	  return -1;
+	  return make_pair (-1, LILY_SYSCALL_EMAPPED);
 	}
       }
       else {
 	// Offset is past end of source.
-	return -1;
+	return make_pair (-1, LILY_SYSCALL_EINVAL);
       }
     }
     else {
       // One of the buffers does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBADBD);
     }
   }
 

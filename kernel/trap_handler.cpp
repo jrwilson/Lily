@@ -74,6 +74,21 @@ struct buffer_create_args {
   size_t size;
 };
 
+struct buffer_copy_args {
+  uint32_t eip;
+  aid_t src;
+  size_t offset;
+  size_t length;
+};
+
+struct buffer_append_args {
+  uint32_t eip;
+  aid_t dst;
+  aid_t src;
+  size_t offset;
+  size_t length;
+};
+
 struct buffer_map_args {
   uint32_t eip;
   bd_t buffer;
@@ -219,9 +234,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_COPY:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_copy (regs.ebx, regs.ecx, regs.edx);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_copy_args* ptr = reinterpret_cast<buffer_copy_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_copy_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<bd_t, int> r = a->buffer_copy (ptr->src, ptr->offset, ptr->length);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -235,9 +256,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_APPEND:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_append (regs.ebx, regs.ecx, regs.edx, regs.esi);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_append_args* ptr = reinterpret_cast<buffer_append_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_append_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<bd_t, int> r = a->buffer_append (ptr->dst, ptr->src, ptr->offset, ptr->length);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

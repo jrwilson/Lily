@@ -245,10 +245,10 @@ private:
 	    buf = 0;
 	  }
 	  
-	  // Push the address.
-	  *--stack_pointer = reinterpret_cast<uint32_t> (buf);
 	  // Push the buffer capacity.
 	  *--stack_pointer = buffer_capacity;
+	  // Push the address.
+	  *--stack_pointer = reinterpret_cast<uint32_t> (buf);
 	  // Push the buffer.
 	  *--stack_pointer = input_buffer;	
 	}

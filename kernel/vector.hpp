@@ -215,6 +215,7 @@ public:
     for (; begin != end; ++begin, ++pos) {
       Allocator::construct (pos, *begin);
     }
+    end_ += count;
   }
 
   iterator

@@ -40,15 +40,12 @@ buffer_create:
 	mov %ecx, automatonerrno
 	ret
 
-/* inline bid_t */
-/* buffer_copy (bid_t b, */
-/* 	     size_t offset, */
-/* 	     size_t length) */
-/* { */
-/*   bid_t bid; */
-/*   asm ("int $0x81\n" : "=a"(bid) : "0"(BUFFER_COPY), "b"(b), "c"(offset), "d"(length) :); */
-/*   return bid; */
-/* } */
+	.global buffer_copy
+buffer_copy:
+	mov $LILY_SYSCALL_BUFFER_COPY, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
 
 /* inline size_t */
 /* buffer_grow (bid_t bid, */
@@ -59,16 +56,12 @@ buffer_create:
 /*   return off; */
 /* } */
 
-/* inline size_t */
-/* buffer_append (bid_t dest, */
-/* 	       bid_t src, */
-/* 	       size_t offset, */
-/* 	       size_t length) */
-/* { */
-/*   size_t off; */
-/*   asm ("int $0x81\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(dest), "c"(src), "d"(offset), "S"(length) :); */
-/*   return off; */
-/* } */
+	.global buffer_append
+buffer_append:
+	mov $LILY_SYSCALL_BUFFER_APPEND, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
 
 /* inline int */
 /* buffer_assign (bid_t dest, */

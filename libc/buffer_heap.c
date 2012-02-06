@@ -1,12 +1,5 @@
 #include "buffer_heap.h"
 
-static inline void*
-align_up (void* address,
-	  unsigned int radix)
-{
-  return (void*) (((size_t)address + radix - 1) & ~(radix - 1));
-}
-
 void
 buffer_heap_init (buffer_heap_t* heap,
 		  void* begin,
@@ -15,7 +8,7 @@ buffer_heap_init (buffer_heap_t* heap,
   /* 4 byte alignment */
   heap->begin = begin;
   heap->end = begin + size;
-  heap->mark = align_up (begin, 4);
+  heap->mark = begin;
 }
 
 void*
@@ -33,7 +26,21 @@ buffer_heap_alloc (buffer_heap_t* heap,
   }
 
   void* retval = heap->mark;
-  heap->mark = align_up (heap->mark + size, 4);
+  heap->mark = heap->mark + size;
 
   return retval;
+}
+
+void*
+buffer_heap_begin (const buffer_heap_t* heap)
+{
+  return heap->begin;
+}
+
+bool
+buffer_heap_check (const buffer_heap_t* heap,
+		   const void* ptr,
+		   size_t size)
+{
+  return ptr >= heap->begin && ptr < heap->end && ptr + size <= heap->end;
 }

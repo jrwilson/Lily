@@ -157,8 +157,8 @@ parse_cpio_header (const char* begin,
 void
 init (int param,
       bd_t bd,
-      size_t buffer_capacity,
-      const char* begin)
+      const char* begin,
+      size_t buffer_capacity)
 {
   const char* end = begin + buffer_capacity;
 

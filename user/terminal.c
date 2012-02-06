@@ -64,6 +64,74 @@
 /* White on black. */
 #define ATTRIBUTE 0x0F00
 
+/* Null. */
+#define NUL 0X00
+/* Start of Heading (ISO 1745). */
+#define SOH 0X01
+/* Start of Text (ISO 1745). */
+#define STX 0X02
+/* End of Text (ISO 1745). */
+#define ETX 0X03
+/* End of Transmission (ISO 1745). */
+#define EOT 0X04
+/* Enquiry  (ISO 1745). */
+#define ENQ 0X05
+/* Acknowledge  (ISO 1745). */
+#define ACK 0X06
+/* Bell. */
+#define BEL 0X07
+/* Backspace. */
+#define BS  0X08
+/* Character Tabulation. */
+#define HT  0X09
+/* Line Feed. */
+#define LF  0x0A
+/* Line Tabulation. */
+#define VT  0x0B
+/* Form Feed. */
+#define FF  0x0C
+/* Carriage Return. */
+#define CR  0x0D
+/* Shift-Out (ECMA-35). */
+#define SO  0x0E
+/* Shift-In (ECMA-35). */
+#define SI  0x0F
+/* Data Link Escape (ISO 1745). */
+#define DLE 0x10
+/* Device Control One (XON). */
+#define DC1 0x11
+/* Device Control Two. */
+#define DC2 0x12
+/* Device Control Three (XOFF). */
+#define DC3 0x13
+/* Device Control Four. */
+#define DC4 0x14
+/* Negative Acknowledge (ISO 1745). */
+#define NAK 0x15
+/* Synchronous Idle (ISO 1745). */
+#define SYN 0x16
+/* End of Transmission Block (ISO 1745). */
+#define ETB 0x17
+/* Cancel. */
+#define CAN 0x18
+/* End of Medium. */
+#define EM  0x19
+/* Substitute. */
+#define SUB 0x1A
+/* Escape (ECMA-35). */
+#define ESC 0x1B
+/* Information Separator Four (FS - File Separator). */
+#define IS4 0x1C
+/* Information Separator Three (GS - Group Separator). */
+#define IS3 0x1D
+/* Information Separator Two (RS - Record Separator). */
+#define IS2 0x1E
+/* Information Separator One (US - Unit Separator). */
+#define IS1 0x1F
+
+/* The ASCII delete character. */
+#define DEL 0x7F
+
 typedef struct client client_t;
 struct client {
   /* Associated aid. */
@@ -105,7 +173,12 @@ create_client (aid_t aid)
   client->buffer = buffer_map (client->bd);
   /* ECMA-48 states that the initial state of the characters must be "erased."
      The buffer should be all zeroes but just in case things change...*/
-  memset (client->buffer, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
+  unsigned short* data = client->buffer;
+  for (size_t y = 0; y != PAGE_LIMIT_POSITION; ++y) {
+    for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
+      data[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+    }
+  }
   /* I don't recall ECMA-48 specifying the initial state of the active position but this seems reasonable. */
   client->active_position_x = LINE_HOME_POSITION;
   client->active_position_y = PAGE_HOME_POSITION;
@@ -123,7 +196,8 @@ switch_to_client (client_t* client)
 {
   if (client != active_client) {
     active_client = client;
-    refresh = true;
+    /* Only refresh if there is a client. */
+    refresh = active_client != 0;
   }
 }
 
@@ -158,8 +232,8 @@ typedef struct {
 void
 terminal_focus (int param,
 		bd_t bd,
-		size_t buffer_size,
-		focus_arg_t* a)
+		focus_arg_t* a,
+		size_t buffer_size)
 {
   if (a != 0 && buffer_size >= sizeof (focus_arg_t)) {
     /* We don't care if the client is null. */
@@ -171,37 +245,30 @@ terminal_focus (int param,
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, TERMINAL_FOCUS, terminal_focus);
 
-void
-terminal_display (aid_t aid,
-		  bd_t bd,
-		  size_t buffer_size,
-		  void* ptr)
+static void
+display (aid_t aid,
+	 void* ptr,
+	 size_t buffer_size)
 {
   if (ptr == 0) {
     /* Either no data or we can't map it. */
-    schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    return;
   }
-
+  
   buffer_heap_t heap;
   buffer_heap_init (&heap, ptr, buffer_size);
   
-  const terminal_display_arg_t* arg = buffer_heap_alloc (&heap, sizeof (terminal_display_arg_t));
-  if (arg == 0) {
+  const terminal_display_arg_t* arg = buffer_heap_begin (&heap);
+  if (!buffer_heap_check (&heap, arg, sizeof (terminal_display_arg_t))) {
     /* Not enough data. */
-    schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    return;
   }
 
-  const char* string = (void*)&arg->string + arg->string;
-  if (!buffer_heap_check (&heap, string, arg->size)) {
+  const char* begin = (void*)&arg->string + arg->string;
+  if (!buffer_heap_check (&heap, begin, arg->size)) {
     /* Not enough data. */
-    schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    return;
   }
-
-
-
 
   /* Find or create the client. */
   client_t* client = find_client (aid);
@@ -210,35 +277,98 @@ terminal_display (aid_t aid,
   }
   
   /* Process the string. */
-  const char* end = begin + buffer_size;
+  const char* end = begin + arg->size;
   for (; begin != end; ++begin) {
     const char c = *begin;
-    if (c >= 0 && c < 0x20) {
-      /* C0 control character. */
-      /* TODO */
-    }
-    else if (c >= 0x20 && c < 0x7F) {
-      /* ASCII character that can be displayed. */
-      
-      if (client->active_position_x == LINE_LIMIT_POSITION) {
-	/* Active position is at the end of the line.
-	   ECMA-48 does not define behavior in this circumstance.
-	   We will move to home and scroll.
-	*/
-	client->active_position_x = LINE_HOME_POSITION;
+
+    if (c >= NUL && c <= DEL) {
+      /* Process a 7-bit ASCII character. */
+      switch (c) {
+      case NUL:
+      case SOH:
+      case STX:
+      case ETX:
+      case EOT:
+      case ENQ:
+      case ACK:
+	/* Do nothing. */
+	break;
+      case BEL:
+	/* Not supported. */
+	break;
+      case BS:
+	/* Backspace. */
+	if (client->active_position_x != 0) {
+	  --client->active_position_x;
+	}
+	break;
+      case HT:
+	/* Horizontal tab. */
+	client->active_position_x = (client->active_position_x + 8) & ~(8-1);
+	break;
+      case LF:
+	/* Line feed. */
 	++client->active_position_y;
+	if (client->active_position_y == PAGE_LIMIT_POSITION) {
+	  scroll (client);
+	}
+	break;
+      case VT:
+	/* Vertical tab. */
+      case FF:
+	/* Form feed. */
+	/* Not supported. */
+	break;
+      case CR:
+	/* Carriage return. */
+	client->active_position_x = 0;
+	break;
+      case SO:
+      case SI:
+      case DLE:
+      case DC1:
+      case DC2:
+      case DC3:
+      case DC4:
+      case NAK:
+      case SYN:
+      case ETB:
+      case CAN:
+      case EM:
+      case SUB:
+      case ESC:
+      case IS4:
+      case IS3:
+      case IS2:
+      case IS1:
+	/* Not supported. */
+	break;
+
+      case DEL:
+	/* Ignore the ASCII delete character. */
+	break;
+
+      default:
+	/* ASCII character that can be displayed. */
+	
+	if (client->active_position_x == LINE_LIMIT_POSITION) {
+	  /* Active position is at the end of the line.
+	     ECMA-48 does not define behavior in this circumstance.
+	     We will move to home and scroll.
+	  */
+	  client->active_position_x = LINE_HOME_POSITION;
+	  ++client->active_position_y;
+	}
+	
+	if (client->active_position_y == PAGE_LIMIT_POSITION) {
+	  /* Same idea. */
+	  scroll (client);
+	}
+	
+	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x++] = ATTRIBUTE | c;
+
+	break;
       }
-      
-      if (client->active_position_y == PAGE_LIMIT_POSITION) {
-	/* Same idea. */
-	scroll (client);
-      }
-      
-      client->buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x++] = ATTRIBUTE | c;
-    }
-    else if (c == 0x7F) {
-      /* ASCII DEL code. */
-      /* TODO */
     }
   }
   
@@ -249,60 +379,65 @@ terminal_display (aid_t aid,
   
   /* TODO:  Remove this line. */
   switch_to_client (client);
+}
+
+void
+terminal_display (aid_t aid,
+		  bd_t bd,
+		  void* ptr,
+		  size_t buffer_size)
+{
+  display (aid, ptr, buffer_size);
 
   schedule ();
-  scheduler_finish (bd, buffer_size, FINISH_DESTROY);
+  scheduler_finish (bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, TERMINAL_DISPLAY, terminal_display);
 
 static bool
 terminal_vga_precondition (void)
 {
-  return refresh && terminal_vga_op_binding_count != 0;
+  return refresh && active_client != 0 && terminal_vga_op_binding_count != 0;
 }
 
 void
 terminal_vga_op (int param,
-		size_t bc)
+		 size_t bc)
 {
   scheduler_remove (TERMINAL_VGA_OP, param);
   terminal_vga_op_binding_count = bc;
 
   if (terminal_vga_precondition ()) {
-    if (active_client != 0) {
-      /* Send the data. */
-      size_t buffer_size = sizeof (vga_op_t);
-      bd_t bd = buffer_create (buffer_size);
-      size_t data_offset = buffer_append (bd, client->bd);
-      vga_op_t* op = buffer_map (bd);
-      op->type = VGA_ASSIGN;
-      op->arg.assign.address = 0;
-      op->arg.assign.size = PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE;
-      
+    refresh = false;
 
-      
-
-      /* TODO */
-      /* Send the cursor location. */
-    }
-    else {
-      /* TODO */
-    }
-
-    /* vga_op_item_t* item = vga_op_queue_pop (); */
-    /* bd_t bd = item->bd; */
-    /* size_t buffer_size = item->buffer_size; */
-    /* free (item); */
-
-    bd_t bd = -1;
-    size_t buffer_size = 0;
+    size_t buffer_size = 2 * sizeof (vga_op_t);
+    bd_t bd = buffer_create (buffer_size);
+    size_t data_offset = buffer_append (bd, active_client->bd, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
+    void* ptr = buffer_map (bd);
+    buffer_heap_t heap;
+    buffer_heap_init (&heap, ptr, buffer_size);
+    
+    /* Send the data. */
+    vga_op_t* assign_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
+    assign_op->type = VGA_ASSIGN;
+    assign_op->arg.assign.address = 0;
+    assign_op->arg.assign.size = PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE;
+    assign_op->arg.assign.data = (buffer_heap_begin (&heap) + data_offset) - (void*)&assign_op->arg.assign.data;
+    
+    /* Send the cursor. */
+    vga_op_t* set_cursor_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
+    assign_op->next = (void*)set_cursor_op - (void*)&assign_op->next;
+    set_cursor_op->type = VGA_SET_CURSOR_LOCATION;
+    set_cursor_op->arg.set_cursor_location.location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+    
+    set_cursor_op->next = 0;
 
     schedule ();
-    scheduler_finish (bd, buffer_size, FINISH_DESTROY);
+    scheduler_finish (bd, FINISH_DESTROY);
   }
   else {
     schedule ();
-    scheduler_finish (-1, 0, FINISH_NO);
+    scheduler_finish (-1, FINISH_NO);
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, TERMINAL_VGA_OP, terminal_vga_op);
@@ -310,8 +445,8 @@ EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, TERMINAL_VGA_OP, terminal_vga_op)
 void
 destroyed (aid_t aid,
 	   bd_t bd,
-	   size_t buffer_size,
-	   void* p)
+	   void* p,
+	   size_t buffer_size)
 {
   /* Destroy the client. */
   client_t** ptr = &client_list_head;
@@ -323,7 +458,7 @@ destroyed (aid_t aid,
   }
 
   schedule ();
-  scheduler_finish (bd, buffer_size, FINISH_DESTROY);
+  scheduler_finish (bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, DESTROYED, destroyed);
 

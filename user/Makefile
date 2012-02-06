@@ -22,10 +22,10 @@ producer : producer.o
 	$(CC) -o $@ $^ -lstring -lbuffer_heap
 
 terminal : terminal.o
-	$(CC) -o $@ $^ -lstring -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -lstring -lfifo_scheduler -ldymem -lbuffer_heap
 
 vga : vga.o
-	$(CC) -o $@ $^ -lio -ldymem -lstring
+	$(CC) -o $@ $^ -lio -ldymem -lstring -lbuffer_heap
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

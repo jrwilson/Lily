@@ -3,6 +3,7 @@
 #include <io.h>
 #include <dymem.h>
 #include <string.h>
+#include <buffer_heap.h>
 
 #define VIDEO_MEMORY_BEGIN 0xA0000
 #define VIDEO_MEMORY_END   0xC0000
@@ -156,12 +157,16 @@ struct client_context {
   vga_registers_t registers;
   bd_t bd; /* A buffer for video memory. */
   void* buffer; /* Pointer to the buffer if mapped. */
+  size_t default_offset;
+  size_t default_size;
   client_context_t* next;
 };
 
 static bool initialized = false;
 /* The registers as they were when we started. */
 static vga_registers_t default_registers;
+/* The data as it was when we started. */
+static bd_t default_data;
 /* List of clients. */
 static client_context_t* context_list_head = 0;
 /* Pointer to the active client. */
@@ -401,6 +406,22 @@ set_start_address (vga_registers_t* r,
   }
 }
 
+static void
+set_cursor_location (vga_registers_t* r,
+		     unsigned short location)
+{
+  r->cursor_location_high = (location >> 8);
+  r->cursor_location_low = location & (0xFF);
+  
+  if (active_context != 0 && r == &active_context->registers) {
+    /* Write through. */
+    outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_HIGH_REGISTER);
+    outb (CRT_DATA_PORT, r->cursor_location_high);
+    outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_LOW_REGISTER);
+    outb (CRT_DATA_PORT, r->cursor_location_low);
+  }
+}
+
 /* static void */
 /* set_line_compare (vga_registers_t* r, */
 /* 		  unsigned short line) */
@@ -434,8 +455,10 @@ create_client_context (aid_t aid)
   client_context_t* context = malloc (sizeof (client_context_t));
   context->aid = aid;
   copy_vga_registers (&context->registers, &default_registers);
-  context->bd = buffer_create (VIDEO_MEMORY_SIZE);
+  context->bd = buffer_copy (default_data, 0, VIDEO_MEMORY_SIZE);
   context->buffer = buffer_map (context->bd);
+  context->default_offset = TEXT_MEMORY_BEGIN - VIDEO_MEMORY_BEGIN;
+  context->default_size = TEXT_MEMORY_SIZE;
   context->next = context_list_head;
   context_list_head = context;
 
@@ -481,11 +504,11 @@ assign (client_context_t* context,
 	const void* data,
 	size_t size)
 {
-  if (address < TEXT_MEMORY_SIZE &&
-      address + size <= TEXT_MEMORY_SIZE) {
-    unsigned char* dst = context->buffer;
+  if (address < context->default_size &&
+      address + size <= context->default_size) {
+    void* dst = context->buffer + context->default_offset;
     if (context == active_context) {
-      dst = (unsigned char*)TEXT_MEMORY_BEGIN;
+      dst = (void*)VIDEO_MEMORY_BEGIN + context->default_offset;
     }
     memcpy (dst + address, data, size);
   }
@@ -514,9 +537,17 @@ initialize (void)
 
     /* Map in the video memory. */
     map ((const void*)VIDEO_MEMORY_BEGIN, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE);
+    /* Clear the text region. */
+    memset ((void*)TEXT_MEMORY_BEGIN, 0, TEXT_MEMORY_SIZE);
 
     /* Read the default registers. */
     read_vga_registers (&default_registers);
+
+    /* Copy the state into a buffer. */
+    default_data = buffer_create (VIDEO_MEMORY_SIZE);
+    void* ptr = buffer_map (default_data);
+    memcpy (ptr, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE);
+    buffer_unmap (default_data);
 
     initialized = true;
   }
@@ -525,12 +556,12 @@ initialize (void)
 void
 init (int param,
       bd_t bd,
-      size_t buffer_size,
-      void* ptr)
+      void* ptr,
+      size_t buffer_size)
 {
   initialize ();
 
-  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
+  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
@@ -541,8 +572,8 @@ typedef struct {
 void
 vga_focus (int param,
 	   bd_t bd,
-	   size_t buffer_size,
-	   focus_arg_t* a)
+	   focus_arg_t* a,
+	   size_t buffer_size)
 {
   initialize ();
 
@@ -553,19 +584,20 @@ vga_focus (int param,
     }
   }
 
-  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
+  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, VGA_FOCUS, vga_focus);
 
 void
 vga_op (aid_t aid,
 	bd_t bd,
-	size_t buffer_size,
-	vga_op_t* op)
+	void* ptr,
+	size_t buffer_size)
 {
   initialize ();
 
-  if (op != 0 && buffer_size >= sizeof (vga_op_t)) {
+  if (ptr != 0) {
+
     client_context_t* context = find_client_context (aid);
     if (context == 0) {
       context = create_client_context (aid);
@@ -574,29 +606,50 @@ vga_op (aid_t aid,
     /* TODO:  Remove this line. */
     switch_to_context (context);
 
-    /* TODO */
+    buffer_heap_t heap;
+    buffer_heap_init (&heap, ptr, buffer_size);
 
-    /* switch (op->type) { */
-    /* case VGA_SET_START_ADDRESS: */
-    /*   set_start_address (&context->registers, op->arg.set_start_address.address); */
-    /*   break; */
-    /* case VGA_ASSIGN: */
-    /*   if (sizeof (vga_op_t) + op->arg.assign.size == buffer_size) { */
-    /* 	assign (context, op->arg.assign.address, op->arg.assign.data, op->arg.assign.size); */
-    /*   } */
-    /*   break; */
-    /* } */
+    const vga_op_t* op = buffer_heap_begin (&heap);
+
+    while (buffer_heap_check (&heap, op, sizeof (vga_op_t))) {
+      /* Process the op. */
+
+      switch (op->type) {
+      case VGA_SET_START_ADDRESS:
+    	set_start_address (&context->registers, op->arg.set_start_address.address);
+    	break;
+      case VGA_SET_CURSOR_LOCATION:
+	set_cursor_location (&context->registers, op->arg.set_cursor_location.location);
+	break;
+      case VGA_ASSIGN:
+    	{
+    	  const void* data = (void*)&op->arg.assign.data + op->arg.assign.data;
+    	  if (buffer_heap_check (&heap, data, op->arg.assign.size)) {
+    	    assign (context, op->arg.assign.address, data, op->arg.assign.size);
+    	  }
+    	}
+    	break;
+      }
+
+      /* Move to the next. */
+      if (op->next != 0) {
+    	op = (void*)&op->next + op->next;
+      }
+      else {
+    	break;
+      }
+    }
   }
   
-  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
+  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, VGA_OP, vga_op);
 
 void
 destroyed (aid_t aid,
 	   bd_t bd,
-	   size_t buffer_size,
-	   void* p)
+	   void* p,
+	   size_t buffer_size)
 {
   initialize ();
 
@@ -609,6 +662,6 @@ destroyed (aid_t aid,
     destroy_client_context (temp);
   }
 
-  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
+  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, DESTROYED, destroyed);

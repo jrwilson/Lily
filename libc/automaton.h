@@ -76,15 +76,10 @@ subscribe_destroyed (aid_t aid);
 bd_t
 buffer_create (size_t size);
 
-  /* inline bd_t */
-  /* buffer_copy (bd_t b, */
-  /* 	       size_t offset, */
-  /* 	       size_t length) */
-  /* { */
-  /*   bd_t bd; */
-  /*   asm ("int $0x81\n" : "=a"(bd) : "0"(BUFFER_COPY), "b"(b), "c"(offset), "d"(length) :); */
-  /*   return bd; */
-  /* } */
+bd_t
+buffer_copy (bd_t bd,
+	     size_t offset,
+	     size_t length);
 
   /* inline size_t */
   /* buffer_grow (bd_t bd, */
@@ -96,10 +91,10 @@ buffer_create (size_t size);
   /* } */
 
 size_t
-  buffer_append (bd_t dest,
-  		 bd_t src,
-  		 size_t offset,
-  		 size_t length);
+buffer_append (bd_t dest,
+	       bd_t src,
+	       size_t offset,
+	       size_t length);
 
   /* inline int */
   /* buffer_assign (bd_t dest, */

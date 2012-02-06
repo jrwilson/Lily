@@ -5,6 +5,7 @@
 
 typedef enum {
   VGA_SET_START_ADDRESS,
+  VGA_SET_CURSOR_LOCATION,
   VGA_ASSIGN,
 } vga_op_type_t;
 
@@ -15,15 +16,19 @@ typedef struct {
     struct {
       size_t address;
     } set_start_address;
+    /* Set the cursor. */
+    struct {
+      size_t location;
+    } set_cursor_location;
     /* Assign size bytes of data starting at address.
        The data_offset field specifies the location of the data in the buffer. */
     struct {
       size_t address;
       size_t size;
-      size_t data_offset; /* Offset of data in the buffer. */
+      ptrdiff_t data; /* Offset of data in the buffer. */
     } assign;
   } arg;
-  size_t next_op_offset; /* Offset of the next operation in the buffer. */
+  ptrdiff_t next; /* Offset of the next operation in the buffer. */
 } vga_op_t;
 
 #define VGA_FOCUS 1
