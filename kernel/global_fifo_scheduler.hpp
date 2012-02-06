@@ -357,30 +357,36 @@ public:
     // This call won't return when executing input actions.
     exec_context_.finish_action (bd, flags);
 
-    if (!ready_queue_.empty ()) {
-      // Get the automaton context and remove it from the ready queue.
-      automaton_context* c = ready_queue_.front ();
-      ready_queue_.pop_front ();
-    
-      // Load the execution context and remove it from the automaton context.
-      exec_context_.load (c->front ());
-      c->pop ();
+    // Check for interrupts.
+    interrupts::enable ();
+    interrupts::disable ();
 
-      if (!c->empty ()) {
-	// Automaton has more actions, return to ready queue.
-	ready_queue_.push_back (c);
-      }
-      else {
-	// Leave out.
-	c->status (NOT_SCHEDULED);
+    for (;;) {
+      if (!ready_queue_.empty ()) {
+	// Get the automaton context and remove it from the ready queue.
+	automaton_context* c = ready_queue_.front ();
+	ready_queue_.pop_front ();
+	
+	// Load the execution context and remove it from the automaton context.
+	exec_context_.load (c->front ());
+	c->pop ();
+	
+	if (!c->empty ()) {
+	  // Automaton has more actions, return to ready queue.
+	  ready_queue_.push_back (c);
+	}
+	else {
+	  // Leave out.
+	  c->status (NOT_SCHEDULED);
+	}
+	
+	// This call doesn't not return.
+	exec_context_.execute ();
       }
 
-      // This call doesn't not return.
-      exec_context_.execute ();
-    }
-    else {
       /* Out of actions.  Halt. */
       exec_context_.clear ();
+      interrupts::enable ();
       asm volatile ("hlt");
     }
   }

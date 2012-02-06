@@ -16,8 +16,9 @@
 #include "gdt.hpp"
 #include "io.hpp"
 #include "kassert.hpp"
+#include "scheduler.hpp"
 
-/* Remap interrupts to ISR. */
+/* Remap interrupts to ISR. The assumption that they are contiguous is important. */
 static const unsigned int PIC_MASTER_BASE = 32;
 static const unsigned int PIC_MASTER_LIMIT = 40;
 static const unsigned int PIC_SLAVE_BASE = 40;
@@ -93,8 +94,12 @@ extern "C" void irq13 ();
 extern "C" void irq14 ();
 extern "C" void irq15 ();
 
-uint8_t irq_handler::pic_master_mask_;
-uint8_t irq_handler::pic_slave_mask_;
+static uint8_t pic_master_mask_;
+static uint8_t pic_slave_mask_;
+
+typedef vector<caction> subscriber_list_type;
+typedef vector<subscriber_list_type> subscribers_type;
+static subscribers_type subscribers_ (irq_handler::MAX_IRQ + 1);
 
 void
 irq_handler::install ()
@@ -133,33 +138,35 @@ irq_handler::install ()
   idt::set (PIC_SLAVE_BASE + 7, make_interrupt_gate (irq15, gdt::KERNEL_CODE_SELECTOR, descriptor::RING0, descriptor::PRESENT));
 }
 
-// void
-// set_interrupt_handler (uint8_t num,
-// 		       interrupt_handler_t handler)
-// {
-//   kassert (interrupt_handler[num] == default_handler);
-//   kassert (handler != 0);
+void
+irq_handler::subscribe (int irq,
+			const caction& action)
+{
+  if (subscribers_[irq].empty ()) {
+    unsigned int isr = irq + PIC_MASTER_BASE;
+    // Change the masks on the interrupt controllers.
+    if (PIC_MASTER_BASE <= isr && isr < PIC_MASTER_LIMIT) {
+      pic_master_mask_ &= ~(1 << (isr - PIC_MASTER_BASE));
+      io::outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask_); 
+    }
+    else if (PIC_SLAVE_BASE <= isr && isr < PIC_SLAVE_LIMIT) {
+      pic_slave_mask_ &= ~(1 << (isr - PIC_SLAVE_BASE));
+      io::outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask_);
+    }
+  }
 
-//   interrupt_handler[num] = handler;
-  
-//   /* Change the masks on the interrupt controllers. */
-//   if (PIC_MASTER_BASE <= num && num < PIC_MASTER_LIMIT) {
-//     pic_master_mask &= ~(1 << (num - PIC_MASTER_BASE));
-//     outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask); 
-//   }
-//   else if (PIC_SLAVE_BASE <= num && num < PIC_SLAVE_LIMIT) {
-//     pic_slave_mask &= ~(1 << (num - PIC_SLAVE_BASE));
-//     outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask);
-//   }
-
-// }
+  subscribers_[irq].push_back (action);
+}
 
 extern "C" void
-irq_handler (volatile registers regs)
+irq_dispatch (volatile registers regs)
 {
-  // BUG
-  kassert (0);
-  //dispatcher.dispatch (&regs);
+  const int irq = regs.number - PIC_MASTER_BASE;
+  for (subscriber_list_type::const_iterator pos = subscribers_[irq].begin ();
+       pos != subscribers_[irq].end ();
+       ++pos) {
+    scheduler::schedule (*pos);
+  }
 
   /* Send end-of-interrupt. */
   if (PIC_SLAVE_BASE <= regs.number && regs.number < PIC_SLAVE_LIMIT) {

@@ -33,3 +33,10 @@ outb:
 	int $0x80
 	mov %ecx, ioerrno
 	ret
+
+	.global subscribe_irq
+subscribe_irq:
+	mov $LILY_SYSCALL_SUBSCRIBE_IRQ, %eax
+	int $0x80
+	mov %ecx, ioerrno
+	ret

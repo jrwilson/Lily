@@ -24,6 +24,7 @@
 #include "mapped_area.hpp"
 #include "lily/syscall.h"
 #include "io.hpp"
+#include "irq_handler.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -112,6 +113,9 @@ private:
   // Reserved I/O ports.
   typedef unordered_set<unsigned short> port_set_type;
   port_set_type port_set_;
+  // Interrupts.
+  typedef unordered_map<int, caction> irq_map_type;
+  irq_map_type irq_map_;
   // Automata to which this automaton is subscribed.
   typedef unordered_set<automaton*> subscriptions_set_type;
   subscriptions_set_type subscriptions_;
@@ -345,6 +349,44 @@ public:
     else {
       return make_pair (-1, LILY_SYSCALL_EPERM);
     }
+  }
+
+  pair<int, int>
+  subscribe_irq (int irq,
+		 ano_t action_number,
+		 int parameter)
+  {
+    if (!privileged ()) {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+
+    if (irq < irq_handler::MIN_IRQ ||
+	irq > irq_handler::MAX_IRQ) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    // Find the action.
+    const paction* action = find_action (action_number);
+    if (action == 0 || action->type != INTERNAL) {
+      return make_pair (-1, LILY_SYSCALL_EBADANO);
+    }
+
+    // Correct the parameter.
+    if (action->parameter_mode == NO_PARAMETER) {
+      parameter = 0;
+    }
+
+    if (irq_map_.find (irq) != irq_map_.end ()) {
+      /* Already subscribed.  Not that we don't check the action. */
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+
+    caction c (action, parameter);
+
+    irq_map_.insert (make_pair (irq, c));
+    irq_handler::subscribe (irq, c);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   pair<void*, int>

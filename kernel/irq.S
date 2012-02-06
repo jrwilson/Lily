@@ -12,8 +12,8 @@ irq\irq_num:
 	jmp irq_common_stub
 .endm
 
-	# Import irq_handler.
-	.extern irq_handler
+	# Import irq_dispatch.
+	.extern irq_dispatch
 irq_common_stub:
 	# Push the processor state.
 	pusha
@@ -27,7 +27,7 @@ irq_common_stub:
 	mov %ax, %es
 	mov %ax, %fs
 	mov %ax, %gs
-	call irq_handler
+	call irq_dispatch
 	# Pop the old data segment.
 	pop %eax
 	# Load the old data segment.

@@ -1,6 +1,7 @@
 #ifndef IO_H
 #define IO_H
 
+#include <lily/types.h>
 #include <lily/syscall.h>
 #include <stddef.h>
 
@@ -27,5 +28,10 @@ inb (unsigned short port);
 void
 outb (unsigned short port,
       unsigned char value);
+
+int
+subscribe_irq (int irq,
+	       ano_t ano,
+	       int param);
 
 #endif /* IO_H */

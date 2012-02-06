@@ -164,6 +164,14 @@ init (int param,
 
   parse_cpio_header (begin, end);
 
+  aid_t keyboard = -1;
+  for (file_t* f = head; f != 0; f = f->next) {
+    if (strcmp (f->name, "keyboard") == 0) {
+      //print ("name = "); print (f->name); put ('\n');
+      keyboard = create (f->buffer, f->buffer_size, true, -1);
+    }
+  }
+
   aid_t producer = -1;
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "producer") == 0) {

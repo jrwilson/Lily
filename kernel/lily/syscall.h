@@ -51,6 +51,9 @@
 #define LILY_SYSCALL_INB                   0x112
 #define LILY_SYSCALL_OUTB                  0x113
 
+#define LILY_SYSCALL_SUBSCRIBE_IRQ         0x120
+#define LILY_SYSCALL_UNSUBSCRIBE_IRQ       0x121
+
 /* Names for sysconf. */
 #define LILY_SYSCALL_SYSCONF_PAGESIZE 0
 

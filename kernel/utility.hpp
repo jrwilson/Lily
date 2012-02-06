@@ -34,4 +34,13 @@ make_pair (First first,
   return pair<First, Second> (first, second);
 }
 
+template <typename First,
+	  typename Second>
+bool
+operator== (const pair<First, Second>& x,
+	    const pair<First, Second>& y)
+{
+  return x.first == y.first && x.second == y.second;
+}
+
 #endif /* __utility_hpp__ */

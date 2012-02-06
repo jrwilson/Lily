@@ -15,15 +15,20 @@
 */
 
 #include "integer_types.hpp"
+#include "action.hpp"
 
-class irq_handler {
-public:
-  static void
+namespace irq_handler {
+
+  void
   install ();
 
-private:
-  static uint8_t pic_master_mask_;
-  static uint8_t pic_slave_mask_;
+  void
+  subscribe (int irq,
+	     const caction& action);
+
+  static const int MIN_IRQ = 0;
+  static const int MAX_IRQ = 15;
+
 };
 
 #endif /* __irq_handler_hpp__ */

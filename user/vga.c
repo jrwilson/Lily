@@ -560,7 +560,6 @@ init (int param,
       size_t buffer_size)
 {
   initialize ();
-
   finish (NO_ACTION, 0, bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);

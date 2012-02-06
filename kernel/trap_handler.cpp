@@ -122,6 +122,13 @@ struct outb_args {
   uint32_t value;
 };
 
+struct subscribe_irq_args {
+  uint32_t eip;
+  int irq;
+  ano_t action_number;
+  int parameter;
+};
+
 struct sysconf_args {
   uint32_t eip;
   int name;
@@ -368,6 +375,19 @@ trap_dispatch (volatile registers regs)
 	kassert (0);
       }
       pair<unsigned char, int> r = a->outb (ptr->port, ptr->value);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+  case LILY_SYSCALL_SUBSCRIBE_IRQ:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      subscribe_irq_args* ptr = reinterpret_cast<subscribe_irq_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (subscribe_irq_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->subscribe_irq (ptr->irq, ptr->action_number, ptr->parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
