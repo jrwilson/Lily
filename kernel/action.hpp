@@ -50,31 +50,26 @@ struct caction {
   const paction* action;
   int parameter;
   buffer* system_input_buffer;
-  size_t system_input_buffer_size;
 
   caction () :
     action (0),
     parameter (0),
-    system_input_buffer (0),
-    system_input_buffer_size (0)
+    system_input_buffer (0)
   { }
 
   caction (const paction* act,
 	   int p) :
     action (act),
     parameter (p),
-    system_input_buffer (0),
-    system_input_buffer_size (0)
+    system_input_buffer (0)
   { }
 
   caction (const paction* act,
 	   int p,
-	   buffer* b,
-	   size_t s) :
+	   buffer* b) :
     action (act),
     parameter (p),
-    system_input_buffer (b),
-    system_input_buffer_size (s)
+    system_input_buffer (b)
   { }
   
   inline bool

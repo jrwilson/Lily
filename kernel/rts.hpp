@@ -32,7 +32,6 @@ namespace rts {
 	  ano_t action_number,
 	  int parameter,
 	  bd_t bd,
-	  size_t buffer_size,
 	  int flags);
   
   pair<aid_t, int>
@@ -40,8 +39,7 @@ namespace rts {
 	  bd_t text_bd,
 	  size_t text_buffer_size,
 	  bool retain_privilege,
-	  bd_t data_bd,
-	  size_t data_buffer_size);
+	  bd_t data_bd);
 
   pair<bid_t, int>
   bind (automaton* a,

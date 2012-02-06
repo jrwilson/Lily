@@ -5,8 +5,7 @@
 #include <automaton.h>
 
 #include "producer.h"
-#include "printer.h"
-#include "console.h"
+#include "terminal.h"
 #include "vga.h"
 
 typedef struct file file_t;
@@ -158,10 +157,10 @@ parse_cpio_header (const char* begin,
 void
 init (int param,
       bd_t bd,
-      size_t buffer_size,
+      size_t buffer_capacity,
       const char* begin)
 {
-  const char* end = begin + buffer_size;
+  const char* end = begin + buffer_capacity;
 
   parse_cpio_header (begin, end);
 
@@ -169,23 +168,15 @@ init (int param,
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "producer") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      producer = create (f->buffer, f->buffer_size, true, -1, 0);
+      producer = create (f->buffer, f->buffer_size, true, -1);
     }
   }
 
-  aid_t printer = -1;
+  aid_t terminal = -1;
   for (file_t* f = head; f != 0; f = f->next) {
-    if (strcmp (f->name, "printer") == 0) {
+    if (strcmp (f->name, "terminal") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      printer = create (f->buffer, f->buffer_size, true, -1, 0);
-    }
-  }
-
-  aid_t console = -1;
-  for (file_t* f = head; f != 0; f = f->next) {
-    if (strcmp (f->name, "console") == 0) {
-      //print ("name = "); print (f->name); put ('\n');
-      console = create (f->buffer, f->buffer_size, true, -1, 0);
+      terminal = create (f->buffer, f->buffer_size, true, -1);
     }
   }
 
@@ -193,15 +184,14 @@ init (int param,
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "vga") == 0) {
       //print ("name = "); print (f->name); put ('\n');
-      vga = create (f->buffer, f->buffer_size, true, -1, 0);
+      vga = create (f->buffer, f->buffer_size, true, -1);
     }
   }
 
-  bind (producer, PRODUCER_PRINTER_OP, 0, printer, PRINTER_PRINT, 0);
-  bind (printer, PRINTER_CONSOLE_OP, 0, console, CONSOLE_OP, 0);
-  bind (console, CONSOLE_VGA_OP, 0, vga, VGA_OP, 0);
+  bind (producer, PRODUCER_PRINTER_OP, 0, terminal, TERMINAL_DISPLAY, 0);
+  bind (terminal, TERMINAL_VGA_OP, 0, vga, VGA_OP, 0);
 
-  finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);
+  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 

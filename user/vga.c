@@ -574,16 +574,18 @@ vga_op (aid_t aid,
     /* TODO:  Remove this line. */
     switch_to_context (context);
 
-    switch (op->type) {
-    case VGA_SET_START_ADDRESS:
-      set_start_address (&context->registers, op->arg.set_start_address.address);
-      break;
-    case VGA_ASSIGN:
-      if (sizeof (vga_op_t) + op->arg.assign.size == buffer_size) {
-    	assign (context, op->arg.assign.address, op->arg.assign.data, op->arg.assign.size);
-      }
-      break;
-    }
+    /* TODO */
+
+    /* switch (op->type) { */
+    /* case VGA_SET_START_ADDRESS: */
+    /*   set_start_address (&context->registers, op->arg.set_start_address.address); */
+    /*   break; */
+    /* case VGA_ASSIGN: */
+    /*   if (sizeof (vga_op_t) + op->arg.assign.size == buffer_size) { */
+    /* 	assign (context, op->arg.assign.address, op->arg.assign.data, op->arg.assign.size); */
+    /*   } */
+    /*   break; */
+    /* } */
   }
   
   finish (NO_ACTION, 0, bd, buffer_size, FINISH_DESTROY);

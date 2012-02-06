@@ -13,7 +13,6 @@ scheduler_remove (ano_t action_number,
 		  int parameter);
 void
 scheduler_finish (bd_t bd,
-		  size_t buffer_size,
 		  int flags);
 
 #endif /* FIFO_SCHEDULER_H */

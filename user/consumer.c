@@ -212,7 +212,7 @@ void
 init (void)
 {
   initialize ();
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, -1, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, LILY_ACTION_INIT, init);
 
@@ -220,7 +220,7 @@ void
 focus (void)
 {
   initialize ();
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, -1, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, CONSUMER_FOCUS, focus);
 
@@ -242,7 +242,7 @@ print (aid_t aid,
   /*   } */
   /* } */
   
-  finish (NO_ACTION, 0, -1, 0, 0);
+  finish (NO_ACTION, 0, -1, 0);
 }
 EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, CONSUMER_PRINT, print);
 

@@ -53,13 +53,12 @@ scheduler_remove (ano_t action_number,
 
 void
 scheduler_finish (bd_t bd,
-		  size_t buffer_size,
 		  int flags)
 {
   if (item_head != 0) {
-    finish (item_head->action_number, item_head->parameter, bd, buffer_size, flags);
+    finish (item_head->action_number, item_head->parameter, bd, flags);
   }
   else {
-    finish (NO_ACTION, 0, bd, buffer_size, flags);
+    finish (NO_ACTION, 0, bd, flags);
   }
 }

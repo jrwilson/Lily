@@ -54,15 +54,13 @@ void
 finish (ano_t action_number,
 	int parameter,
 	bd_t buffer,
-	size_t buffer_size,
 	int flags);
 
 aid_t
 create (bd_t text_bd,
 	size_t text_buffer_size,
 	bool retain_privilege,
-	bd_t data_bd,
-	size_t data_buffer_size);
+	bd_t data_bd);
 
 bid_t
 bind (aid_t output_automaton,
@@ -97,16 +95,11 @@ buffer_create (size_t size);
   /*   return off; */
   /* } */
 
-  /* inline size_t */
-  /* buffer_append (bd_t dest, */
-  /* 		 bd_t src, */
-  /* 		 size_t offset, */
-  /* 		 size_t length) */
-  /* { */
-  /*   size_t off; */
-  /*   asm ("int $0x81\n" : "=a"(off) : "0"(BUFFER_APPEND), "b"(dest), "c"(src), "d"(offset), "S"(length) :); */
-  /*   return off; */
-  /* } */
+size_t
+  buffer_append (bd_t dest,
+  		 bd_t src,
+  		 size_t offset,
+  		 size_t length);
 
   /* inline int */
   /* buffer_assign (bd_t dest, */

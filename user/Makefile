@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
-PROGRAMS=producer consumer printer console vga
+PROGRAMS=consumer producer terminal vga
 TARGETS=init_automaton init_data
 
 .PHONY : all
@@ -15,16 +15,13 @@ init_data : $(PROGRAMS)
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
 
-producer : producer.o
-	$(CC) -o $@ $^ -lstring
-
 consumer : consumer.o
 	$(CC) -o $@ $^ -lio -ldymem -lstring
 
-printer : printer.o
-	$(CC) -o $@ $^ -lfifo_scheduler -ldymem -lstring
+producer : producer.o
+	$(CC) -o $@ $^ -lstring -lbuffer_heap
 
-console : console.o
+terminal : terminal.o
 	$(CC) -o $@ $^ -lstring -lfifo_scheduler -ldymem
 
 vga : vga.o

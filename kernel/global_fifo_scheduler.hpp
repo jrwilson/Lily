@@ -85,7 +85,6 @@ private:
     const automaton::input_action_set_type* input_actions_;
     automaton::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
-    size_t buffer_size_;
     int flags_;
 
   public:
@@ -100,7 +99,6 @@ private:
       action_.action = 0;
       action_.parameter = 0;
       output_buffer_ = 0;
-      buffer_size_ = 0;
       flags_ = 0;
     }
 
@@ -129,7 +127,6 @@ private:
       case SYSTEM_INPUT:
 	// Load the buffer.
 	output_buffer_ = action_.system_input_buffer;
-	buffer_size_ = action_.system_input_buffer_size;
 	// Destroy it when finished.
 	if (output_buffer_ != 0) {
 	  flags_ = LILY_SYSCALL_FINISH_DESTROY;
@@ -143,7 +140,6 @@ private:
 
     inline void
     finish_action (bd_t bd,
-		   size_t buffer_size,
 		   int flags)
     {
       if (action_.action != 0) {	
@@ -177,7 +173,6 @@ private:
 	    else {
 	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bd);
 	    }
-	    buffer_size_ = buffer_size;
 	    flags_ = flags;
 	    if (input_actions_ != 0) {
 	      /* Load the execution context. */
@@ -235,22 +230,25 @@ private:
       case SYSTEM_INPUT:
 	{
 	  bd_t input_buffer;
+	  size_t buffer_capacity;
 	  const void* buf;
 	  
 	  if (output_buffer_ != 0) {
 	    // Copy the buffer to the input automaton and try to map it.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
+	    buffer_capacity = output_buffer_->capacity ();
 	    buf = action_.action->automaton->buffer_map (input_buffer).first;
 	  }
 	  else {
 	    input_buffer = -1;
+	    buffer_capacity = 0;
 	    buf = 0;
 	  }
 	  
 	  // Push the address.
 	  *--stack_pointer = reinterpret_cast<uint32_t> (buf);
-	  // Push the buffer size.
-	  *--stack_pointer = buffer_size_;
+	  // Push the buffer capacity.
+	  *--stack_pointer = buffer_capacity;
 	  // Push the buffer.
 	  *--stack_pointer = input_buffer;	
 	}
@@ -354,11 +352,10 @@ public:
   
   static inline void
   finish (bd_t bd,
-	  size_t buffer_size,
 	  int flags)
   {
     // This call won't return when executing input actions.
-    exec_context_.finish_action (bd, buffer_size, flags);
+    exec_context_.finish_action (bd, flags);
 
     if (!ready_queue_.empty ()) {
       // Get the automaton context and remove it from the ready queue.
