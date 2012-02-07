@@ -5,7 +5,6 @@ buffer_heap_init (buffer_heap_t* heap,
 		  void* begin,
 		  size_t size)
 {
-  /* 4 byte alignment */
   heap->begin = begin;
   heap->end = begin + size;
   heap->mark = begin;

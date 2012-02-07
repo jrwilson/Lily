@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
-PROGRAMS=keyboard consumer producer terminal vga
+PROGRAMS=keyboard kb_us_104 producer terminal vga
 TARGETS=init_automaton init_data
 
 .PHONY : all
@@ -14,15 +14,14 @@ init_data : $(PROGRAMS)
 	cp -t init_fs $^
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
-
 keyboard : keyboard.o
-	$(CC) -o $@ $^ -lio
+	$(CC) -o $@ $^ -lio -lbuffer_heap -lfifo_scheduler -ldymem
 
-consumer : consumer.o
-	$(CC) -o $@ $^ -lio -ldymem -lstring
+kb_us_104 : kb_us_104.o
+	$(CC) -o $@ $^ -lstring -lbuffer_heap -lfifo_scheduler -ldymem
 
 producer : producer.o
-	$(CC) -o $@ $^ -lstring -lbuffer_heap
+	$(CC) -o $@ $^ -lstring -lbuffer_heap -lfifo_scheduler -ldymem
 
 terminal : terminal.o
 	$(CC) -o $@ $^ -lstring -lfifo_scheduler -ldymem -lbuffer_heap

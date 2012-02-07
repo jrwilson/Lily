@@ -1,8 +1,0 @@
-#ifndef CONSUMER_H
-#define CONSUMER_H
-
-#define CONSUMER_FOCUS 1
-#define CONSUMER_PRINT 2
-#define CONSUMER_PRINT_SENSE 3
-
-#endif /* CONSUMER_H */

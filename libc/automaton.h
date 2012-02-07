@@ -81,14 +81,9 @@ buffer_copy (bd_t bd,
 	     size_t offset,
 	     size_t length);
 
-  /* inline size_t */
-  /* buffer_grow (bd_t bd, */
-  /* 	       size_t size) */
-  /* { */
-  /*   size_t off; */
-  /*   asm ("int $0x81\n" : "=a"(off) : "0"(BUFFER_GROW), "b"(bd), "c"(size) :); */
-  /*   return off; */
-  /* } */
+size_t
+buffer_grow (bd_t bd,
+	     size_t size);
 
 size_t
 buffer_append (bd_t dest,

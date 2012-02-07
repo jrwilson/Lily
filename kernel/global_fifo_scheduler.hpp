@@ -388,6 +388,7 @@ public:
       exec_context_.clear ();
       interrupts::enable ();
       asm volatile ("hlt");
+      interrupts::disable ();
     }
   }
 

@@ -4,6 +4,8 @@
 #include <dymem.h>
 #include <automaton.h>
 
+#include "keyboard.h"
+#include "kb_us_104.h"
 #include "producer.h"
 #include "terminal.h"
 #include "vga.h"
@@ -172,6 +174,14 @@ init (int param,
     }
   }
 
+  aid_t kb_us_104 = -1;
+  for (file_t* f = head; f != 0; f = f->next) {
+    if (strcmp (f->name, "kb_us_104") == 0) {
+      //print ("name = "); print (f->name); put ('\n');
+      kb_us_104 = create (f->buffer, f->buffer_size, true, -1);
+    }
+  }
+
   aid_t producer = -1;
   for (file_t* f = head; f != 0; f = f->next) {
     if (strcmp (f->name, "producer") == 0) {
@@ -196,7 +206,9 @@ init (int param,
     }
   }
 
-  bind (producer, PRODUCER_PRINTER_OP, 0, terminal, TERMINAL_DISPLAY, 0);
+  bind (keyboard, KEYBOARD_SCAN_CODE, 0, kb_us_104, KB_US_104_SCAN_CODE, 0);
+  bind (kb_us_104, KB_US_104_STRING, 0, producer, PRODUCER_STRING, 0);
+  bind (producer, PRODUCER_DISPLAY, 0, terminal, TERMINAL_DISPLAY, 0);
   bind (terminal, TERMINAL_VGA_OP, 0, vga, VGA_OP, 0);
 
   finish (NO_ACTION, 0, bd, FINISH_DESTROY);

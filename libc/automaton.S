@@ -47,14 +47,12 @@ buffer_copy:
 	mov %ecx, automatonerrno
 	ret
 
-/* inline size_t */
-/* buffer_grow (bid_t bid, */
-/* 	     size_t size) */
-/* { */
-/*   size_t off; */
-/*   asm ("int $0x81\n" : "=a"(off) : "0"(BUFFER_GROW), "b"(bid), "c"(size) :); */
-/*   return off; */
-/* } */
+	.global buffer_grow
+buffer_grow:
+	mov $LILY_SYSCALL_BUFFER_GROW, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
 
 	.global buffer_append
 buffer_append:
