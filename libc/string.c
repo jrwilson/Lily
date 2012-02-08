@@ -176,6 +176,17 @@ obuf_puts (obuf_t* buf,
   }
 }
 
+static char
+to_hex (int x)
+{
+  if (x < 10) {
+    return x + '0';
+  }
+  else {
+    return x - 10 + 'a';
+  }
+}
+
 int
 snprintf (char* str,
 	  size_t size,
@@ -233,6 +244,39 @@ snprintf (char* str,
 	  }
 	  else {
 	    obuf_puts (&obuf, "-2147483648");
+	  }
+	  
+	  ++format;
+	}
+	break;
+      case 'x':
+	{
+	  int num = va_arg (ap, int);
+	  fbuf_reset (&fbuf);
+	  if (num == 0) {
+	    obuf_put (&obuf, '0');
+	  }
+	  else if (num != -2147483648) {
+	    if (num < 0) {
+	      fbuf_push_left (&fbuf, '-');
+	      num *= -1;
+	    }
+
+	    while (num != 0) {
+	      fbuf_push_right (&fbuf, to_hex (num % 16));
+	      num /= 16;
+	    }
+
+	    while (!fbuf_empty_left (&fbuf)) {
+	      obuf_put (&obuf, fbuf_pop_left (&fbuf));
+	    }
+
+	    while (!fbuf_empty_right (&fbuf)) {
+	      obuf_put (&obuf, fbuf_pop_right (&fbuf));
+	    }
+	  }
+	  else {
+	    obuf_puts (&obuf, "-ffffffff");
 	  }
 	  
 	  ++format;

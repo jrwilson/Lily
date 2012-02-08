@@ -308,6 +308,9 @@ display (aid_t aid,
 	break;
       case LF:
 	/* Line feed. */
+	/* We break the standard here by first performing a carriage return. */
+	client->active_position_x = 0;
+	/* Then the line feed. */
 	++client->active_position_y;
 	if (client->active_position_y == PAGE_LIMIT_POSITION) {
 	  scroll (client);

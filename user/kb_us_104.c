@@ -5,6 +5,13 @@
 #include <fifo_scheduler.h>
 #include "keyboard.h"
 
+/*
+  Driver for a 104-key US keyboard
+  ================================
+  This driver converts scan codes from a keyboard to ASCII text.
+  The ultimate goal should be to support some standard such as UTF-8.
+*/
+
 /* Initial capacity of the ASCII array. */
 #define INITIAL_CAPACITY 4000
 
@@ -21,14 +28,20 @@ static char* aarr_string;
 static bool left_shift = false;
 static bool right_shift = false;
 static bool caps_lock = false;
+static bool control = false;
+static bool alt = false;
+
+#define BREAK 0x80
 
 #define CAPS_LOCK 0x3A
 #define ENTER 0x1C
 #define LEFT_SHIFT 0x2A
 #define RIGHT_SHIFT 0x36
+#define CONTROL 0x1D
+#define ALT 0x38
 
 static char lower_case[128] = {
-  /* Escape */
+  [0x01] = 27, /* Escape */
 
   /* F1-F4 */
   /* F5-F6 */
@@ -48,9 +61,9 @@ static char lower_case[128] = {
   [0x0B] = '0',
   [0x0C] = '-',
   [0x0D] = '=',
-  /* Backspace */
+  [0x0E] = '\b', /* Backsapce */
 
-  /* Tab */
+  [0x0F] = '\t', /* Tab */
   [0x10] = 'q',
   [0x11] = 'w',
   [0x12] = 'e',
@@ -77,7 +90,7 @@ static char lower_case[128] = {
   [0x26] = 'l',
   [0x27] = ';',
   [0x28] = '\'',
-  /* Enter */
+  [0x1C] = '\n', /* Enter */
 
   /* Shift */
   [0x2C] = 'z',
@@ -178,7 +191,7 @@ static char upper_case[128] = {
   /* Control */
   /* Windows */
   /* Alt */
-  [0x39] = ' ',
+  /* Space */
   /* Alt */
   /* Windows */
   /* Menu */
@@ -262,7 +275,7 @@ kb_us_104_scan_code (int param,
       if (buffer_heap_check (&heap, codes, kk->count)) {
 	for (size_t idx = 0; idx != kk->count; ++idx) {
 	  unsigned char c = codes[idx];
-	  if (c < 0x80) {
+	  if (c < BREAK) {
 	    /* Make. */
 	    switch (c) {
 	    case LEFT_SHIFT:
@@ -274,39 +287,46 @@ kb_us_104_scan_code (int param,
 	    case CAPS_LOCK:
 	      caps_lock = !caps_lock;
 	      break;
+	    case CONTROL:
+	      control = true;
+	      break;
+	    case ALT:
+	      alt = true;
+	      break;
 	    default:
 	      {
 		char t = lower_case[c];
-		if (t >= 'a' && t <= 'z') {
-		  if (((left_shift || right_shift) && !caps_lock) ||
-		      (!(left_shift || right_shift) && caps_lock)) {
-		    t = t - 'a' + 'A';
-		  }
+		/*
+		  The first clause says that an alphabetic character should be capitalized if either shifting or caps lock exclusively.
+		  The second clause says that all other characters can be shifted if a definition exists.
+		 */
+		if ((t >= 'a' && t <= 'z') &&
+		    (((left_shift || right_shift) && !caps_lock) ||
+		     (!(left_shift || right_shift) && caps_lock))) {
+		  t = upper_case[c];
 		}
-		else {
-		  if (left_shift || right_shift) {
-		    t = upper_case[c];
-		  }
+		else if ((left_shift || right_shift) && upper_case[c] != 0) {
+		  t = upper_case[c];
 		}
 
 		if (t != 0) {
 		  put (t);
 		}
-		else {
-		  /* TODO */
-		  char buf[8];
-		  int cnt = snprintf (buf, 8, " %d ", c);
-		  for (int i = 0; i != cnt; ++i) {
-		    put (buf[i]);
-		  }
-		}
+		/* else { */
+		/*   /\* TODO *\/ */
+		/*   char buf[256]; */
+		/*   int cnt = snprintf (buf, 256, " %x ", c); */
+		/*   for (int i = 0; i != cnt; ++i) { */
+		/*     put (buf[i]); */
+		/*   } */
+		/* } */
 	      }
 	      break;
 	    }
 	  }
 	  else {
 	    /* Break. */
-	    c -= 0x80;
+	    c -= BREAK;
 	    switch (c) {
 	    case LEFT_SHIFT:
 	      left_shift = false;
@@ -314,8 +334,11 @@ kb_us_104_scan_code (int param,
 	    case RIGHT_SHIFT:
 	      right_shift = false;
 	      break;
-	    case CAPS_LOCK:
-	      /* Do nothing. */
+	    case CONTROL:
+	      control = false;
+	      break;
+	    case ALT:
+	      alt = false;
 	      break;
 	    }
 	  }
