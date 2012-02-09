@@ -655,7 +655,7 @@ public:
     }
     else {
       // Buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBADBD);
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
   }
 
@@ -671,8 +671,8 @@ public:
     
     return bd;
   }
-
-  size_t
+  
+  pair<size_t, int>
   buffer_grow (bd_t bd,
 	       size_t size)
   {
@@ -682,16 +682,16 @@ public:
     if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
       if (b->begin () == 0) {
-	return b->grow (size);
+	return make_pair (b->grow (size), LILY_SYSCALL_ESUCCESS);
       }
       else {
 	// Buffer was mapped.
-	return -1;
+	return make_pair (-1, LILY_SYSCALL_EMAPPED);
       }
     }
     else {
       // Buffer does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
   }
 
@@ -727,7 +727,7 @@ public:
     }
     else {
       // One of the buffers does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBADBD);
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
   }
 
@@ -770,14 +770,14 @@ public:
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos == bd_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return make_pair ((void*)0, LILY_SYSCALL_EBADBD);
+      return make_pair ((void*)0, LILY_SYSCALL_EBDDNE);
     }
 
     buffer* b = bpos->second;
     
     if (b->capacity () == 0) {
       // The buffer is empty.
-      return make_pair ((void*)0, LILY_SYSCALL_EBADBD);
+      return make_pair ((void*)0, LILY_SYSCALL_EEMPTY);
     }
 
     if (b->begin () != 0) {
@@ -820,7 +820,7 @@ public:
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos == bd_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBADBD);
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
     
     buffer* b = bpos->second;
@@ -887,16 +887,16 @@ public:
     }
   }
 
-  size_t
+  pair<size_t, int>
   buffer_capacity (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos != bd_to_buffer_map_.end ()) {
-      return bpos->second->capacity ();
+      return make_pair (bpos->second->capacity (), LILY_SYSCALL_ESUCCESS);
     }
     else {
       // The buffer does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
   }
 

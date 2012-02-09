@@ -212,7 +212,7 @@ init (int param,
       void* ptr,
       size_t buffer_size)
 {
-  string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
+  string_buffer_init (&string_buffer, INITIAL_CAPACITY);
 
   schedule ();
   scheduler_finish (-1, FINISH_NO);
@@ -266,7 +266,7 @@ kb_us_104_scan_code (int param,
 	      }
 	      
 	      if (t != 0) {
-		string_buffer_put (&string_buffer, t);
+		string_buffer_putc (&string_buffer, t);
 	      }
 	      /* else { */
 	      /*   /\* TODO *\/ */
@@ -321,7 +321,8 @@ kb_us_104_string (int param,
   scheduler_remove (KB_US_104_STRING, param);
 
   if (kb_us_104_string_precondition ()) {
-    bd_t bd = string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
+    bd_t bd = string_buffer_bd (&string_buffer);
+    string_buffer_init (&string_buffer, INITIAL_CAPACITY);
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
   }

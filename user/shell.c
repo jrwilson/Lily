@@ -6,6 +6,7 @@
 #include "keyboard.h"
 #include <fifo_scheduler.h>
 #include <dymem.h>
+#include <string_buffer.h>
 
 /*
   Shell
@@ -107,6 +108,93 @@ init (int param,
       void* ptr,
       size_t buffer_size)
 {
+  string_buffer_t sb;
+
+  string_buffer_init (&sb, 1);
+
+  /* Move to almost the lower right corner. */
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_puts (&sb, "0123456789");
+  string_buffer_putc (&sb, ESC);
+  string_buffer_putc (&sb, CSI);
+  string_buffer_putc (&sb, '1');
+  string_buffer_putc (&sb, ';');
+  string_buffer_putc (&sb, '1');
+  string_buffer_putc (&sb, CUP);
+
+  string_buffer_putc (&sb, ESC);
+  string_buffer_putc (&sb, CSI);
+  string_buffer_putc (&sb, '5');
+  string_buffer_putc (&sb, ICH);
+
+  string_buffer_puts (&sb, "Hello");
+
+  
+
+  string_buffer_putc (&sb, ESC);
+  string_buffer_putc (&sb, CSI);
+  string_buffer_putc (&sb, '2');
+  string_buffer_putc (&sb, '5');
+  string_buffer_putc (&sb, ';');
+  string_buffer_putc (&sb, '7');
+  string_buffer_putc (&sb, '9');
+  string_buffer_putc (&sb, CUP);
+
+  string_buffer_putc (&sb, 'X');
+  string_buffer_putc (&sb, '\b');
+
+  string_buffer_putc (&sb, ESC);
+  string_buffer_putc (&sb, CSI);
+  string_buffer_putc (&sb, ICH);
+
+  string_buffer_putc (&sb, 'X');
+
+
+  /* string_buffer_putc (&sb, '*'); */
+  /* string_buffer_putc (&sb, ESC); */
+  /* string_buffer_putc (&sb, CSI); */
+  /* string_buffer_putc (&sb, '9'); */
+  /* string_buffer_putc (&sb, CUF); */
+  /* string_buffer_putc (&sb, '*'); */
+  /* string_buffer_putc (&sb, ESC); */
+  /* string_buffer_putc (&sb, CSI); */
+  /* string_buffer_putc (&sb, '9'); */
+  /* string_buffer_putc (&sb, CUD); */
+  /* string_buffer_putc (&sb, '*'); */
+  /* string_buffer_putc (&sb, ESC); */
+  /* string_buffer_putc (&sb, CSI); */
+  /* string_buffer_putc (&sb, '1'); */
+  /* string_buffer_putc (&sb, '0'); */
+  /* string_buffer_putc (&sb, CUB); */
+  /* string_buffer_putc (&sb, '*'); */
+
+
+  /* string_buffer_putc (&sb, ESC); */
+  /* string_buffer_putc (&sb, CSI); */
+  /* string_buffer_putc (&sb, '1'); */
+  /* string_buffer_putc (&sb, '0'); */
+  /* string_buffer_putc (&sb, ';'); */
+  /* string_buffer_putc (&sb, '1'); */
+  /* string_buffer_putc (&sb, '0'); */
+  /* string_buffer_putc (&sb, CUP); */
+  /* string_buffer_putc (&sb, ESC); */
+  /* string_buffer_putc (&sb, CSI); */
+  /* string_buffer_putc (&sb, '5'); */
+  /* string_buffer_putc (&sb, CUB); */
+
+  /* string_buffer_puts (&sb, "Hello world!\n"); */
+  /* sbprintf (&sb, "%d", 314); */
+
+  item_t* item = malloc (sizeof (item_t));
+  item->bd = string_buffer_bd (&sb);
+  push (item);
+  
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
@@ -114,9 +202,9 @@ EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 void
 shell_string (int param,
-		 bd_t bd,
-		 void* ptr,
-		 size_t size)
+	      bd_t bd,
+	      void* ptr,
+	      size_t size)
 {
   if (bd != -1) {
     item_t* item = malloc (sizeof (item_t));

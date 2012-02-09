@@ -67,7 +67,7 @@ init (int param,
   reserve_port (KEYBOARD_CONTROLLER_PORT);
   subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT, 0);
 
-  string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
+  string_buffer_init (&string_buffer, INITIAL_CAPACITY);
 
   schedule ();
   scheduler_finish (-1, FINISH_NO);
@@ -77,7 +77,7 @@ EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 void
 interrupt (int param)
 {
-  string_buffer_put (&string_buffer, inb (KEYBOARD_DATA_PORT));
+  string_buffer_putc (&string_buffer, inb (KEYBOARD_DATA_PORT));
 
   schedule ();
   scheduler_finish (-1, FINISH_NO);
@@ -98,7 +98,8 @@ scan_code (int param,
   scheduler_remove (KEYBOARD_SCAN_CODE, param);
 
   if (keycode_precondition ()) {
-    bd_t bd = string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
+    bd_t bd = string_buffer_bd (&string_buffer);
+    string_buffer_init (&string_buffer, INITIAL_CAPACITY);
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
   }

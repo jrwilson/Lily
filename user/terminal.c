@@ -34,10 +34,10 @@
   (4) functions that are supported must be identified.
   See Section 2 of the ECMA-48 Standard for details.
 
-  Status
-  ------
+  Caveats
+  -------
   Data must be encoded using 7-bit ASCII.
-  The following control codes are supported:
+  This is not without purpose as we can support UTF-8.
     
   Limitations
   -----------
@@ -48,6 +48,174 @@
   -------
   Justin R. Wilson
 
+  Status
+  ------
+  + indicates the function is implemented.
+  LF feed is not standard as it is actually CR+LF.
+  Tabs are assumed at every eighth position.
+
+  ACK  - ACKNOWLEDGE
+  APC  - APPLICATION PROGRAM COMMAND
+  BEL  - BELL
+  BPH  - BREAK PERMITTED HERE
+  + BS   - BACKSPACE
+  CAN  - CANCEL
+  CBT  - CURSOR BACKWARD TABULATION
+  CCH  - CANCEL CHARACTER
+  CHA  - CURSOR CHARACTER ABSOLUTE
+  CHT  - CURSOR FORWARD TABULATION
+  CMD  - CODING METHOD DELIMITER
+  CNL  - CURSOR NEXT LINE
+  CPL  - CURSOR PRECEDING LINE
+  CPR  - ACTIVE POSITION REPORT
+  + CR   - CARRIAGE RETURN
+  CSI  - CONTROL SEQUENCE INTRODUCER
+  CTC  - CURSOR TABULATION CONTROL
+  + CUB  - CURSOR LEFT
+  + CUD  - CURSOR DOWN
+  + CUF  - CURSOR RIGHT
+  + CUP  - CURSOR POSITION
+  + CUU  - CURSOR UP
+  CVT  - CURSOR LINE TABULATION
+  DA   - DEVICE ATTRIBUTES
+  DAQ  - DEFINE AREA QUALIFICATION
+  DCH  - DELETE CHARACTER
+  DCS  - DEVICE CONTROL STRING
+  DC1  - DEVICE CONTROL ONE
+  DC2  - DEVICE CONTROL TWO
+  DC3  - DEVICE CONTROL THREE
+  DC4  - DEVICE CONTROL FOUR
+  DL   - DELETE LINE
+  DLE  - DATA LINK ESCAPE
+  DMI  - DISABLE MANUAL INPUT
+  DSR  - DEVICE STATUS REPORT
+  DTA  - DIMENSION TEXT AREA
+  EA   - ERASE IN AREA
+  ECH  - ERASE CHARACTER
+  ED   - ERASE IN PAGE
+  EF   - ERASE IN FIELD
+  EL   - ERASE IN LINE
+  EM   - END OF MEDIUM
+  EMI  - ENABLE MANUAL INPUT
+  ENQ  - ENQUIRY
+  EOT  - END OF TRANSMISSION
+  EPA  - END OF GUARDED AREA
+  ESA  - END OF SELECTED AREA
+  ESC  - ESCAPE
+  ETB  - END OF TRANSMISSION BLOCK
+  ETX  - END OF TEXT
+  FF   - FORM FEED
+  FNK  - FUNCTION KEY
+  FNT  - FONT SELECTION
+  GCC  - GRAPHIC CHARACTER COMBINATION
+  GSM  - GRAPHIC SIZE MODIFICATION
+  GSS  - GRAPHIC SIZE SELECTION
+  HPA  - CHARACTER POSITION ABSOLUTE
+  HPB  - CHARACTER POSITION BACKWARD
+  HPR  - CHARACTER POSITION FORWARD
+  + HT   - CHARACTER TABULATION
+  HTJ  - CHARACTER TABULATION WITH JUSTIFICATION
+  HTS  - CHARACTER TABULATION SET
+  HVP  - CHARACTER AND LINE POSITION
+  + ICH  - INSERT CHARACTER
+  IDCS - IDENTIFY DEVICE CONTROL STRING
+  IG   - IDENTIFY GRAPHIC SUBREPERTOIRE
+  IL   - INSERT LINE
+  INT  - INTERRUPT
+  IS1  - INFORMATION SEPARATOR ONE (US - UNIT SEPARATOR)
+  IS2  - INFORMATION SEPARATOR TWO (RS - RECORD SEPARATOR)
+  IS3  - INFORMATION SEPARATOR THREE (GS - GROUP SEPARATOR)
+  IS4  - INFORMATION SEPARATOR FOUR (FS - FILE SEPARATOR)
+  JFY  - JUSTIFY
+  + LF   - LINE FEED
+  LS0  - LOCKING-SHIFT ZERO
+  LS1  - LOCKING-SHIFT ONE
+  LS1R - LOCKING-SHIFT ONE RIGHT
+  LS2  - LOCKING-SHIFT TWO
+  LS2R - LOCKING-SHIFT TWO RIGHT
+  LS3  - LOCKING-SHIFT THREE
+  LS3R - LOCKING-SHIFT THREE RIGHT
+  MC   - MEDIA COPY
+  MW   - MESSAGE WAITING
+  NAK  - NEGATIVE ACKNOWLEDGE
+  NBH  - NO BREAK HERE
+  NEL  - NEXT LINE
+  NP   - NEXT PAGE
+  + NUL  - NULL
+  OSC  - OPERATING SYSTEM COMMAND
+  PEC  - PRESENTATION EXPAND OR CONTRACT
+  PFS  - PAGE FORMAT SELECTION
+  PLD  - PARTIAL LINE FORWARD
+  PLU  - PARTIAL LINE BACKWARD
+  PM   - PRIVACY MESSAGE
+  PP   - PRECEDING PAGE
+  PPA  - PAGE POSITION ABSOLUTE
+  PPB  - PAGE POSITION BACKWARD
+  PPR  - PAGE POSITION FORWARD
+  PTX  - PARALLEL TEXTS
+  PU1  - PRIVATE USE ONE
+  PU2  - PRIVATE USE TWO
+  QUAT - QUAD
+  REP  - REPEAT
+  RI   - REVERSE LINE FEED
+  RIS  - RESET TO INITIAL STATE
+  RM   - RESET MODE
+  SACS - SET ADDITIONAL CHARACTER SEPARATION
+  SAPV - SELECT ALTERNATIVE REPRESENTATION VARIANTS
+  SCI  - SINGLE CHARACTER INTRODUCER
+  SCO  - SELECT CHARACTER ORIENTATION
+  SCP  - SELECT CHARACTER PATH
+  SCS  - SET CHARACTER SPACING
+  SD   - SCROLL DOWN
+  SDS  - START DIRECTED STRING
+  SEE  - SELECT EDITING EXTENT
+  SEF  - SHEET EJECT AND FEED
+  SGR  - SELECT GRAPHIC RENDITION
+  SHS  - SELECT CHARACTER SPACING
+  SI   - SHIFT-IN
+  SIMD - SELECT IMPLICIT MOVEMENT DIRECTION
+  SL   - SCROLL LEFT
+  SLH  - SET LINE HOME
+  SLL  - SET LINE LIMIT
+  SLS  - SET LINE SPACING
+  SM   - SET MODE
+  SO   - SHIFT-OUT
+  SOH  - START OF HEADING
+  SOS  - START OF STRING
+  SPA  - START OF GUARDED AREA
+  SPD  - SELECT PRESENTATION DIRECTIONS
+  SPH  - SET PAGE HOME
+  SPI  - SPACING INCREMENT
+  SPL  - SET PAGE LIMIT
+  SPQR - SELECT PRINT QUALITY AND RAPIDITY
+  SR   - SCROLL RIGHT
+  SRCS - SET REDUCED CHARACTER SEPARATION
+  SRS  - START REVERSED STRING
+  SSA  - START OF SELECTED AREA
+  SSU  - SELECTED SIZE UNIT
+  SSW  - SET SPACE WIDTH
+  SS2  - SINGLE-SHIFT TWO
+  SS3  - SINGLE-SHIFT THREE
+  ST   - STRING TERMINATOR
+  STAB - SELECTIVE TABULATION
+  STS  - SET TRANSMIT STATE
+  STX  - START OF TEXT
+  SU   - SCROLL UP
+  SUB  - SUBSTITUTE
+  SVS  - SELECT LINE SPACING
+  SYN  - SYNCHRONOUS IDLE
+  TAC  - TABULATION ALIGNED CENTERED
+  TALE - TABULATION ALIGNED LEADING EDGE
+  TATE - TABULATION ALIGNED TRAILING EDGE
+  TBC  - TABULATION CLEAR
+  TCC  - TABULATION CENTERED ON CHARACTER
+  TSR  - TABULATION STOP REMOVE
+  TSS  - THIN SPACE SPECIFICATION
+  VPA  - LINE POSITION ABSOLUTE
+  VPB  - LINE POSITION BACKWARD
+  VPR  - LINE POSITION FORWARD
+  VT   - LINE TABULATION
+  VTS  - LINE TABULATION SET
 */
 
 #define LINE_HOME_POSITION 0
@@ -62,76 +230,16 @@
 */
 #define CELL_SIZE 2
 
-/* White on black. */
+/* White on black for VGA. */
 #define ATTRIBUTE 0x0F00
 
-/* Null. */
-#define NUL 0X00
-/* Start of Heading (ISO 1745). */
-#define SOH 0X01
-/* Start of Text (ISO 1745). */
-#define STX 0X02
-/* End of Text (ISO 1745). */
-#define ETX 0X03
-/* End of Transmission (ISO 1745). */
-#define EOT 0X04
-/* Enquiry  (ISO 1745). */
-#define ENQ 0X05
-/* Acknowledge  (ISO 1745). */
-#define ACK 0X06
-/* Bell. */
-#define BEL 0X07
-/* Backspace. */
-#define BS  0X08
-/* Character Tabulation. */
-#define HT  0X09
-/* Line Feed. */
-#define LF  0x0A
-/* Line Tabulation. */
-#define VT  0x0B
-/* Form Feed. */
-#define FF  0x0C
-/* Carriage Return. */
-#define CR  0x0D
-/* Shift-Out (ECMA-35). */
-#define SO  0x0E
-/* Shift-In (ECMA-35). */
-#define SI  0x0F
-/* Data Link Escape (ISO 1745). */
-#define DLE 0x10
-/* Device Control One (XON). */
-#define DC1 0x11
-/* Device Control Two. */
-#define DC2 0x12
-/* Device Control Three (XOFF). */
-#define DC3 0x13
-/* Device Control Four. */
-#define DC4 0x14
-/* Negative Acknowledge (ISO 1745). */
-#define NAK 0x15
-/* Synchronous Idle (ISO 1745). */
-#define SYN 0x16
-/* End of Transmission Block (ISO 1745). */
-#define ETB 0x17
-/* Cancel. */
-#define CAN 0x18
-/* End of Medium. */
-#define EM  0x19
-/* Substitute. */
-#define SUB 0x1A
-/* Escape (ECMA-35). */
-#define ESC 0x1B
-/* Information Separator Four (FS - File Separator). */
-#define IS4 0x1C
-/* Information Separator Three (GS - Group Separator). */
-#define IS3 0x1D
-/* Information Separator Two (RS - Record Separator). */
-#define IS2 0x1E
-/* Information Separator One (US - Unit Separator). */
-#define IS1 0x1F
+#define PARAMETER_SIZE 2
 
-/* The ASCII delete character. */
-#define DEL 0x7F
+typedef enum {
+  NORMAL,
+  ESCAPED,
+  CONTROL
+} mode_t;
 
 typedef struct client client_t;
 struct client {
@@ -144,6 +252,11 @@ struct client {
   /* Active position.  These are zero based. */
   unsigned short active_position_x;
   unsigned short active_position_y;
+
+  mode_t mode;
+  int parameter[PARAMETER_SIZE];
+  size_t parameter_count;
+
   /* Next on the list. */
   client_t* next;
 };
@@ -173,7 +286,7 @@ create_client (aid_t aid)
   client->bd = buffer_create (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
   client->buffer = buffer_map (client->bd);
   /* ECMA-48 states that the initial state of the characters must be "erased."
-     The buffer should be all zeroes but just in case things change...*/
+     We use spaces. */
   unsigned short* data = client->buffer;
   for (size_t y = 0; y != PAGE_LIMIT_POSITION; ++y) {
     for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
@@ -183,6 +296,8 @@ create_client (aid_t aid)
   /* I don't recall ECMA-48 specifying the initial state of the active position but this seems reasonable. */
   client->active_position_x = LINE_HOME_POSITION;
   client->active_position_y = PAGE_HOME_POSITION;
+
+  client->mode = NORMAL;
 
   client->next = client_list_head;
   client_list_head = client;
@@ -247,6 +362,216 @@ terminal_focus (int param,
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, TERMINAL_FOCUS, terminal_focus);
 
 static void
+process_normal (client_t* client,
+		char c)
+{
+  /* Process a 7-bit ASCII character. */
+  switch (c) {
+  case NUL:
+    /* Do nothing. */
+    break;
+  case BS:
+    /* Backspace. */
+    if (client->active_position_x != 0) {
+      --client->active_position_x;
+    }
+    break;
+  case HT:
+    /* Horizontal tab. */
+    client->active_position_x = (client->active_position_x + 8) & ~(8-1);
+    break;
+  case LF:
+    /* Line feed.  (NOT STANDARD!) */
+    /* Perform a carriage return. */
+    client->active_position_x = 0;
+    /* Then the line feed. */
+    ++client->active_position_y;
+    if (client->active_position_y == PAGE_LIMIT_POSITION) {
+      scroll (client);
+    }
+    break;
+  case CR:
+    /* Carriage return. */
+    client->active_position_x = 0;
+    break;
+  case ESC:
+    /* Begin of escaped sequence. */
+    client->mode = ESCAPED;
+    break;
+  case DEL:
+    /* Ignore the ASCII delete character. */
+    break;
+  default:
+    /* ASCII character that can be displayed. */
+    if (c >= ' ' && c <= '~') {
+      client->buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x++] = ATTRIBUTE | c;
+      
+      if (client->active_position_x == LINE_LIMIT_POSITION) {
+	/* Active position is at the end of the line.
+	   ECMA-48 does not define behavior in this circumstance.
+	   We will move to home and scroll.
+	*/
+	client->active_position_x = LINE_HOME_POSITION;
+	++client->active_position_y;
+      }
+      
+      if (client->active_position_y == PAGE_LIMIT_POSITION) {
+	/* Same idea. */
+	scroll (client);
+      }
+    }
+    break;
+  }
+}
+
+static void
+process_escaped (client_t* client,
+		 char c)
+{
+  switch (c) {
+  case CSI:
+    /* Prepare for parameters. */
+    for (size_t idx = 0; idx != PARAMETER_SIZE; ++idx) {
+      client->parameter[idx] = 0;
+    }
+    client->parameter_count = 0;
+    client->mode = CONTROL;
+    break;
+  }
+}
+
+static void
+process_control (client_t* client,
+		 char c)
+{
+  switch (c) {
+  case '0':
+  case '1':
+  case '2':
+  case '3':
+  case '4':
+  case '5':
+  case '6':
+  case '7':
+  case '8':
+  case '9':
+    if (client->parameter_count == 0) {
+      client->parameter_count = 1;
+    }
+    if (client->parameter_count <= PARAMETER_SIZE) {
+      client->parameter[client->parameter_count - 1] *= 10;
+      client->parameter[client->parameter_count - 1] += (c - '0');
+    }
+    break;
+  case ';':
+    ++client->parameter_count;
+    break;
+  case ICH:
+    {
+      /* Parse the parameters. */
+      unsigned short count = 1;
+      if (client->parameter_count >= 1) {
+      	count = client->parameter[0];
+      }
+      /* Shift the line. */
+      for (unsigned short dest_x = LINE_LIMIT_POSITION - 1; dest_x != client->active_position_x && dest_x >= count; --dest_x) {
+	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] = 
+	  client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x - count];
+      }
+      /* Replace with spaces. */
+      for (unsigned short dest_x = client->active_position_x; dest_x != LINE_LIMIT_POSITION && count != 0; ++dest_x, --count) {
+	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] = ATTRIBUTE | ' ';
+      }
+
+      /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  case CUU:
+    {
+      /* Parse the parameters. */
+      unsigned short offset = 1;
+      if (client->parameter_count >= 1) {
+	offset = client->parameter[0];
+      }
+      /* Set the position if in bounds. */
+      if (offset <= client->active_position_y) {
+	client->active_position_y -= offset;
+      }
+      /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  case CUD:
+    {
+      /* Parse the parameters. */
+      unsigned short offset = 1;
+      if (client->parameter_count >= 1) {
+	offset = client->parameter[0];
+      }
+      /* Set the position if in bounds. */
+      if (client->active_position_y + offset < PAGE_LIMIT_POSITION) {
+	client->active_position_y += offset;
+      }
+      /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  case CUF:
+    {
+      /* Parse the parameters. */
+      unsigned short offset = 1;
+      if (client->parameter_count >= 1) {
+	offset = client->parameter[0];
+      }
+      /* Set the position if in bounds. */
+      if (client->active_position_x + offset < LINE_LIMIT_POSITION) {
+	client->active_position_x += offset;
+      }
+      /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  case CUB:
+    {
+      /* Parse the parameters. */
+      unsigned short offset = 1;
+      if (client->parameter_count >= 1) {
+	offset = client->parameter[0];
+      }
+      /* Set the position if in bounds. */
+      if (offset <= client->active_position_x) {
+	client->active_position_x -= offset;
+      }
+      /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  case CUP:
+    {
+      /* Parse the parameters. */
+      unsigned short new_y = 1;
+      unsigned short new_x = 1;
+      if (client->parameter_count >= 1) {
+	new_y = client->parameter[0];
+      }
+      if (client->parameter_count >= 2) {
+	new_x = client->parameter[1];
+      }
+      /* Set the position if in bounds. */
+      if (new_y <= PAGE_LIMIT_POSITION &&
+	  new_x <= LINE_LIMIT_POSITION) {
+	client->active_position_y = new_y - 1;
+	client->active_position_x = new_x - 1;
+      }
+      /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  }
+}
+
+static void
 display (aid_t aid,
 	 bd_t bd,
 	 void* ptr,
@@ -275,95 +600,16 @@ display (aid_t aid,
   for (; begin != end; ++begin) {
     const char c = *begin;
 
-    if (c >= NUL && c <= DEL) {
-      /* Process a 7-bit ASCII character. */
-      switch (c) {
-      case NUL:
-      case SOH:
-      case STX:
-      case ETX:
-      case EOT:
-      case ENQ:
-      case ACK:
-	/* Do nothing. */
+    if ((c & 0x80) == 0) {
+      switch (client->mode) {
+      case NORMAL:
+	process_normal (client, c);
 	break;
-      case BEL:
-	/* Not supported. */
+      case ESCAPED:
+	process_escaped (client, c);
 	break;
-      case BS:
-	/* Backspace. */
-	if (client->active_position_x != 0) {
-	  --client->active_position_x;
-	}
-	break;
-      case HT:
-	/* Horizontal tab. */
-	client->active_position_x = (client->active_position_x + 8) & ~(8-1);
-	break;
-      case LF:
-	/* Line feed. */
-	/* We break the standard here by first performing a carriage return. */
-	client->active_position_x = 0;
-	/* Then the line feed. */
-	++client->active_position_y;
-	if (client->active_position_y == PAGE_LIMIT_POSITION) {
-	  scroll (client);
-	}
-	break;
-      case VT:
-	/* Vertical tab. */
-      case FF:
-	/* Form feed. */
-	/* Not supported. */
-	break;
-      case CR:
-	/* Carriage return. */
-	client->active_position_x = 0;
-	break;
-      case SO:
-      case SI:
-      case DLE:
-      case DC1:
-      case DC2:
-      case DC3:
-      case DC4:
-      case NAK:
-      case SYN:
-      case ETB:
-      case CAN:
-      case EM:
-      case SUB:
-      case ESC:
-      case IS4:
-      case IS3:
-      case IS2:
-      case IS1:
-	/* Not supported. */
-	break;
-
-      case DEL:
-	/* Ignore the ASCII delete character. */
-	break;
-
-      default:
-	/* ASCII character that can be displayed. */
-	
-	if (client->active_position_x == LINE_LIMIT_POSITION) {
-	  /* Active position is at the end of the line.
-	     ECMA-48 does not define behavior in this circumstance.
-	     We will move to home and scroll.
-	  */
-	  client->active_position_x = LINE_HOME_POSITION;
-	  ++client->active_position_y;
-	}
-	
-	if (client->active_position_y == PAGE_LIMIT_POSITION) {
-	  /* Same idea. */
-	  scroll (client);
-	}
-	
-	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x++] = ATTRIBUTE | c;
-
+      case CONTROL:
+	process_control (client, c);
 	break;
       }
     }

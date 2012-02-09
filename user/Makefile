@@ -21,7 +21,7 @@ kb_us_104 : kb_us_104.o
 	$(CC) -o $@ $^ -lstring -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem
 
 shell : shell.o
-	$(CC) -o $@ $^ -lstring -lbuffer_heap -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -lstring -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem
 
 terminal : terminal.o
 	$(CC) -o $@ $^ -lstring -lfifo_scheduler -ldymem -lstring_buffer -lbuffer_heap

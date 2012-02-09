@@ -94,13 +94,12 @@ buffer_destroy:
 	mov %ecx, automatonerrno
 	ret
 
-/* inline size_t */
-/* buffer_size (bid_t bid) */
-/* { */
-/*   size_t size; */
-/*   asm ("int $0x81\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bid) :); */
-/*   return size; */
-/* } */
+	.global buffer_capacity
+buffer_capacity:
+	mov $LILY_SYSCALL_BUFFER_CAPACITY, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
 
 	.global sysconf
 sysconf:

@@ -112,13 +112,8 @@ buffer_unmap (bd_t bd);
 int
 buffer_destroy (bd_t bd);
 
-  /* inline size_t */
-  /* buffer_capacity (bd_t bd) */
-  /* { */
-  /*   size_t size; */
-  /*   asm ("int $0x81\n" : "=a"(size) : "0"(BUFFER_SIZE), "b"(bd) :); */
-  /*   return size; */
-  /* } */
+size_t
+buffer_capacity (bd_t bd);
 
 #define PAGESIZE LILY_SYSCALL_SYSCONF_PAGESIZE
 

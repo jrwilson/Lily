@@ -76,27 +76,38 @@ struct buffer_create_args {
 
 struct buffer_copy_args {
   uint32_t eip;
-  aid_t src;
+  bd_t src;
   size_t offset;
   size_t length;
 };
 
+struct buffer_grow_args {
+  uint32_t eip;
+  bd_t bd;
+  size_t size;
+};
+
 struct buffer_append_args {
   uint32_t eip;
-  aid_t dst;
-  aid_t src;
+  bd_t dst;
+  bd_t src;
   size_t offset;
   size_t length;
 };
 
 struct buffer_map_args {
   uint32_t eip;
-  bd_t buffer;
+  bd_t bd;
 };
 
 struct buffer_unmap_args {
   uint32_t eip;
-  bd_t buffer;
+  bd_t bd;
+};
+
+struct buffer_capacity_args {
+  uint32_t eip;
+  bd_t bd;
 };
 
 struct map_args {
@@ -255,9 +266,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_GROW:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_grow (regs.ebx, regs.ecx);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_grow_args* ptr = reinterpret_cast<buffer_grow_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_grow_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<bd_t, int> r = a->buffer_grow (ptr->bd, ptr->size);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -291,7 +308,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<void*, int> r = a->buffer_map (ptr->buffer);
+      pair<void*, int> r = a->buffer_map (ptr->bd);
       regs.eax = reinterpret_cast<uint32_t> (r.first);
       regs.ecx = r.second;
       return;
@@ -305,7 +322,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<int, int> r = a->buffer_unmap (ptr->buffer);
+      pair<int, int> r = a->buffer_unmap (ptr->bd);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -321,9 +338,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_CAPACITY:
     {
-      // BUG
-      kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_capacity (regs.ebx);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_capacity_args* ptr = reinterpret_cast<buffer_capacity_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_capacity_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = a->buffer_capacity (ptr->bd);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

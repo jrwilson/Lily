@@ -30,10 +30,4 @@ strcmp (const char* s1,
 size_t
 strlen (const char* s);
 
-int
-snprintf (char* str,
-	  size_t size,
-	  const char* format,
-	  ...);
-
 #endif /* STRING_H */
