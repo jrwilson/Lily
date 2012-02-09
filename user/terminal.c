@@ -5,6 +5,7 @@
 #include <dymem.h>
 #include <fifo_scheduler.h>
 #include <buffer_heap.h>
+#include "string_buffer.h"
 
 /*
   VGA Terminal Server
@@ -247,6 +248,7 @@ EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, TERMINAL_FOCUS, terminal_focus);
 
 static void
 display (aid_t aid,
+	 bd_t bd,
 	 void* ptr,
 	 size_t buffer_size)
 {
@@ -255,18 +257,9 @@ display (aid_t aid,
     return;
   }
   
-  buffer_heap_t heap;
-  buffer_heap_init (&heap, ptr, buffer_size);
-  
-  const terminal_display_arg_t* arg = buffer_heap_begin (&heap);
-  if (!buffer_heap_check (&heap, arg, sizeof (terminal_display_arg_t))) {
-    /* Not enough data. */
-    return;
-  }
-
-  const char* begin = (void*)&arg->string + arg->string;
-  if (!buffer_heap_check (&heap, begin, arg->size)) {
-    /* Not enough data. */
+  string_buffer_t sb;
+  if (!string_buffer_parse (&sb, bd, ptr, buffer_size)) {
+    /* Bad buffer. */
     return;
   }
 
@@ -277,7 +270,8 @@ display (aid_t aid,
   }
   
   /* Process the string. */
-  const char* end = begin + arg->size;
+  char* begin = string_buffer_data (&sb);
+  const char* end = begin + string_buffer_size (&sb);
   for (; begin != end; ++begin) {
     const char c = *begin;
 
@@ -390,7 +384,7 @@ terminal_display (aid_t aid,
 		  void* ptr,
 		  size_t buffer_size)
 {
-  display (aid, ptr, buffer_size);
+  display (aid, bd, ptr, buffer_size);
 
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);

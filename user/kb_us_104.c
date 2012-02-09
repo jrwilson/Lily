@@ -4,6 +4,7 @@
 #include <buffer_heap.h>
 #include <fifo_scheduler.h>
 #include "keyboard.h"
+#include "string_buffer.h"
 
 /*
   Driver for a 104-key US keyboard
@@ -19,11 +20,7 @@
   An array of ASCII characters implemented with a buffer.
   This allows us to output the array when the STRING output fires.
 */
-static size_t aarr_size;
-static size_t aarr_capacity;
-static bd_t aarr_bd;
-static kb_us_104_string_t* aarr_struct;
-static char* aarr_string;
+static string_buffer_t string_buffer;
 
 static bool left_shift = false;
 static bool right_shift = false;
@@ -207,44 +204,6 @@ static char upper_case[128] = {
 };
 
 static void
-reset_buffer (void)
-{
-  /* Create an array to store scan codes. */
-  aarr_capacity = INITIAL_CAPACITY;
-  aarr_size = sizeof (keyboard_scan_code_t) + aarr_capacity;
-  aarr_bd = buffer_create (aarr_size);
-  void* keycode_ptr = buffer_map (aarr_bd);
-  buffer_heap_t keycode_heap;
-  buffer_heap_init (&keycode_heap, keycode_ptr, aarr_size);
-  aarr_struct = buffer_heap_alloc (&keycode_heap, sizeof (keyboard_scan_code_t));
-  aarr_string = buffer_heap_alloc (&keycode_heap, aarr_capacity);
-  
-  aarr_struct->length = 0;
-  aarr_struct->string = (void*)aarr_string - (void*)&aarr_struct->string;
-}
-
-static void
-put (char c)
-{
-  /* Resize the output array. */
-  if (aarr_struct->length == aarr_capacity) {
-    buffer_unmap (aarr_bd);
-    buffer_grow (aarr_bd, aarr_capacity);
-    aarr_capacity *= 2;
-    aarr_size = sizeof (keyboard_scan_code_t) + aarr_capacity;
-    void* keycode_ptr = buffer_map (aarr_bd);
-    buffer_heap_t keycode_heap;
-    buffer_heap_init (&keycode_heap, keycode_ptr, aarr_size);
-    aarr_struct = buffer_heap_alloc (&keycode_heap, sizeof (keyboard_scan_code_t));
-    aarr_string = buffer_heap_alloc (&keycode_heap, aarr_capacity);
-    /* Note:  The count and offset to the array haven't changed. */
-  }
-
-  /* Store the scan code. */
-  aarr_string[aarr_struct->length++] = c;
-}
-
-static void
 schedule (void);
 
 void
@@ -253,7 +212,7 @@ init (int param,
       void* ptr,
       size_t buffer_size)
 {
-  reset_buffer ();
+  string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
 
   schedule ();
   scheduler_finish (-1, FINISH_NO);
@@ -267,80 +226,76 @@ kb_us_104_scan_code (int param,
 		     size_t size)
 {
   if (ptr != 0) {
-    buffer_heap_t heap;
-    buffer_heap_init (&heap, ptr, size);
-    keyboard_scan_code_t* kk = buffer_heap_begin (&heap);
-    if (buffer_heap_check (&heap, kk, sizeof (keyboard_scan_code_t))) {
-      unsigned char* codes = (void*)&kk->codes + kk->codes;
-      if (buffer_heap_check (&heap, codes, kk->count)) {
-	for (size_t idx = 0; idx != kk->count; ++idx) {
-	  unsigned char c = codes[idx];
-	  if (c < BREAK) {
-	    /* Make. */
-	    switch (c) {
-	    case LEFT_SHIFT:
-	      left_shift = true;
-	      break;
-	    case RIGHT_SHIFT:
-	      right_shift = true;
-	      break;
-	    case CAPS_LOCK:
-	      caps_lock = !caps_lock;
-	      break;
-	    case CONTROL:
-	      control = true;
-	      break;
-	    case ALT:
-	      alt = true;
-	      break;
-	    default:
-	      {
-		char t = lower_case[c];
+    string_buffer_t sb;
+    if (string_buffer_parse (&sb, bd, ptr, size)) {
+      unsigned char* codes = string_buffer_data (&sb);
+      for (size_t idx = 0; idx != string_buffer_size (&sb); ++idx) {
+	unsigned char c = codes[idx];
+	if (c < BREAK) {
+	  /* Make. */
+	  switch (c) {
+	  case LEFT_SHIFT:
+	    left_shift = true;
+	    break;
+	  case RIGHT_SHIFT:
+	    right_shift = true;
+	    break;
+	  case CAPS_LOCK:
+	    caps_lock = !caps_lock;
+	    break;
+	  case CONTROL:
+	    control = true;
+	    break;
+	  case ALT:
+	    alt = true;
+	    break;
+	  default:
+	    {
+	      char t = lower_case[c];
 		/*
 		  The first clause says that an alphabetic character should be capitalized if either shifting or caps lock exclusively.
 		  The second clause says that all other characters can be shifted if a definition exists.
-		 */
-		if ((t >= 'a' && t <= 'z') &&
-		    (((left_shift || right_shift) && !caps_lock) ||
-		     (!(left_shift || right_shift) && caps_lock))) {
-		  t = upper_case[c];
-		}
-		else if ((left_shift || right_shift) && upper_case[c] != 0) {
-		  t = upper_case[c];
-		}
-
-		if (t != 0) {
-		  put (t);
-		}
-		/* else { */
-		/*   /\* TODO *\/ */
-		/*   char buf[256]; */
-		/*   int cnt = snprintf (buf, 256, " %x ", c); */
-		/*   for (int i = 0; i != cnt; ++i) { */
-		/*     put (buf[i]); */
-		/*   } */
-		/* } */
+		*/
+	      if ((t >= 'a' && t <= 'z') &&
+		  (((left_shift || right_shift) && !caps_lock) ||
+		   (!(left_shift || right_shift) && caps_lock))) {
+		t = upper_case[c];
 	      }
-	      break;
+	      else if ((left_shift || right_shift) && upper_case[c] != 0) {
+		t = upper_case[c];
+	      }
+	      
+	      if (t != 0) {
+		string_buffer_put (&string_buffer, t);
+	      }
+	      /* else { */
+	      /*   /\* TODO *\/ */
+	      /*   char buf[256]; */
+	      /*   int cnt = snprintf (buf, 256, " %x ", c); */
+	      /*   for (int i = 0; i != cnt; ++i) { */
+	      /*     put (buf[i]); */
+	      /*   } */
+	      /* } */
 	    }
+	    break;
 	  }
-	  else {
-	    /* Break. */
-	    c -= BREAK;
-	    switch (c) {
-	    case LEFT_SHIFT:
-	      left_shift = false;
-	      break;
-	    case RIGHT_SHIFT:
-	      right_shift = false;
-	      break;
-	    case CONTROL:
-	      control = false;
-	      break;
-	    case ALT:
-	      alt = false;
-	      break;
-	    }
+	}
+	else {
+	  /* Break. */
+	  c -= BREAK;
+	  switch (c) {
+	  case LEFT_SHIFT:
+	    left_shift = false;
+	    break;
+	  case RIGHT_SHIFT:
+	    right_shift = false;
+	    break;
+	  case CONTROL:
+	    control = false;
+	    break;
+	  case ALT:
+	    alt = false;
+	    break;
 	  }
 	}
       }
@@ -353,24 +308,20 @@ kb_us_104_scan_code (int param,
 EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, KB_US_104_SCAN_CODE, kb_us_104_scan_code);
 
 static bool
-kb_us_104_printer_op_precondition (void)
+kb_us_104_string_precondition (void)
 {
   /* Don't care if we are bound. */
-  return aarr_struct->length != 0;
+  return string_buffer_size (&string_buffer) != 0;
 }
 
 void
-kb_us_104_printer_op (int param,
+kb_us_104_string (int param,
 		     size_t bc)
 {
   scheduler_remove (KB_US_104_STRING, param);
 
-  if (kb_us_104_printer_op_precondition ()) {
-    /* Make a copy for the readers. */
-    bd_t bd = aarr_bd;
-    /* Reset. */
-    reset_buffer ();
-
+  if (kb_us_104_string_precondition ()) {
+    bd_t bd = string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
   }
@@ -379,12 +330,12 @@ kb_us_104_printer_op (int param,
     scheduler_finish (-1, FINISH_NO);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, KB_US_104_STRING, kb_us_104_printer_op);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, KB_US_104_STRING, kb_us_104_string);
 
 static void
 schedule (void)
 {
-  if (kb_us_104_printer_op_precondition ()) {
+  if (kb_us_104_string_precondition ()) {
     scheduler_add (KB_US_104_STRING, 0);
   }
 }

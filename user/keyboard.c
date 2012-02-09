@@ -3,6 +3,7 @@
 #include <io.h>
 #include <buffer_heap.h>
 #include <fifo_scheduler.h>
+#include "string_buffer.h"
 
 /*
   Keyboard Driver
@@ -51,28 +52,7 @@ typedef union {
   An array of scan codes implemented with a buffer.
   This allows us to output the array when the SCAN_CODE output fires.
 */
-static size_t scarr_size;
-static size_t scarr_capacity;
-static bd_t scarr_bd;
-static keyboard_scan_code_t* scarr_struct;
-static unsigned char* scarr_codes;
-
-static void
-reset_buffer (void)
-{
-  /* Create an array to store scan codes. */
-  scarr_capacity = INITIAL_CAPACITY;
-  scarr_size = sizeof (keyboard_scan_code_t) + scarr_capacity;
-  scarr_bd = buffer_create (scarr_size);
-  void* keycode_ptr = buffer_map (scarr_bd);
-  buffer_heap_t keycode_heap;
-  buffer_heap_init (&keycode_heap, keycode_ptr, scarr_size);
-  scarr_struct = buffer_heap_alloc (&keycode_heap, sizeof (keyboard_scan_code_t));
-  scarr_codes = buffer_heap_alloc (&keycode_heap, scarr_capacity);
-  
-  scarr_struct->count = 0;
-  scarr_struct->codes = (void*)scarr_codes - (void*)&scarr_struct->codes;
-}
+static string_buffer_t string_buffer;
 
 static void schedule (void);
 
@@ -87,7 +67,7 @@ init (int param,
   reserve_port (KEYBOARD_CONTROLLER_PORT);
   subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT, 0);
 
-  reset_buffer ();
+  string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
 
   schedule ();
   scheduler_finish (-1, FINISH_NO);
@@ -97,22 +77,7 @@ EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 void
 interrupt (int param)
 {
-  /* Resize the output array. */
-  if (scarr_struct->count == scarr_capacity) {
-    buffer_unmap (scarr_bd);
-    buffer_grow (scarr_bd, scarr_capacity);
-    scarr_capacity *= 2;
-    scarr_size = sizeof (keyboard_scan_code_t) + scarr_capacity;
-    void* keycode_ptr = buffer_map (scarr_bd);
-    buffer_heap_t keycode_heap;
-    buffer_heap_init (&keycode_heap, keycode_ptr, scarr_size);
-    scarr_struct = buffer_heap_alloc (&keycode_heap, sizeof (keyboard_scan_code_t));
-    scarr_codes = buffer_heap_alloc (&keycode_heap, scarr_capacity);
-    /* Note:  The count and offset to the array haven't changed. */
-  }
-
-  /* Store the scan code. */
-  scarr_codes[scarr_struct->count++] = inb (KEYBOARD_DATA_PORT);
+  string_buffer_put (&string_buffer, inb (KEYBOARD_DATA_PORT));
 
   schedule ();
   scheduler_finish (-1, FINISH_NO);
@@ -123,7 +88,7 @@ static bool
 keycode_precondition (void)
 {
   /* We don't care if we are bound or not. */
-  return scarr_struct->count != 0;
+  return string_buffer_size (&string_buffer) != 0;
 }
 
 void
@@ -133,11 +98,7 @@ scan_code (int param,
   scheduler_remove (KEYBOARD_SCAN_CODE, param);
 
   if (keycode_precondition ()) {
-    /* Make a copy for the readers. */
-    bd_t bd = scarr_bd;
-    /* Reset. */
-    reset_buffer ();
-
+    bd_t bd = string_buffer_harvest (&string_buffer, INITIAL_CAPACITY);
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
   }
