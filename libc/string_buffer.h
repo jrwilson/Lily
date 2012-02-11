@@ -22,12 +22,21 @@ string_buffer_init (string_buffer_t* sb,
 		    size_t initial_capacity);
 
 void
+string_buffer_reserve (string_buffer_t* sb,
+		       size_t new_capacity);
+
+void
 string_buffer_putc (string_buffer_t* sb,
 		    char c);
 
 void
 string_buffer_puts (string_buffer_t* sb,
 		    const char* s);
+
+void
+string_buffer_append (string_buffer_t* sb,
+		      const void* ptr,
+		      size_t size);
 
 bd_t
 string_buffer_bd (const string_buffer_t* sb);

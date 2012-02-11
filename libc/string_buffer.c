@@ -2,6 +2,7 @@
 #include "automaton.h"
 #include "buffer_heap.h"
 #include <stdarg.h>
+#include "string.h"
 
 void
 string_buffer_init (string_buffer_t* sb,
@@ -21,13 +22,12 @@ string_buffer_init (string_buffer_t* sb,
 }
 
 void
-string_buffer_putc (string_buffer_t* sb,
-		    char c)
+string_buffer_reserve (string_buffer_t* sb,
+		       size_t new_capacity)
 {
-  /* Resize the output array. */
-  if (sb->string->size == sb->string->capacity) {
+  if (new_capacity > sb->string->capacity) {
     /* Double in capacity. */
-    size_t grow_size = sb->string->capacity;
+    size_t grow_size = new_capacity - sb->string->capacity;
     buffer_unmap (sb->bd);
     buffer_grow (sb->bd, grow_size);
     size_t real_capacity = buffer_capacity (sb->bd);
@@ -41,6 +41,16 @@ string_buffer_putc (string_buffer_t* sb,
     sb->string->capacity = real_capacity - sizeof (string_t);
     /* sb->string->data has not changed. */
   }
+}
+
+void
+string_buffer_putc (string_buffer_t* sb,
+		    char c)
+{
+  if (sb->string->size == sb->string->capacity) {
+    /* Double in capacity. */
+    string_buffer_reserve (sb, sb->string->capacity);
+  }
   
   /* Store the scan code. */
   sb->data[sb->string->size++] = c;
@@ -53,6 +63,16 @@ string_buffer_puts (string_buffer_t* sb,
   while (*s != 0) {
     string_buffer_putc (sb, *s++);
   }
+}
+
+void
+string_buffer_append (string_buffer_t* sb,
+		      const void* ptr,
+		      size_t size)
+{
+  string_buffer_reserve (sb, size);
+  memcpy (&sb->data[sb->string->size], ptr, size);
+  sb->string->size += size;
 }
 
 bd_t
@@ -242,6 +262,13 @@ sbprintf (string_buffer_t* sb,
 	    string_buffer_puts (sb, "-ffffffff");
 	  }
 	  
+	  ++format;
+	}
+	break;
+      case 's':
+	{
+	  char* str = va_arg (ap, char*);
+	  string_buffer_puts (sb, str);
 	  ++format;
 	}
 	break;

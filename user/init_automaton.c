@@ -207,8 +207,8 @@ init (int param,
   }
 
   bind (keyboard, KEYBOARD_SCAN_CODE, 0, kb_us_104, KB_US_104_SCAN_CODE, 0);
-  bind (kb_us_104, KB_US_104_STRING, 0, shell, SHELL_STRING, 0);
-  bind (shell, SHELL_DISPLAY, 0, terminal, TERMINAL_DISPLAY, 0);
+  bind (kb_us_104, KB_US_104_STRING, 0, shell, SHELL_STDIN, 0);
+  bind (shell, SHELL_STDOUT, 0, terminal, TERMINAL_DISPLAY, 0);
   bind (terminal, TERMINAL_VGA_OP, 0, vga, VGA_OP, 0);
 
   finish (NO_ACTION, 0, bd, FINISH_DESTROY);

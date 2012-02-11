@@ -43,6 +43,7 @@
   -----------
   The server assumes an 80x25 single page display.
   The character progression is assumed left-to-right and the line progression is assumed top-to-bottom.
+  The server is not efficient and sends the entire screen when updating.
 
   Authors
   -------
@@ -92,7 +93,7 @@
   DTA  - DIMENSION TEXT AREA
   EA   - ERASE IN AREA
   ECH  - ERASE CHARACTER
-  ED   - ERASE IN PAGE
+  + ED   - ERASE IN PAGE
   EF   - ERASE IN FIELD
   EL   - ERASE IN LINE
   EM   - END OF MEDIUM
@@ -253,6 +254,11 @@ struct client {
   unsigned short active_position_x;
   unsigned short active_position_y;
 
+  /* Flag indicating that the graphics for the active_client needs to be sent to the VGA. */
+  bool graphics_refresh;
+  /* Flag indicating that the cursor for the active_client needs to be sent to the VGA. */
+  bool cursor_refresh;
+
   mode_t mode;
   int parameter[PARAMETER_SIZE];
   size_t parameter_count;
@@ -265,8 +271,6 @@ struct client {
 static client_t* client_list_head = 0;
 /* The active client. */
 static client_t* active_client = 0;
-/* Flag indicating that the data for the active_client needs to be sent to the VGA. */
-static bool refresh = false;
 /* The number of actions bound to the terminal_vga_op output.  By making this non-zero to start, we force an update. */
 static size_t terminal_vga_op_binding_count = 1;
 
@@ -297,6 +301,9 @@ create_client (aid_t aid)
   client->active_position_x = LINE_HOME_POSITION;
   client->active_position_y = PAGE_HOME_POSITION;
 
+  client->graphics_refresh = true;
+  client->cursor_refresh = true;
+
   client->mode = NORMAL;
 
   client->next = client_list_head;
@@ -311,9 +318,12 @@ static void
 switch_to_client (client_t* client)
 {
   if (client != active_client) {
-    active_client = client;
     /* Only refresh if there is a client. */
-    refresh = active_client != 0;
+    if (client != 0) {
+      client->graphics_refresh = true;
+      client->cursor_refresh = true;
+    }
+    active_client = client;
   }
 }
 
@@ -337,6 +347,9 @@ scroll (client_t* client)
   memset (&client->buffer[(PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION], 0, LINE_LIMIT_POSITION * CELL_SIZE);
   /* Change the active y. */
   --client->active_position_y;
+
+  client->graphics_refresh = true;
+  client->cursor_refresh = true;
 }
 
 static void schedule (void);
@@ -374,11 +387,13 @@ process_normal (client_t* client,
     /* Backspace. */
     if (client->active_position_x != 0) {
       --client->active_position_x;
+      client->cursor_refresh = true;
     }
     break;
   case HT:
     /* Horizontal tab. */
     client->active_position_x = (client->active_position_x + 8) & ~(8-1);
+    client->cursor_refresh = true;
     break;
   case LF:
     /* Line feed.  (NOT STANDARD!) */
@@ -389,10 +404,12 @@ process_normal (client_t* client,
     if (client->active_position_y == PAGE_LIMIT_POSITION) {
       scroll (client);
     }
+    client->cursor_refresh = true;
     break;
   case CR:
     /* Carriage return. */
     client->active_position_x = 0;
+    client->cursor_refresh = true;
     break;
   case ESC:
     /* Begin of escaped sequence. */
@@ -419,6 +436,9 @@ process_normal (client_t* client,
 	/* Same idea. */
 	scroll (client);
       }
+
+      client->graphics_refresh = true;
+      client->cursor_refresh = true;
     }
     break;
   }
@@ -483,6 +503,12 @@ process_control (client_t* client,
 	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] = ATTRIBUTE | ' ';
       }
 
+      /* Move to line home. */
+      client->active_position_x = LINE_HOME_POSITION;
+
+      client->graphics_refresh = true;
+      client->cursor_refresh = true;
+
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -498,6 +524,9 @@ process_control (client_t* client,
       if (offset <= client->active_position_y) {
 	client->active_position_y -= offset;
       }
+
+      client->cursor_refresh = true;
+
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -513,6 +542,9 @@ process_control (client_t* client,
       if (client->active_position_y + offset < PAGE_LIMIT_POSITION) {
 	client->active_position_y += offset;
       }
+
+      client->cursor_refresh = true;
+
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -528,6 +560,9 @@ process_control (client_t* client,
       if (client->active_position_x + offset < LINE_LIMIT_POSITION) {
 	client->active_position_x += offset;
       }
+
+      client->cursor_refresh = true;
+
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -543,6 +578,9 @@ process_control (client_t* client,
       if (offset <= client->active_position_x) {
 	client->active_position_x -= offset;
       }
+
+      client->cursor_refresh = true;
+
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -564,7 +602,56 @@ process_control (client_t* client,
 	client->active_position_y = new_y - 1;
 	client->active_position_x = new_x - 1;
       }
+
+      client->cursor_refresh = true;
+
       /* Reset. */
+      client->mode = NORMAL;
+    }
+    break;
+  case ED:
+    {
+      /* Parse the parameters. */
+      unsigned short choice = 0;
+      if (client->parameter_count >= 1) {
+	choice = client->parameter[0];
+      }
+      switch (choice) {
+      case ERASE_TO_PAGE_LIMIT:
+	/* Erase the current line. */
+	for (unsigned short x = client->active_position_x; x != LINE_LIMIT_POSITION; ++x) {
+	  client->buffer[client->active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	}
+	/* Erase the subsequent lines. */
+	for (unsigned short y = client->active_position_y + 1; y != PAGE_LIMIT_POSITION; ++y) {
+	  for (unsigned short x = 0; x != LINE_LIMIT_POSITION; ++x) {
+	    client->buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	  }
+	}
+	break;
+      case ERASE_TO_PAGE_HOME:
+	/* Erase the preceding lines. */
+	for (unsigned short y = 0; y != client->active_position_y; ++y) {
+	  for (unsigned short x = 0; x != LINE_LIMIT_POSITION; ++x) {
+	    client->buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	  }
+	}
+	/* Erase the current line. */
+	for (unsigned short x = 0; x != client->active_position_x + 1; ++x) {
+	  client->buffer[client->active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	}
+	break;
+      case ERASE_ALL:
+	/* Erase the entire page. */
+	for (unsigned short y = 0; y != PAGE_LIMIT_POSITION; ++y) {
+	  for (unsigned short x = 0; x != LINE_LIMIT_POSITION; ++x) {
+	    client->buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	  }
+	}
+	break;
+      }
+
+      client->graphics_refresh = true;
       client->mode = NORMAL;
     }
     break;
@@ -615,11 +702,6 @@ display (aid_t aid,
     }
   }
   
-  /* If this is the active client, refresh the VGA. */
-  if (client == active_client) {
-    refresh = true;
-  }
-  
   /* TODO:  Remove this line. */
   switch_to_client (client);
 }
@@ -640,7 +722,7 @@ EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, TERMINAL_DISPLAY, terminal_displ
 static bool
 terminal_vga_precondition (void)
 {
-  return refresh && active_client != 0 && terminal_vga_op_binding_count != 0;
+  return active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh) && terminal_vga_op_binding_count != 0;
 }
 
 void
@@ -651,29 +733,49 @@ terminal_vga_op (int param,
   terminal_vga_op_binding_count = bc;
 
   if (terminal_vga_precondition ()) {
-    refresh = false;
+    size_t op_count = 0;
+    if (active_client->graphics_refresh) {
+      ++op_count;
+    }
+    if (active_client->cursor_refresh) {
+      ++op_count;
+    }
 
-    size_t buffer_size = 2 * sizeof (vga_op_t);
+    size_t buffer_size = op_count * sizeof (vga_op_t);
     bd_t bd = buffer_create (buffer_size);
-    size_t data_offset = buffer_append (bd, active_client->bd, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
+    size_t data_offset = 0;
+    if (active_client->graphics_refresh) {
+      data_offset = buffer_append (bd, active_client->bd, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
+    }
     void* ptr = buffer_map (bd);
     buffer_heap_t heap;
     buffer_heap_init (&heap, ptr, buffer_size);
     
-    /* Send the data. */
-    vga_op_t* assign_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
-    assign_op->type = VGA_ASSIGN;
-    assign_op->arg.assign.address = 0;
-    assign_op->arg.assign.size = PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE;
-    assign_op->arg.assign.data = (buffer_heap_begin (&heap) + data_offset) - (void*)&assign_op->arg.assign.data;
+    vga_op_t* assign_op = 0;
+    if (active_client->graphics_refresh) {
+      /* Send the data. */
+      assign_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
+      assign_op->type = VGA_ASSIGN;
+      assign_op->arg.assign.address = 0;
+      assign_op->arg.assign.size = PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE;
+      assign_op->arg.assign.data = (buffer_heap_begin (&heap) + data_offset) - (void*)&assign_op->arg.assign.data;
+      assign_op->next = 0;
+    }
     
-    /* Send the cursor. */
-    vga_op_t* set_cursor_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
-    assign_op->next = (void*)set_cursor_op - (void*)&assign_op->next;
-    set_cursor_op->type = VGA_SET_CURSOR_LOCATION;
-    set_cursor_op->arg.set_cursor_location.location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
-    
-    set_cursor_op->next = 0;
+    if (active_client->cursor_refresh) {
+      /* Send the cursor. */
+      vga_op_t* set_cursor_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
+      set_cursor_op->type = VGA_SET_CURSOR_LOCATION;
+      set_cursor_op->arg.set_cursor_location.location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+      set_cursor_op->next = 0;
+
+      if (assign_op != 0) {
+	assign_op->next = (void*)set_cursor_op - (void*)&assign_op->next;
+      }
+    }
+
+    active_client->graphics_refresh = false;
+    active_client->cursor_refresh = false;
 
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);

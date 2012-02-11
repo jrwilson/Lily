@@ -4,7 +4,7 @@
   Description
   -----------
   Dynamic memory allocation based on Doug Lea's malloc.
-  I would eventually like to port dlmalloc to Lily, however, I'm unwilling to find the Unix assumption right now.
+  I would eventually like to port dlmalloc to Lily, however, I'm unwilling to fight the Unix assumption right now.
 
   Authors:
   Justin R. Wilson
@@ -13,6 +13,7 @@
 /* BUG:  We assume a 32-bit architecture. */
 
 #include <stdbool.h>
+#include "string.h"
 
 /* The number of bins containing free chunks of memory. */
 #define BIN_COUNT 128
@@ -562,6 +563,65 @@ free (void* ptr)
 	insert (h);
       }
     }
+  }
+}
+
+void*
+realloc (void* ptr,
+	 size_t size)
+{
+  /* We'll do a simple allocate, copy, and then free. */
+  /* TODO:  Try to optimize by expanding the node. */
+
+  if (ptr != 0) {
+
+    header_t* h = (header_t*) ((char*)(ptr) - HEADER_SIZE);
+    
+    if (h >= first_header_ &&
+	h <= last_header_ &&
+	!header_get_available (h)) {
+      
+      footer_t* f = header_get_footer (h);
+      
+      if (f >= header_get_footer (first_header_) &&
+	  f <= header_get_footer (last_header_) &&
+	  header_size (h) == footer_size (f)) {
+	/* We are satisfied that the chunk is correct. */
+	/* We could be more paranoid and check the previous/next chunk. */
+
+	if (size != 0) {
+	  /* Requesting a non-zero size. */
+
+	  const size_t old_size = header_size (h);
+	  const size_t copy_size = (old_size < size) ? old_size : size;
+
+	  /* Allocate. */
+	  void* retval = malloc (size);
+	  if (retval != 0) {
+	    /* Copy and free. */
+	    memcpy (retval, ptr, copy_size);
+	    free (ptr);
+	    return retval;
+	  }
+	  else {
+	    /* Couldn't fulfill the request. */
+	    return 0;
+	  }
+	}
+	else {
+	  /* Requesting zero size.  Free. */
+	  free (h);
+	  return 0;
+	}
+      }
+    }
+
+    /* If we've made it here it means that the pointer was not valid. */
+    return 0;
+  }
+  else {
+    /* Pointer was 0. */
+    return malloc (size);
   }
 }
 

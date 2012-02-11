@@ -15,13 +15,13 @@ init_data : $(PROGRAMS)
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
 keyboard : keyboard.o
-	$(CC) -o $@ $^ -lio -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -lio -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
 
 kb_us_104 : kb_us_104.o
-	$(CC) -o $@ $^ -lstring -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
 
 shell : shell.o
-	$(CC) -o $@ $^ -lstring -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
 
 terminal : terminal.o
 	$(CC) -o $@ $^ -lstring -lfifo_scheduler -ldymem -lstring_buffer -lbuffer_heap
