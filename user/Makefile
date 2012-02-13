@@ -7,7 +7,7 @@ TARGETS=init_automaton init_data
 all : $(TARGETS)
 
 init_automaton : init_automaton.o
-	$(CC) -o $@ $^ -lstring -ldymem
+	$(CC) -o $@ $^ -lio -lstring -ldymem
 
 init_data : $(PROGRAMS)
 	mkdir -p init_fs

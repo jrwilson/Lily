@@ -19,7 +19,7 @@
 #include "algorithm.hpp"
 #include "registers.hpp"
 
-// TODO:  Perhpas this could be simpler to match its intended use.  Maybe remove inlines, etc.
+// TODO:  Perhaps this could be simpler to match its intended use.  Maybe remove inlines, etc.
 
 class console {
 private:

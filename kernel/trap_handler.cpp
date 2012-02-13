@@ -145,11 +145,21 @@ struct sysconf_args {
   int name;
 };
 
+struct syslog_args {
+  uint32_t eip;
+  char* string;
+  size_t size;
+};
+
 // The goal of this function is to demarshall system calls and dispatch.
 extern "C" void
 trap_dispatch (volatile registers regs)
 {
   kassert (regs.number == SYSCALL_INTERRUPT);
+
+  /* These match the order in lily/syscall.h.
+     Please keep it that way.
+  */
   switch (regs.eax) {
   case LILY_SYSCALL_FINISH:
     {
@@ -160,6 +170,13 @@ trap_dispatch (volatile registers regs)
 	kassert (0);
       }
       rts::finish (current, ptr->action_number, ptr->parameter, ptr->bd, ptr->flags);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_EXIT:
+    {
+      // BUG
+      kassert (0);
       return;
     }
     break;
@@ -191,25 +208,37 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_LOOSE:
+  case LILY_SYSCALL_UNBIND:
     {
       // BUG
       kassert (0);
-      rts::loose ();
-  	return;
+      return;
     }
     break;
   case LILY_SYSCALL_DESTROY:
     {
       // BUG
       kassert (0);
-      rts::destroy ();
+      return;
+    }
+    break;
+  case LILY_SYSCALL_SUBSCRIBE_UNBOUND:
+    {
+      // BUG
+      kassert (0);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_UNSUBSCRIBE_UNBOUND:
+    {
+      // BUG
+      kassert (0);
       return;
     }
     break;
   case LILY_SYSCALL_SUBSCRIBE_DESTROYED:
     {
-      automaton* a = scheduler::current_action ().action->automaton;
+    automaton* a = scheduler::current_action ().action->automaton;
       subscribe_destroyed_args* ptr = reinterpret_cast<subscribe_destroyed_args*> (regs.useresp);
       if (!a->verify_span (ptr, sizeof (subscribe_destroyed_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
@@ -219,7 +248,13 @@ trap_dispatch (volatile registers regs)
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
-
+    }
+    break;
+  case LILY_SYSCALL_UNSUBSCRIBE_DESTROYED:
+    {
+      // BUG
+      kassert (0);
+      return;
     }
     break;
   case LILY_SYSCALL_ADJUST_BREAK:
@@ -252,7 +287,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_COPY:
     {
-      automaton* a = scheduler::current_action ().action->automaton;
+    automaton* a = scheduler::current_action ().action->automaton;
       buffer_copy_args* ptr = reinterpret_cast<buffer_copy_args*> (regs.useresp);
       if (!a->verify_span (ptr, sizeof (buffer_copy_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
@@ -296,7 +331,6 @@ trap_dispatch (volatile registers regs)
     {
       // BUG
       kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_assign (regs.ebx, regs.ecx, regs.edx, regs.esi, regs.edi);
       return;
     }
     break;
@@ -332,7 +366,6 @@ trap_dispatch (volatile registers regs)
     {
       // BUG
       kassert (0);
-      regs.eax = scheduler::current_action ().action->automaton->buffer_destroy (regs.ebx);
       return;
     }
     break;
@@ -350,71 +383,6 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_MAP:
-    {
-      automaton* a = scheduler::current_action ().action->automaton;
-      map_args* ptr = reinterpret_cast<map_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (map_args))) {
-	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
-	kassert (0);
-      }
-      pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-  case LILY_SYSCALL_RESERVE_PORT:
-    {
-      automaton* a = scheduler::current_action ().action->automaton;
-      reserve_port_args* ptr = reinterpret_cast<reserve_port_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (reserve_port_args))) {
-	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
-	kassert (0);
-      }
-      pair<int, int> r = rts::reserve_port (a, ptr->port);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-  case LILY_SYSCALL_INB:
-    {
-      automaton* a = scheduler::current_action ().action->automaton;
-      inb_args* ptr = reinterpret_cast<inb_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (inb_args))) {
-	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
-	kassert (0);
-      }
-      pair<unsigned char, int> r = a->inb (ptr->port);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-  case LILY_SYSCALL_OUTB:
-    {
-      automaton* a = scheduler::current_action ().action->automaton;
-      outb_args* ptr = reinterpret_cast<outb_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (outb_args))) {
-	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
-	kassert (0);
-      }
-      pair<unsigned char, int> r = a->outb (ptr->port, ptr->value);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-  case LILY_SYSCALL_SUBSCRIBE_IRQ:
-    {
-      automaton* a = scheduler::current_action ().action->automaton;
-      subscribe_irq_args* ptr = reinterpret_cast<subscribe_irq_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (subscribe_irq_args))) {
-	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
-	kassert (0);
-      }
-      pair<unsigned char, int> r = a->subscribe_irq (ptr->irq, ptr->action_number, ptr->parameter);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
   case LILY_SYSCALL_SYSCONF:
     {
       automaton* a = scheduler::current_action ().action->automaton;
@@ -437,8 +405,129 @@ trap_dispatch (volatile registers regs)
       }
       return;
     }
+    break;
+  case LILY_SYSCALL_SET_REGISTRY:
+    {
+      // BUG
+      kassert (0);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_GET_REGISTRY:
+    {
+      // BUG
+      kassert (0);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_MAP:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      map_args* ptr = reinterpret_cast<map_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (map_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_UNMAP:
+    {
+      // BUG
+      kassert (0);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_RESERVE_PORT:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      reserve_port_args* ptr = reinterpret_cast<reserve_port_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (reserve_port_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = rts::reserve_port (a, ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_UNRESERVE_PORT:
+    {
+      // BUG
+      kassert (0);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_INB:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      inb_args* ptr = reinterpret_cast<inb_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (inb_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->inb (ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_OUTB:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      outb_args* ptr = reinterpret_cast<outb_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (outb_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->outb (ptr->port, ptr->value);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_SUBSCRIBE_IRQ:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      subscribe_irq_args* ptr = reinterpret_cast<subscribe_irq_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (subscribe_irq_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->subscribe_irq (ptr->irq, ptr->action_number, ptr->parameter);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_UNSUBSCRIBE_IRQ:
+    {
+      // BUG
+      kassert (0);
+      return;
+    }
+    break;
+  case LILY_SYSCALL_SYSLOG:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      syslog_args* ptr = reinterpret_cast<syslog_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (syslog_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<unsigned char, int> r = a->syslog (ptr->string, ptr->size);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
   default:
     // BUG:  Unknown system call.
     kassert (0);
+    break;
   }
 }

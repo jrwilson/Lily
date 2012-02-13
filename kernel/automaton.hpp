@@ -389,6 +389,27 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
+  pair<int, int>
+  syslog (const char* string,
+	  size_t size)
+  {
+    if (!privileged ()) {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+
+    if (!verify_span (string, size)) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    while (size != 0) {
+      kout.put (*string);
+      ++string;
+      --size;
+    }
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
   pair<void*, int>
   adjust_break (ptrdiff_t size)
   {

@@ -34,4 +34,8 @@ subscribe_irq (int irq,
 	       ano_t ano,
 	       int param);
 
+int
+syslog (const char* message,
+	size_t size);
+
 #endif /* IO_H */
