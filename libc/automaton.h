@@ -56,6 +56,9 @@ finish (ano_t action_number,
 	bd_t buffer,
 	int flags);
 
+void
+exit (void);
+
 aid_t
 create (bd_t text_bd,
 	size_t text_buffer_size,

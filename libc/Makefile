@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 AS=i586-elf-as
-CFLAGS=-MD -O2 -g -Wall -std=c99
+CFLAGS=-MD -O2 -g -Wall -fno-builtin -std=c99
 
 # Headers that will be installed.
 HEADERS=automaton.h io.h string.h dymem.h fifo_scheduler.h buffer_heap.h string_buffer.h

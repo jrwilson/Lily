@@ -93,10 +93,10 @@ kmain (uint32_t multiboot_magic,
   // Print a welcome message.
   kout << "Lily" << endl;
 
-  frame_t automaton_frame;
-  size_t automaton_size;
-  frame_t data_frame;
-  size_t data_size;
+  frame_t boot_automaton_frame;
+  size_t boot_automaton_size;
+  frame_t boot_data_frame;
+  size_t boot_data_size;
 
   {
     // A wrapper around multiboot_info_t.
@@ -119,27 +119,27 @@ kmain (uint32_t multiboot_magic,
       halt ();
     }
 
-    const multiboot_module_t* automaton_module = 0;
-    const multiboot_module_t* data_module = 0;
+    const multiboot_module_t* boot_automaton_module = 0;
+    const multiboot_module_t* boot_data_module = 0;
 
     for (const multiboot_module_t* mod = multiboot_parser.module_begin ();
   	 mod != multiboot_parser.module_end ();
   	 ++mod) {
-      if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "automaton") == 0) {
-  	automaton_module = mod;
+      if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "boot_automaton") == 0) {
+  	boot_automaton_module = mod;
       }
-      else if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "data") == 0) {
-  	data_module = mod;
+      else if (strcmp (reinterpret_cast<const char*> (mod->cmdline), "boot_data") == 0) {
+  	boot_data_module = mod;
       }
     }
 
-    if (automaton_module == 0) {
-      kout << "No automaton module.  Halting." << endl;
+    if (boot_automaton_module == 0) {
+      kout << "No boot_automaton module.  Halting." << endl;
       halt ();
     }
 
-    if (data_module == 0) {
-      kout << "No data module.  Halting." << endl;
+    if (boot_data_module == 0) {
+      kout << "No boot_data module.  Halting." << endl;
       halt ();
     }
 
@@ -248,22 +248,22 @@ kmain (uint32_t multiboot_magic,
   	  vm::MAP_READ_WRITE);
 
     // Mark but don't map the initial automaton.
-    mark (automaton_module->mod_start + KERNEL_VIRTUAL_BASE,
-  	  automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
+    mark (boot_automaton_module->mod_start + KERNEL_VIRTUAL_BASE,
+  	  boot_automaton_module->mod_end + KERNEL_VIRTUAL_BASE,
   	  false,
   	  vm::MAP_READ_ONLY);
 
     // Mark but don't map the initial automaton's data.
-    mark (data_module->mod_start + KERNEL_VIRTUAL_BASE,
-  	  data_module->mod_end + KERNEL_VIRTUAL_BASE,
+    mark (boot_data_module->mod_start + KERNEL_VIRTUAL_BASE,
+  	  boot_data_module->mod_end + KERNEL_VIRTUAL_BASE,
   	  false,
   	  vm::MAP_READ_ONLY);
     
     // Convert the modules into buffers.
-    automaton_frame = physical_address_to_frame (automaton_module->mod_start);
-    automaton_size = automaton_module->mod_end - automaton_module->mod_start;
-    data_frame = physical_address_to_frame (data_module->mod_start);
-    data_size = data_module->mod_end - data_module->mod_start;
+    boot_automaton_frame = physical_address_to_frame (boot_automaton_module->mod_start);
+    boot_automaton_size = boot_automaton_module->mod_end - boot_automaton_module->mod_start;
+    boot_data_frame = physical_address_to_frame (boot_data_module->mod_start);
+    boot_data_size = boot_data_module->mod_end - boot_data_module->mod_start;
 
     // Sweep away logical addresses that aren't in use.
     sweep ();
@@ -273,5 +273,5 @@ kmain (uint32_t multiboot_magic,
   kernel_alloc::engage_vm (PAGING_AREA);
 
   // Create the initial automaton.  (Doesn't return.)
-  rts::create_init_automaton (automaton_frame, automaton_size, data_frame, data_size);
+  rts::create_init_automaton (boot_automaton_frame, boot_automaton_size, boot_data_frame, boot_data_size);
 }

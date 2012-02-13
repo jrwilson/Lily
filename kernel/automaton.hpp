@@ -879,7 +879,7 @@ public:
     return b;
   }
 
-  int
+  pair<int, int>
   buffer_destroy (bd_t bd)
   {
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
@@ -900,11 +900,11 @@ public:
       // Destroy it.
       delete b;
 
-      return 0;
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
     }
     else {
       // The buffer does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
   }
 

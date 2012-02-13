@@ -105,6 +105,11 @@ struct buffer_unmap_args {
   bd_t bd;
 };
 
+struct buffer_destroy_args {
+  uint32_t eip;
+  bd_t bd;
+};
+
 struct buffer_capacity_args {
   uint32_t eip;
   bd_t bd;
@@ -364,8 +369,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_DESTROY:
     {
-      // BUG
-      kassert (0);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_destroy_args* ptr = reinterpret_cast<buffer_destroy_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_destroy_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = a->buffer_destroy (ptr->bd);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

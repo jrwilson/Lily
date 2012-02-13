@@ -12,6 +12,11 @@ finish:
 	mov $LILY_SYSCALL_FINISH, %eax
 	int $0x80
 
+	.global exit
+exit:
+	mov $LILY_SYSCALL_EXIT, %eax
+	int $0x80
+
 	.global create
 create:
 	mov $LILY_SYSCALL_CREATE, %eax
