@@ -17,7 +17,7 @@ boot_data : $(BOOT_PROGRAMS)
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
 registry : registry.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lio -lbuffer_heap -lfifo_scheduler -ldymem -lstring
 
 vfs : vfs.o
 	$(CC) -o $@ $^

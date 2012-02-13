@@ -44,6 +44,8 @@ namespace rts {
   typedef vector<pair<logical_address_t, logical_address_t> > clear_list_type;
   static clear_list_type clear_list_;
 
+  static automaton* registry = 0;
+
   static automaton*
   create_automaton (buffer* text,
 		    size_t text_size,
@@ -512,6 +514,19 @@ namespace rts {
   {
     // BUG
     kassert (0);
+  }
+
+  // The automaton is requesting to become the registry.
+  // Succeed unless the registry is already set.
+  pair<int, int>
+  set_registry (automaton* a)
+  {
+    if (registry != 0) {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+
+    registry = a;
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.

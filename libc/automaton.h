@@ -123,4 +123,10 @@ buffer_capacity (bd_t bd);
 long
 sysconf (int name);
 
+int
+set_registry (void);
+
+aid_t
+get_registry (void);
+
 #endif /* AUTOMATON_H */

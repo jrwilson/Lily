@@ -6,9 +6,9 @@
 #include <lily/types.h>
 
 typedef struct {
+  ptrdiff_t data; /* Relative offset. */
   size_t size;
   size_t capacity;
-  ptrdiff_t data; /* Relative offset. */
 } string_t;
 
 typedef struct {

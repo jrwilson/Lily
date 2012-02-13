@@ -61,6 +61,9 @@ namespace rts {
 		       aid_t aid);
 
   pair<int, int>
+  set_registry (automaton* a);
+
+  pair<int, int>
   map (automaton* a,
        const void* destination,
        const void* source,
