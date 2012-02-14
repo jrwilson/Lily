@@ -75,14 +75,17 @@ init (int param,
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 void
-interrupt (int param)
+interrupt (int param,
+	   bd_t bd,
+	   void* ptr,
+	   size_t buffer_size)
 {
   string_buffer_putc (&string_buffer, inb (KEYBOARD_DATA_PORT));
 
   schedule ();
-  scheduler_finish (-1, FINISH_NO);
+  scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INTERNAL, NO_PARAMETER, KEYBOARD_INTERRUPT, interrupt);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, KEYBOARD_INTERRUPT, interrupt);
 
 static bool
 keycode_precondition (void)

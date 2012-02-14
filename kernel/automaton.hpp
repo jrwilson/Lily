@@ -367,7 +367,7 @@ public:
 
     // Find the action.
     const paction* action = find_action (action_number);
-    if (action == 0 || action->type != INTERNAL) {
+    if (action == 0 || action->type != SYSTEM_INPUT) {
       return make_pair (-1, LILY_SYSCALL_EBADANO);
     }
 
