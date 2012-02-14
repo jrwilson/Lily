@@ -22,7 +22,7 @@
 void
 init (int param,
       bd_t bd,
-      const char* begin,
+      void* ptr,
       size_t capacity)
 {
   if (bd == -1) {
@@ -31,7 +31,7 @@ init (int param,
     exit ();
   }
 
-  if (begin == 0) {
+  if (ptr == 0) {
     const char* s = "boot_automaton: error: Buffer could not be mapped\n";
     syslog (s, strlen (s));
     exit ();
@@ -44,14 +44,16 @@ init (int param,
   }
 
   /* Parse the cpio archive looking for files that we need. */
-  const char* end = begin + capacity;
+  buffer_file_t bf;
+  buffer_file_open (&bf, false, bd, ptr, capacity);
+
   cpio_file_t* registry_file = 0;
   cpio_file_t* vfs_file = 0;
   cpio_file_t* tmpfs_file = 0;
   cpio_file_t* init_file = 0;
   cpio_file_t* init_data_file = 0;
   cpio_file_t* file;
-  while ((file = parse_cpio (&begin, end)) != 0) {
+  while ((file = parse_cpio (&bf)) != 0) {
     if (strcmp (file->name, "registry") == 0) {
       registry_file = file;
     }

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <automaton.h>
+#include <buffer_file.h>
 
 typedef struct {
   char* name;
@@ -12,8 +13,7 @@ typedef struct {
 } cpio_file_t;
 
 cpio_file_t*
-parse_cpio (const char** begin_ptr,
-	    const char* end);
+parse_cpio (buffer_file_t* bf);
 
 void
 cpio_file_destroy (cpio_file_t* file);

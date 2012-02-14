@@ -8,7 +8,7 @@ TARGETS=boot_automaton boot_data
 all : $(TARGETS)
 
 boot_automaton : boot_automaton.o cpio.o
-	$(CC) -o $@ $^ -lio -lstring -ldymem
+	$(CC) -o $@ $^ -lio -lbuffer_file -lstring -ldymem
 
 # $(PROGRAMS)
 boot_data : $(BOOT_PROGRAMS)

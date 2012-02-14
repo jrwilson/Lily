@@ -2,11 +2,11 @@
 #include <string.h>
 #include <dymem.h>
 
-static const char*
-align_up (const char* address,
+static int
+align_up (int address,
 	  unsigned int radix)
 {
-  return (const char*) (((size_t)address + radix - 1) & ~(radix - 1));
+  return ((size_t)address + radix - 1) & ~(radix - 1);
 }
 
 static unsigned int
@@ -45,22 +45,18 @@ typedef struct {
 } cpio_header_t;
 
 cpio_file_t*
-parse_cpio (const char** begin_ptr,
-	    const char* end)
+parse_cpio (buffer_file_t* bf)
 {
-  const char* begin = *begin_ptr;
-  if (begin >= end) {
-    return 0;
-  }
-
   /* Align to a 4-byte boundary. */
-  begin = align_up (begin, 4);
+  int pos = buffer_file_seek (bf, 0, BUFFER_FILE_CURRENT);
+  pos = align_up (pos, 4);
+  buffer_file_seek (bf, pos, BUFFER_FILE_SET);
 
-  if (begin + sizeof (cpio_header_t) > end) {
+  cpio_header_t* h = buffer_file_readp (bf, sizeof (cpio_header_t));
+  if (h == 0) {
     /* Underflow. */
     return 0;
   }
-  cpio_header_t* h = (cpio_header_t*)begin;
 
   if (memcmp (h->magic, "070701", 6) == 0) {
 
@@ -74,28 +70,25 @@ parse_cpio (const char** begin_ptr,
   }
   size_t filesize = from_hex (h->filesize);
   size_t namesize = from_hex (h->namesize);
-  begin += sizeof (cpio_header_t);
 
-  if (begin + namesize > end) {
-    /* Underflow. */
+  const char* name = buffer_file_readp (bf, namesize);
+  if (name == 0) {
     return 0;
   }
-  if (begin[namesize - 1] != 0) {
+  if (name[namesize - 1] != 0) {
     /* Name is not null terminated. */
     return 0;
   }
-  const char* name = begin;
-  begin += namesize;
 
   /* Align to a 4-byte boundary. */
-  begin = align_up (begin, 4);
+  pos = buffer_file_seek (bf, 0, BUFFER_FILE_CURRENT);
+  pos = align_up (pos, 4);
+  buffer_file_seek (bf, pos, BUFFER_FILE_SET);
 
-  if (begin + filesize > end) {
-    /* Underflow. */
+  const char* data = buffer_file_readp (bf, filesize);
+  if (data == 0) {
     return 0;
   }
-  const char* data = begin;
-  begin += filesize;
 
   /* Check for the trailer. */
   if (strcmp (name, "TRAILER!!!") == 0) {
@@ -115,7 +108,6 @@ parse_cpio (const char** begin_ptr,
   buffer_unmap (f->buffer);
   f->buffer_size = filesize;
 
-  *begin_ptr = begin;
   return f;
 }
 
