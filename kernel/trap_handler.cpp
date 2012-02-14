@@ -152,6 +152,11 @@ struct sysconf_args {
 
 struct set_registry_args {
   uint32_t eip;
+  aid_t aid;
+};
+
+struct get_registry_args {
+  uint32_t eip;
 };
 
 struct syslog_args {
@@ -430,7 +435,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<int, int> r = rts::set_registry (a);
+      pair<int, int> r = rts::set_registry (ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -438,8 +443,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_GET_REGISTRY:
     {
-      // BUG
-      kassert (0);
+      automaton* a = scheduler::current_action ().action->automaton;
+      get_registry_args* ptr = reinterpret_cast<get_registry_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (get_registry_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = rts::get_registry ();
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

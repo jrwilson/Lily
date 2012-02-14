@@ -29,7 +29,7 @@ int
 buffer_file_create (buffer_file_t* bf,
 		    size_t initial_capacity);
 
-void*
+const void*
 buffer_file_readp (buffer_file_t* bf,
 		   size_t size);
 
@@ -40,7 +40,10 @@ buffer_file_seek (buffer_file_t* bf,
 
 int
 buffer_file_write (buffer_file_t* bf,
-		   void* ptr,
+		   const void* ptr,
 		   size_t size);
+
+bd_t
+buffer_file_bd (const buffer_file_t* bf);
 
 #endif /* BUFFER_FILE_H */

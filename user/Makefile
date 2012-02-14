@@ -20,7 +20,7 @@ registry : registry.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 vfs : vfs.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 tmpfs : tmpfs.o
 	$(CC) -o $@ $^

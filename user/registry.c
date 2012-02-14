@@ -35,6 +35,7 @@
   ----
   * We don't account for the possibility of huge descriptions.
   * Matching can be involved.  We could move it to an internal action to increase concurrency.
+  * Error checking is lacking.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
@@ -124,12 +125,6 @@ initialize (void)
 {
   if (!initialized) {
     initialized = true;
-    if (set_registry () == -1) {
-      const char* s = "registry: error:  Couldn't not set registry\n";
-      syslog (s, strlen (s));
-      exit ();
-    }
-
     buffer_queue_init (&rr_queue);
     buffer_queue_init (&qr_queue);
   }
@@ -316,7 +311,8 @@ init (int param,
       size_t capacity)
 {
   initialize ();
-  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
+  schedule ();
+  scheduler_finish (bd, FINISH_DESTROY);
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
@@ -331,7 +327,7 @@ register_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, REGISTER_REGISTER_REQUEST, register_request);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST, register_request);
 
 void
 register_response (aid_t aid,
@@ -356,7 +352,7 @@ register_response (aid_t aid,
     scheduler_finish (-1, FINISH_NO);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, REGISTER_REGISTER_RESPONSE, register_response);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE, register_response);
 
 void
 query_request (aid_t aid,
@@ -369,7 +365,7 @@ query_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, REGISTER_QUERY_REQUEST, query_request);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, REGISTRY_QUERY_REQUEST, query_request);
 
 void
 query_response (aid_t aid,
@@ -394,15 +390,15 @@ query_response (aid_t aid,
     scheduler_finish (-1, FINISH_NO);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, REGISTER_QUERY_RESPONSE, query_response);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE, query_response);
 
 static void
 schedule (void)
 {
   if (!buffer_queue_empty (&rr_queue)) {
-    scheduler_add (REGISTER_REGISTER_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&rr_queue)));
+    scheduler_add (REGISTRY_REGISTER_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&rr_queue)));
   }
   if (!buffer_queue_empty (&qr_queue)) {
-    scheduler_add (REGISTER_QUERY_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&qr_queue)));
+    scheduler_add (REGISTRY_QUERY_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&qr_queue)));
   }
 }

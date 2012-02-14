@@ -47,10 +47,10 @@ typedef struct {
 				/* Description string follows. */
 } registry_query_result_t;
 
-#define REGISTER_REGISTER_REQUEST 1
-#define REGISTER_REGISTER_RESPONSE 2
+#define REGISTRY_REGISTER_REQUEST 1
+#define REGISTRY_REGISTER_RESPONSE 2
 
-#define REGISTER_QUERY_REQUEST 3
-#define REGISTER_QUERY_RESPONSE 4
+#define REGISTRY_QUERY_REQUEST 3
+#define REGISTRY_QUERY_RESPONSE 4
 
 #endif /* REGISTRY_H */

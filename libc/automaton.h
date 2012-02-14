@@ -124,7 +124,7 @@ long
 sysconf (int name);
 
 int
-set_registry (void);
+set_registry (aid_t aid);
 
 aid_t
 get_registry (void);

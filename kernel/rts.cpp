@@ -519,14 +519,30 @@ namespace rts {
   // The automaton is requesting to become the registry.
   // Succeed unless the registry is already set.
   pair<int, int>
-  set_registry (automaton* a)
+  set_registry (aid_t aid)
   {
+    aid_map_type::iterator pos = aid_map_.find (aid);
+    if (pos == aid_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+    }
+
     if (registry != 0) {
       return make_pair (-1, LILY_SYSCALL_EPERM);
     }
 
-    registry = a;
+    registry = pos->second;
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  pair<aid_t, int>
+  get_registry (void)
+  {
+    if (registry != 0) {
+      return make_pair (registry->aid (), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+    }
   }
 
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.

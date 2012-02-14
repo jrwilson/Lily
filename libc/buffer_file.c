@@ -40,7 +40,7 @@ buffer_file_create (buffer_file_t* bf,
   return 0;
 }
 
-void*
+const void*
 buffer_file_readp (buffer_file_t* bf,
 		   size_t size)
 {
@@ -102,7 +102,7 @@ buffer_file_seek (buffer_file_t* bf,
 
 int
 buffer_file_write (buffer_file_t* bf,
-		   void* ptr,
+		   const void* ptr,
 		   size_t size)
 {
   if (!bf->can_update) {
@@ -133,6 +133,12 @@ buffer_file_write (buffer_file_t* bf,
   bf->position = new_position;
 
   return 0;
+}
+
+bd_t
+buffer_file_bd (const buffer_file_t* bf)
+{
+  return bf->bd;
 }
 
 /* #ifndef STRING_BUFFER_H */

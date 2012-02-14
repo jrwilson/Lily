@@ -81,10 +81,15 @@ init (int param,
   */
 
   if (registry_file != 0) {
-    if (create (registry_file->buffer, registry_file->buffer_size, true, -1) == -1) {
+    aid_t registry = create (registry_file->buffer, registry_file->buffer_size, true, -1);
+    if (registry == -1) {
       const char* s = "boot_automaton: warning: Could not create registry\n";
       syslog (s, strlen (s));
     }
+    if (set_registry (registry) == -1) {
+      const char* s = "boot_automaton: warning: Could not set registry\n";
+      syslog (s, strlen (s));
+    }      
     cpio_file_destroy (registry_file);
   }
   else {
