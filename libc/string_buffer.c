@@ -27,10 +27,8 @@ string_buffer_reserve (string_buffer_t* sb,
 {
   if (new_capacity > sb->string->capacity) {
     /* Double in capacity. */
-    size_t grow_size = new_capacity - sb->string->capacity;
     buffer_unmap (sb->bd);
-    buffer_grow (sb->bd, grow_size);
-    size_t real_capacity = buffer_capacity (sb->bd);
+    size_t real_capacity = buffer_resize (sb->bd, new_capacity);
     void* ptr = buffer_map (sb->bd);
     buffer_heap_t heap;
     buffer_heap_init (&heap, ptr, real_capacity);

@@ -30,7 +30,7 @@
   
 #define LILY_SYSCALL_BUFFER_CREATE         0x40
 #define LILY_SYSCALL_BUFFER_COPY           0x41
-#define LILY_SYSCALL_BUFFER_GROW           0x42
+#define LILY_SYSCALL_BUFFER_RESIZE         0x42
 #define LILY_SYSCALL_BUFFER_APPEND         0x43
 #define LILY_SYSCALL_BUFFER_ASSIGN         0x44
 #define LILY_SYSCALL_BUFFER_MAP            0x45

@@ -250,6 +250,12 @@ public:
   }
 
   void
+  pop_back (void)
+  {
+    Allocator::destroy (--end_);
+  }
+
+  void
   clear ()
   {
     for (T* ptr = begin_; ptr != end_; ++ptr) {

@@ -81,7 +81,7 @@ struct buffer_copy_args {
   size_t length;
 };
 
-struct buffer_grow_args {
+struct buffer_resize_args {
   uint32_t eip;
   bd_t bd;
   size_t size;
@@ -308,15 +308,15 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_BUFFER_GROW:
+  case LILY_SYSCALL_BUFFER_RESIZE:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      buffer_grow_args* ptr = reinterpret_cast<buffer_grow_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (buffer_grow_args))) {
+      buffer_resize_args* ptr = reinterpret_cast<buffer_resize_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_resize_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<bd_t, int> r = a->buffer_grow (ptr->bd, ptr->size);
+      pair<bd_t, int> r = a->buffer_resize (ptr->bd, ptr->size);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

@@ -104,15 +104,27 @@ public:
   }
 
   size_t
-  grow (size_t size)
+  resize (size_t size)
   {
     // Cannot be mapped.
     kassert (begin_ == 0);
-    size_t retval = this->capacity ();
-    size_t begin = frame_list_.size ();
-    frame_list_.resize (begin + size / PAGE_SIZE, vm::zero_frame ());
-    frame_manager::incref (vm::zero_frame (), frame_list_.size () - begin);
-    return retval;
+
+    size_t old_size = frame_list_.size ();
+    size_t new_size = align_up (size, PAGE_SIZE) / PAGE_SIZE;
+    
+    if (new_size < old_size) {
+      /* Shrink. */
+      while (frame_list_.size () != new_size) {
+	frame_manager::decref (frame_list_.back ());
+	frame_list_.pop_back ();
+      }
+    }
+    else if (new_size > old_size) {
+      frame_list_.resize (new_size, vm::zero_frame ());
+      frame_manager::incref (vm::zero_frame (), new_size - old_size);
+    }
+
+    return this->capacity ();
   }
 
   size_t

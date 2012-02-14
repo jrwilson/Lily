@@ -2,9 +2,10 @@
 #include <automaton.h>
 #include <io.h>
 #include <string.h>
-#include <buffer_heap.h>
 #include <dymem.h>
 #include <fifo_scheduler.h>
+#include <buffer_queue.h>
+#include <buffer_file.h>
 
 /*
   The Registry Automaton
@@ -80,21 +81,14 @@ description_replace_description (description_t* d,
   d->description_size = description_size;
 }
 
-/* Data structure used for the response queues. */
-typedef struct response_item_struct response_item_t;
-struct response_item_struct {
-  aid_t aid;
-  bd_t bd;
-  response_item_t* next;
-};
+/* Initialization flag. */
+static bool initialized = false;
 
 /* Queue for register responses. */
-static response_item_t* rr_item_head = 0;
-static response_item_t** rr_item_tail = &rr_item_head;
+static buffer_queue_t rr_queue;
 
 /* Queue for query responses. */
-static response_item_t* qr_item_head = 0;
-static response_item_t** qr_item_tail = &qr_item_head;
+static buffer_queue_t qr_queue;
 
 static void
 form_register_response (aid_t aid,
@@ -106,15 +100,7 @@ form_register_response (aid_t aid,
   rr->error = error;
   /* We don't unmap it because we are going to destroy it when we respond. */
 
-  /* Create a queue item. */
-  response_item_t* item = malloc (sizeof (response_item_t));
-  memset (item, 0, sizeof (response_item_t));
-  item->aid = aid;
-  item->bd = bd;
-
-  /* Insert into the queue. */
-  *rr_item_tail = item;
-  rr_item_tail = &item->next;
+  buffer_queue_push (&rr_queue, aid, bd);
 }
 
 static void
@@ -127,35 +113,27 @@ form_query_response (aid_t aid,
   registry_query_response_t* qr = buffer_map (bd);
   qr->error = error;
   qr->method = method;
-  qr->result = 0;
+  qr->count = 0;
   /* We don't unmap it because we are going to destroy it when we respond. */
 
-  /* Create a queue item. */
-  response_item_t* item = malloc (sizeof (response_item_t));
-  memset (item, 0, sizeof (response_item_t));
-  item->aid = aid;
-  item->bd = bd;
-
-  /* Insert into the queue. */
-  *qr_item_tail = item;
-  qr_item_tail = &item->next;
+  buffer_queue_push (&qr_queue, aid, bd);
 }
 
-void
-init (int param,
-      bd_t bd,
-      const char* begin,
-      size_t capacity)
+static void
+initialize (void)
 {
-  if (set_registry () == -1) {
-    const char* s = "registry: error:  Couldn't not set registry\n";
-    syslog (s, strlen (s));
-    exit ();
-  }
+  if (!initialized) {
+    initialized = true;
+    if (set_registry () == -1) {
+      const char* s = "registry: error:  Couldn't not set registry\n";
+      syslog (s, strlen (s));
+      exit ();
+    }
 
-  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
+    buffer_queue_init (&rr_queue);
+    buffer_queue_init (&qr_queue);
+  }
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 static void
 process_register (aid_t aid,
@@ -173,15 +151,16 @@ process_register (aid_t aid,
     return;
   }
 
-  buffer_heap_t heap;
-  buffer_heap_init (&heap, ptr, capacity);
-  const registry_register_request_t* r = buffer_heap_begin (&heap);
-  if (!buffer_heap_check (&heap, r, sizeof (registry_register_request_t))) {
+  buffer_file_t file;
+  buffer_file_open (&file, false, bd, ptr, capacity);
+
+  const registry_register_request_t* r = buffer_file_readp (&file, sizeof (registry_register_request_t));
+  if (r == 0) {
     form_register_response (aid, REGISTRY_BAD_REQUEST);
     return;
   }
-  const char* description = (void*)&r->description + r->description;
-  if (!buffer_heap_check (&heap, description, r->description_size)) {
+  const void* description = buffer_file_readp (&file, r->description_size);
+  if (description == 0) {
     form_register_response (aid, REGISTRY_BAD_REQUEST);
     return;
   }
@@ -237,6 +216,24 @@ process_register (aid_t aid,
   form_register_response (aid, REGISTRY_SUCCESS);
 }
 
+static bool
+match (registry_method_t method,
+       const void* description,
+       size_t description_size,
+       const void* specification,
+       size_t specification_size)
+{
+  switch (method) {
+  case REGISTRY_STRING_EQUAL:
+    {
+      return description_size == specification_size && memcmp (description, specification, description_size) == 0;
+    }
+    break;
+  }
+
+  return false;
+}
+
 static void
 process_query (aid_t aid,
 	       bd_t bd,
@@ -253,15 +250,16 @@ process_query (aid_t aid,
     return;
   }
 
-  buffer_heap_t heap;
-  buffer_heap_init (&heap, ptr, capacity);
-  const registry_query_request_t* q = buffer_heap_begin (&heap);
-  if (!buffer_heap_check (&heap, q, sizeof (registry_query_request_t))) {
+  buffer_file_t file;
+  buffer_file_open (&file, false, bd, ptr, capacity);
+  
+  const registry_query_request_t* q = buffer_file_readp (&file, sizeof (registry_query_request_t));
+  if (q == 0) {
     form_query_response (aid, REGISTRY_BAD_REQUEST, 0);
     return;
   }
-  const char* specification = (void*)&q->specification + q->specification;
-  if (!buffer_heap_check (&heap, specification, q->specification_size)) {
+  const void* specification = buffer_file_readp (&file, q->specification_size);
+  if (specification == 0) {
     form_query_response (aid, REGISTRY_BAD_REQUEST, q->method);
     return;
   }
@@ -269,17 +267,58 @@ process_query (aid_t aid,
   /* Inspect the method. */
   switch (q->method) {
   case REGISTRY_STRING_EQUAL:
-    /* TODO */
+    /* Okay. */
     break;
   default:
     form_query_response (aid, REGISTRY_UNKNOWN_METHOD, q->method);
     return;
     break;
   }
+
+  buffer_file_t answer;
+  buffer_file_create (&answer, 0);
+
+  /* Skip over the header. */
+  buffer_file_seek (&answer, sizeof (registry_query_response_t), BUFFER_FILE_SET);
+
+  size_t count = 0;
+  description_t* d;
+  for (d = description_head; d != 0; d = d->next) {
+    if (d->method == q->method &&
+	match (d->method, d->description, d->description_size, specification, q->specification_size)) {
+      /* Write a match. */
+      registry_query_result_t result;
+      result.aid = d->aid;
+      result.description_size = d->description_size;
+      buffer_file_write (&answer, &result, sizeof (registry_query_result_t));
+      buffer_file_write (&answer, d->description, d->description_size);
+      ++count;
+    }
+  }
+
+  /* Write the header. */
+  buffer_file_seek (&answer, 0, BUFFER_FILE_SET);
+  
+  registry_query_response_t response;
+  response.error = REGISTRY_SUCCESS;
+  response.method = q->method;
+  response.count = count;
+  buffer_file_write (&answer, &response, sizeof (registry_query_response_t));
 }
 
 static void
 schedule (void);
+
+void
+init (int param,
+      bd_t bd,
+      const void* ptr,
+      size_t capacity)
+{
+  initialize ();
+  finish (NO_ACTION, 0, bd, FINISH_DESTROY);
+}
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
 void
 register_request (aid_t aid,
@@ -287,6 +326,7 @@ register_request (aid_t aid,
 		  void* ptr,
 		  size_t capacity)
 {
+  initialize ();
   process_register (aid, bd, ptr, capacity);
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
@@ -297,27 +337,15 @@ void
 register_response (aid_t aid,
 		   size_t bc)
 {
+  initialize ();
+
   /* Find in the queue. */
-  response_item_t** ptr;
-  for (ptr = &rr_item_head; *ptr != 0; ptr = &(*ptr)->next) {
-    if ((*ptr)->aid == aid) {
-      break;
-    }
-  }
+  buffer_queue_item_t* item = buffer_queue_find (&rr_queue, aid);
 
-  if (*ptr != 0) {
+  if (item != 0) {
     /* Found a response.  Execute. */
-    
-    /* Remove the item from the queue. */
-    response_item_t* item = *ptr;
-    *ptr = item->next;
-
-    if (rr_item_head == 0) {
-      rr_item_tail = &rr_item_head;
-    }
-
-    bd_t bd = item->bd;
-    free (item);
+    bd_t bd = buffer_queue_item_bd (item);
+    buffer_queue_erase (&rr_queue, item);
 
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
@@ -336,6 +364,7 @@ query_request (aid_t aid,
 	       void* ptr,
 	       size_t capacity)
 {
+  initialize ();
   process_query (aid, bd, ptr, capacity);
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
@@ -346,27 +375,15 @@ void
 query_response (aid_t aid,
 		size_t bc)
 {
+  initialize ();
+
   /* Find in the queue. */
-  response_item_t** ptr;
-  for (ptr = &qr_item_head; *ptr != 0; ptr = &(*ptr)->next) {
-    if ((*ptr)->aid == aid) {
-      break;
-    }
-  }
+  buffer_queue_item_t* item = buffer_queue_find (&qr_queue, aid);
 
-  if (*ptr != 0) {
+  if (item != 0) {
     /* Found a response.  Execute. */
-    
-    /* Remove the item from the queue. */
-    response_item_t* item = *ptr;
-    *ptr = item->next;
-
-    if (qr_item_head == 0) {
-      qr_item_tail = &qr_item_head;
-    }
-
-    bd_t bd = item->bd;
-    free (item);
+    bd_t bd = buffer_queue_item_bd (item);
+    buffer_queue_erase (&qr_queue, item);
 
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
@@ -382,10 +399,10 @@ EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, REGISTER_QUERY_RESPONSE, query_
 static void
 schedule (void)
 {
-  if (rr_item_head != 0) {
-    scheduler_add (REGISTER_REGISTER_RESPONSE, rr_item_head->aid);
+  if (!buffer_queue_empty (&rr_queue)) {
+    scheduler_add (REGISTER_REGISTER_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&rr_queue)));
   }
-  if (qr_item_head != 0) {
-    scheduler_add (REGISTER_QUERY_RESPONSE, qr_item_head->aid);
+  if (!buffer_queue_empty (&qr_queue)) {
+    scheduler_add (REGISTER_QUERY_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&qr_queue)));
   }
 }

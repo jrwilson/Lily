@@ -52,9 +52,9 @@ buffer_copy:
 	mov %ecx, automatonerrno
 	ret
 
-	.global buffer_grow
-buffer_grow:
-	mov $LILY_SYSCALL_BUFFER_GROW, %eax
+	.global buffer_resize
+buffer_resize:
+	mov $LILY_SYSCALL_BUFFER_RESIZE, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret

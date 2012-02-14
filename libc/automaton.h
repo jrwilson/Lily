@@ -85,8 +85,8 @@ buffer_copy (bd_t bd,
 	     size_t length);
 
 size_t
-buffer_grow (bd_t bd,
-	     size_t size);
+buffer_resize (bd_t bd,
+	       size_t size);
 
 size_t
 buffer_append (bd_t dest,

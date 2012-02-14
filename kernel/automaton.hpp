@@ -694,7 +694,7 @@ public:
   }
   
   pair<size_t, int>
-  buffer_grow (bd_t bd,
+  buffer_resize (bd_t bd,
 	       size_t size)
   {
     size = align_up (size, PAGE_SIZE);
@@ -703,7 +703,7 @@ public:
     if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
       if (b->begin () == 0) {
-	return make_pair (b->grow (size), LILY_SYSCALL_ESUCCESS);
+	return make_pair (b->resize (size), LILY_SYSCALL_ESUCCESS);
       }
       else {
 	// Buffer was mapped.
