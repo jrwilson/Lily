@@ -233,7 +233,7 @@ private:
 	  size_t buffer_capacity;
 	  const void* buf;
 	  
-	  if (output_buffer_ != 0) {
+	  if (output_buffer_ != 0 && (action_.action->flags & LILY_ACTION_AUTO_MAP) != 0) {
 	    // Copy the buffer to the input automaton and try to map it.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
 	    buffer_capacity = output_buffer_->capacity ();

@@ -58,6 +58,7 @@ namespace rts {
 
   pair<int, int>
   subscribe_destroyed (automaton* a,
+		       ano_t action_number,
 		       aid_t aid);
 
   pair<int, int>

@@ -61,6 +61,7 @@ struct bind_args {
 
 struct subscribe_destroyed_args {
   uint32_t eip;
+  ano_t action_number;
   aid_t aid;
 };
 
@@ -258,7 +259,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<bid_t, int> r = rts::subscribe_destroyed (a, ptr->aid);
+      pair<bid_t, int> r = rts::subscribe_destroyed (a, ptr->action_number, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

@@ -103,8 +103,6 @@ namespace rts {
    	kassert (0);
 	break;
       case LILY_ACTION_INIT:
-      case LILY_ACTION_LOOSED:
-      case LILY_ACTION_DESTROYED:
 	if ((*pos)->type != LILY_ACTION_SYSTEM_INPUT) {
 	  // BUG:  These must have the correct type.
 	  kassert (0);
@@ -478,16 +476,17 @@ namespace rts {
     return make_pair (bid, LILY_SYSCALL_ESUCCESS);
   }
 
-  // The automaton wants to receive a notification when the automaton corresponding to aid is destroyed.
-  // The automaton must have an action for receiving destroyed events.
+  // The automaton wants to receive a notification via action_number when the automaton corresponding to aid is destroyed.
+  // The automaton must have an action for receiving the event.
   // The automaton corresponding to aid must exist.
   // Not an error if already subscribed.
   pair<int, int>
   subscribe_destroyed (automaton* a,
+		       ano_t action_number,
 		       aid_t aid)
   {
-    const paction* action = a->find_action (LILY_ACTION_DESTROYED);
-    if (action == 0 || action->type != INTERNAL || action->parameter_mode != PARAMETER) {
+    const paction* action = a->find_action (action_number);
+    if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
       return make_pair (-1, LILY_SYSCALL_EBADANO);
     }
 

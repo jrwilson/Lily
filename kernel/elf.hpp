@@ -112,6 +112,7 @@ namespace elf {
   struct action_descriptor {
     uint32_t action_type;
     uint32_t parameter_mode;
+    uint32_t flags;
     uint32_t id;
     uint32_t action_entry_point;
   };
@@ -362,6 +363,7 @@ namespace elf {
 		    actions_.push_back (new paction (a,
 						     static_cast<action_type_t> (d->action_type),
 						     static_cast<parameter_mode_t> (d->parameter_mode),
+						     d->flags,
 						     d->id,
 						     reinterpret_cast<const void*> (d->action_entry_point)));
 		  }

@@ -21,10 +21,10 @@
 #define PARAMETER LILY_ACTION_PARAMETER
 #define AUTO_PARAMETER LILY_ACTION_AUTO_PARAMETER
 
+#define AUTO_MAP LILY_ACTION_AUTO_MAP
+
 #define NO_ACTION LILY_ACTION_NO_ACTION
 #define INIT LILY_ACTION_INIT
-#define LOOSED LILY_ACTION_LOOSED
-#define DESTROYED LILY_ACTION_DESTROYED
 
 /* #define AUTOMATON_ESUCCESS LILY_SYSCALL_ESUCCESS */
 /* #define AUTOMATON_EBADBID LILY_SYSCALL_EBADBID */
@@ -32,7 +32,7 @@
 /* #define AUTOMATON_ENOMEM LILY_SYSCALL_ENOMEM */
 
 /* A macro for embedding the action information. */
-#define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, id, func_name) \
+#define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, flags, id, func_name) \
   __asm__ (".pushsection .action_info, \"\", @note\n"		   \
   ".balign 4\n"							   \
   ".long 1f - 0f\n"		/* Length of the author string. */ \
@@ -43,6 +43,7 @@
   "2:\n"			/* The description of the note. */ \
   ".long " quote (action_type) "\n"	/* Action type. */ \
   ".long " quote (parameter_mode) "\n"	/* Parameter mode. */ \
+  ".long " quote (flags) "\n"		/* Flags. */ \
   ".long " quote (id) "\n" /* Numeric identifier. */ \
   ".long " #func_name "\n"		/* Action entry point. */		\
   "3: .balign 4\n" \
@@ -74,7 +75,8 @@ bind (aid_t output_automaton,
       int input_parameter);
 
 int
-subscribe_destroyed (aid_t aid);
+subscribe_destroyed (ano_t action_number,
+		     aid_t aid);
 
 bd_t
 buffer_create (size_t size);
