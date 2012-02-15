@@ -1,6 +1,28 @@
 #include "string.h"
 #include <stdbool.h>
 
+void*
+memchr (const void *s,
+	int c,
+	size_t n)
+{
+  const unsigned char* data = s;
+  while (n != 0) {
+    if (*data == c) {
+      break;
+    }
+    --n;
+    ++data;
+  }
+
+  if (n != 0) {
+    return data;
+  }
+  else {
+    return 0;
+  }
+}
+
 int
 memcmp (const void* s1,
 	const void* s2,

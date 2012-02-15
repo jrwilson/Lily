@@ -102,11 +102,13 @@ parse_cpio (buffer_file_t* bf)
   f->name = malloc (namesize);
   memcpy (f->name, name, namesize);
   f->name_size = namesize;
+  f->mode = from_hex (h->mode);
   /* Create a buffer and copy the file content. */
-  f->buffer = buffer_create (ALIGN_UP (filesize, pagesize ()) / pagesize ());
-  memcpy (buffer_map (f->buffer), data, filesize);
-  buffer_unmap (f->buffer);
-  f->buffer_size = filesize;
+  f->bd_size = ALIGN_UP (filesize, pagesize ()) / pagesize ();
+  f->bd = buffer_create (f->bd_size);
+  memcpy (buffer_map (f->bd), data, filesize);
+  buffer_unmap (f->bd);
+  f->size = filesize;
 
   return f;
 }
@@ -114,7 +116,7 @@ parse_cpio (buffer_file_t* bf)
 void
 cpio_file_destroy (cpio_file_t* file)
 {
-  buffer_destroy (file->buffer);
+  buffer_destroy (file->bd);
   free (file->name);
   free (file);
 }

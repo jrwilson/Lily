@@ -81,7 +81,7 @@ init (int param,
   */
 
   if (registry_file != 0) {
-    aid_t registry = create (registry_file->buffer, registry_file->buffer_size, true, -1);
+    aid_t registry = create (registry_file->bd, registry_file->size, true, -1);
     if (registry == -1) {
       const char* s = "boot_automaton: warning: Could not create registry\n";
       syslog (s, strlen (s));
@@ -98,7 +98,7 @@ init (int param,
   }
 
   if (vfs_file != 0) {
-    if (create (vfs_file->buffer, vfs_file->buffer_size, true, -1) == -1) {
+    if (create (vfs_file->bd, vfs_file->size, true, -1) == -1) {
       const char* s = "boot_automaton: warning: Could not create vfs\n";
       syslog (s, strlen (s));
     }
@@ -111,7 +111,7 @@ init (int param,
 
   if (tmpfs_file != 0) {
     /* Note that we pass along the data (bd) to the tmpfs automaton. */
-    if (create (tmpfs_file->buffer, tmpfs_file->buffer_size, true, bd) == -1) {
+    if (create (tmpfs_file->bd, tmpfs_file->size, true, bd) == -1) {
       const char* s = "boot_automaton: warning: Could not create tmpfs\n";
       syslog (s, strlen (s));
     }
@@ -125,7 +125,7 @@ init (int param,
   if (init_file != 0) {
     bd_t init_data;
     if (init_data_file != 0) {
-      init_data = init_data_file->buffer;
+      init_data = init_data_file->bd;
     }
     else {
       init_data = -1;
@@ -134,7 +134,7 @@ init (int param,
     }
 
     /* Create the init automaton with the init data. */
-    if (create (init_file->buffer, init_file->buffer_size, true, init_data) == -1) {
+    if (create (init_file->bd, init_file->size, true, init_data) == -1) {
       const char* s = "boot_automaton: warning: Could not create init\n";
       syslog (s, strlen (s));
     }

@@ -466,7 +466,6 @@ public:
   verify_span (const void* ptr,
 	       size_t size) const
   {
-    kassert (size != 0);
     const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
     memory_map_type::const_iterator pos = find_address (address);
     return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();

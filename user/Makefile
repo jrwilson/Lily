@@ -22,8 +22,8 @@ registry : registry.o
 vfs : vfs.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
-tmpfs : tmpfs.o
-	$(CC) -o $@ $^
+tmpfs : tmpfs.o cpio.o
+	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 init : init.o
 	$(CC) -o $@ $^
