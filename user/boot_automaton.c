@@ -22,11 +22,17 @@
 void
 init (int param,
       bd_t bd,
-      void* ptr,
-      size_t capacity)
+      size_t bd_size,
+      void* ptr)
 {
   if (bd == -1) {
     const char* s = "boot_automaton: error: No buffer\n";
+    syslog (s, strlen (s));
+    exit ();
+  }
+
+  if (bd_size == 0) {
+    const char* s = "boot_automaton: error: Buffer is empty\n";
     syslog (s, strlen (s));
     exit ();
   }
@@ -37,15 +43,9 @@ init (int param,
     exit ();
   }
 
-  if (capacity == 0) {
-    const char* s = "boot_automaton: error: Buffer is empty\n";
-    syslog (s, strlen (s));
-    exit ();
-  }
-
   /* Parse the cpio archive looking for files that we need. */
   buffer_file_t bf;
-  buffer_file_open (&bf, false, bd, ptr, capacity);
+  buffer_file_open (&bf, bd, bd_size, ptr, false);
 
   cpio_file_t* registry_file = 0;
   cpio_file_t* vfs_file = 0;
@@ -89,7 +89,7 @@ init (int param,
     if (set_registry (registry) == -1) {
       const char* s = "boot_automaton: warning: Could not set registry\n";
       syslog (s, strlen (s));
-    }      
+    }
     cpio_file_destroy (registry_file);
   }
   else {

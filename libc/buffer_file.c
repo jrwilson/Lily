@@ -4,15 +4,16 @@
 
 int
 buffer_file_open (buffer_file_t* bf,
-		  bool can_update,
 		  bd_t bd,
+		  size_t bd_size,
 		  void* ptr,
-		  size_t capacity)
+		  bool can_update)
 {
-  bf->can_update = can_update;
   bf->bd = bd;
+  bf->bd_size = bd_size;
   bf->ptr = ptr;
-  bf->capacity = capacity;
+  bf->can_update = can_update;
+  bf->size = bd_size * pagesize ();
   bf->position = 0;
 
   return 0;
@@ -20,21 +21,22 @@ buffer_file_open (buffer_file_t* bf,
 
 int
 buffer_file_create (buffer_file_t* bf,
-		    size_t initial_capacity)
+		    size_t initial_capacity_bytes)
 {
-  if (initial_capacity == 0) {
-    initial_capacity = 1;
-  }
-  bf->can_update = true;
-  bf->bd = buffer_create (1);
+  bf->size = ALIGN_UP (initial_capacity_bytes, pagesize ());
+  bf->bd_size = bf->size / pagesize ();
+
+  bf->bd = buffer_create (bf->bd_size);
   if (bf->bd == -1) {
     return -1;
   }
+
   bf->ptr = buffer_map (bf->bd);
   if (bf->ptr == 0) {
     return -1;
   }
-  bf->capacity = buffer_capacity (bf->bd);
+
+  bf->can_update = true;
   bf->position = 0;
 
   return 0;
@@ -44,24 +46,22 @@ const void*
 buffer_file_readp (buffer_file_t* bf,
 		   size_t size)
 {
-  if (!bf->can_update) {
-    if (bf->position + size <= bf->capacity) {
-      /* Success.
-	 Return the current position. */
-      void* retval = bf->ptr + bf->position;
-      /* Advance. */
-      bf->position += size;
-      return retval;
-    }
-    else {
-      /* Error: Underflow. */
-      return 0;
-    }
-  }
-  else {
+  if (bf->can_update) {
     /* Error: Cannot form pointers. */
     return 0;
   }
+
+  if (bf->position + size > bf->size) {
+    /* Error: Underflow. */
+    return 0;
+  }
+
+  /* Success.
+     Return the current position. */
+  void* retval = bf->ptr + bf->position;
+  /* Advance. */
+  bf->position += size;
+  return retval;
 }
 
 int
@@ -115,12 +115,13 @@ buffer_file_write (buffer_file_t* bf,
   }
 
   /* Resize if necessary. */
-  if (bf->capacity < new_position) {
+  if (bf->size < new_position) {
     if (buffer_unmap (bf->bd) == -1) {
       return -1;
     }
-    bf->capacity = buffer_resize (bf->bd, new_position);
-    if (bf->capacity == -1) {
+    bf->size = ALIGN_UP (new_position, pagesize ());
+    bf->bd_size = bf->size / pagesize ();
+    if (buffer_resize (bf->bd, bf->bd_size) == -1) {
       return -1;
     }
     bf->ptr = buffer_map (bf->bd);

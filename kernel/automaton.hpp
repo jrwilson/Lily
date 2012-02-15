@@ -636,8 +636,6 @@ public:
   pair<bd_t, int>
   buffer_create (size_t size)
   {
-    size = align_up (size, PAGE_SIZE);
-
     // Generate an id.
     bd_t bd = generate_bd ();
     
@@ -650,34 +648,33 @@ public:
   
   pair<bd_t, int>
   buffer_copy (bd_t other,
-	       size_t offset,
-	       size_t length)
+	       size_t begin,
+	       size_t end)
   {
-    offset = align_down (offset, PAGE_SIZE);
-    length = align_up (length, PAGE_SIZE);
+    if (begin > end) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
 
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
-    if (bpos != bd_to_buffer_map_.end ()) {
-      buffer* b = bpos->second;
-      if (offset + length <= b->capacity ()) {
-	// Generate an id.
-	bd_t bd = generate_bd ();
-	
-	// Create the buffer and insert it into the map.
-	buffer* n = new buffer (*b, offset, length);
-	bd_to_buffer_map_.insert (make_pair (bd, n));
-	
-	return make_pair (bd, LILY_SYSCALL_ESUCCESS);
-      }
-      else {
-	// Offset is past end of buffer.
-	return make_pair (-1, LILY_SYSCALL_EINVAL);
-      }
-    }
-    else {
+    if (bpos == bd_to_buffer_map_.end ()) {
       // Buffer does not exist.
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
+
+    buffer* b = bpos->second;
+    if (end > b->size ()) {
+      // End is past end of buffer.
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    // Generate an id.
+    bd_t bd = generate_bd ();
+    
+    // Create the buffer and insert it into the map.
+    buffer* n = new buffer (*b, begin, end);
+    bd_to_buffer_map_.insert (make_pair (bd, n));
+    
+    return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
 
   bd_t
@@ -695,91 +692,92 @@ public:
   
   pair<size_t, int>
   buffer_resize (bd_t bd,
-	       size_t size)
+		 size_t size)
   {
-    size = align_up (size, PAGE_SIZE);
-
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
-    if (bpos != bd_to_buffer_map_.end ()) {
-      buffer* b = bpos->second;
-      if (b->begin () == 0) {
-	return make_pair (b->resize (size), LILY_SYSCALL_ESUCCESS);
-      }
-      else {
-	// Buffer was mapped.
-	return make_pair (-1, LILY_SYSCALL_EMAPPED);
-      }
-    }
-    else {
+    if (bpos == bd_to_buffer_map_.end ()) {
       // Buffer does not exist.
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
+
+    buffer* b = bpos->second;
+    if (b->begin () != 0) {
+      // Buffer was mapped.
+      return make_pair (-1, LILY_SYSCALL_EMAPPED);
+    }
+
+    b->resize (size);
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   pair<size_t, int>
   buffer_append (bd_t dst,
 		 bd_t src,
-		 size_t offset,
-		 size_t length)
+		 size_t begin,
+		 size_t end)
   {
-    offset = align_down (offset, PAGE_SIZE);
-    length = align_up (length, PAGE_SIZE);
+    if (begin > end) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
 
     bd_to_buffer_map_type::const_iterator dst_pos = bd_to_buffer_map_.find (dst);
     bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
-    if (dst_pos != bd_to_buffer_map_.end () &&
-	src_pos != bd_to_buffer_map_.end ()) {
-      buffer* dst = dst_pos->second;
-      buffer* src = src_pos->second;
-      if (offset + length <= src->capacity ()) {
-	if (dst->begin () == 0) {
-	  // Append.
-	  return make_pair (dst->append (*src, offset, length), LILY_SYSCALL_ESUCCESS);
-	}
-	else {
-	  // The destination is mapped.
-	  return make_pair (-1, LILY_SYSCALL_EMAPPED);
-	}
-      }
-      else {
-	// Offset is past end of source.
-	return make_pair (-1, LILY_SYSCALL_EINVAL);
-      }
-    }
-    else {
+    if (dst_pos == bd_to_buffer_map_.end () ||
+	src_pos == bd_to_buffer_map_.end ()) {
       // One of the buffers does not exist.
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
+
+    buffer* d = dst_pos->second;
+    buffer* s = src_pos->second;
+    if (end > s->size ()) {
+      // Offset is past end of source.
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+    
+    if (d->begin () != 0) {
+      // The destination is mapped.
+      return make_pair (-1, LILY_SYSCALL_EMAPPED);
+    }
+
+    // Append.
+    return make_pair (d->append (*s, begin, end), LILY_SYSCALL_ESUCCESS);
   }
 
   int
   buffer_assign (bd_t dest,
-		 size_t dest_offset,
+		 size_t dest_begin,
 		 bd_t src,
-		 size_t src_offset,
-		 size_t length)
+		 size_t src_begin,
+		 size_t src_end)
   {
+    if (src_begin > src_end) {
+      // Bad range.
+      return -1;
+    }
+
     bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
     bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
-    if (dest_pos != bd_to_buffer_map_.end () &&
-	src_pos != bd_to_buffer_map_.end ()) {
-      buffer* dest_b = dest_pos->second;
-      buffer* src_b = src_pos->second;
-      if (dest_offset + length <= dest_b->capacity () &&
-	  src_offset + length <= src_b->capacity ()) {
-	// Assign.
-	dest_b->assign (dest_offset, *src_b, src_offset, length);
-	return 0;
-      }
-      else {
-	// Would got outside of range.
-	return -1;
-      }
-    }
-    else {
+    if (dest_pos == bd_to_buffer_map_.end () ||
+	src_pos == bd_to_buffer_map_.end ()) {
       // One of the buffers does not exist.
       return -1;
     }
+
+    buffer* dest_b = dest_pos->second;
+    buffer* src_b = src_pos->second;
+
+    if (src_end > src_b->size ()) {
+      return -1;
+    }
+
+    if (dest_begin + (src_end - src_begin) > dest_b->size ()) {
+      return -1;
+    }
+
+    // Assign.
+    dest_b->assign (dest_begin, *src_b, src_begin, src_end);
+    return 0;
   }
 
   pair<void*, int>
@@ -796,7 +794,7 @@ public:
 
     buffer* b = bpos->second;
     
-    if (b->capacity () == 0) {
+    if (b->size () == 0) {
       // The buffer is empty.
       return make_pair ((void*)0, LILY_SYSCALL_EEMPTY);
     }
@@ -823,7 +821,7 @@ public:
     for (; stack_pos != heap_pos; ++stack_pos) {
       memory_map_type::reverse_iterator prev = stack_pos + 1;
       size_t size = (*stack_pos)->begin () - (*prev)->end ();
-      if (size >= b->capacity ()) {
+      if (size >= b->size () * PAGE_SIZE) {
 	b->map_end ((*stack_pos)->begin ());
 	memory_map_.insert (prev.base (), b);
 	// Success.
@@ -909,11 +907,11 @@ public:
   }
 
   pair<size_t, int>
-  buffer_capacity (bd_t bd)
+  buffer_size (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos != bd_to_buffer_map_.end ()) {
-      return make_pair (bpos->second->capacity (), LILY_SYSCALL_ESUCCESS);
+      return make_pair (bpos->second->size (), LILY_SYSCALL_ESUCCESS);
     }
     else {
       // The buffer does not exist.

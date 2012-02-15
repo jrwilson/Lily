@@ -83,30 +83,31 @@ buffer_create (size_t size);
 
 bd_t
 buffer_copy (bd_t bd,
-	     size_t offset,
-	     size_t length);
+	     size_t begin,
+	     size_t end);
+
+int
+buffer_destroy (bd_t bd);
+
+size_t
+buffer_size (bd_t bd);
 
 size_t
 buffer_resize (bd_t bd,
 	       size_t size);
 
+int
+buffer_assign (bd_t dest,
+	       size_t dest_begin,
+	       bd_t src,
+	       size_t src_begin,
+	       size_t src_end);
+
 size_t
 buffer_append (bd_t dest,
 	       bd_t src,
-	       size_t offset,
-	       size_t length);
-
-  /* inline int */
-  /* buffer_assign (bd_t dest, */
-  /* 		 size_t dest_offset, */
-  /* 		 bd_t src, */
-  /* 		 size_t src_offset, */
-  /* 		 size_t length) */
-  /* { */
-  /*   int result; */
-  /*   asm ("int $0x81\n" : "=a"(result) : "0"(BUFFER_ASSIGN), "b"(dest), "c"(dest_offset), "d"(src), "S"(src_offset), "D"(length) :); */
-  /*   return result; */
-  /* } */
+	       size_t begin,
+	       size_t end);
 
 void*
 buffer_map (bd_t bd);
@@ -114,16 +115,15 @@ buffer_map (bd_t bd);
 int
 buffer_unmap (bd_t bd);
 
-int
-buffer_destroy (bd_t bd);
-
-size_t
-buffer_capacity (bd_t bd);
-
-#define PAGESIZE LILY_SYSCALL_SYSCONF_PAGESIZE
+#define SYSCONF_PAGESIZE LILY_SYSCALL_SYSCONF_PAGESIZE
 
 long
 sysconf (int name);
+
+size_t
+pagesize (void);
+
+#define ALIGN_UP(val, radix) (((val) + (radix) - 1) & ~((radix) - 1))
 
 int
 set_registry (aid_t aid);

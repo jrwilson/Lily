@@ -230,25 +230,25 @@ private:
       case SYSTEM_INPUT:
 	{
 	  bd_t input_buffer;
-	  size_t buffer_capacity;
+	  size_t buffer_size;
 	  const void* buf;
 	  
 	  if (output_buffer_ != 0 && (action_.action->flags & LILY_ACTION_AUTO_MAP) != 0) {
 	    // Copy the buffer to the input automaton and try to map it.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
-	    buffer_capacity = output_buffer_->capacity ();
+	    buffer_size = output_buffer_->size ();
 	    buf = action_.action->automaton->buffer_map (input_buffer).first;
 	  }
 	  else {
 	    input_buffer = -1;
-	    buffer_capacity = 0;
+	    buffer_size = 0;
 	    buf = 0;
 	  }
-	  
-	  // Push the buffer capacity.
-	  *--stack_pointer = buffer_capacity;
+
 	  // Push the address.
 	  *--stack_pointer = reinterpret_cast<uint32_t> (buf);
+	  // Push the buffer capacity.
+	  *--stack_pointer = buffer_size;
 	  // Push the buffer.
 	  *--stack_pointer = input_buffer;	
 	}

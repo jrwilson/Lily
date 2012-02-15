@@ -329,7 +329,7 @@ namespace rts {
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    if (!(text_buffer_size <= text_buffer->capacity ())) {
+    if (!(text_buffer_size <= text_buffer->size () * PAGE_SIZE)) {
       // They claim that the buffer is bigger than it really is.
       return make_pair (-1, LILY_SYSCALL_EBDSIZE);
     }
@@ -364,7 +364,7 @@ namespace rts {
     buffer* data_buffer = a->lookup_buffer (data_bd);
     if (data_buffer != 0) {
       // Synchronize the buffer so the frames listed in the buffer are correct.
-      data_buffer->sync (0, data_buffer->capacity ());
+      data_buffer->sync (0, data_buffer->size ());
     }
 
     // Schedule the init action.

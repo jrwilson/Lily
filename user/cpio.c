@@ -52,7 +52,7 @@ parse_cpio (buffer_file_t* bf)
   pos = align_up (pos, 4);
   buffer_file_seek (bf, pos, BUFFER_FILE_SET);
 
-  cpio_header_t* h = buffer_file_readp (bf, sizeof (cpio_header_t));
+  const cpio_header_t* h = buffer_file_readp (bf, sizeof (cpio_header_t));
   if (h == 0) {
     /* Underflow. */
     return 0;
@@ -103,7 +103,7 @@ parse_cpio (buffer_file_t* bf)
   memcpy (f->name, name, namesize);
   f->name_size = namesize;
   /* Create a buffer and copy the file content. */
-  f->buffer = buffer_create (filesize);
+  f->buffer = buffer_create (ALIGN_UP (filesize, pagesize ()) / pagesize ());
   memcpy (buffer_map (f->buffer), data, filesize);
   buffer_unmap (f->buffer);
   f->buffer_size = filesize;

@@ -133,8 +133,8 @@ initialize (void)
 static void
 process_register (aid_t aid,
 		  bd_t bd,
-		  void* ptr,
-		  size_t capacity)
+		  size_t bd_size,
+		  void* ptr)
 {
   if (bd == -1) {
     form_register_response (aid, REGISTRY_NO_BUFFER);
@@ -147,7 +147,7 @@ process_register (aid_t aid,
   }
 
   buffer_file_t file;
-  buffer_file_open (&file, false, bd, ptr, capacity);
+  buffer_file_open (&file, bd, bd_size, ptr, false);
 
   const registry_register_request_t* r = buffer_file_readp (&file, sizeof (registry_register_request_t));
   if (r == 0) {
@@ -232,8 +232,8 @@ match (registry_method_t method,
 static void
 process_query (aid_t aid,
 	       bd_t bd,
-	       void* ptr,
-	       size_t capacity)
+	       size_t bd_size,
+	       void* ptr)
 {
   if (bd == -1) {
     form_query_response (aid, REGISTRY_NO_BUFFER, 0);
@@ -246,7 +246,7 @@ process_query (aid_t aid,
   }
 
   buffer_file_t file;
-  buffer_file_open (&file, false, bd, ptr, capacity);
+  buffer_file_open (&file, bd, bd_size, ptr, false);
   
   const registry_query_request_t* q = buffer_file_readp (&file, sizeof (registry_query_request_t));
   if (q == 0) {
@@ -307,8 +307,8 @@ schedule (void);
 void
 init (int param,
       bd_t bd,
-      const void* ptr,
-      size_t capacity)
+      size_t bd_size,
+      const void* ptr)
 {
   initialize ();
   schedule ();
@@ -319,11 +319,11 @@ EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, INIT, init);
 void
 register_request (aid_t aid,
 		  bd_t bd,
-		  void* ptr,
-		  size_t capacity)
+		  size_t bd_size,
+		  void* ptr)
 {
   initialize ();
-  process_register (aid, bd, ptr, capacity);
+  process_register (aid, bd, bd_size, ptr);
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
@@ -357,11 +357,11 @@ EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, REGISTRY_REGISTER_RESPONSE, 
 void
 query_request (aid_t aid,
 	       bd_t bd,
-	       void* ptr,
-	       size_t capacity)
+	       size_t bd_size,
+	       void* ptr)
 {
   initialize ();
-  process_query (aid, bd, ptr, capacity);
+  process_query (aid, bd, bd_size, ptr);
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }

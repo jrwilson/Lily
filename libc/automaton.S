@@ -52,9 +52,30 @@ buffer_copy:
 	mov %ecx, automatonerrno
 	ret
 
+	.global buffer_destroy
+buffer_destroy:
+	mov $LILY_SYSCALL_BUFFER_DESTROY, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
+	.global buffer_size
+buffer_size:
+	mov $LILY_SYSCALL_BUFFER_SIZE, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+	
 	.global buffer_resize
 buffer_resize:
 	mov $LILY_SYSCALL_BUFFER_RESIZE, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
+	.global buffer_assign
+buffer_assign:
+	mov $LILY_SYSCALL_BUFFER_ASSIGN, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret
@@ -66,18 +87,6 @@ buffer_append:
 	mov %ecx, automatonerrno
 	ret
 
-/* inline int */
-/* buffer_assign (bid_t dest, */
-/* 	       size_t dest_offset, */
-/* 	       bid_t src, */
-/* 	       size_t src_offset, */
-/* 	       size_t length) */
-/* { */
-/*   int result; */
-/*   asm ("int $0x81\n" : "=a"(result) : "0"(BUFFER_ASSIGN), "b"(dest), "c"(dest_offset), "d"(src), "S"(src_offset), "D"(length) :); */
-/*   return result; */
-/* } */
-
 	.global buffer_map
 buffer_map:
 	mov $LILY_SYSCALL_BUFFER_MAP, %eax
@@ -88,20 +97,6 @@ buffer_map:
 	.global buffer_unmap
 buffer_unmap:
 	mov $LILY_SYSCALL_BUFFER_UNMAP, %eax
-	int $0x80
-	mov %ecx, automatonerrno
-	ret
-
-	.global buffer_destroy
-buffer_destroy:
-	mov $LILY_SYSCALL_BUFFER_DESTROY, %eax
-	int $0x80
-	mov %ecx, automatonerrno
-	ret
-
-	.global buffer_capacity
-buffer_capacity:
-	mov $LILY_SYSCALL_BUFFER_CAPACITY, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret

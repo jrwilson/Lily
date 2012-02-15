@@ -51,8 +51,8 @@ schedule (void);
 void
 init (aid_t vfs_aid,
       bd_t bd,
-      const void* ptr,
-      size_t capacity)
+      size_t bd_size,
+      void* ptr)
 {
   initialize ();
 
@@ -113,12 +113,12 @@ EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, 0, VFS_REGISTER_REQUEST, register
 void
 register_response (int param,
 		   bd_t bd,
-		   void* ptr,
-		   size_t capacity)
+		   size_t bd_size,
+		   void* ptr)
 {
   if (ptr != 0) {
     buffer_file_t file;
-    buffer_file_open (&file, false, bd, ptr, capacity);
+    buffer_file_open (&file, bd, bd_size, ptr, false);
     const registry_register_response_t* r = buffer_file_readp (&file, sizeof (registry_register_response_t));
     if (r != 0) {
       switch (r->error) {
@@ -143,7 +143,7 @@ EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, AUTO_MAP, VFS_REGISTER_RESPONSE, r
 static void
 process_file_request (aid_t aid,
 		      bd_t bd,
-		      size_t capacity)
+		      size_t bd_size)
 {
   if (bd == -1) {
     /* TODO */
@@ -156,10 +156,10 @@ process_file_request (aid_t aid,
 void
 file_request (aid_t aid,
 	      bd_t bd,
-	      void* ptr,
-	      size_t capacity)
+	      size_t bd_size,
+	      void* ptr)
 {
-  process_file_request (aid, bd, capacity);
+  process_file_request (aid, bd, bd_size);
 
   /* TODO */
 
