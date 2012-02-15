@@ -105,7 +105,7 @@ register_request (int param,
   }
   else {
     schedule ();
-    scheduler_finish (-1, FINISH_NO);
+    scheduler_finish (-1, FINISH_NOOP);
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, 0, VFS_REGISTER_REQUEST, register_request);
@@ -216,11 +216,11 @@ file_response (int param,
   /* } */
   /* else { */
   /*   schedule (); */
-  /*   scheduler_finish (-1, FINISH_NO); */
+  /*   scheduler_finish (-1, FINISH_NOOP); */
   /* } */
 
   schedule ();
-  scheduler_finish (-1, FINISH_NO);
+  scheduler_finish (-1, FINISH_NOOP);
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, 0, VFS_FILE_RESPONSE, file_response);
 

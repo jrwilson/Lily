@@ -3,13 +3,14 @@
 
 /*
   Different modes for finishing actions.
-  NO means an output action did not execute.
-  YES means an output action did execute.
   DESTROY means the specified buffer should be destroyed and the output action did execute if applicable.
+  RETAIN means the specified buffer should be retained and the output action did execute if applicable.
+  NOOP means the output action did not execute.  No action will be taken with the buffer.
+  RETAIN and NOOP are equivalent for input and internal actions.
  */
-#define LILY_SYSCALL_FINISH_NO 0
-#define LILY_SYSCALL_FINISH_YES 1
-#define LILY_SYSCALL_FINISH_DESTROY 2
+#define LILY_SYSCALL_FINISH_DESTROY 0
+#define LILY_SYSCALL_FINISH_RETAIN  1
+#define LILY_SYSCALL_FINISH_NOOP    2
 
 /* Unprivileged system calls. */
 #define LILY_SYSCALL_FINISH                0x00

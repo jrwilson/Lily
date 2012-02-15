@@ -349,7 +349,7 @@ register_response (aid_t aid,
   else {
     /* Did not find a response. */
     schedule ();
-    scheduler_finish (-1, FINISH_NO);
+    scheduler_finish (-1, FINISH_NOOP);
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, REGISTRY_REGISTER_RESPONSE, register_response);
@@ -387,7 +387,7 @@ query_response (aid_t aid,
   else {
     /* Did not find a response. */
     schedule ();
-    scheduler_finish (-1, FINISH_NO);
+    scheduler_finish (-1, FINISH_NOOP);
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, REGISTRY_QUERY_RESPONSE, query_response);

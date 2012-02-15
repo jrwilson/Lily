@@ -235,7 +235,7 @@ namespace rts {
     scheduler::schedule (caction (action, child->aid (), data_buffer));
 
     // Start the scheduler.  Doesn't return.
-    scheduler::finish (-1, LILY_SYSCALL_FINISH_NO);
+    scheduler::finish (-1, LILY_SYSCALL_FINISH_NOOP);
   }
 
   // The automaton has finished the current action.
@@ -294,7 +294,7 @@ namespace rts {
 	a->buffer_destroy (bd);
       }
       bd = -1;
-      flags = LILY_SYSCALL_FINISH_NO;
+      flags = LILY_SYSCALL_FINISH_NOOP;
       break;
     case OUTPUT:
       {
@@ -304,7 +304,7 @@ namespace rts {
 	  bd = -1;
 	  if (flags == LILY_SYSCALL_FINISH_DESTROY) {
 	    // Can't destroy a buffer that doesn't exist.
-	    flags = LILY_SYSCALL_FINISH_YES;
+	    flags = LILY_SYSCALL_FINISH_RETAIN;
 	  }
 	}
       }

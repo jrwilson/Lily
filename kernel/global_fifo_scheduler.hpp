@@ -132,7 +132,7 @@ private:
 	  flags_ = LILY_SYSCALL_FINISH_DESTROY;
 	}
 	else {
-	  flags_ = 0;
+	  flags_ = LILY_SYSCALL_FINISH_RETAIN;
 	}
 	break;
       }
@@ -165,13 +165,13 @@ private:
 	  }
 	  break;
 	case OUTPUT:
-	  if (flags == LILY_SYSCALL_FINISH_YES || flags == LILY_SYSCALL_FINISH_DESTROY) {
+	  if (flags == LILY_SYSCALL_FINISH_DESTROY || flags == LILY_SYSCALL_FINISH_RETAIN) {
 	    // The output did something.
-	    if (flags == LILY_SYSCALL_FINISH_YES) {
-	      output_buffer_ = action_.action->automaton->lookup_buffer (bd);
+	    if (flags == LILY_SYSCALL_FINISH_DESTROY) {
+	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bd);
 	    }
 	    else {
-	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bd);
+	      output_buffer_ = action_.action->automaton->lookup_buffer (bd);
 	    }
 	    flags_ = flags;
 	    if (input_actions_ != 0) {
