@@ -114,7 +114,7 @@ init (aid_t vfs_aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "init", "description");
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "", "");
 
 static bool
 register_request_precondition (void)
@@ -146,7 +146,7 @@ register_request (int param,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, 0, register_request, VFS_REGISTER_REQUEST, "register_request", "description");
+EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, 0, register_request, VFS_REGISTER_REQUEST, "", "");
 
 void
 register_response (int param,
@@ -176,7 +176,7 @@ register_response (int param,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, AUTO_MAP, register_response, VFS_REGISTER_RESPONSE, "register_response", "description");
+EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, AUTO_MAP, register_response, VFS_REGISTER_RESPONSE, "", "");
 
 static void
 schedule (void)

@@ -23,7 +23,7 @@ vfs : vfs.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 tmpfs : tmpfs.o cpio.o
-	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 init : init.o
 	$(CC) -o $@ $^

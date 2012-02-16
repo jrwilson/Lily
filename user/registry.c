@@ -67,8 +67,6 @@
 #define REGISTRY_QUERY_RESPONSE_DESC ""
 
 #define REGISTRY_DESTROYED_NO 5
-#define REGISTRY_DESTROYED_NAME ""
-#define REGISTRY_DESTROYED_DESC ""
 
 typedef struct description_struct description_t;
 struct description_struct {
@@ -347,7 +345,7 @@ init (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "init", "");
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "", "");
 
 void
 register_request (aid_t aid,
@@ -451,7 +449,7 @@ destroyed (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, destroyed, REGISTRY_DESTROYED_NO, REGISTRY_DESTROYED_NAME, REGISTRY_DESTROYED_DESC);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, destroyed, REGISTRY_DESTROYED_NO, "", "");
 
 static void
 schedule (void)
