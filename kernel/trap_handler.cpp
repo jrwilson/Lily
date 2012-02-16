@@ -61,13 +61,13 @@ struct bind_args {
 
 struct subscribe_destroyed_args {
   uint32_t eip;
-  ano_t action_number;
   aid_t aid;
+  ano_t action_number;
 };
 
 struct adjust_break_args {
   uint32_t eip;
-  size_t size;
+  ptrdiff_t size;
 };
 
 struct buffer_create_args {

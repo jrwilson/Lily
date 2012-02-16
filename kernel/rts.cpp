@@ -106,7 +106,7 @@ namespace rts {
    	kassert (0);
 	break;
       case LILY_ACTION_INIT:
-	if (pos->type != LILY_ACTION_SYSTEM_INPUT) {
+	if (pos->type != LILY_ACTION_SYSTEM_INPUT || pos->parameter_mode != PARAMETER) {
 	  // BUG:  These must have the correct type.
 	  kassert (0);
 	}
@@ -522,20 +522,6 @@ namespace rts {
     pos->second->add_subscriber (a);
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
-  }
-
-  void
-  loose (void)
-  {
-    // BUG
-    kassert (0);
-  }
-
-  void
-  destroy (void)
-  {
-    // BUG
-    kassert (0);
   }
 
   // The automaton is requesting to become the registry.

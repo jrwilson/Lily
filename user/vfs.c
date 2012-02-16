@@ -114,7 +114,7 @@ init (aid_t vfs_aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, init, INIT, "init", "description");
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "init", "description");
 
 static bool
 register_request_precondition (void)

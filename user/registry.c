@@ -17,6 +17,7 @@
   The two main activities involving the registry are registration and query.
   For registration, an automaton submits a description and algorithm to use when matching.
   The registry associates the description and algorithm with the automaton identifier (aid) of the registering automaton.
+  A description for the same automaton and algorithm overwrites an existing description.
   For query, an automaton submits a specification and matching algorithm.
   Using the algorithm, the registry compares the specification to descriptions registered with the same algorithm and returns a list of matching descriptions and aids.
 
@@ -31,11 +32,23 @@
   Another automaton wishing to use the "abc" automaton must make a decision; the outcome of which is probably not what is expected or desired.
   The descriptions for more flexible matching algorithms can be made unique by including an aid or some other unique piece of information.
 
-  Bugs
-  ----
-  * We don't account for the possibility of huge descriptions.
-  * Matching can be involved.  We could move it to an internal action to increase concurrency.
-  * Error checking is lacking.
+  Comparison Methods
+  ------------------
+  STRING_EQUAL - byte-wise comparison of the specification and description.  (Sizes must match.)
+
+  Implementation Details
+  ----------------------
+  The descriptions are stored in a linked-list.
+  If performance becomes an issue, then more advanced data structures should be considered.
+
+  Matching is performed when the specification is received.
+  One could increase concurrency by introducing an internal action that performs the matching.
+  This should only be necessary if the matching process becomes appreciably complex.
+
+  Bugs and Limitations
+  --------------------
+  * We don't account for the possibility of huge descriptions/specifications.
+  * Error checking is lacking, e.g., malloc.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
@@ -53,6 +66,10 @@
 #define REGISTRY_QUERY_RESPONSE_NO 4
 #define REGISTRY_QUERY_RESPONSE_DESC ""
 
+#define REGISTRY_DESTROYED_NO 5
+#define REGISTRY_DESTROYED_NAME ""
+#define REGISTRY_DESTROYED_DESC ""
+
 typedef struct description_struct description_t;
 struct description_struct {
   aid_t aid;
@@ -62,9 +79,6 @@ struct description_struct {
   description_t* next;
 };
 
-/* To keep things simple, we'll use a single list of descriptions.
-   Feel free to use a different scheme if justified.
-*/
 static description_t* description_head = 0;
 
 static description_t*
@@ -81,6 +95,13 @@ create_description (aid_t aid,
   memcpy (d->description, description, description_size);
   d->description_size = description_size;
   return d;
+}
+
+static void
+destroy_description (description_t* d)
+{
+  free (d->description);
+  free (d);
 }
 
 static void
@@ -317,7 +338,7 @@ static void
 schedule (void);
 
 void
-init (int param,
+init (aid_t aid,
       bd_t bd,
       size_t bd_size,
       const void* ptr)
@@ -326,7 +347,7 @@ init (int param,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, init, INIT, "init", "");
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "init", "");
 
 void
 register_request (aid_t aid,
@@ -335,6 +356,7 @@ register_request (aid_t aid,
 		  void* ptr)
 {
   initialize ();
+  subscribe_destroyed (aid, REGISTRY_DESTROYED_NO);
   process_register (aid, bd, bd_size, ptr);
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
@@ -403,6 +425,33 @@ query_response (aid_t aid,
   }
 }
 EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, REGISTRY_QUERY_RESPONSE_DESC);
+
+void
+destroyed (aid_t aid,
+	   bd_t bd,
+	   size_t bd_size,
+	   void* ptr)
+{
+  initialize ();
+
+  /* The automaton corresponding to aid has been destroyed.
+     Remove all relevant descriptions. */
+  description_t** dp = &description_head;
+  while (*dp != 0) {
+    if ((*dp)->aid != aid) {
+      dp = &(*dp)->next;
+    }
+    else {
+      description_t* d = *dp;
+      *dp = d->next;
+      destroy_description (d);
+    }
+  }
+
+  schedule ();
+  scheduler_finish (bd, FINISH_DESTROY);
+}
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, destroyed, REGISTRY_DESTROYED_NO, REGISTRY_DESTROYED_NAME, REGISTRY_DESTROYED_DESC);
 
 static void
 schedule (void)

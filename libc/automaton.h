@@ -74,16 +74,16 @@ bind (aid_t output_automaton,
       int input_parameter);
 
 int
-subscribe_unbound (ano_t action_number,
-		   bid_t bid);
+subscribe_unbound (bid_t bid,
+		   ano_t action_number);
 
 int
 unsubscribe_unbound (bid_t bid);
 
 
 int
-subscribe_destroyed (ano_t action_number,
-		     aid_t aid);
+subscribe_destroyed (aid_t aid,
+		     ano_t action_number);
 
 int
 unsubscribe_destroyed (aid_t aid);
