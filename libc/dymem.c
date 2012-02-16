@@ -1,4 +1,5 @@
 #include "dymem.h"
+#include "automaton.h"
 
 /*
   Description
@@ -373,9 +374,6 @@ size_to_bin (size_t size)
 static header_t* first_header_ = 0;
 static header_t* last_header_ = 0;
 static header_t* bin_[BIN_COUNT];
-
-void*
-adjust_break (size_t size);
 
 static inline void
 insert (header_t* h)

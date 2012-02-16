@@ -160,6 +160,11 @@ struct get_registry_args {
   uint32_t eip;
 };
 
+struct describe_args {
+  uint32_t eip;
+  aid_t aid;
+};
+
 struct syslog_args {
   uint32_t eip;
   char* string;
@@ -451,6 +456,20 @@ trap_dispatch (volatile registers regs)
 	kassert (0);
       }
       pair<int, int> r = rts::get_registry ();
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_DESCRIBE:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      describe_args* ptr = reinterpret_cast<describe_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (describe_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = rts::describe (a, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

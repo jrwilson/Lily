@@ -3,6 +3,7 @@
 
 #include "integer_types.hpp"
 #include "buffer_file.hpp"
+#include "kstring.hpp"
 
 // I stole this from Linkers and Loaders (John R. Levine, p. 64).
 namespace elf {    
@@ -102,12 +103,37 @@ namespace elf {
     uint32_t action_description_size;
   };
 
+  struct action {
+    action_type_t type;
+    parameter_mode_t parameter_mode;
+    unsigned int flags;
+    const void* action_entry_point;
+    ano_t action_number;
+    kstring action_name;
+    kstring action_description;
+    
+    action (action_type_t t,
+	    parameter_mode_t pm,
+	    unsigned int f,
+	    const void* aep,
+	    ano_t an,
+	    const kstring& name,
+	    const kstring& desc) :
+      type (t),
+      parameter_mode (pm),
+      flags (f),
+      action_entry_point (aep),
+      action_number (an),
+      action_name (name),
+      action_description (desc)
+    { }
+  };
+
   // Interpret a region of memory as an ELF file.
   class parser {
   public:
     bool
-    parse (automaton* a,
-	   logical_address_t begin,
+    parse (logical_address_t begin,
 	   logical_address_t end)
     {
       buffer_file bf (begin, end);
@@ -349,14 +375,13 @@ namespace elf {
 			return false;
 		      }
 
-		      actions_.push_back (new paction (a,
-						       static_cast<action_type_t> (d->action_type),
-						       static_cast<parameter_mode_t> (d->parameter_mode),
-						       d->flags,
-						       reinterpret_cast<const void*> (d->action_entry_point),
-						       d->action_number,
-						       kstring (action_name, d->action_name_size),
-						       kstring (action_description, d->action_description_size)));
+		      action_list.push_back (action (static_cast<action_type_t> (d->action_type),
+						     static_cast<parameter_mode_t> (d->parameter_mode),
+						     d->flags,
+						     reinterpret_cast<const void*> (d->action_entry_point),
+						     d->action_number,
+						     kstring (action_name, d->action_name_size),
+						     kstring (action_description, d->action_description_size)));
 		    }
 		    break;
 		  default:
@@ -398,24 +423,11 @@ namespace elf {
       return program_headers_.end ();
     }
 
-    typedef vector<paction*> action_list_type;
-    typedef action_list_type::const_iterator action_iterator;
-
-    action_iterator
-    action_begin () const
-    {
-      return actions_.begin ();
-    }
-
-    action_iterator
-    action_end () const
-    {
-      return actions_.end ();
-    }
+    typedef vector<action> action_list_type;
+    action_list_type action_list;
 
   private:
     program_header_list_type program_headers_;
-    action_list_type actions_;
   };
 
 }

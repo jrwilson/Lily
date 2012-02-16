@@ -74,8 +74,22 @@ bind (aid_t output_automaton,
       int input_parameter);
 
 int
+subscribe_unbound (ano_t action_number,
+		   bid_t bid);
+
+int
+unsubscribe_unbound (bid_t bid);
+
+
+int
 subscribe_destroyed (ano_t action_number,
 		     aid_t aid);
+
+int
+unsubscribe_destroyed (aid_t aid);
+
+void*
+adjust_break (ptrdiff_t size);
 
 bd_t
 buffer_create (size_t size);
@@ -129,5 +143,8 @@ set_registry (aid_t aid);
 
 aid_t
 get_registry (void);
+
+bd_t
+describe (aid_t aid);
 
 #endif /* AUTOMATON_H */

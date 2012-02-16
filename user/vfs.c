@@ -5,13 +5,47 @@
 #include <buffer_file.h>
 #include "registry.h"
 
+ano_t
+action_name_to_number (bd_t bd,
+		       size_t bd_size,
+		       void* ptr,
+		       const char* action_name)
+{
+  buffer_file_t bf;
+  buffer_file_open (&bf, bd, bd_size, ptr, false);
+  const size_t* count = buffer_file_readp (&bf, sizeof (size_t));
+  if (count == 0) {
+    return NO_ACTION;
+  }
+
+  for (size_t idx = 0; idx != *count; ++idx) {
+    const action_descriptor_t* d = buffer_file_readp (&bf, sizeof (action_descriptor_t));
+    if (d == 0) {
+      return NO_ACTION;
+    }
+
+    const char* name = buffer_file_readp (&bf, d->name_size);
+    if (name == 0) {
+      return NO_ACTION;
+    }
+
+    const char* description = buffer_file_readp (&bf, d->description_size);
+    if (description == 0) {
+      return NO_ACTION;
+    }
+
+    if (strcmp (name, action_name) == 0) {
+      return d->number;
+    }
+  }
+
+  return NO_ACTION;
+}
+
 #define VFS_REGISTER_REQUEST 1
 #define VFS_REGISTER_RESPONSE 2
 
 static const char* description = "vfs";
-
-/* Initialization flag. */
-static bool initialized = false;
 
 typedef enum {
   START,
@@ -22,15 +56,53 @@ typedef enum {
 static register_state_t register_state = START;
 
 static void
-initialize (void)
-{
-  if (!initialized) {
-    initialized = true;
-  }
-}
+schedule (void);
 
 static void
-schedule (void);
+registerf (aid_t vfs_aid)
+{
+  /* Look up the registry. */
+  aid_t registry_aid = get_registry ();
+  if (registry_aid == -1) {
+    const char* s = "vfs: warning: no registry\n";
+    syslog (s, strlen (s));
+    return;
+  }
+
+  /* Get its description. */
+  bd_t bd = describe (registry_aid);
+  if (bd == -1) {
+    const char* s = "vfs: warning: no registry description\n";
+    syslog (s, strlen (s));
+    return;
+  }
+
+  size_t bd_size = buffer_size (bd);
+
+  /* Map the description. */
+  void* ptr = buffer_map (bd);
+  if (ptr == 0) {
+    const char* s = "vfs: warning: could map registry description\n";
+    syslog (s, strlen (s));
+    return;
+  }
+
+  const ano_t register_request = action_name_to_number (bd, bd_size, ptr, REGISTRY_REGISTER_REQUEST_NAME);
+  const ano_t register_response = action_name_to_number (bd, bd_size, ptr, REGISTRY_REGISTER_RESPONSE_NAME);
+
+  /* Dispense with the buffer. */
+  buffer_destroy (bd);
+
+  if (bind (vfs_aid, VFS_REGISTER_REQUEST, 0, registry_aid, register_request, 0) == -1 ||
+      bind (registry_aid, register_response, 0, vfs_aid, VFS_REGISTER_RESPONSE, 0) == -1) {
+    const char* s = "vfs: warning: couldn't bind to registry\n";
+    syslog (s, strlen (s));
+  }
+  else {
+    register_state = REGISTER;
+  }
+
+}
 
 void
 init (aid_t vfs_aid,
@@ -38,25 +110,7 @@ init (aid_t vfs_aid,
       size_t bd_size,
       void* ptr)
 {
-  initialize ();
-
-  /* Look up the registry and bind to it. */
-  aid_t registry_aid = get_registry ();
-  if (registry_aid != -1) {
-    if (bind (vfs_aid, VFS_REGISTER_REQUEST, 0, registry_aid, REGISTRY_REGISTER_REQUEST, 0) == -1 ||
-	bind (registry_aid, REGISTRY_REGISTER_RESPONSE, 0, vfs_aid, VFS_REGISTER_RESPONSE, 0) == -1) {
-      const char* s = "vfs: warning: couldn't bind to registry\n";
-      syslog (s, strlen (s));
-    }
-    else {
-      register_state = REGISTER;
-    }
-  }
-  else {
-    const char* s = "vfs: warning: no registry\n";
-    syslog (s, strlen (s));
-  }
-
+  registerf (vfs_aid);
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }

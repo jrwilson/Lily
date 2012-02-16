@@ -10,6 +10,11 @@ private:
   size_t size_;
 
 public:
+  kstring () :
+    string_ (0),
+    size_ (0)
+  { }
+
   kstring (const char* str)
   {
     size_ = strlen (str) + 1;
@@ -71,6 +76,18 @@ public:
   operator!= (const kstring& other) const
   {
     return !(*this == other);
+  }
+
+  void
+  append (const void* ptr,
+	  size_t size)
+  {
+    char* str = new char[size_ + size];
+    memcpy (str, string_, size_);
+    memcpy (str + size_, ptr, size);
+    delete[] string_;
+    string_ = str;
+    size_ += size;
   }
 };
 

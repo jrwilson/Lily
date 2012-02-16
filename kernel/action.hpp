@@ -4,7 +4,6 @@
 #include <lily/types.h>
 #include <lily/action.h>
 #include "buffer.hpp"
-#include "kstring.hpp"
 
 class automaton;
 
@@ -29,25 +28,19 @@ struct paction {
   unsigned int const flags;
   const void* const action_entry_point;
   ano_t const action_number;
-  kstring const action_name;
-  kstring const action_description;
 
   paction (::automaton* a,
 	   action_type_t t,
 	   parameter_mode_t pm,
 	   unsigned int f,
 	   const void* aep,
-	   ano_t an,
-	   const kstring& name,
-	   const kstring& desc) :
+	   ano_t an) :
     automaton (a),
     type (t),
     parameter_mode (pm),
     flags (f),
     action_entry_point (aep),
-    action_number (an),
-    action_name (name),
-    action_description (desc)
+    action_number (an)
   { }
 
 private:

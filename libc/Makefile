@@ -17,7 +17,7 @@ libstring.a : string.o
 
 libio.a : io.o
 
-libdymem.a : dymem.o sbrk.o
+libdymem.a : dymem.o
 
 libfifo_scheduler.a : fifo_scheduler.o
 

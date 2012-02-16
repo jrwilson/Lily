@@ -41,6 +41,18 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
+#define REGISTRY_REGISTER_REQUEST_NO 1
+#define REGISTRY_REGISTER_REQUEST_DESC ""
+
+#define REGISTRY_REGISTER_RESPONSE_NO 2
+#define REGISTRY_REGISTER_RESPONSE_DESC ""
+
+#define REGISTRY_QUERY_REQUEST_NO 3
+#define REGISTRY_QUERY_REQUEST_DESC ""
+
+#define REGISTRY_QUERY_RESPONSE_NO 4
+#define REGISTRY_QUERY_RESPONSE_DESC ""
+
 typedef struct description_struct description_t;
 struct description_struct {
   aid_t aid;
@@ -314,7 +326,7 @@ init (int param,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, init, INIT, "init", "description");
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, init, INIT, "init", "");
 
 void
 register_request (aid_t aid,
@@ -327,7 +339,7 @@ register_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, register_request, REGISTRY_REGISTER_REQUEST, "registry_register_request", "description");
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, register_request, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, REGISTRY_REGISTER_REQUEST_DESC);
 
 void
 register_response (aid_t aid,
@@ -352,7 +364,7 @@ register_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, register_response, REGISTRY_REGISTER_RESPONSE, "registry_register_response", "description");
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, register_response, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, REGISTRY_REGISTER_RESPONSE_DESC);
 
 void
 query_request (aid_t aid,
@@ -365,7 +377,7 @@ query_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, query_request, REGISTRY_QUERY_REQUEST, "registry_query_request", "description");
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, query_request, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, REGISTRY_QUERY_REQUEST_DESC);
 
 void
 query_response (aid_t aid,
@@ -390,15 +402,15 @@ query_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE, "registry_query_response", "description");
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, REGISTRY_QUERY_RESPONSE_DESC);
 
 static void
 schedule (void)
 {
   if (!buffer_queue_empty (&rr_queue)) {
-    scheduler_add (REGISTRY_REGISTER_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&rr_queue)));
+    scheduler_add (REGISTRY_REGISTER_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&rr_queue)));
   }
   if (!buffer_queue_empty (&qr_queue)) {
-    scheduler_add (REGISTRY_QUERY_RESPONSE, buffer_queue_item_parameter (buffer_queue_front (&qr_queue)));
+    scheduler_add (REGISTRY_QUERY_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&qr_queue)));
   }
 }

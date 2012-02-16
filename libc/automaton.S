@@ -37,6 +37,13 @@ subscribe_destroyed:
 	int $0x80
 	mov %ecx, automatonerrno
 	ret
+
+	.global adjust_break
+adjust_break:
+	mov $LILY_SYSCALL_ADJUST_BREAK, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
 	
 	.global buffer_create
 buffer_create:
@@ -118,6 +125,13 @@ set_registry:
 	.global get_registry
 get_registry:
 	mov $LILY_SYSCALL_GET_REGISTRY, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
+	.global describe
+describe:
+	mov $LILY_SYSCALL_DESCRIBE, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret

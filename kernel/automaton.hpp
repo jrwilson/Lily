@@ -25,6 +25,7 @@
 #include "lily/syscall.h"
 #include "io.hpp"
 #include "irq_handler.hpp"
+#include "kstring.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -101,6 +102,8 @@ private:
   // Map from action number to action.
   typedef unordered_map<ano_t, const paction* const> ano_to_action_map_type;
   ano_to_action_map_type ano_to_action_map_;
+  // Description of the actions.
+  kstring description_;
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef vector<vm_area_base*> memory_map_type;
   memory_map_type memory_map_;
@@ -503,6 +506,18 @@ public:
     else {
       return false;
     }
+  }
+
+  void
+  set_description (const kstring& desc)
+  {
+    description_ = desc;
+  }
+
+  const kstring&
+  get_description (void) const
+  {
+    return description_;
   }
 
   const paction*

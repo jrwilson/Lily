@@ -56,6 +56,16 @@ namespace rts {
     const logical_address_t text_end = text_begin + text_size;
     text->map_begin (text_begin);
 
+    // Parse the file.
+    elf::parser hp;
+    if (!hp.parse (text_begin, text_end)) {
+      // BUG:  Couldn't parse the program.
+      kassert (0);
+    }
+
+    // BUG:  Check the memory map from the parse.
+    // BUG:  Check the set of actions from the parse.
+
     // Create the automaton.
 
     // Allocate a frame.
@@ -88,35 +98,48 @@ namespace rts {
     // Add to the scheduler.
     scheduler::add_automaton (a);
 
-    // Parse the file.
-    elf::parser hp;
-    if (!hp.parse (a, text_begin, text_end)) {
-      // BUG:  Couldn't parse the program.
-      kassert (0);
-    }
-
     // Add the actions to the automaton.
-    for (elf::parser::action_iterator pos = hp.action_begin (); pos != hp.action_end (); ++pos) {
-      switch ((*pos)->action_number) {
+    for (elf::parser::action_list_type::iterator pos = hp.action_list.begin (); pos != hp.action_list.end (); ++pos) {
+      switch (pos->action_number) {
       case LILY_ACTION_NO_ACTION:
     	// BUG:  The action number LILY_ACTION_NO_ACTION is reserved.
    	kassert (0);
 	break;
       case LILY_ACTION_INIT:
-	if ((*pos)->type != LILY_ACTION_SYSTEM_INPUT) {
+	if (pos->type != LILY_ACTION_SYSTEM_INPUT) {
 	  // BUG:  These must have the correct type.
 	  kassert (0);
 	}
 	// Fall through.
       default:
-	if (!a->add_action (*pos)) {
+	if (!a->add_action (new paction (a, pos->type, pos->parameter_mode, pos->flags, pos->action_entry_point, pos->action_number))) {
 	  // BUG:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
 	  kassert (0);
 	}
 	break;
       }
-
     }
+
+    // Form a description of the actions.
+    kstring description;
+    {
+      size_t action_count = hp.action_list.size ();
+      description.append (&action_count, sizeof (action_count));
+    }
+
+    for (elf::parser::action_list_type::iterator pos = hp.action_list.begin (); pos != hp.action_list.end (); ++pos) {
+      description.append (&pos->type, sizeof (pos->type));
+      description.append (&pos->parameter_mode, sizeof (pos->parameter_mode));
+      description.append (&pos->action_number, sizeof (pos->action_number));
+      size_t size = pos->action_name.size ();
+      description.append (&size, sizeof (size));
+      size = pos->action_description.size ();
+      description.append (&size, sizeof (size));
+      description.append (pos->action_name.c_str (), pos->action_name.size ());
+      description.append (pos->action_description.c_str (), pos->action_description.size ());
+    }
+
+    a->set_description (description);
 
     // Create the memory map for the automaton.
     frame_map_.clear ();
@@ -542,6 +565,35 @@ namespace rts {
     else {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
+  }
+
+  pair<bd_t, int>
+  describe (automaton* a,
+	    aid_t aid)
+  {
+    aid_map_type::iterator pos = aid_map_.find (aid);
+    if (pos == aid_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+    }
+
+    const kstring& desc = pos->second->get_description ();
+
+    // Create a buffer.
+    pair<bd_t, int> r = a->buffer_create (align_up (desc.size (), PAGE_SIZE) / PAGE_SIZE);
+    if (r.first == -1) {
+      return r;
+    }
+
+    pair<void*, int> s = a->buffer_map (r.first);
+    if (s.first == 0) {
+      // Destroy the buffer.
+      a->buffer_destroy (r.first);
+      return make_pair (-1, s.second);
+    }
+
+    memcpy (s.first, desc.c_str (), desc.size ());
+
+    return make_pair (r.first, LILY_SYSCALL_ESUCCESS);
   }
 
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.
