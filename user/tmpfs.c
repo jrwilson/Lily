@@ -223,7 +223,7 @@ init (int param,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, AUTO_MAP, INIT, init);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, AUTO_MAP, init, INIT, "init", "description");
 
 static void
 schedule (void)

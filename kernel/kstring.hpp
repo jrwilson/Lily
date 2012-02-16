@@ -17,6 +17,14 @@ public:
     memcpy (string_, str, size_);
   }
 
+  kstring (const char* str,
+	   size_t size) :
+    size_ (size)
+  {
+    string_ = new char[size_];
+    memcpy (string_, str, size_);
+  }
+
   kstring (const kstring& other)
   {
     size_ = other.size_;

@@ -314,7 +314,7 @@ init (int param,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, INIT, init);
+EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, 0, init, INIT, "init", "description");
 
 void
 register_request (aid_t aid,
@@ -327,7 +327,7 @@ register_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, REGISTRY_REGISTER_REQUEST, register_request);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, register_request, REGISTRY_REGISTER_REQUEST, "registry_register_request", "description");
 
 void
 register_response (aid_t aid,
@@ -352,7 +352,7 @@ register_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, REGISTRY_REGISTER_RESPONSE, register_response);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, register_response, REGISTRY_REGISTER_RESPONSE, "registry_register_response", "description");
 
 void
 query_request (aid_t aid,
@@ -365,7 +365,7 @@ query_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, REGISTRY_QUERY_REQUEST, query_request);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, query_request, REGISTRY_QUERY_REQUEST, "registry_query_request", "description");
 
 void
 query_response (aid_t aid,
@@ -390,7 +390,7 @@ query_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, REGISTRY_QUERY_RESPONSE, query_response);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE, "registry_query_response", "description");
 
 static void
 schedule (void)

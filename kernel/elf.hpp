@@ -2,6 +2,7 @@
 #define __elf_hpp__
 
 #include "integer_types.hpp"
+#include "buffer_file.hpp"
 
 // I stole this from Linkers and Loaders (John R. Levine, p. 64).
 namespace elf {    
@@ -85,24 +86,6 @@ namespace elf {
     uint32_t name_size;
     uint32_t desc_size;
     uint32_t type;
-
-    const char*
-    name () const
-    {
-      return reinterpret_cast<const char*> (&type + 1);
-    }
-
-    const void*
-    desc () const
-    {
-      return name () + align_up (name_size, 4);
-    }
-
-    const note*
-    next () const
-    {
-      return reinterpret_cast<const elf::note*> (reinterpret_cast<const uint8_t*> (this) + sizeof (elf::note) + align_up (name_size, 4) + align_up (desc_size, 4));
-    }
   };
 
   enum note_type {
@@ -113,8 +96,10 @@ namespace elf {
     uint32_t action_type;
     uint32_t parameter_mode;
     uint32_t flags;
-    uint32_t id;
     uint32_t action_entry_point;
+    uint32_t action_number;
+    uint32_t action_name_size;
+    uint32_t action_description_size;
   };
 
   // Interpret a region of memory as an ELF file.
@@ -125,11 +110,11 @@ namespace elf {
 	   logical_address_t begin,
 	   logical_address_t end)
     {
-      const preamble* const preamble_ = reinterpret_cast<const preamble*> (begin);
-      const void* const end_ = reinterpret_cast<const void*> (end);
+      buffer_file bf (begin, end);
 
-      // Ensure we have enough data to process.
-      if (preamble_ + 1 > end_) {
+      // Read the preamble.
+      const preamble* const preamble_ = static_cast<const preamble*> (bf.readp (sizeof (preamble)));
+      if (preamble_ == 0) {
 	return false;
       }
 
@@ -154,11 +139,9 @@ namespace elf {
 	return false;
       }
 
-      // Compute the location of the header.
-      const header* header_ = reinterpret_cast<const header*> (preamble_ + 1);
-
-      // Ensure we have enough data to process.
-      if (header_ + 1 > end_) {
+      // Read the header.
+      const header* const header_ = static_cast<const header*> (bf.readp (sizeof (header)));
+      if (header_ == 0) {
 	return false;
       }
 
@@ -184,9 +167,6 @@ namespace elf {
 	return false;
       }
 
-      // Compute the location of the program header.
-      const program_header_entry* program_header_begin_ = reinterpret_cast<const program_header_entry*> (reinterpret_cast<const uint8_t*> (preamble_) + header_->program_header_offset);
-
       // Ignore the section header offset.
 
       // Ignore the flags.
@@ -206,28 +186,22 @@ namespace elf {
 	return false;
       }
 
-      // Calculate the end of the program header.
-      const program_header_entry* program_header_end_ = program_header_begin_ + header_->program_header_entry_count;
-
-      // Both the beginning and end must be range.
-      if (program_header_begin_ + 1 > end_) {
-	return false;
-      }
-      if (program_header_end_ > end_) {
-	return false;
-      }
-      if (program_header_begin_ >= program_header_end_) {
-	return false;
-      }
-
       // Ignore the section headers.
 
       // Ignore the section number containing the name strings.
 
+
       // Check the program header.
-      for (const program_header_entry* e = program_header_begin_;
-	   e != program_header_end_;
-	   ++e) {
+
+      // Seek to the program header.
+      bf.seek (header_->program_header_offset);
+
+      for (size_t idx = 0; idx != header_->program_header_entry_count; ++idx) {
+	// Read the program header entries.
+	const program_header_entry* const e = static_cast<const program_header_entry*> (bf.readp (sizeof (program_header_entry)));
+	if (e == 0) {
+	  return false;
+	}
 
 	switch (e->type) {
 	case NULL_ENTRY:
@@ -235,14 +209,19 @@ namespace elf {
 	  break;
 	case LOAD:
 	  if (e->memory_size != 0) {
-	    if (reinterpret_cast<const int8_t*> (preamble_) + e->offset >= end_) {
-	      // Section is not in file.
+
+	    // Record our position.
+	    size_t pos = bf.position ();
+
+	    // Seek to the section and try to read it.
+	    bf.seek (e->offset);
+	    if (bf.readp (e->file_size) == 0) {
 	      return false;
 	    }
-	    if (reinterpret_cast<const int8_t*> (preamble_) + e->offset + e->file_size > end_) {
-	      // Section ends outside of file.
-	      return false;
-	    }
+
+	    // Restore our position.
+	    bf.seek (pos);
+
 	    if (e->virtual_address >= KERNEL_VIRTUAL_BASE) {
 	      // Interferes with kernel.
 	      return false;
@@ -280,100 +259,116 @@ namespace elf {
 	  break;
 	case NOTE:
 	  if (e->file_size != 0) {
-	    if (reinterpret_cast<const int8_t*> (preamble_) + e->offset >= end_) {
-	      // Section is not in file.
-	      return false;
-	    }
-	    if (reinterpret_cast<const int8_t*> (preamble_) + e->offset + e->file_size > end_) {
-	      // Section ends outside of file.
-	      return false;
-	    }
+
 	    if (e->alignment != 4) {
 	      // Must be aligned to 32-bit integers.
 	      return false;
 	    }
 
-	    // Parse the notes.
-	    for (const note* n = reinterpret_cast<const note*> (reinterpret_cast<const int8_t*> (preamble_) + e->offset);
-		 n < static_cast<const void*> (reinterpret_cast<const int8_t*> (preamble_) + e->offset + e->file_size);
-		 n = n->next ()) {
+	    // Record our position.
+	    size_t pos = bf.position ();
 
-	      if (n + 1 > end_) {
-		// Note is not in file.
-		return false;
-	      }
-	      
-	      if (n->name () > end_) {
-		// Name is not in file.
-		return false;
-	      }
-	      
-	      if (n->name () + n->name_size > end_) {
-		// Name is not in file.
-		return false;
-	      }
-	      
-	      if (n->name ()[n->name_size - 1] != 0) {
-		// Name is not null-terminated.
-		return false;
-	      }
-	      
-	      if (n->desc () > end_) {
-		// Description is not in file.
-		return false;
-	      }
-	      
-	      if (static_cast<const uint8_t*> (n->desc ()) + n->desc_size > end_) {
-		// Description is not in file.
-		return false;
-	      }
-	      
-	      if (strcmp (n->name (), "lily") == 0) {
-		// Note is intended for us.
-		switch (n->type) {
-		case ACTION_DESCRIPTOR:
-		  {
-		    const action_descriptor* d = static_cast<const action_descriptor*> (n->desc ());
-		    if (d + 1 > static_cast<const void*> (n->next ())) {
-		      // Action description is not in file.
-		      return false;
-		    }
-		    
-		    switch (d->action_type) {
-		    case INPUT:
-		    case OUTPUT:
-		    case INTERNAL:
-		    case SYSTEM_INPUT:
-		      break;
-		    default:
-		      // Unknown action type.
-		      return false;
-		    }
-		    
-		    switch (d->parameter_mode) {
-		    case NO_PARAMETER:
-		    case PARAMETER:
-		    case AUTO_PARAMETER:
-		      break;
-		    default:
-		      // Unknown parameter mode.
-		      return false;
-		    }
+	    // Seek to the section and try to read it.
+	    bf.seek (e->offset);
+	    const logical_address_t note_begin = reinterpret_cast<logical_address_t> (bf.readp (0));
+	    if (bf.readp (e->file_size) == 0) {
+	      return false;
+	    }
 
-		    actions_.push_back (new paction (a,
-						     static_cast<action_type_t> (d->action_type),
-						     static_cast<parameter_mode_t> (d->parameter_mode),
-						     d->flags,
-						     d->id,
-						     reinterpret_cast<const void*> (d->action_entry_point)));
-		  }
-		  break;
-		default:
-		  // Unknown note.
+	    // Restore our position.
+	    bf.seek (pos);
+
+	    // We'll treat the note section as a file within a file.
+	    buffer_file note_bf (note_begin, note_begin + e->file_size);
+
+	    const note* n;
+	    for (;;) {
+	      n = static_cast<const note*> (note_bf.readp (sizeof (note)));
+	      if (n != 0) {
+		const char* name = static_cast<const char*> (note_bf.readp (align_up (n->name_size, 4)));
+		if (name == 0) {
 		  return false;
 		}
+		if (name[n->name_size - 1] != 0) {
+		  // Name is not null-terminated.
+		  return false;
+		}
+
+		const logical_address_t desc = reinterpret_cast<logical_address_t> (note_bf.readp (align_up (n->desc_size, 4)));
+		if (desc == 0) {
+		  return false;
+		}
+
+		if (strcmp (name, "lily") == 0) {
+		  // Note is intended for us.
+		  switch (n->type) {
+		  case ACTION_DESCRIPTOR:
+		    {
+		      // Parse the description like a file.
+		      buffer_file desc_bf (desc, desc + n->desc_size);
+
+		      const action_descriptor* d = static_cast<const action_descriptor*> (desc_bf.readp (sizeof (action_descriptor)));
+		      if (d == 0) {
+			return false;
+		      }
+
+		      switch (d->action_type) {
+		      case INPUT:
+		      case OUTPUT:
+		      case INTERNAL:
+		      case SYSTEM_INPUT:
+			break;
+		      default:
+			// Unknown action type.
+			return false;
+		      }
+
+		      switch (d->parameter_mode) {
+		      case NO_PARAMETER:
+		      case PARAMETER:
+		      case AUTO_PARAMETER:
+			break;
+		      default:
+			// Unknown parameter mode.
+			return false;
+		      }
+
+		      const char* action_name = static_cast<const char*> (desc_bf.readp (d->action_name_size));
+		      if (action_name == 0) {
+			return false;
+		      }
+		      if (action_name[d->action_name_size - 1] != 0) {
+			return false;
+		      }
+
+		      const char* action_description = static_cast<const char*> (desc_bf.readp (d->action_description_size));
+		      if (action_description == 0) {
+			return false;
+		      }
+		      if (action_description[d->action_description_size - 1] != 0) {
+			return false;
+		      }
+
+		      actions_.push_back (new paction (a,
+						       static_cast<action_type_t> (d->action_type),
+						       static_cast<parameter_mode_t> (d->parameter_mode),
+						       d->flags,
+						       reinterpret_cast<const void*> (d->action_entry_point),
+						       d->action_number,
+						       kstring (action_name, d->action_name_size),
+						       kstring (action_description, d->action_description_size)));
+		    }
+		    break;
+		  default:
+		    // Unknown note.
+		    return false;
+		  }	  
+		}
 	      }
-	    }
+	      else {
+		break;
+	      }
+	    }	      
 	  }
 	  break;
 	case SHLIB:
@@ -384,7 +379,7 @@ namespace elf {
 	  break;
 	}
       }
-
+      
       return true;
     }
 

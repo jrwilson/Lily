@@ -26,26 +26,25 @@
 #define NO_ACTION LILY_ACTION_NO_ACTION
 #define INIT LILY_ACTION_INIT
 
-/* #define AUTOMATON_ESUCCESS LILY_SYSCALL_ESUCCESS */
-/* #define AUTOMATON_EBADBID LILY_SYSCALL_EBADBID */
-/* #define AUTOMATON_EINVAL LILY_SYSCALL_EINVAL */
-/* #define AUTOMATON_ENOMEM LILY_SYSCALL_ENOMEM */
-
 /* A macro for embedding the action information. */
-#define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, flags, id, func_name) \
+#define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, flags, func_name, action_number, action_name, action_description) \
   __asm__ (".pushsection .action_info, \"\", @note\n"		   \
   ".balign 4\n"							   \
-  ".long 1f - 0f\n"		/* Length of the author string. */ \
-  ".long 3f - 2f\n"		/* Length of the description. */ \
-  ".long 0\n"			/* The type.  0 => action descriptor. */ \
-  "0: .asciz \"lily\"\n"	/* The author of the note. */ \
+  ".long 1f - 0f\n"			/* Size of the author string. */ \
+  ".long 3f - 2f\n"			/* Size of the description. */ \
+  ".long 0\n"				/* The type.  0 => action descriptor. */ \
+  "0: .asciz \"lily\"\n"		/* The author of the note. */ \
   "1: .balign 4\n" \
-  "2:\n"			/* The description of the note. */ \
+  "2:\n"				/* The description of the note. */ \
   ".long " quote (action_type) "\n"	/* Action type. */ \
   ".long " quote (parameter_mode) "\n"	/* Parameter mode. */ \
   ".long " quote (flags) "\n"		/* Flags. */ \
-  ".long " quote (id) "\n" /* Numeric identifier. */ \
   ".long " #func_name "\n"		/* Action entry point. */		\
+  ".long " quote (action_number) "\n"	/* Numeric identifier. */ \
+  ".long 5f - 4f\n"			/* Size of the action name. */ \
+  ".long 3f - 5f\n"			/* Size of the action description. */ \
+  "4: .asciz \"" action_name "\"\n"		/* The action name. */ \
+  "5: .asciz \"" action_description "\"\n"     /* The action description. */ \
   "3: .balign 4\n" \
        ".popsection\n");
 
