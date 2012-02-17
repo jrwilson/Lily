@@ -1,4 +1,3 @@
-#include "tmpfs.h"
 #include <automaton.h>
 #include <io.h>
 #include <string.h>
@@ -7,6 +6,7 @@
 #include <buffer_file.h>
 #include <buffer_queue.h>
 #include "cpio.h"
+#include "vfs.h"
 
 /*
   Tmpfs
@@ -20,16 +20,30 @@
   One reads and writes data by specifying the operation, the file's inode, and the data.
   One can traverse paths by specifying a directory's inode and the next element of the path to determine the next inode.
 
-  The primary interface of tmpfs involves a control channel and a data channel.
-  The control channel contains a input action for receive requests and an output action for indicating the results of a request.
-  The data channel contains a input for receiving bulk data, e.g., the user is performing a write, and an output for sending bulk data, e.g., the user is performing a read.
-  Separating the channels reduces the amount of buffer manipulation and mapping.
-  The control channel will usually be auto-mapped since the data traversing the channel is small.
-  The data channel will usually only be auto-mapped on the user's input channel as that is the only time the data is actually inspected.
-  Combining the control and data also forces one to prepend a header on every data buffer which is tedious.
+  Protocol
+  --------
+  I considered three possible protocols for tmpfs.
+  The first is a simple request-response protocol.
+  The second is also a request-response protocol but bulk data follows a corresponding request or response.
+  The third is a request-response protocol with an additional channel for bulk data transfers.
 
-  Supported Operations
-  --------------------
+  The potential problems of the first design is that it requires buffer manipulation and can't take advantage of auto-mapping.
+  For example, to write data to a file, one must create a buffer containing the request and then append a buffer containing the data.
+  Since the data may be large, the tmpfs automaton should not auto-map it but rather extract a buffer containing the request and map it.
+  The advantage of the first design is that it results in a stateless protocol which is considerably easier to implement.
+
+  The second design solves the buffer manipulation problem but introduces state.
+  Since the request and data are sent separately, there is no need to pack and unpack them.
+  However, the auto-mapping problem remains as the data can be large and arrives at the same input.
+  In the second design, one must remember the last request to determine if data is expected or not.
+
+  The third design solves both the buffer manipulation problem and auto-mapping problem but is more complex than the second design.
+  In the second design, all messages can be placed in a queue and processed in FIFO order.
+  The third design introduces additional overhead to synchronize the request/response queues and the data queues.
+  The problem is summarized by saying that the data cannot be placed on an outgoing queue until the corresponding request/response has been sent.
+
+  To make an informed decision, one needs estimates of the system call overhead for the first design which can be compared to the expected overhead of the second and third design.
+  Since I currently lack this information, I will go with the first design since it is easier.
 
   Implementation Details
   ----------------------
@@ -48,21 +62,8 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define TMPFS_CONTROL_REQUEST_NO 1
-#define TMPFS_CONTROL_REQUEST_NAME "control_request"
-#define TMPFS_CONTROL_REQUEST_DESC ""
-
-#define TMPFS_CONTROL_RESPONSE_NO 2
-#define TMPFS_CONTROL_RESPONSE_NAME "control_response"
-#define TMPFS_CONTROL_RESPONSE_DESC ""
-
-#define TMPFS_DATA_WRITE_NO 3
-#define TMPFS_DATA_WRITE_NAME "data_write"
-#define TMPFS_DATA_WRITE_DESC ""
-
-#define TMPFS_DATA_READ_NO 4
-#define TMPFS_DATA_READ_NAME "data_read"
-#define TMPFS_DATA_READ_DESC ""
+#define TMPFS_REQUEST_NO 1
+#define TMPFS_RESPONSE_NO 2
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef enum {
@@ -98,8 +99,8 @@ static inode_t* free_list = 0;
 /* Initialization flag. */
 static bool initialized = false;
 
-/* Queue for control responses. */
-static buffer_queue_t control_response_queue;
+/* Queue for responses. */
+static buffer_queue_t response_queue;
 
 static inode_t*
 inode_create (inode_type_t type,
@@ -234,71 +235,91 @@ initialize (void)
     root = inode_create (DIRECTORY, "", 0, -1, 0, 0, 0);
     /* TODO:  Do we need to make the root its own parent? */
 
-    buffer_queue_init (&control_response_queue);
+    buffer_queue_init (&response_queue);
   }
 }
 
 static void
-form_control_response (aid_t aid,
-		       tmpfs_error_t error)
+form_response (aid_t aid,
+	       vfs_fs_type_t type,
+	       vfs_fs_error_t error)
 {
   /* Create a response. */
-  bd_t bd = buffer_create (sizeof (tmpfs_control_response_t));
-  tmpfs_control_response_t* rr = buffer_map (bd);
+  bd_t bd = buffer_create (size_to_pages (sizeof (vfs_fs_response_t)));
+  vfs_fs_response_t* rr = buffer_map (bd);
+  rr->type = type;
   rr->error = error;
   /* We don't unmap it because we are going to destroy it when we respond. */
 
-  buffer_queue_push (&control_response_queue, aid, bd);
+  buffer_queue_push (&response_queue, aid, bd);
 }
 
 static void
-process_control_request (aid_t aid,
-			 bd_t bd,
-			 size_t bd_size,
-			 void* ptr)
+process_request (aid_t aid,
+		 bd_t bd,
+		 size_t bd_size)
 {
   if (bd == -1) {
-    form_control_response (aid, TMPFS_NO_BUFFER);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_BUFFER);
     return;
   }
 
+  /* Create a buffer that contains the request. */
+  bd_t request_bd = buffer_copy (bd, 0, size_to_pages (sizeof (vfs_fs_request_t)));
+  if (request_bd == -1) {
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP);
+    return;
+  }
+
+  /* Map in the request. */
+  void* ptr= buffer_map (request_bd);
   if (ptr == 0) {
-    form_control_response (aid, TMPFS_BUFFER_TOO_BIG);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP);
     return;
   }
 
   buffer_file_t file;
   buffer_file_open (&file, bd, bd_size, ptr, false);
 
-  const tmpfs_control_request_t* r = buffer_file_readp (&file, sizeof (tmpfs_control_request_t));
+  const vfs_fs_request_t* r = buffer_file_readp (&file, sizeof (vfs_fs_request_t));
   if (r == 0) {
-    form_control_response (aid, TMPFS_BAD_REQUEST);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST);
     return;
   }
 
-  switch (r->control) {
-  case TMPFS_READ_FILE:
+  switch (r->type) {
+  case VFS_FS_READ_FILE:
     {
       if (r->u.read_file.inode >= nodes_size) {
-	form_control_response (aid, TMPFS_BAD_INODE);
+	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE);
 	return;
       }
 
       inode_t* inode = nodes[r->u.read_file.inode];
 
       if (inode == 0) {
-	form_control_response (aid, TMPFS_BAD_INODE);
+	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE);
 	return;
       }
 
-      /* TODO:  Put the buffer on the data queue. */
+      /* Create a response. */
+      bd_t bd = buffer_create (size_to_pages (sizeof (vfs_fs_response_t)));
+      vfs_fs_response_t* rr = buffer_map (bd);
+      rr->type = VFS_FS_READ_FILE;
+      rr->error = VFS_FS_SUCCESS;
+      rr->u.read_file.size = inode->size;
+      buffer_unmap (bd);
+      /* Append the file. */
+      buffer_append (bd, inode->bd, 0, inode->bd_size);
 
-      form_control_response (aid, TMPFS_SUCCESS);
+      /* Enqueue the response. */
+      buffer_queue_push (&response_queue, aid, bd);
+
       return;
     }
     break;
   default:
-    form_control_response (aid, TMPFS_BAD_REQUEST);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST);
     return;
   }
   
@@ -358,8 +379,8 @@ init (int param,
       cpio_file_destroy (file);
     }
 
+    /* TODO */
     print (root);
-
     const char* s = "tmpfs: starting\n";
     syslog (s, strlen (s));
   }
@@ -369,35 +390,35 @@ init (int param,
 }
 EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, AUTO_MAP, init, INIT, "", "");
 
-
 void
-control_request (aid_t aid,
-		 bd_t bd,
-		 size_t bd_size,
-		 void* ptr)
+request (aid_t aid,
+	 bd_t bd,
+	 size_t bd_size,
+	 void* ptr)
 {
   initialize ();
 
-  process_control_request (aid, bd, bd_size, ptr);
+  process_request (aid, bd, bd_size);
 
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, control_request, TMPFS_CONTROL_REQUEST_NO, TMPFS_CONTROL_REQUEST_NAME, TMPFS_CONTROL_REQUEST_DESC);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, 0, request, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "");
 
 void
-control_response (aid_t aid,
-		  size_t bc)
+response (aid_t aid,
+	  size_t bc)
 {
   initialize ();
+  scheduler_remove (TMPFS_RESPONSE_NO, aid);
 
   /* Find in the queue. */
-  buffer_queue_item_t* item = buffer_queue_find (&control_response_queue, aid);
+  buffer_queue_item_t* item = buffer_queue_find (&response_queue, aid);
 
   if (item != 0) {
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
-    buffer_queue_erase (&control_response_queue, item);
+    buffer_queue_erase (&response_queue, item);
 
     schedule ();
     scheduler_finish (bd, FINISH_DESTROY);
@@ -408,39 +429,12 @@ control_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, control_response, TMPFS_CONTROL_RESPONSE_NO, TMPFS_CONTROL_RESPONSE_NAME, TMPFS_CONTROL_RESPONSE_DESC);
-
-void
-data_write (aid_t aid,
-	    bd_t bd,
-	    size_t bd_size,
-	    void* ptr)
-{
-  initialize ();
-
-  /* TODO */
-  schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
-}
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, 0, data_write, TMPFS_DATA_WRITE_NO, TMPFS_DATA_WRITE_NAME, TMPFS_DATA_WRITE_DESC);
-
-void
-data_read (aid_t aid,
-	       size_t bc)
-{
-  initialize ();
-  
-  /* TODO */
-  schedule ();
-  scheduler_finish (-1, FINISH_NOOP);
-}
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, data_read, TMPFS_DATA_READ_NO, TMPFS_DATA_READ_NAME, TMPFS_DATA_READ_DESC);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, response, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "");
 
 static void
 schedule (void)
 {
-  if (!buffer_queue_empty (&control_response_queue)) {
-    scheduler_add (TMPFS_CONTROL_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&control_response_queue)));
+  if (!buffer_queue_empty (&response_queue)) {
+    scheduler_add (TMPFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&response_queue)));
   }
-  /* TODO */
 }

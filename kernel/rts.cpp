@@ -415,37 +415,37 @@ namespace rts {
   {
     aid_map_type::const_iterator output_pos = aid_map_.find (output_aid);
     if (output_pos == aid_map_.end ()) {
-      // BUG:  Output automaton DNE.
-      kassert (0);
+      // Output automaton DNE.
+      return make_pair (-1, LILY_SYSCALL_EOAIDDNE);
     }
     automaton* output_automaton = output_pos->second;
 
     aid_map_type::const_iterator input_pos = aid_map_.find (input_aid);
     if (input_pos == aid_map_.end ()) {
-      // BUG:  Input automaton DNE.
-      kassert (0);
+      // Input automaton DNE.
+      return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
     }
     automaton* input_automaton = input_pos->second;
 
     if (output_automaton == input_automaton) {
-      // BUG:  The output and input automata must be different.
-      kassert (0);
+      // The output and input automata must be different.
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
 
     // Check the output action dynamically.
     const paction* output_action = output_automaton->find_action (output_ano);
     if (output_action == 0 ||
   	output_action->type != OUTPUT) {
-      // BUG:  Output action does not exist or has the wrong type.
-      kassert (0);
+      // Output action does not exist or has the wrong type.
+      return make_pair (-1, LILY_SYSCALL_EOBADANO);
     }
 
     // Check the input action dynamically.
     const paction* input_action = input_automaton->find_action (input_ano);
     if (input_action == 0 ||
   	input_action->type != INPUT) {
-      // BUG:  Input action does not exist or has the wrong type.
-      kassert (0);
+      // Input action does not exist or has the wrong type.
+      return make_pair (-1, LILY_SYSCALL_EIBADANO);
     }
 
     // Adust the parameters.
@@ -478,14 +478,12 @@ namespace rts {
     // Check that the input action is not bound.
     // (Also checks that the binding does not exist.)
     if (input_automaton->is_input_bound (ia)) {
-      // BUG
-      kassert (0);
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
 
     // Check that the output action is not bound to an action in the input automaton.
     if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
-      // BUG
-      kassert (0);
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
 
     // Bind.

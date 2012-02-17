@@ -16,7 +16,7 @@ memchr (const void *s,
   }
 
   if (n != 0) {
-    return data;
+    return (void*)data;
   }
   else {
     return 0;

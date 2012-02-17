@@ -11,7 +11,7 @@ OBJECTS=crt0.o libc.a libstring.a libio.a libdymem.a libfifo_scheduler.a libbuff
 .PHONY : all
 all : $(OBJECTS)
 
-libc.a : automaton.o pagesize.o
+libc.a : automaton.o pagesize.o description.o
 
 libstring.a : string.o
 

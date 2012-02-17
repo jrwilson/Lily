@@ -138,6 +138,9 @@ pagesize (void);
 
 #define ALIGN_UP(val, radix) (((val) + (radix) - 1) & ~((radix) - 1))
 
+size_t
+size_to_pages (size_t size);
+
 int
 set_registry (aid_t aid);
 
@@ -146,5 +149,11 @@ get_registry (void);
 
 bd_t
 describe (aid_t aid);
+
+ano_t
+action_name_to_number (bd_t bd,
+		       size_t bd_size,
+		       void* ptr,
+		       const char* action_name);
 
 #endif /* AUTOMATON_H */

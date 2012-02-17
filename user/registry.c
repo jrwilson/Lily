@@ -55,17 +55,9 @@
 */
 
 #define REGISTRY_REGISTER_REQUEST_NO 1
-#define REGISTRY_REGISTER_REQUEST_DESC ""
-
 #define REGISTRY_REGISTER_RESPONSE_NO 2
-#define REGISTRY_REGISTER_RESPONSE_DESC ""
-
 #define REGISTRY_QUERY_REQUEST_NO 3
-#define REGISTRY_QUERY_REQUEST_DESC ""
-
 #define REGISTRY_QUERY_RESPONSE_NO 4
-#define REGISTRY_QUERY_RESPONSE_DESC ""
-
 #define REGISTRY_DESTROYED_NO 5
 
 typedef struct description_struct description_t;
@@ -127,7 +119,7 @@ form_register_response (aid_t aid,
 			registry_error_t error)
 {
   /* Create a response. */
-  bd_t bd = buffer_create (sizeof (registry_register_response_t));
+  bd_t bd = buffer_create (size_to_pages (sizeof (registry_register_response_t)));
   registry_register_response_t* rr = buffer_map (bd);
   rr->error = error;
   /* We don't unmap it because we are going to destroy it when we respond. */
@@ -141,7 +133,7 @@ form_query_response (aid_t aid,
 		     registry_method_t method)
 {
   /* Create a response. */
-  bd_t bd = buffer_create (sizeof (registry_register_response_t));
+  bd_t bd = buffer_create (size_to_pages (sizeof (registry_register_response_t)));
   registry_query_response_t* qr = buffer_map (bd);
   qr->error = error;
   qr->method = method;
@@ -359,13 +351,14 @@ register_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, register_request, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, REGISTRY_REGISTER_REQUEST_DESC);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, register_request, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "");
 
 void
 register_response (aid_t aid,
 		   size_t bc)
 {
   initialize ();
+  scheduler_remove (REGISTRY_REGISTER_RESPONSE_NO, aid);
 
   /* Find in the queue. */
   buffer_queue_item_t* item = buffer_queue_find (&rr_queue, aid);
@@ -384,7 +377,7 @@ register_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, register_response, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, REGISTRY_REGISTER_RESPONSE_DESC);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, register_response, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, "");
 
 void
 query_request (aid_t aid,
@@ -397,13 +390,14 @@ query_request (aid_t aid,
   schedule ();
   scheduler_finish (bd, FINISH_DESTROY);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, query_request, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, REGISTRY_QUERY_REQUEST_DESC);
+EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, query_request, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "");
 
 void
 query_response (aid_t aid,
 		size_t bc)
 {
   initialize ();
+  scheduler_remove (REGISTRY_QUERY_RESPONSE_NO, aid);
 
   /* Find in the queue. */
   buffer_queue_item_t* item = buffer_queue_find (&qr_queue, aid);
@@ -422,7 +416,7 @@ query_response (aid_t aid,
     scheduler_finish (-1, FINISH_NOOP);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, REGISTRY_QUERY_RESPONSE_DESC);
+EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, "");
 
 void
 destroyed (aid_t aid,

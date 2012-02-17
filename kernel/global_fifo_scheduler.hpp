@@ -167,11 +167,16 @@ private:
 	case OUTPUT:
 	  if (flags == LILY_SYSCALL_FINISH_DESTROY || flags == LILY_SYSCALL_FINISH_RETAIN) {
 	    // The output did something.
-	    if (flags == LILY_SYSCALL_FINISH_DESTROY) {
+	    switch (flags) {
+	    case LILY_SYSCALL_FINISH_DESTROY:
 	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bd);
-	    }
-	    else {
+	      break;
+	    case LILY_SYSCALL_FINISH_RETAIN:
 	      output_buffer_ = action_.action->automaton->lookup_buffer (bd);
+	      break;
+	    default:
+	      output_buffer_ = 0;
+	      break;
 	    }
 	    flags_ = flags;
 	    if (input_actions_ != 0) {
@@ -229,20 +234,17 @@ private:
       case INPUT:
       case SYSTEM_INPUT:
 	{
-	  bd_t input_buffer;
-	  size_t buffer_size;
-	  const void* buf;
+	  bd_t input_buffer = -1;
+	  size_t buffer_size = 0;
+	  const void* buf = 0;
 	  
-	  if (output_buffer_ != 0 && (action_.action->flags & LILY_ACTION_AUTO_MAP) != 0) {
+	  if (output_buffer_ != 0) {
 	    // Copy the buffer to the input automaton and try to map it.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
 	    buffer_size = output_buffer_->size ();
-	    buf = action_.action->automaton->buffer_map (input_buffer).first;
-	  }
-	  else {
-	    input_buffer = -1;
-	    buffer_size = 0;
-	    buf = 0;
+	    if ((action_.action->flags & LILY_ACTION_AUTO_MAP) != 0) {
+	      buf = action_.action->automaton->buffer_map (input_buffer).first;
+	    }
 	  }
 
 	  // Push the address.

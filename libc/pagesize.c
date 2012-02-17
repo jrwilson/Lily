@@ -10,3 +10,10 @@ pagesize (void)
   }
   return page_size;
 }
+
+size_t
+size_to_pages (size_t size)
+{
+  size_t ps = pagesize ();
+  return ALIGN_UP (size, ps) / ps;
+}
