@@ -37,14 +37,13 @@ struct finish_args {
   uint32_t eip;
   ano_t action_number;
   int parameter;
+  bool output_fired;
   bd_t bd;
-  int flags;
 };
 
 struct create_args {
   uint32_t eip;
   bd_t text_bd;
-  size_t text_buffer_size;
   bool retain_privilege;
   bd_t data_bd;
 };
@@ -189,7 +188,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      rts::finish (current, ptr->action_number, ptr->parameter, ptr->bd, ptr->flags);
+      rts::finish (current, ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bd);
       return;
     }
     break;
@@ -208,7 +207,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<aid_t, int> r = rts::create (a, ptr->text_bd, ptr->text_buffer_size, ptr->retain_privilege, ptr->data_bd);
+      pair<aid_t, int> r = rts::create (a, ptr->text_bd, ptr->retain_privilege, ptr->data_bd);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

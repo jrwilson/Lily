@@ -64,6 +64,7 @@
 
 #define TMPFS_REQUEST_NO 1
 #define TMPFS_RESPONSE_NO 2
+#define DESTROY_BUFFERS_NO 3
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef enum {
@@ -101,6 +102,9 @@ static bool initialized = false;
 
 /* Queue for responses. */
 static buffer_queue_t response_queue;
+
+/* Queue of buffers to destroy. */
+static buffer_queue_t destroy_queue;
 
 static inode_t*
 inode_create (inode_type_t type,
@@ -236,6 +240,7 @@ initialize (void)
     /* TODO:  Do we need to make the root its own parent? */
 
     buffer_queue_init (&response_queue);
+    buffer_queue_init (&destroy_queue);
   }
 }
 
@@ -328,13 +333,16 @@ process_request (aid_t aid,
 static void
 schedule (void);
 
-void
-init (int param,
-      bd_t bd,
-      size_t bd_size,
-      void* ptr)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 {
+  {
+    const char* s = "tmpfs: init\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
+
+  void* ptr = buffer_map (bd);
 
   if (ptr != 0) {
     /* Parse the cpio archive looking for files that we need. */
@@ -381,34 +389,35 @@ init (int param,
 
     /* TODO */
     print (root);
-    const char* s = "tmpfs: starting\n";
+  }
+
+  buffer_destroy (bd);
+
+  schedule ();
+  scheduler_finish (false, -1);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, aid_t aid, bd_t bd, size_t bd_size)
+{
+  {
+    const char* s = "tmpfs: request\n";
     syslog (s, strlen (s));
   }
 
-  schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
-}
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, AUTO_MAP, init, INIT, "", "");
-
-void
-request (aid_t aid,
-	 bd_t bd,
-	 size_t bd_size,
-	 void* ptr)
-{
   initialize ();
-
   process_request (aid, bd, bd_size);
-
+  buffer_destroy (bd);
   schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  scheduler_finish (false, -1);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, 0, request, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "");
 
-void
-response (aid_t aid,
-	  size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, aid_t aid, size_t bc)
 {
+  {
+    const char* s = "tmpfs: response\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
   scheduler_remove (TMPFS_RESPONSE_NO, aid);
 
@@ -420,21 +429,51 @@ response (aid_t aid,
     bd_t bd = buffer_queue_item_bd (item);
     buffer_queue_erase (&response_queue, item);
 
+    buffer_queue_push (&destroy_queue, 0, bd);
+
     schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    scheduler_finish (true, bd);
   }
   else {
     /* Did not find a response. */
     schedule ();
-    scheduler_finish (-1, FINISH_NOOP);
+    scheduler_finish (false, -1);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, response, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "");
+
+static bool
+destroy_buffers_precondition (void)
+{
+  return !buffer_queue_empty (&destroy_queue);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
+{
+  {
+    const char* s = "registry: destroy_buffers\n";
+    syslog (s, strlen (s));
+  }
+
+  initialize ();
+  scheduler_remove (DESTROY_BUFFERS_NO, param);
+  if (destroy_buffers_precondition ()) {
+    /* Drain the queue. */
+    while (!buffer_queue_empty (&destroy_queue)) {
+      buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
+      buffer_queue_pop (&destroy_queue);
+    }
+  }
+  schedule ();
+  scheduler_finish (false, -1);
+}
 
 static void
 schedule (void)
 {
   if (!buffer_queue_empty (&response_queue)) {
     scheduler_add (TMPFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&response_queue)));
+  }
+  if (destroy_buffers_precondition ()) {
+    scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
 }

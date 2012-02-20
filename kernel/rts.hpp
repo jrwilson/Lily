@@ -31,13 +31,12 @@ namespace rts {
   finish (const caction& current,
 	  ano_t action_number,
 	  int parameter,
-	  bd_t bd,
-	  int flags);
+	  bool output_fired,
+	  bd_t bd);
   
   pair<aid_t, int>
   create (automaton* a,
 	  bd_t text_bd,
-	  size_t text_buffer_size,
 	  bool retain_privilege,
 	  bd_t data_bd);
 

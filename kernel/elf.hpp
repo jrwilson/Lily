@@ -96,7 +96,6 @@ namespace elf {
   struct action_descriptor {
     uint32_t action_type;
     uint32_t parameter_mode;
-    uint32_t flags;
     uint32_t action_entry_point;
     uint32_t action_number;
     uint32_t action_name_size;
@@ -106,7 +105,6 @@ namespace elf {
   struct action {
     action_type_t type;
     parameter_mode_t parameter_mode;
-    unsigned int flags;
     const void* action_entry_point;
     ano_t action_number;
     kstring action_name;
@@ -114,14 +112,12 @@ namespace elf {
     
     action (action_type_t t,
 	    parameter_mode_t pm,
-	    unsigned int f,
 	    const void* aep,
 	    ano_t an,
 	    const kstring& name,
 	    const kstring& desc) :
       type (t),
       parameter_mode (pm),
-      flags (f),
       action_entry_point (aep),
       action_number (an),
       action_name (name),
@@ -377,7 +373,6 @@ namespace elf {
 
 		      action_list.push_back (action (static_cast<action_type_t> (d->action_type),
 						     static_cast<parameter_mode_t> (d->parameter_mode),
-						     d->flags,
 						     reinterpret_cast<const void*> (d->action_entry_point),
 						     d->action_number,
 						     kstring (action_name, d->action_name_size),

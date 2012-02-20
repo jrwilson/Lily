@@ -85,7 +85,7 @@ private:
     const automaton::input_action_set_type* input_actions_;
     automaton::input_action_set_type::const_iterator input_action_pos_;
     buffer* output_buffer_;
-    int flags_;
+    bool destroy_buffer_;
 
   public:
     execution_context ()
@@ -99,7 +99,7 @@ private:
       action_.action = 0;
       action_.parameter = 0;
       output_buffer_ = 0;
-      flags_ = 0;
+      destroy_buffer_ = false;
     }
 
     inline const caction&
@@ -127,20 +127,15 @@ private:
       case SYSTEM_INPUT:
 	// Load the buffer.
 	output_buffer_ = action_.system_input_buffer;
-	// Destroy it when finished.
-	if (output_buffer_ != 0) {
-	  flags_ = LILY_SYSCALL_FINISH_DESTROY;
-	}
-	else {
-	  flags_ = LILY_SYSCALL_FINISH_RETAIN;
-	}
+	destroy_buffer_ = true;
 	break;
       }
     }
 
     inline void
-    finish_action (bd_t bd,
-		   int flags)
+    finish_action (bool output_fired,
+		   bd_t bd)
+
     {
       if (action_.action != 0) {	
 	switch (action_.action->type) {
@@ -156,29 +151,21 @@ private:
 	  // Fall through.
 	case SYSTEM_INPUT:
 	  // Finished executing input actions.
-	  if (flags_ == LILY_SYSCALL_FINISH_DESTROY) {
-	    // The buffer must exist.
-	    kassert (output_buffer_ != 0);
-	    // Destroy the buffer.
+	  if (output_buffer_ != 0 && destroy_buffer_) {
 	    delete output_buffer_;
-	    output_buffer_ = 0;
 	  }
+	  output_buffer_ = 0;
+	  destroy_buffer_ = false;
 	  break;
 	case OUTPUT:
-	  if (flags == LILY_SYSCALL_FINISH_DESTROY || flags == LILY_SYSCALL_FINISH_RETAIN) {
+	  if (output_fired) {
 	    // The output did something.
-	    switch (flags) {
-	    case LILY_SYSCALL_FINISH_DESTROY:
-	      output_buffer_ = action_.action->automaton->buffer_output_destroy (bd);
-	      break;
-	    case LILY_SYSCALL_FINISH_RETAIN:
-	      output_buffer_ = action_.action->automaton->lookup_buffer (bd);
-	      break;
-	    default:
-	      output_buffer_ = 0;
-	      break;
+	    output_buffer_ = action_.action->automaton->lookup_buffer (bd);
+	    // Synchronize.
+	    if (output_buffer_ != 0) {
+	      output_buffer_->sync (0, output_buffer_->size ());
 	    }
-	    flags_ = flags;
+	    destroy_buffer_ = false;
 	    if (input_actions_ != 0) {
 	      /* Load the execution context. */
 	      input_action_pos_ = input_actions_->begin ();
@@ -187,13 +174,8 @@ private:
 	      execute ();
 	    }
 	    // There were no inputs.
-	    if (flags_ == LILY_SYSCALL_FINISH_DESTROY) {
-	      // The buffer must exist.
-	      kassert (output_buffer_ != 0);
-	      // Destroy the buffer.
-	      delete output_buffer_;
-	      output_buffer_ = 0;
-	    }
+	    output_buffer_ = 0;
+	    destroy_buffer_ = false;
 	  }
 	  break;
 	case INTERNAL:
@@ -236,19 +218,13 @@ private:
 	{
 	  bd_t input_buffer = -1;
 	  size_t buffer_size = 0;
-	  const void* buf = 0;
 	  
 	  if (output_buffer_ != 0) {
 	    // Copy the buffer to the input automaton and try to map it.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
 	    buffer_size = output_buffer_->size ();
-	    if ((action_.action->flags & LILY_ACTION_AUTO_MAP) != 0) {
-	      buf = action_.action->automaton->buffer_map (input_buffer).first;
-	    }
 	  }
 
-	  // Push the address.
-	  *--stack_pointer = reinterpret_cast<uint32_t> (buf);
 	  // Push the buffer capacity.
 	  *--stack_pointer = buffer_size;
 	  // Push the buffer.
@@ -353,11 +329,11 @@ public:
   }
   
   static inline void
-  finish (bd_t bd,
-	  int flags)
+  finish (bool output_fired,
+	  bd_t bd)
   {
     // This call won't return when executing input actions.
-    exec_context_.finish_action (bd, flags);
+    exec_context_.finish_action (output_fired, bd);
 
     // Check for interrupts.
     interrupts::enable ();

@@ -31,6 +31,19 @@ buffer_queue_push (buffer_queue_t* bq,
   bq->tail = &item->next;
 }
 
+void
+buffer_queue_pop (buffer_queue_t* bq)
+{
+  buffer_queue_item_t* item = bq->head;
+  bq->head = item->next;
+
+  free (item);
+  
+  if (bq->head == 0) {
+    bq->tail = &bq->head;
+  }
+}
+
 buffer_queue_item_t*
 buffer_queue_find (const buffer_queue_t* bq,
 		   int parameter)

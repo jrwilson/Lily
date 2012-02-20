@@ -112,7 +112,7 @@ namespace rts {
 	}
 	// Fall through.
       default:
-	if (!a->add_action (new paction (a, pos->type, pos->parameter_mode, pos->flags, pos->action_entry_point, pos->action_number))) {
+	if (!a->add_action (new paction (a, pos->type, pos->parameter_mode, pos->action_entry_point, pos->action_number))) {
 	  // BUG:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
 	  kassert (0);
 	}
@@ -258,7 +258,7 @@ namespace rts {
     scheduler::schedule (caction (action, child->aid (), data_buffer));
 
     // Start the scheduler.  Doesn't return.
-    scheduler::finish (-1, LILY_SYSCALL_FINISH_NOOP);
+    scheduler::finish (false, -1);
   }
 
   // The automaton has finished the current action.
@@ -288,12 +288,23 @@ namespace rts {
   finish (const caction& current,
 	  ano_t action_number,
 	  int parameter,
-	  bd_t bd,
-	  int flags)
+	  bool output_fired,
+	  bd_t bd)
   {
     automaton* a = current.action->automaton;
     const paction* action = a->find_action (action_number);
     if (action != 0) {
+      /* Correct the parameter. */
+      switch (action->parameter_mode) {
+      case NO_PARAMETER:
+	parameter = 0;
+	break;
+      case PARAMETER:
+      case AUTO_PARAMETER:
+	/* No correction necessary. */
+	break;
+      }
+
       switch (action->type) {
       case OUTPUT:
       case INTERNAL:
@@ -307,40 +318,12 @@ namespace rts {
       }
     }
 
-    switch (current.action->type) {
-    case INPUT:
-    case INTERNAL:
-    case SYSTEM_INPUT:
-      // They wish to destroy a buffer.
-      if (flags == LILY_SYSCALL_FINISH_DESTROY) {
-	// We don't care if this fails.  It just means the buffer didn't exist.
-	a->buffer_destroy (bd);
-      }
-      bd = -1;
-      flags = LILY_SYSCALL_FINISH_NOOP;
-      break;
-    case OUTPUT:
-      {
-	buffer* b = current.action->automaton->lookup_buffer (bd);
-	if (b == 0) {
-	  // The buffer does not exist.
-	  bd = -1;
-	  if (flags == LILY_SYSCALL_FINISH_DESTROY) {
-	    // Can't destroy a buffer that doesn't exist.
-	    flags = LILY_SYSCALL_FINISH_RETAIN;
-	  }
-	}
-      }
-      break;
-    }
-
-    scheduler::finish (bd, flags);
+    scheduler::finish (output_fired, bd);
   }
 
   pair<aid_t, int>
   create (automaton* a,
 	  bd_t text_bd,
-	  size_t text_buffer_size,
 	  bool retain_privilege,
 	  bd_t data_bd)
   {
@@ -352,13 +335,8 @@ namespace rts {
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    if (!(text_buffer_size <= text_buffer->size () * PAGE_SIZE)) {
-      // They claim that the buffer is bigger than it really is.
-      return make_pair (-1, LILY_SYSCALL_EBDSIZE);
-    }
-
     // Synchronize the buffer so the frames listed in the buffer are correct.
-    text_buffer->sync (0, text_buffer_size);
+    text_buffer->sync (0, text_buffer->size ());
 
     // If the buffer is not mapped, there are no problems.
     // If the buffer is mapped, we have three options:
@@ -376,7 +354,7 @@ namespace rts {
     physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
 
     // Create the automaton.
-    const automaton* child = create_automaton (text_buffer, text_buffer_size, retain_privilege && a->privileged ());
+    const automaton* child = create_automaton (text_buffer, text_buffer->size () * PAGE_SIZE, retain_privilege && a->privileged ());
 
     // Switch back.
     vm::switch_to_directory (old);
@@ -448,7 +426,7 @@ namespace rts {
       return make_pair (-1, LILY_SYSCALL_EIBADANO);
     }
 
-    // Adust the parameters.
+    // Correct the parameters.
     switch (output_action->parameter_mode) {
     case NO_PARAMETER:
       output_parameter = 0;

@@ -52,13 +52,13 @@ scheduler_remove (ano_t action_number,
 }
 
 void
-scheduler_finish (bd_t bd,
-		  int flags)
+scheduler_finish (bool output_fired,
+		  bd_t bd)
 {
   if (item_head != 0) {
-    finish (item_head->action_number, item_head->parameter, bd, flags);
+    finish (item_head->action_number, item_head->parameter, output_fired, bd);
   }
   else {
-    finish (NO_ACTION, 0, bd, flags);
+    finish (NO_ACTION, 0, output_fired, bd);
   }
 }

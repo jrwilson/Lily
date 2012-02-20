@@ -59,6 +59,7 @@
 #define REGISTRY_QUERY_REQUEST_NO 3
 #define REGISTRY_QUERY_RESPONSE_NO 4
 #define REGISTRY_DESTROYED_NO 5
+#define DESTROY_BUFFERS_NO 6
 
 typedef struct description_struct description_t;
 struct description_struct {
@@ -114,6 +115,9 @@ static buffer_queue_t rr_queue;
 /* Queue for query responses. */
 static buffer_queue_t qr_queue;
 
+/* Queue of buffers to destroy. */
+static buffer_queue_t destroy_queue;
+
 static void
 form_register_response (aid_t aid,
 			registry_error_t error)
@@ -150,22 +154,23 @@ initialize (void)
     initialized = true;
     buffer_queue_init (&rr_queue);
     buffer_queue_init (&qr_queue);
+    buffer_queue_init (&destroy_queue);
   }
 }
 
 static void
 process_register (aid_t aid,
 		  bd_t bd,
-		  size_t bd_size,
-		  void* ptr)
+		  size_t bd_size)
 {
   if (bd == -1) {
     form_register_response (aid, REGISTRY_NO_BUFFER);
     return;
   }
 
+  void* ptr = buffer_map (bd);
   if (ptr == 0) {
-    form_register_response (aid, REGISTRY_BUFFER_TOO_BIG);
+    form_register_response (aid, REGISTRY_NO_MAP);
     return;
   }
 
@@ -177,6 +182,7 @@ process_register (aid_t aid,
     form_register_response (aid, REGISTRY_BAD_REQUEST);
     return;
   }
+
   const void* description = buffer_file_readp (&file, r->description_size);
   if (description == 0) {
     form_register_response (aid, REGISTRY_BAD_REQUEST);
@@ -230,7 +236,7 @@ process_register (aid_t aid,
     memcpy (d->description, description, r->description_size);
     d->description_size = r->description_size;
   }
-  
+
   form_register_response (aid, REGISTRY_SUCCESS);
 }
 
@@ -255,16 +261,16 @@ match (registry_method_t method,
 static void
 process_query (aid_t aid,
 	       bd_t bd,
-	       size_t bd_size,
-	       void* ptr)
+	       size_t bd_size)
 {
   if (bd == -1) {
     form_query_response (aid, REGISTRY_NO_BUFFER, 0);
     return;
   }
 
+  void* ptr = buffer_map (bd);
   if (ptr == 0) {
-    form_query_response (aid, REGISTRY_BUFFER_TOO_BIG, 0);
+    form_query_response (aid, REGISTRY_NO_MAP, 0);
     return;
   }
 
@@ -327,36 +333,41 @@ process_query (aid_t aid,
 static void
 schedule (void);
 
-void
-init (aid_t aid,
-      bd_t bd,
-      size_t bd_size,
-      const void* ptr)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 {
+  {
+    const char* s = "registry: init\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
   schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  buffer_destroy (bd);
+  scheduler_finish (false, -1);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, init, INIT, "", "");
 
-void
-register_request (aid_t aid,
-		  bd_t bd,
-		  size_t bd_size,
-		  void* ptr)
+BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "", register_request, aid_t aid, bd_t bd, size_t bd_size)
 {
+  {
+    const char* s = "registry: register_request\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
   subscribe_destroyed (aid, REGISTRY_DESTROYED_NO);
-  process_register (aid, bd, bd_size, ptr);
+  process_register (aid, bd, bd_size);
+  buffer_destroy (bd);
   schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  scheduler_finish (false, -1);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, register_request, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "");
 
-void
-register_response (aid_t aid,
-		   size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, "", register_response, aid_t aid, size_t bc)
 {
+  {
+    const char* s = "registry: register_response\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
   scheduler_remove (REGISTRY_REGISTER_RESPONSE_NO, aid);
 
@@ -368,34 +379,39 @@ register_response (aid_t aid,
     bd_t bd = buffer_queue_item_bd (item);
     buffer_queue_erase (&rr_queue, item);
 
+    buffer_queue_push (&destroy_queue, 0, bd);
+
     schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    scheduler_finish (true, bd);
   }
   else {
     /* Did not find a response. */
     schedule ();
-    scheduler_finish (-1, FINISH_NOOP);
+    scheduler_finish (false, -1);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, register_response, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, "");
 
-void
-query_request (aid_t aid,
-	       bd_t bd,
-	       size_t bd_size,
-	       void* ptr)
+BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "", query_request, aid_t aid, bd_t bd, size_t bd_size)
 {
+  {
+    const char* s = "registry: query_request\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
-  process_query (aid, bd, bd_size, ptr);
+  process_query (aid, bd, bd_size);
+  buffer_destroy (bd);
   schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  scheduler_finish (false, -1);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, AUTO_MAP, query_request, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "");
 
-void
-query_response (aid_t aid,
-		size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, "", query_response, aid_t aid, size_t bc)
 {
+  {
+    const char* s = "registry: query_response\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
   scheduler_remove (REGISTRY_QUERY_RESPONSE_NO, aid);
 
@@ -407,23 +423,25 @@ query_response (aid_t aid,
     bd_t bd = buffer_queue_item_bd (item);
     buffer_queue_erase (&qr_queue, item);
 
+    buffer_queue_push (&destroy_queue, 0, bd);
+
     schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    scheduler_finish (true, bd);
   }
   else {
     /* Did not find a response. */
     schedule ();
-    scheduler_finish (-1, FINISH_NOOP);
+    scheduler_finish (false, -1);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, AUTO_PARAMETER, 0, query_response, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, "");
 
-void
-destroyed (aid_t aid,
-	   bd_t bd,
-	   size_t bd_size,
-	   void* ptr)
+BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bd, size_t bd_size)
 {
+  {
+    const char* s = "registry: destroyed\n";
+    syslog (s, strlen (s));
+  }
+
   initialize ();
 
   /* The automaton corresponding to aid has been destroyed.
@@ -440,10 +458,36 @@ destroyed (aid_t aid,
     }
   }
 
+  buffer_destroy (bd);
   schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  scheduler_finish (false, -1);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, 0, destroyed, REGISTRY_DESTROYED_NO, "", "");
+
+static bool
+destroy_buffers_precondition (void)
+{
+  return !buffer_queue_empty (&destroy_queue);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
+{
+  {
+    const char* s = "registry: destroy_buffers\n";
+    syslog (s, strlen (s));
+  }
+
+  initialize ();
+  scheduler_remove (DESTROY_BUFFERS_NO, param);
+  if (destroy_buffers_precondition ()) {
+    /* Drain the queue. */
+    while (!buffer_queue_empty (&destroy_queue)) {
+      buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
+      buffer_queue_pop (&destroy_queue);
+    }
+  }
+  schedule ();
+  scheduler_finish (false, -1);
+}
 
 static void
 schedule (void)
@@ -453,5 +497,8 @@ schedule (void)
   }
   if (!buffer_queue_empty (&qr_queue)) {
     scheduler_add (REGISTRY_QUERY_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&qr_queue)));
+  }
+  if (destroy_buffers_precondition ()) {
+    scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
 }

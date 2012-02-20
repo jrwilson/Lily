@@ -19,6 +19,9 @@ buffer_queue_push (buffer_queue_t* bq,
 		   int parameter,
 		   bd_t bd);
 
+void
+buffer_queue_pop (buffer_queue_t* bq);
+
 buffer_queue_item_t*
 buffer_queue_find (const buffer_queue_t* bq,
 		   int parameter);

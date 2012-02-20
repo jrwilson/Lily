@@ -8,26 +8,15 @@
 #include <stdbool.h>
 
 /* Import the Lily namespace. */
-#define FINISH_DESTROY LILY_SYSCALL_FINISH_DESTROY
-#define FINISH_RETAIN LILY_SYSCALL_FINISH_RETAIN
-#define FINISH_NOOP LILY_SYSCALL_FINISH_NOOP
-
-#define INPUT LILY_ACTION_INPUT
-#define OUTPUT LILY_ACTION_OUTPUT
-#define INTERNAL LILY_ACTION_INTERNAL
-#define SYSTEM_INPUT LILY_ACTION_SYSTEM_INPUT
-
 #define NO_PARAMETER LILY_ACTION_NO_PARAMETER
 #define PARAMETER LILY_ACTION_PARAMETER
 #define AUTO_PARAMETER LILY_ACTION_AUTO_PARAMETER
-
-#define AUTO_MAP LILY_ACTION_AUTO_MAP
 
 #define NO_ACTION LILY_ACTION_NO_ACTION
 #define INIT LILY_ACTION_INIT
 
 /* A macro for embedding the action information. */
-#define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, flags, func_name, action_number, action_name, action_description) \
+#define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, func_name, action_number, action_name, action_description) \
   __asm__ (".pushsection .action_info, \"\", @note\n"		   \
   ".balign 4\n"							   \
   ".long 1f - 0f\n"			/* Size of the author string. */ \
@@ -38,7 +27,6 @@
   "2:\n"				/* The description of the note. */ \
   ".long " quote (action_type) "\n"	/* Action type. */ \
   ".long " quote (parameter_mode) "\n"	/* Parameter mode. */ \
-  ".long " quote (flags) "\n"		/* Flags. */ \
   ".long " #func_name "\n"		/* Action entry point. */		\
   ".long " quote (action_number) "\n"	/* Numeric identifier. */ \
   ".long 5f - 4f\n"			/* Size of the action name. */ \
@@ -48,20 +36,39 @@
   "3: .balign 4\n" \
        ".popsection\n");
 
+#define BEGIN_SYSTEM_INPUT(action_no, action_name, action_desc, func, param, bd, size) \
+void func (param, bd, size); \
+EMBED_ACTION_DESCRIPTOR (LILY_ACTION_SYSTEM_INPUT, PARAMETER, func, action_no, action_name, action_desc); \
+void func (param, bd, size)
+
+#define BEGIN_INPUT(parameter_mode, action_no, action_name, action_desc, func, param, bd, size) \
+void func (param, bd, size); \
+EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INPUT, parameter_mode, func, action_no, action_name, action_desc); \
+void func (param, bd, size)
+
+#define BEGIN_OUTPUT(parameter_mode, action_no, action_name, action_desc, func, param, bc) \
+void func (param, bc); \
+EMBED_ACTION_DESCRIPTOR (LILY_ACTION_OUTPUT, parameter_mode, func, action_no, action_name, action_desc); \
+void func (param, bc)
+
+#define BEGIN_INTERNAL(parameter_mode, action_no, action_name, action_desc, func, param) \
+void func (param); \
+EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INTERNAL, parameter_mode, func, action_no, action_name, action_desc); \
+void func (param)
+
 extern int automatonerrno;
 
 void
 finish (ano_t action_number,
 	int parameter,
-	bd_t buffer,
-	int flags);
+	bool output_fired,
+	bd_t bd);
 
 void
 exit (void);
 
 aid_t
 create (bd_t text_bd,
-	size_t text_buffer_size,
 	bool retain_privilege,
 	bd_t data_bd);
 
@@ -149,11 +156,5 @@ get_registry (void);
 
 bd_t
 describe (aid_t aid);
-
-ano_t
-action_name_to_number (bd_t bd,
-		       size_t bd_size,
-		       void* ptr,
-		       const char* action_name);
 
 #endif /* AUTOMATON_H */
