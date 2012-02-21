@@ -283,11 +283,12 @@ BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_
     buffer_file_write (&file, ROOT_PATH, s);
 
     bd_t bd = buffer_file_bd (&file);
+    size_t bd_size = buffer_file_size (&file);
 
     mount_state = SENT;
 
     /* Destroy the buffer. */
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);

@@ -123,12 +123,13 @@ form_register_response (aid_t aid,
 			registry_error_t error)
 {
   /* Create a response. */
-  bd_t bd = buffer_create (size_to_pages (sizeof (registry_register_response_t)));
+  size_t bd_size = size_to_pages (sizeof (registry_register_response_t));
+  bd_t bd = buffer_create (bd_size);
   registry_register_response_t* rr = buffer_map (bd);
   rr->error = error;
   /* We don't unmap it because we are going to destroy it when we respond. */
 
-  buffer_queue_push (&rr_queue, aid, bd);
+  buffer_queue_push (&rr_queue, aid, bd, bd_size);
 }
 
 static void
@@ -137,14 +138,15 @@ form_query_response (aid_t aid,
 		     registry_method_t method)
 {
   /* Create a response. */
-  bd_t bd = buffer_create (size_to_pages (sizeof (registry_register_response_t)));
+  size_t bd_size = size_to_pages (sizeof (registry_register_response_t));
+  bd_t bd = buffer_create (bd_size);
   registry_query_response_t* qr = buffer_map (bd);
   qr->error = error;
   qr->method = method;
   qr->count = 0;
   /* We don't unmap it because we are going to destroy it when we respond. */
 
-  buffer_queue_push (&qr_queue, aid, bd);
+  buffer_queue_push (&qr_queue, aid, bd, bd_size);
 }
 
 static void
@@ -377,9 +379,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
   if (item != 0) {
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
+    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&rr_queue, item);
 
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);
@@ -421,9 +424,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONS
   if (item != 0) {
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
+    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&qr_queue, item);
 
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);

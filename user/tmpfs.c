@@ -247,16 +247,21 @@ initialize (void)
 static void
 form_response (aid_t aid,
 	       vfs_fs_type_t type,
-	       vfs_fs_error_t error)
+	       vfs_fs_error_t error,
+	       bd_t request_bd)
 {
   /* Create a response. */
-  bd_t bd = buffer_create (size_to_pages (sizeof (vfs_fs_response_t)));
+  size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t));
+  bd_t bd = buffer_create (bd_size);
   vfs_fs_response_t* rr = buffer_map (bd);
   rr->type = type;
   rr->error = error;
   /* We don't unmap it because we are going to destroy it when we respond. */
+  buffer_queue_push (&response_queue, aid, bd, bd_size);
 
-  buffer_queue_push (&response_queue, aid, bd);
+  if (request_bd != -1) {
+    buffer_destroy (request_bd);
+  }
 }
 
 static void
@@ -265,30 +270,31 @@ process_request (aid_t aid,
 		 size_t bd_size)
 {
   if (bd == -1) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_BUFFER);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_BUFFER, -1);
     return;
   }
 
   /* Create a buffer that contains the request. */
-  bd_t request_bd = buffer_copy (bd, 0, size_to_pages (sizeof (vfs_fs_request_t)));
+  size_t request_bd_size = size_to_pages (sizeof (vfs_fs_request_t));
+  bd_t request_bd = buffer_copy (bd, 0, request_bd_size);
   if (request_bd == -1) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, -1);
     return;
   }
 
   /* Map in the request. */
   void* ptr= buffer_map (request_bd);
   if (ptr == 0) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, request_bd);
     return;
   }
 
   buffer_file_t file;
-  buffer_file_open (&file, bd, bd_size, ptr, false);
+  buffer_file_open (&file, request_bd, request_bd_size, ptr, false);
 
   const vfs_fs_request_t* r = buffer_file_readp (&file, sizeof (vfs_fs_request_t));
   if (r == 0) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd);
     return;
   }
 
@@ -296,38 +302,41 @@ process_request (aid_t aid,
   case VFS_FS_READ_FILE:
     {
       if (r->u.read_file.inode >= nodes_size) {
-	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE);
+	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd);
 	return;
       }
 
       inode_t* inode = nodes[r->u.read_file.inode];
 
       if (inode == 0) {
-	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE);
+	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd);
 	return;
       }
 
       /* Create a response. */
-      bd_t bd = buffer_create (size_to_pages (sizeof (vfs_fs_response_t)));
+      size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t));
+      bd_t bd = buffer_create (bd_size);
       vfs_fs_response_t* rr = buffer_map (bd);
       rr->type = VFS_FS_READ_FILE;
       rr->error = VFS_FS_SUCCESS;
       rr->u.read_file.size = inode->size;
       buffer_unmap (bd);
       /* Append the file. */
+      bd_size += inode->bd_size;
       buffer_append (bd, inode->bd, 0, inode->bd_size);
 
       /* Enqueue the response. */
-      buffer_queue_push (&response_queue, aid, bd);
+      buffer_queue_push (&response_queue, aid, bd, bd_size);
+
+      buffer_destroy (request_bd);
 
       return;
     }
     break;
   default:
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST);
+    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd);
     return;
   }
-  
 }
 
 static void
@@ -427,9 +436,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respo
   if (item != 0) {
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
+    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&response_queue, item);
 
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);

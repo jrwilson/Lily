@@ -11,7 +11,7 @@
 /*
   VFS
   ===
-  The virtual file system presents a unified hierarchical namespace for managing files.
+nn  The virtual file system presents a unified hierarchical namespace for managing files.
   The VFS translates high-level requests from clients into low-level file-system operations.
   
   Client 1              File system A
@@ -85,6 +85,7 @@
 #define VFS_FS_REQUEST_NO 5
 #define VFS_FS_RESPONSE_NO 6
 #define DESTROY_BUFFERS_NO 7
+#define LOAD_NO 8
 
 #define DESCRIPTION "vfs"
 
@@ -115,6 +116,13 @@ static buffer_queue_t client_response_queue;
 /* Queue of buffers to destroy. */
 static buffer_queue_t destroy_queue;
 
+/* State machine for client requests. */
+typedef enum {
+  EMPTY,
+  FULL,
+} load_state_t;
+static load_state_t load_state = EMPTY;
+  
 static void
 schedule (void);
 
@@ -178,94 +186,6 @@ registerf (aid_t vfs_aid)
   }
 }
 
-/* static void */
-/* form_response (aid_t aid, */
-/* 	       vfs_type_t type, */
-/* 	       vfs_error_t error) */
-/* { */
-/*   /\* Create a response. *\/ */
-/*   bd_t bd = buffer_create (size_to_pages (sizeof (vfs_response_t))); */
-/*   vfs_response_t* rr = buffer_map (bd); */
-/*   rr->type = type; */
-/*   rr->error = error; */
-/*   /\* We don't unmap it because we are going to destroy it when we respond. *\/ */
-
-/*   buffer_queue_push (&response_queue, aid, bd); */
-/* } */
-
-/* static void */
-/* process_request (aid_t aid, */
-/* 		 bd_t bd, */
-/* 		 size_t bd_size) */
-/* { */
-/*   if (bd == -1) { */
-/*     form_response (aid, VFS_UNKNOWN, VFS_NO_BUFFER); */
-/*     return; */
-/*   } */
-
-/*   /\* Create a buffer that contains the request. *\/ */
-/*   bd_t request_bd = buffer_copy (bd, 0, size_to_pages (sizeof (vfs_request_t))); */
-/*   if (request_bd == -1) { */
-/*     form_response (aid, VFS_UNKNOWN, VFS_NO_MAP); */
-/*     return; */
-/*   } */
-
-/*   /\* Map in the request. *\/ */
-/*   void* ptr= buffer_map (request_bd); */
-/*   if (ptr == 0) { */
-/*     form_response (aid, VFS_UNKNOWN, VFS_NO_MAP); */
-/*     return; */
-/*   } */
-
-/*   buffer_file_t file; */
-/*   buffer_file_open (&file, bd, bd_size, ptr, false); */
-
-/*   const vfs_request_t* r = buffer_file_readp (&file, sizeof (vfs_request_t)); */
-/*   if (r == 0) { */
-/*     form_response (aid, VFS_UNKNOWN, VFS_BAD_REQUEST); */
-/*     return; */
-/*   } */
-
-/*   switch (r->type) { */
-/*   case VFS_MOUNT: */
-/*     { */
-/*       if (r->u.mount.path_size == 0) { */
-/* 	/\* No path. *\/ */
-/* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-/* 	return; */
-/*       } */
-
-/*       const char* path = buffer_file_readp (&file, r->u.mount.path_size); */
-/*       if (path == 0) { */
-/* 	/\* Path is too long or unreadable. *\/ */
-/* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-/* 	return; */
-/*       } */
-
-/*       if (path[0] != '/') { */
-/* 	/\* Must be absolute. *\/ */
-/* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-/* 	return; */
-/*       } */
-
-/*       if (path[r->u.mount.path_size - 1] != 0) { */
-/* 	/\* Path is not null terminated. *\/ */
-/* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-/* 	return; */
-/*       } */
-
-/*       /\* TODO *\/ */
-/*       syslog (path, r->u.mount.path_size); */
-
-/*       return; */
-/*     } */
-/*     break; */
-/*   default: */
-/*     form_response (aid, VFS_UNKNOWN, VFS_BAD_REQUEST); */
-/*     return; */
-/*   } */
-/* } */
-
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t vfs_aid, bd_t bd, size_t bd_size)
 {
   {
@@ -305,10 +225,11 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, i
     buffer_file_write (&file, &r, sizeof (registry_register_request_t));
     buffer_file_write (&file, DESCRIPTION, r.description_size);
     bd_t bd = buffer_file_bd (&file);
+    size_t bd_size = buffer_file_size (&file);
 
     register_state = SENT;
 
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);
@@ -365,7 +286,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
   }
 
   initialize ();
-  buffer_queue_push (&client_request_queue, aid, bd);
+  buffer_queue_push (&client_request_queue, aid, bd, bd_size);
   schedule ();
   scheduler_finish (false, -1);
 }
@@ -386,9 +307,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
   if (item != 0) {
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
+    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&client_response_queue, item);
 
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);
@@ -416,9 +338,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
   if (item != 0) {
     /* Found a request.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
+    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&file_system_request_queue, item);
 
-    buffer_queue_push (&destroy_queue, 0, bd);
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
 
     schedule ();
     scheduler_finish (true, bd);
@@ -438,7 +361,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
   }
 
   initialize ();
-  buffer_queue_push (&file_system_response_queue, aid, bd);
+  buffer_queue_push (&file_system_response_queue, aid, bd, bd_size);
   schedule ();
   scheduler_finish (false, -1);
 }
@@ -452,7 +375,7 @@ destroy_buffers_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
   {
-    const char* s = "boot_automaton: destroy_buffers\n";
+    const char* s = "vfs: destroy_buffers\n";
     syslog (s, strlen (s));
   }
 
@@ -464,6 +387,133 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
       buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
       buffer_queue_pop (&destroy_queue);
     }
+  }
+  schedule ();
+  scheduler_finish (false, -1);
+}
+
+static void
+form_response (aid_t aid,
+	       vfs_type_t type,
+	       vfs_error_t error)
+{
+  /* Create a response. */
+  size_t bd_size = size_to_pages (sizeof (vfs_response_t));
+  bd_t bd = buffer_create (bd_size);
+  vfs_response_t* rr = buffer_map (bd);
+  rr->type = type;
+  rr->error = error;
+  /* We don't unmap it because we are going to destroy it when we respond. */
+  buffer_queue_push (&client_response_queue, aid, bd, bd_size);
+}
+
+static void
+process_load2 (void)
+{
+  /* /\* Map in the request. *\/ */
+  /* void* ptr= buffer_map (request_bd); */
+  /* if (ptr == 0) { */
+  /*   form_response (aid, VFS_UNKNOWN, VFS_NO_MAP); */
+  /*   return; */
+  /* } */
+
+  /* buffer_file_t file; */
+  /* buffer_file_open (&file, bd, bd_size, ptr, false); */
+
+  /* const vfs_request_t* r = buffer_file_readp (&file, sizeof (vfs_request_t)); */
+  /* if (r == 0) { */
+  /*   form_response (aid, VFS_UNKNOWN, VFS_BAD_REQUEST); */
+  /*   return; */
+  /* } */
+
+  /* switch (r->type) { */
+  /* case VFS_MOUNT: */
+  /*   { */
+  /*     if (r->u.mount.path_size == 0) { */
+  /* 	/\* No path. *\/ */
+  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
+  /* 	return; */
+  /*     } */
+
+  /*     const char* path = buffer_file_readp (&file, r->u.mount.path_size); */
+  /*     if (path == 0) { */
+  /* 	/\* Path is too long or unreadable. *\/ */
+  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
+  /* 	return; */
+  /*     } */
+
+  /*     if (path[0] != '/') { */
+  /* 	/\* Must be absolute. *\/ */
+  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
+  /* 	return; */
+  /*     } */
+
+  /*     if (path[r->u.mount.path_size - 1] != 0) { */
+  /* 	/\* Path is not null terminated. *\/ */
+  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
+  /* 	return; */
+  /*     } */
+
+  /*     /\* TODO *\/ */
+  /*     syslog (path, r->u.mount.path_size); */
+
+  /*     return; */
+  /*   } */
+  /*   break; */
+  /* default: */
+  /*   form_response (aid, VFS_UNKNOWN, VFS_BAD_REQUEST); */
+  /*   return; */
+  /* } */
+}
+
+static void
+process_load (aid_t aid,
+	      bd_t bd,
+	      size_t bd_size)
+{
+  /* TODO */
+  if (bd == -1) {
+    form_response (aid, VFS_UNKNOWN, VFS_NO_BUFFER);
+    buffer_queue_pop (&client_request_queue);
+    return;
+  }
+
+  /* Create a buffer that contains the request. */
+  bd_t request_bd = buffer_copy (bd, 0, size_to_pages (sizeof (vfs_request_t)));
+  if (request_bd == -1) {
+    form_response (aid, VFS_UNKNOWN, VFS_NO_MAP);
+    buffer_queue_pop (&client_request_queue);
+    return;
+  }
+
+  process_load2 ();
+
+  buffer_destroy (request_bd);
+}
+
+/* This internal action begins the process of executing a client request. */
+static bool
+load_precondition (void)
+{
+  return load_state == EMPTY && !buffer_queue_empty (&client_request_queue);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, LOAD_NO, "", "", load, int param)
+{
+  {
+    const char* s = "vfs: load\n";
+    syslog (s, strlen (s));
+  }
+
+  initialize ();
+  scheduler_remove (LOAD_NO, param);
+  if (load_precondition ()) {
+    load_state = FULL;
+    const buffer_queue_item_t* front = buffer_queue_front (&client_request_queue);
+    aid_t aid = buffer_queue_item_parameter (front);
+    bd_t bd = buffer_queue_item_bd (front);
+    size_t bd_size = buffer_queue_item_size (front);
+    process_load (aid, bd, bd_size);
   }
   schedule ();
   scheduler_finish (false, -1);
@@ -483,5 +533,8 @@ schedule (void)
   }
   if (destroy_buffers_precondition ()) {
     scheduler_add (DESTROY_BUFFERS_NO, 0);
+  }
+  if (load_precondition ()) {
+    scheduler_add (LOAD_NO, 0);
   }
 }

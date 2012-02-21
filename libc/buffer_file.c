@@ -142,6 +142,12 @@ buffer_file_bd (const buffer_file_t* bf)
   return bf->bd;
 }
 
+size_t
+buffer_file_size (const buffer_file_t* bf)
+{
+  return bf->bd_size;
+}
+
 /* #ifndef STRING_BUFFER_H */
 /* #define STRING_BUFFER_H */
 

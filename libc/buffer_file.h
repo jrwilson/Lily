@@ -47,4 +47,7 @@ buffer_file_write (buffer_file_t* bf,
 bd_t
 buffer_file_bd (const buffer_file_t* bf);
 
+size_t
+buffer_file_size (const buffer_file_t* bf);
+
 #endif /* BUFFER_FILE_H */

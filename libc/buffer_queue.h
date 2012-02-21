@@ -17,7 +17,8 @@ buffer_queue_init (buffer_queue_t* bq);
 void
 buffer_queue_push (buffer_queue_t* bq,
 		   int parameter,
-		   bd_t bd);
+		   bd_t bd,
+		   size_t bd_size);
 
 void
 buffer_queue_pop (buffer_queue_t* bq);
@@ -33,7 +34,7 @@ buffer_queue_erase (buffer_queue_t* bq,
 bool
 buffer_queue_empty (const buffer_queue_t* bq);
 
-buffer_queue_item_t*
+const buffer_queue_item_t*
 buffer_queue_front (const buffer_queue_t* bq);
 
 int
@@ -41,5 +42,8 @@ buffer_queue_item_parameter (const buffer_queue_item_t* item);
 
 bd_t
 buffer_queue_item_bd (const buffer_queue_item_t* item);
+
+size_t
+buffer_queue_item_size (const buffer_queue_item_t* item);
 
 #endif /* BUFFER_QUEUE_H */

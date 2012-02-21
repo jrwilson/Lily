@@ -5,6 +5,7 @@
 struct buffer_queue_item_struct {
   int parameter;
   bd_t bd;
+  size_t bd_size;
   buffer_queue_item_t* next;
 };
 
@@ -18,12 +19,14 @@ buffer_queue_init (buffer_queue_t* bq)
 void
 buffer_queue_push (buffer_queue_t* bq,
 		   int parameter,
-		   bd_t bd)
+		   bd_t bd,
+		   size_t bd_size)
 {
   /* Create a queue item. */
   buffer_queue_item_t* item = malloc (sizeof (buffer_queue_item_t));
   item->parameter = parameter;
   item->bd = bd;
+  item->bd_size = bd_size;
   item->next = 0;
 
   /* Insert into the queue. */
@@ -85,7 +88,7 @@ buffer_queue_empty (const buffer_queue_t* bq)
   return bq->head == 0;
 }
 
-buffer_queue_item_t*
+const buffer_queue_item_t*
 buffer_queue_front (const buffer_queue_t* bq)
 {
   return bq->head;
@@ -101,4 +104,10 @@ bd_t
 buffer_queue_item_bd (const buffer_queue_item_t* item)
 {
   return item->bd;
+}
+
+size_t
+buffer_queue_item_size (const buffer_queue_item_t* item)
+{
+  return item->bd_size;
 }
