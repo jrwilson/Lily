@@ -6,7 +6,8 @@
 #include <buffer_queue.h>
 #include <description.h>
 #include "registry.h"
-#include "vfs.h"
+#include "vfs_user.h"
+#include "vfs_priv.h"
 
 /*
   VFS
@@ -151,30 +152,17 @@ registerf (aid_t vfs_aid)
     return;
   }
 
-  /* Get its description. */
-  bd_t bd = describe (registry_aid);
-  if (bd == -1) {
+  description_t desc;
+  if (description_init (&desc, registry_aid) == -1) {
     const char* s = "vfs: warning: no registry description\n";
     syslog (s, strlen (s));
     return;
   }
 
-  size_t bd_size = buffer_size (bd);
+  const ano_t register_request = description_name_to_number (&desc, REGISTRY_REGISTER_REQUEST_NAME);
+  const ano_t register_response = description_name_to_number (&desc, REGISTRY_REGISTER_RESPONSE_NAME);
 
-  /* Map the description. */
-  void* ptr = buffer_map (bd);
-  if (ptr == 0) {
-    const char* s = "vfs: warning: could not map registry description\n";
-    syslog (s, strlen (s));
-    buffer_destroy (bd);
-    return;
-  }
-
-  const ano_t register_request = action_name_to_number (bd, bd_size, ptr, REGISTRY_REGISTER_REQUEST_NAME);
-  const ano_t register_response = action_name_to_number (bd, bd_size, ptr, REGISTRY_REGISTER_RESPONSE_NAME);
-
-  /* Dispense with the buffer. */
-  buffer_destroy (bd);
+  description_fini (&desc);
 
   if (bind (registry_aid, register_response, 0, vfs_aid, VFS_REGISTER_RESPONSE_NO, 0) == -1 ||
       bind (vfs_aid, VFS_REGISTER_REQUEST_NO, 0, registry_aid, register_request, 0) == -1) {
@@ -217,15 +205,18 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, i
   scheduler_remove (VFS_REGISTER_REQUEST_NO, param);
 
   if (register_request_precondition ()) {
+    size_t desc_size = strlen (DESCRIPTION) + 1;
+    size_t bd_size = size_to_pages (sizeof (registry_register_request_t) + desc_size);
+    bd_t bd = buffer_create (bd_size);
     buffer_file_t file;
-    buffer_file_create (&file, sizeof (registry_register_request_t));
+    buffer_file_open (&file, bd, bd_size, true);
     registry_register_request_t r;
     r.method = REGISTRY_STRING_EQUAL;
-    r.description_size = strlen (DESCRIPTION) + 1;
+    r.description_size = desc_size;
     buffer_file_write (&file, &r, sizeof (registry_register_request_t));
     buffer_file_write (&file, DESCRIPTION, r.description_size);
-    bd_t bd = buffer_file_bd (&file);
-    size_t bd_size = buffer_file_size (&file);
+    bd = buffer_file_bd (&file);
+    bd_size = buffer_file_size (&file);
 
     register_state = SENT;
 
@@ -249,11 +240,8 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
 
   initialize ();
 
-  void* ptr = buffer_map (bd);
-
-  if (ptr != 0) {
-    buffer_file_t file;
-    buffer_file_open (&file, bd, bd_size, ptr, false);
+  buffer_file_t file;
+  if (buffer_file_open (&file, bd, bd_size, false) == 0) {
     const registry_register_response_t* r = buffer_file_readp (&file, sizeof (registry_register_response_t));
     if (r != 0) {
       switch (r->error) {
@@ -261,11 +249,11 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
 	/* Okay. */
 	break;
       default:
-      	{
-      	  const char* s = "vfs: warning: failed to register\n";
-      	  syslog (s, strlen (s));
-      	}
-      	break;
+	{
+	  const char* s = "vfs: warning: failed to register\n";
+	  syslog (s, strlen (s));
+	}
+	break;
       }
     }
   }

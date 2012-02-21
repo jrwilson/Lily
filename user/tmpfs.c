@@ -6,7 +6,7 @@
 #include <buffer_file.h>
 #include <buffer_queue.h>
 #include "cpio.h"
-#include "vfs.h"
+#include "vfs_user.h"
 
 /*
   Tmpfs
@@ -282,15 +282,11 @@ process_request (aid_t aid,
     return;
   }
 
-  /* Map in the request. */
-  void* ptr= buffer_map (request_bd);
-  if (ptr == 0) {
+  buffer_file_t file;
+  if (buffer_file_open (&file, request_bd, request_bd_size, false) == -1) {
     form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, request_bd);
     return;
   }
-
-  buffer_file_t file;
-  buffer_file_open (&file, request_bd, request_bd_size, ptr, false);
 
   const vfs_fs_request_t* r = buffer_file_readp (&file, sizeof (vfs_fs_request_t));
   if (r == 0) {
@@ -351,15 +347,12 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 
   initialize ();
 
-  void* ptr = buffer_map (bd);
+  /* Parse the cpio archive looking for files that we need. */
+  cpio_archive_t archive;
+  if (cpio_archive_init (&archive, bd, bd_size) == 0) {
 
-  if (ptr != 0) {
-    /* Parse the cpio archive looking for files that we need. */
-    buffer_file_t bf;
-    buffer_file_open (&bf, bd, bd_size, ptr, false);
-    
     cpio_file_t* file;
-    while ((file = parse_cpio (&bf)) != 0) {
+    while ((file = cpio_archive_next_file (&archive)) != 0) {
 
       /* Ignore the "." directory. */
       if (strcmp (file->name, ".") != 0) {

@@ -6,37 +6,16 @@ int
 buffer_file_open (buffer_file_t* bf,
 		  bd_t bd,
 		  size_t bd_size,
-		  void* ptr,
 		  bool can_update)
 {
   bf->bd = bd;
   bf->bd_size = bd_size;
-  bf->ptr = ptr;
-  bf->can_update = can_update;
-  bf->size = bd_size * pagesize ();
-  bf->position = 0;
-
-  return 0;
-}
-
-int
-buffer_file_create (buffer_file_t* bf,
-		    size_t initial_capacity_bytes)
-{
-  bf->size = ALIGN_UP (initial_capacity_bytes, pagesize ());
-  bf->bd_size = bf->size / pagesize ();
-
-  bf->bd = buffer_create (bf->bd_size);
-  if (bf->bd == -1) {
-    return -1;
-  }
-
-  bf->ptr = buffer_map (bf->bd);
+  bf->ptr = buffer_map (bd);
   if (bf->ptr == 0) {
     return -1;
   }
-
-  bf->can_update = true;
+  bf->can_update = can_update;
+  bf->size = bd_size * pagesize ();
   bf->position = 0;
 
   return 0;

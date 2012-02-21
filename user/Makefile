@@ -7,8 +7,8 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o
-	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
+boot_automaton : boot_automaton.o cpio.o vfs_user.o
+	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lrr_queue -lfifo_scheduler -ldymem -lstring
 
 # $(PROGRAMS)
 boot_data : $(BOOT_PROGRAMS)

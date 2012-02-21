@@ -44,15 +44,27 @@ typedef struct {
   char checksum[8];
 } cpio_header_t;
 
+int
+cpio_archive_init (cpio_archive_t* ar,
+		   bd_t bd,
+		   size_t bd_size)
+{
+  if (buffer_file_open (&ar->bf, bd, bd_size, false) == -1) {
+    return -1;
+  }
+
+  return 0;
+}
+
 cpio_file_t*
-parse_cpio (buffer_file_t* bf)
+cpio_archive_next_file (cpio_archive_t* ar)
 {
   /* Align to a 4-byte boundary. */
-  int pos = buffer_file_seek (bf, 0, BUFFER_FILE_CURRENT);
+  int pos = buffer_file_seek (&ar->bf, 0, BUFFER_FILE_CURRENT);
   pos = align_up (pos, 4);
-  buffer_file_seek (bf, pos, BUFFER_FILE_SET);
+  buffer_file_seek (&ar->bf, pos, BUFFER_FILE_SET);
 
-  const cpio_header_t* h = buffer_file_readp (bf, sizeof (cpio_header_t));
+  const cpio_header_t* h = buffer_file_readp (&ar->bf, sizeof (cpio_header_t));
   if (h == 0) {
     /* Underflow. */
     return 0;
@@ -71,7 +83,7 @@ parse_cpio (buffer_file_t* bf)
   size_t filesize = from_hex (h->filesize);
   size_t namesize = from_hex (h->namesize);
 
-  const char* name = buffer_file_readp (bf, namesize);
+  const char* name = buffer_file_readp (&ar->bf, namesize);
   if (name == 0) {
     return 0;
   }
@@ -81,11 +93,11 @@ parse_cpio (buffer_file_t* bf)
   }
 
   /* Align to a 4-byte boundary. */
-  pos = buffer_file_seek (bf, 0, BUFFER_FILE_CURRENT);
+  pos = buffer_file_seek (&ar->bf, 0, BUFFER_FILE_CURRENT);
   pos = align_up (pos, 4);
-  buffer_file_seek (bf, pos, BUFFER_FILE_SET);
+  buffer_file_seek (&ar->bf, pos, BUFFER_FILE_SET);
 
-  const char* data = buffer_file_readp (bf, filesize);
+  const char* data = buffer_file_readp (&ar->bf, filesize);
   if (data == 0) {
     return 0;
   }

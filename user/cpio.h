@@ -29,8 +29,17 @@ typedef struct {
   size_t size;
 } cpio_file_t;
 
+typedef struct {
+  buffer_file_t bf;
+} cpio_archive_t;
+
+int
+cpio_archive_init (cpio_archive_t* ar,
+		   bd_t bd,
+		   size_t bd_size);
+
 cpio_file_t*
-parse_cpio (buffer_file_t* bf);
+cpio_archive_next_file (cpio_archive_t* ar);
 
 void
 cpio_file_destroy (cpio_file_t* file);

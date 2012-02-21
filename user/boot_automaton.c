@@ -3,9 +3,10 @@
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <buffer_queue.h>
+#include <rr_queue.h>
 #include <description.h>
 #include "cpio.h"
-#include "vfs.h"
+#include "vfs_user.h"
 
 /*
   The Boot Automaton
@@ -15,8 +16,9 @@
   The boot automaton looks for the following file names:  registry, vfs, tmpfs, and init.
   The boot automaton then tries to create automata based on the contents of the registry, vfs, tmpfs, and init files.
   The buffer supplied to the boot automaton is passed to the tmpfs automaton.
-  If one of the files does not exist in the archive, the boot automaton prints a warning and continues.
-  Similarly, a warning is emitted if an automaton cannot be created.
+  Any failures cause the boot automaton to exit.
+
+  TODO:  Should we subscribe to the automata to make sure they don't die?
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
@@ -31,19 +33,19 @@
 /* Initialization flag. */
 static bool initialized = false;
 
-typedef enum {
-  START,
-  MOUNT,
-  SENT,
-} mount_state_t;
-static mount_state_t mount_state = START;
-static aid_t tmpfs_aid = -1;
+/* File containing the init automaton. */
+static cpio_file_t* init_file = 0;
+
+/* Queue for interacting with the vfs. */
+static rr_queue_t vfs_queue;
 
 /* Queue of buffers that need to be destroyed. */
 static buffer_queue_t destroy_queue;
 
 static void
-schedule (void);
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size);
 
 static void
 initialize (void)
@@ -51,144 +53,69 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    rr_queue_init (&vfs_queue);
     buffer_queue_init (&destroy_queue);
   }
 }
 
 static void
-create_registry (cpio_file_t* registry_file)
+ssyslog (const char* msg)
 {
-  if (registry_file == 0) {
-    const char* s = "boot_automaton: warning: No registry\n";
-    syslog (s, strlen (s));
-    return;
-  }
-
-  aid_t registry = create (registry_file->bd, true, -1);
-  if (registry == -1) {
-    const char* s = "boot_automaton: warning: Could not create registry\n";
-    syslog (s, strlen (s));
-    return;
-  }
-
-  if (set_registry (registry) == -1) {
-    const char* s = "boot_automaton: warning: Could not set registry\n";
-    syslog (s, strlen (s));
-    return;
-  }
+  syslog (msg, strlen (msg));
 }
 
 static void
-create_vfs (cpio_file_t* vfs_file,
-	    aid_t boot_aid)
+mount_handler (void* data,
+	       int param,
+	       bd_t bd,
+	       size_t bd_size)
 {
-  aid_t vfs_aid = create (vfs_file->bd, true, -1);
-  if (vfs_aid == -1) {
-    const char* s = "boot_automaton: warning: Could not create vfs\n";
-    syslog (s, strlen (s));
-    return;
+  vfs_error_t error = VFS_SUCCESS;
+  if (mount_response (bd, bd_size, &error) == -1) {
+    ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
+    exit ();
   }
 
-  /* Bind to the VFS so we can mount the tmpfs. */
-
-  /* Get its description. */
-  bd_t bd = describe (vfs_aid);
-  if (bd == -1) {
-    const char* s = "boot_automaton: warning: no vfs description\n";
-    syslog (s, strlen (s));
-    return;
+  if (error != VFS_SUCCESS) {
+    ssyslog ("boot_automaton: error: mounting root file system failed\n");
+    exit ();
   }
 
-  size_t bd_size = buffer_size (bd);
-
-  /* Map the description. */
-  void* ptr = buffer_map (bd);
-  if (ptr == 0) {
-    const char* s = "boot_automaton: warning: could not map vfs description\n";
-    syslog (s, strlen (s));
-    buffer_destroy (bd);
-    return;
+  /* Now that the root file system is mounted, create the init automaton. */
+  aid_t init = create (init_file->bd, true, -1);
+  cpio_file_destroy (init_file);
+  if (init == -1) {
+    ssyslog ("boot_automaton: error: Could not create init\n");
+    exit ();
   }
 
-  /* If these actions don't exist, then attempts to bind below will fail. */
-  const ano_t request = action_name_to_number (bd, bd_size, ptr, VFS_REQUEST_NAME);
-  const ano_t response = action_name_to_number (bd, bd_size, ptr, VFS_RESPONSE_NAME);
-
-  /* Dispense with the buffer. */
-  buffer_destroy (bd);
-
-  /* When binding a request/response channel, bind the response first so they dont' get lost. */
-  if (bind (vfs_aid, response, 0, boot_aid, VFS_RESPONSE_NO, 0) == -1 ||
-      bind (boot_aid, VFS_REQUEST_NO, 0, vfs_aid, request, 0) == -1) {
-    const char* s = "boot_automaton: warning: couldn't bind to vfs\n";
-    syslog (s, strlen (s));
-    return;
-  }
-
-  mount_state = MOUNT;
+  end_action (false, bd, bd_size);
 }
 
-static void
-create_tmpfs (cpio_file_t* tmpfs_file,
-	      bd_t bd)
-{
-  /* Note that we pass along the data (bd) to the tmpfs automaton. */
-  tmpfs_aid = create (tmpfs_file->bd, true, bd);
-  if (tmpfs_aid == -1) {
-    const char* s = "boot_automaton: warning: Could not create tmpfs\n";
-    syslog (s, strlen (s));
-    return;
-  }
-}
-
-static void
-create_init (cpio_file_t* init_file)
-{
-  if (create (init_file->bd, true, -1) == -1) {
-    const char* s = "boot_automaton: warning: Could not create init\n";
-    syslog (s, strlen (s));
-    return;
-  }
-}
-
+/* init
+   ----
+   Init receives a buffer containing a cpio archive.
+   It looks for the files registry, vfs, tmpfs, and init and creates automata from them except for init.
+   It passes the cpio archive to tmpfs.
+   
+   Post: mount_state == MOUNT && tmpfs != -1 && init_file != 0
+ */
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "boot_automaton: init\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("boot_automaton: init\n");
   initialize ();
 
-  if (bd == -1) {
-    const char* s = "boot_automaton: error: No buffer\n";
-    syslog (s, strlen (s));
+  cpio_archive_t archive;
+  if (cpio_archive_init (&archive, bd, bd_size) == -1) {
+    ssyslog ("boot_automaton: error: Could not initialize cpio archive\n");
     exit ();
   }
-
-  if (bd_size == 0) {
-    const char* s = "boot_automaton: error: Buffer is empty\n";
-    syslog (s, strlen (s));
-    exit ();
-  }
-
-  void* ptr = buffer_map (bd);
-  if (ptr == 0) {
-    const char* s = "boot_automaton: error: Buffer could not be mapped\n";
-    syslog (s, strlen (s));
-    exit ();
-  }
-
-  /* Parse the cpio archive looking for files that we need. */
-  buffer_file_t bf;
-  buffer_file_open (&bf, bd, bd_size, ptr, false);
 
   cpio_file_t* registry_file = 0;
   cpio_file_t* vfs_file = 0;
   cpio_file_t* tmpfs_file = 0;
-  cpio_file_t* init_file = 0;
   cpio_file_t* file;
-  while ((file = parse_cpio (&bf)) != 0) {
+  while ((file = cpio_archive_next_file (&archive)) != 0) {
     if (strcmp (file->name, "registry") == 0) {
       registry_file = file;
     }
@@ -207,152 +134,153 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
     }
   }
 
-  /*
-    Create the automata.
-    In general, we create the automaton and then destroy the cpio_file_t* or we emit a warning that the automaton was not provided.
-  */
-  if (registry_file != 0) {
-    create_registry (registry_file);
-    cpio_file_destroy (registry_file);
+  /* Create the registry first so the other automata can use it. */
+  if (registry_file == 0) {
+    ssyslog ("boot_automaton: error: No registry file\n");
+    exit ();
   }
-  else {
-    const char* s = "boot_automaton: warning: No registry\n";
-    syslog (s, strlen (s));
+  aid_t registry = create (registry_file->bd, true, -1);
+  cpio_file_destroy (registry_file);
+  registry_file = 0;
+  if (registry == -1) {
+    ssyslog ("boot_automaton: error: Could not create the registry\n");
+    exit ();
   }
-
-  if (vfs_file != 0) {
-    create_vfs (vfs_file, boot_aid);
-    cpio_file_destroy (vfs_file);
+  if (set_registry (registry) == -1) {
+    ssyslog ("boot_automaton: error: Could not set the registry\n");
+    exit ();
   }
-  else {
-    const char* s = "boot_automaton: warning: No vfs\n";
-    syslog (s, strlen (s));
+  
+  /* Create the vfs. */
+  if (vfs_file == 0) {
+    ssyslog ("boot_automaton: error: No vfs file\n");
+    exit ();
   }
-
-  if (tmpfs_file != 0) {
-    create_tmpfs (tmpfs_file, bd);
-    cpio_file_destroy (tmpfs_file);
-  }
-  else {
-    const char* s = "boot_automaton: warning: No tmpfs\n";
-    syslog (s, strlen (s));
+  aid_t vfs = create (vfs_file->bd, true, -1);
+  cpio_file_destroy (vfs_file);
+  if (vfs == -1) {
+    ssyslog ("boot_automaton: error: Could not create vfs\n");
+    exit ();
   }
 
-  if (init_file != 0) {
-    create_init (init_file);
-    cpio_file_destroy (init_file);
-  }
-  else {
-    const char* s = "boot_automaton: warning: No init\n";
-    syslog (s, strlen (s));
+  /* Bind to the vfs so we can mount the tmpfs. */
+
+  description_t vfs_description;
+  if (description_init (&vfs_description, vfs) == -1) {
+    ssyslog ("boot_automaton: error: Could not describe vfs\n");
+    exit ();
   }
 
-  /* Destroy the buffer. */
-  buffer_destroy (bd);
+  /* If these actions don't exist, then attempts to bind below will fail. */
+  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME);
+  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME);
 
-  schedule ();
-  scheduler_finish (false, -1);
+  description_fini (&vfs_description);
+
+  /* We bind the response first so they don't get lost. */
+  if (bind (vfs, vfs_response, 0, boot_aid, VFS_RESPONSE_NO, 0) == -1 ||
+      bind (boot_aid, VFS_REQUEST_NO, 0, vfs, vfs_request, 0) == -1) {
+    ssyslog ("boot_automaton: error: Couldn't bind to vfs\n");
+    exit ();
+  }
+
+  /* Create the tmpfs. */
+  if (tmpfs_file == 0) {
+    ssyslog ("boot_automaton: error: No tmpfs file\n");
+    exit ();
+  }
+  /* Note:  We pass the buffer containing the cpio archive. */
+  aid_t tmpfs = create (tmpfs_file->bd, true, bd);
+  cpio_file_destroy (tmpfs_file);
+  if (tmpfs == -1) {
+    ssyslog ("boot_automaton: error: Could not create tmpfs\n");
+    exit ();
+  }
+
+  /* Mount tmpfs on ROOT_PATH. */
+  size_t mount_bd_size = 0;
+  bd_t mount_bd = mount_request (tmpfs, ROOT_PATH, &mount_bd_size);
+  rr_queue_push (&vfs_queue, mount_bd, mount_bd_size, mount_handler, 0);
+
+  /* Create the init automaton. */
+  if (init_file == 0) {
+    ssyslog ("boot_automaton: error: No init file\n");
+    exit ();
+  }
+
+  end_action (false, bd, bd_size);
 }
 
+/* vfs_request
+   -----------
+   Sent a request to mount tmpfs as the root file system of vfs.
+
+   Pre:  the vfs_queue is not empty
+   Post: the vfs_queue is shifted once
+ */
 static bool
 vfs_request_precondition (void)
 {
-  return tmpfs_aid != -1 && mount_state == MOUNT;
+  return !rr_queue_request_empty (&vfs_queue);
 }
 
 BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_t bc)
 {
-  {
-    const char* s = "boot_automaton: vfs_request\n";
-    syslog (s, strlen (s));
-  }
-
   initialize ();
   scheduler_remove (VFS_REQUEST_NO, param);
-
+  
   if (vfs_request_precondition ()) {
-    /* Mount tmpfs on /. */
-    buffer_file_t file;
-    buffer_file_create (&file, sizeof (vfs_request_t));
-    vfs_request_t r;
-    r.type = VFS_MOUNT;
-    r.u.mount.aid = tmpfs_aid;
-    size_t s = strlen (ROOT_PATH) + 1;
-    r.u.mount.path_size = s;
-    buffer_file_write (&file, &r, sizeof (vfs_request_t));
-    buffer_file_write (&file, ROOT_PATH, s);
+    ssyslog ("boot_automaton: vfs_request\n");
+    const rr_queue_item_t* item = rr_queue_request_front (&vfs_queue);
+    bd_t bd = rr_queue_item_bd (item);
+    size_t bd_size = rr_queue_item_size (item);
+    rr_queue_shift (&vfs_queue);
 
-    bd_t bd = buffer_file_bd (&file);
-    size_t bd_size = buffer_file_size (&file);
-
-    mount_state = SENT;
-
-    /* Destroy the buffer. */
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    end_action (true, bd, bd_size);
   }
   else {
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
 }
 
-static void
-process_mount_response (bd_t bd,
-			size_t bd_size)
-{
-  void* ptr = buffer_map (bd);
-  if (ptr == 0) {
-    const char* s = "boot_automaton: warning: Could not read mount response\n";
-    syslog (s, strlen (s));
-    return;
-  }
+/* vfs_response
+   ------------
+   Receive a response from the vfs_automaton.
 
-  buffer_file_t file;
-  buffer_file_open (&file, bd, bd_size, ptr, false);
-  const vfs_response_t* r = buffer_file_readp (&file, sizeof (vfs_response_t));
-  if (r == 0) {
-    const char* s = "boot_automaton: warning: Could not read mount response\n";
-    syslog (s, strlen (s));
-    return;
-  }
-
-  if (r->type != VFS_MOUNT) {
-    const char* s = "boot_automaton: warning: Mount returned strange type\n";
-    syslog (s, strlen (s));
-    return;
-  }
-
-  switch (r->error) {
-  case VFS_SUCCESS:
-    /* Okay. */
-    break;
-  default:
-    {
-      const char* s = "boot_automaton: warning: Mounting tmpfs failed\n";
-      syslog (s, strlen (s));
-      return;
-    }
-    break;
-  }
-}
-
+   Post: the vfs_queue is popped once
+ */
 BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "boot_automaton: vfs_response\n";
-    syslog (s, strlen (s));
+  ssyslog ("boot_automaton: vfs_response\n");
+  initialize ();
+
+  if (rr_queue_handler_empty (&vfs_queue)) {
+    /* The vfs violated the protocol by producing a response without a request. */
+    ssyslog ("boot_automaton: error: Spurious response from the vfs\n");
+    exit ();
   }
 
-  initialize ();
-  process_mount_response (bd, bd_size);
-  buffer_destroy (bd);
-  schedule ();
-  scheduler_finish (false, -1);
+  const rr_queue_item_t* item = rr_queue_handler_front (&vfs_queue);
+  void (*handler) (void*, int, bd_t, size_t) = rr_queue_item_handler (item);
+  void* data = rr_queue_item_data (item);
+  rr_queue_pop (&vfs_queue);
+
+  if (handler != 0) {
+    handler (data, param, bd, bd_size);
+  }
+
+  end_action (false, bd, bd_size);
 }
 
+/* destroy_buffers
+   ---------------
+   Destroys all of the buffers in destroy_queue.
+   This is useful for output actions that need to destroy the buffer *after* the output has fired.
+   To schedule a buffer for destruction, just add it to destroy_queue.
+
+   Pre:  Destroy queue is not empty.
+   Post: Destroy queue is empty.
+ */
 static bool
 destroy_buffers_precondition (void)
 {
@@ -361,31 +289,38 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  {
-    const char* s = "boot_automaton: destroy_buffers\n";
-    syslog (s, strlen (s));
-  }
-
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
+
   if (destroy_buffers_precondition ()) {
-    /* Drain the queue. */
     while (!buffer_queue_empty (&destroy_queue)) {
       buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
       buffer_queue_pop (&destroy_queue);
     }
   }
-  schedule ();
-  scheduler_finish (false, -1);
+
+  end_action (false, -1, 0);
 }
 
+/* end_action is a helper function for terminating actions.
+   If the buffer is not -1, it schedules it to be destroyed.
+   end_action schedules local actions and calls scheduler_finish to finish the action.
+*/
 static void
-schedule (void)
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size)
 {
+  if (bd != -1) {
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
+  }
+
   if (vfs_request_precondition ()) {
     scheduler_add (VFS_REQUEST_NO, 0);
   }
   if (destroy_buffers_precondition ()) {
     scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
+
+  scheduler_finish (output_fired, bd);
 }

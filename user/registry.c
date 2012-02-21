@@ -170,14 +170,11 @@ process_register (aid_t aid,
     return;
   }
 
-  void* ptr = buffer_map (bd);
-  if (ptr == 0) {
+  buffer_file_t file;
+  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
     form_register_response (aid, REGISTRY_NO_MAP);
     return;
   }
-
-  buffer_file_t file;
-  buffer_file_open (&file, bd, bd_size, ptr, false);
 
   const registry_register_request_t* r = buffer_file_readp (&file, sizeof (registry_register_request_t));
   if (r == 0) {
@@ -270,14 +267,11 @@ process_query (aid_t aid,
     return;
   }
 
-  void* ptr = buffer_map (bd);
-  if (ptr == 0) {
+  buffer_file_t file;
+  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
     form_query_response (aid, REGISTRY_NO_MAP, 0);
     return;
   }
-
-  buffer_file_t file;
-  buffer_file_open (&file, bd, bd_size, ptr, false);
   
   const registry_query_request_t* q = buffer_file_readp (&file, sizeof (registry_query_request_t));
   if (q == 0) {
@@ -301,8 +295,10 @@ process_query (aid_t aid,
     break;
   }
 
+  size_t answer_bd_size = size_to_pages (sizeof (registry_query_response_t));
+  bd_t answer_bd = buffer_create (answer_bd_size);
   buffer_file_t answer;
-  buffer_file_create (&answer, 0);
+  buffer_file_open (&answer, answer_bd, answer_bd_size, true);
 
   /* Skip over the header. */
   buffer_file_seek (&answer, sizeof (registry_query_response_t), BUFFER_FILE_SET);
@@ -330,6 +326,8 @@ process_query (aid_t aid,
   response.method = q->method;
   response.count = count;
   buffer_file_write (&answer, &response, sizeof (registry_query_response_t));
+
+  buffer_queue_push (&qr_queue, aid, answer_bd, buffer_file_size (&answer));
 }
 
 static void

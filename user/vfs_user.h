@@ -2,12 +2,18 @@
 #define VFS_H
 
 #include <stddef.h>
+#include <lily/types.h>
 
-/* User section. */
+/*
+  User Section
+  ============
+*/
 
+/* Action names. */
 #define VFS_REQUEST_NAME "request"
 #define VFS_RESPONSE_NAME "response"
 
+/* Result codes. */
 typedef enum {
   VFS_SUCCESS,
   VFS_NO_BUFFER,
@@ -16,27 +22,22 @@ typedef enum {
   VFS_BAD_PATH,
 } vfs_error_t;
 
-typedef enum {
-  VFS_UNKNOWN,
-  VFS_MOUNT,
-} vfs_type_t;
+/* Create a mount request. */
+bd_t
+mount_request (aid_t aid,
+	       const char* path,
+	       size_t* bd_size);
 
-typedef struct {
-  vfs_type_t type;
-  union {
-    struct {
-      aid_t aid;	/* The automaton to mount. */
-      size_t path_size;	/* The size of the path including the null terminator.  The path follows the request. */
-    } mount;
-  } u;
-} vfs_request_t;
+/* Parse a mount response. */
+int
+mount_response (bd_t bd,
+		size_t bd_size,
+		vfs_error_t* error);
 
-typedef struct {
-  vfs_type_t type;
-  vfs_error_t error;
-} vfs_response_t;
-
-/* File system section. */
+/*
+  File System Section
+  ===================
+*/
 
 #define VFS_FS_REQUEST_NAME "vfs_request"
 #define VFS_FS_RESPONSE_NAME "vfs_response"

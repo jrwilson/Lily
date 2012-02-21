@@ -23,12 +23,7 @@ int
 buffer_file_open (buffer_file_t* bf,
 		  bd_t bd,
 		  size_t bd_size,
-		  void* ptr,
 		  bool can_update);
-
-int
-buffer_file_create (buffer_file_t* bf,
-		    size_t initial_capacity_bytes);
 
 const void*
 buffer_file_readp (buffer_file_t* bf,
