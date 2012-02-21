@@ -5,9 +5,9 @@
 #include <buffer_file.h>
 
 bd_t
-mount_request (aid_t aid,
-	       const char* path,
-	       size_t* bd_size)
+vfs_mount_request (aid_t aid,
+		   const char* path,
+		   size_t* bd_size)
 {
   vfs_request_t r;
   r.type = VFS_MOUNT;
@@ -46,9 +46,9 @@ mount_request (aid_t aid,
 }
 
 int
-mount_response (bd_t bd,
-		size_t bd_size,
-		vfs_error_t* error)
+vfs_mount_response (bd_t bd,
+		    size_t bd_size,
+		    vfs_error_t* error)
 {
   buffer_file_t file;
   if (buffer_file_open (&file, bd, bd_size, false) == -1) {

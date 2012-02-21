@@ -35,6 +35,11 @@ buffer_file_seek (buffer_file_t* bf,
 		  buffer_file_seek_t s);
 
 int
+buffer_file_read (buffer_file_t* bf,
+		  void* ptr,
+		  size_t size);
+
+int
 buffer_file_write (buffer_file_t* bf,
 		   const void* ptr,
 		   size_t size);

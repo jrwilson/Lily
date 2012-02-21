@@ -1,5 +1,5 @@
-#ifndef VFS_H
-#define VFS_H
+#ifndef VFS_USER_H
+#define VFS_USER_H
 
 #include <stddef.h>
 #include <lily/types.h>
@@ -24,15 +24,15 @@ typedef enum {
 
 /* Create a mount request. */
 bd_t
-mount_request (aid_t aid,
-	       const char* path,
-	       size_t* bd_size);
+vfs_mount_request (aid_t aid,
+		   const char* path,
+		   size_t* bd_size);
 
 /* Parse a mount response. */
 int
-mount_response (bd_t bd,
-		size_t bd_size,
-		vfs_error_t* error);
+vfs_mount_response (bd_t bd,
+		    size_t bd_size,
+		    vfs_error_t* error);
 
 /*
   File System Section
@@ -86,4 +86,4 @@ typedef struct {
   } u;
 } vfs_fs_response_t;
 
-#endif /* VFS_H */
+#endif /* VFS_USER_H */

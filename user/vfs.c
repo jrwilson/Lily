@@ -1,3 +1,5 @@
+#include "vfs_user.h"
+#include "vfs_priv.h"
 #include <automaton.h>
 #include <io.h>
 #include <string.h>
@@ -5,9 +7,7 @@
 #include <buffer_file.h>
 #include <buffer_queue.h>
 #include <description.h>
-#include "registry.h"
-#include "vfs_user.h"
-#include "vfs_priv.h"
+#include "registry_msg.h"
 
 /*
   VFS
@@ -205,18 +205,8 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, i
   scheduler_remove (VFS_REGISTER_REQUEST_NO, param);
 
   if (register_request_precondition ()) {
-    size_t desc_size = strlen (DESCRIPTION) + 1;
-    size_t bd_size = size_to_pages (sizeof (registry_register_request_t) + desc_size);
-    bd_t bd = buffer_create (bd_size);
-    buffer_file_t file;
-    buffer_file_open (&file, bd, bd_size, true);
-    registry_register_request_t r;
-    r.method = REGISTRY_STRING_EQUAL;
-    r.description_size = desc_size;
-    buffer_file_write (&file, &r, sizeof (registry_register_request_t));
-    buffer_file_write (&file, DESCRIPTION, r.description_size);
-    bd = buffer_file_bd (&file);
-    bd_size = buffer_file_size (&file);
+    size_t bd_size = 0;
+    bd_t bd = write_registry_register_request (REGISTRY_STRING_EQUAL, DESCRIPTION, strlen (DESCRIPTION) + 1, &bd_size);
 
     register_state = SENT;
 
@@ -240,21 +230,18 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
 
   initialize ();
 
-  buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == 0) {
-    const registry_register_response_t* r = buffer_file_readp (&file, sizeof (registry_register_response_t));
-    if (r != 0) {
-      switch (r->error) {
-      case REGISTRY_SUCCESS:
-	/* Okay. */
-	break;
-      default:
-	{
-	  const char* s = "vfs: warning: failed to register\n";
-	  syslog (s, strlen (s));
-	}
-	break;
+  registry_error_t error = REGISTRY_SUCCESS;
+  if (read_registry_register_response (bd, bd_size, &error) == 0) {
+    switch (error) {
+    case REGISTRY_SUCCESS:
+      /* Okay. */
+      break;
+    default:
+      {
+	const char* s = "vfs: warning: failed to register\n";
+	syslog (s, strlen (s));
       }
+      break;
     }
   }
   else {

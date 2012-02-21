@@ -1,11 +1,10 @@
-#include "registry.h"
+#include "registry_msg.h"
 #include <automaton.h>
 #include <io.h>
 #include <string.h>
 #include <dymem.h>
 #include <fifo_scheduler.h>
 #include <buffer_queue.h>
-#include <buffer_file.h>
 
 /*
   The Registry Automaton
@@ -119,37 +118,6 @@ static buffer_queue_t qr_queue;
 static buffer_queue_t destroy_queue;
 
 static void
-form_register_response (aid_t aid,
-			registry_error_t error)
-{
-  /* Create a response. */
-  size_t bd_size = size_to_pages (sizeof (registry_register_response_t));
-  bd_t bd = buffer_create (bd_size);
-  registry_register_response_t* rr = buffer_map (bd);
-  rr->error = error;
-  /* We don't unmap it because we are going to destroy it when we respond. */
-
-  buffer_queue_push (&rr_queue, aid, bd, bd_size);
-}
-
-static void
-form_query_response (aid_t aid,
-		     registry_error_t error,
-		     registry_method_t method)
-{
-  /* Create a response. */
-  size_t bd_size = size_to_pages (sizeof (registry_register_response_t));
-  bd_t bd = buffer_create (bd_size);
-  registry_query_response_t* qr = buffer_map (bd);
-  qr->error = error;
-  qr->method = method;
-  qr->count = 0;
-  /* We don't unmap it because we are going to destroy it when we respond. */
-
-  buffer_queue_push (&qr_queue, aid, bd, bd_size);
-}
-
-static void
 initialize (void)
 {
   if (!initialized) {
@@ -161,82 +129,9 @@ initialize (void)
 }
 
 static void
-process_register (aid_t aid,
-		  bd_t bd,
-		  size_t bd_size)
+ssyslog (const char* msg)
 {
-  if (bd == -1) {
-    form_register_response (aid, REGISTRY_NO_BUFFER);
-    return;
-  }
-
-  buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
-    form_register_response (aid, REGISTRY_NO_MAP);
-    return;
-  }
-
-  const registry_register_request_t* r = buffer_file_readp (&file, sizeof (registry_register_request_t));
-  if (r == 0) {
-    form_register_response (aid, REGISTRY_BAD_REQUEST);
-    return;
-  }
-
-  const void* description = buffer_file_readp (&file, r->description_size);
-  if (description == 0) {
-    form_register_response (aid, REGISTRY_BAD_REQUEST);
-    return;
-  }
-
-  /* Check that no description is equal to the given description. */
-  description_t* d;
-  for (d = description_head; d != 0; d = d->next) {
-    if (d->description_size == r->description_size &&
-	memcmp (d->description, description, r->description_size) == 0) {
-      /* Found a description that is equal. */
-      break;
-    }
-  }
-  if (d != 0) {
-    form_register_response (aid, REGISTRY_NOT_UNIQUE);
-    return;
-  }
-
-  /* Inspect the method. */
-  switch (r->method) {
-  case REGISTRY_STRING_EQUAL:
-    /* Okay. */
-    break;
-  default:
-    form_register_response (aid, REGISTRY_UNKNOWN_METHOD);
-    return;
-    break;
-  }
-
-  /* Insert a new description or replace an existing description. */
-  for (d = description_head; d != 0; d = d->next) {
-    if (d->aid == aid &&
-	d->method == r->method) {
-      /* Found a description for this automaton and method. */
-      break;
-    }
-  }
-  if (d == 0) {
-    /* Create a new description. */
-    d = create_description (aid, r->method, description, r->description_size);
-    d->next = description_head;
-    description_head = d;
-  }
-  else {
-    /* Replace the existing description. */
-    description_replace_description (d, description, r->description_size);
-    free (d->description);
-    d->description = malloc (r->description_size);
-    memcpy (d->description, description, r->description_size);
-    d->description_size = r->description_size;
-  }
-
-  form_register_response (aid, REGISTRY_SUCCESS);
+  syslog (msg, strlen (msg));
 }
 
 static bool
@@ -258,116 +153,119 @@ match (registry_method_t method,
 }
 
 static void
-process_query (aid_t aid,
-	       bd_t bd,
-	       size_t bd_size)
+form_register_response (aid_t aid,
+			registry_error_t error)
 {
-  if (bd == -1) {
-    form_query_response (aid, REGISTRY_NO_BUFFER, 0);
-    return;
+  /* Create a response. */
+  size_t bd_size;
+  bd_t bd = write_registry_register_response (error, &bd_size);
+  buffer_queue_push (&rr_queue, aid, bd, bd_size);
+}
+
+static void
+form_query_response (aid_t aid,
+		     registry_error_t error,
+		     registry_method_t method)
+{
+  /* Create a response. */
+  registry_query_response_t qr;
+  bd_t bd = registry_query_response_init (&qr, error, method);
+  size_t bd_size = registry_query_response_bd_size (&qr);
+
+  buffer_queue_push (&qr_queue, aid, bd, bd_size);
+}
+
+static void
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size);
+
+/* register_request
+   ----------------
+   Receive a registration request.
+
+   Post: The end of the registration response queue will contain a response to the query.
+         If the registration is successful, we will be subscribed to the automaton.
+ */
+BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "", register_request, aid_t aid, bd_t bd, size_t bd_size)
+{
+  ssyslog ("registry: register_request\n");
+  initialize ();
+
+  registry_method_t method;
+  const void* description;
+  size_t size;
+
+  if (read_registry_register_request (bd, bd_size, &method, &description, &size) == -1) {
+    form_register_response (aid, REGISTRY_BAD_REQUEST);
+    end_action (false, bd, bd_size);
   }
 
-  buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
-    form_query_response (aid, REGISTRY_NO_MAP, 0);
-    return;
+  /* Check that no description is equal to the given description. */
+  description_t* d;
+  for (d = description_head; d != 0; d = d->next) {
+    if (d->description_size == size &&
+	memcmp (d->description, description, size) == 0) {
+      /* Found a description that is equal. */
+      break;
+    }
   }
-  
-  const registry_query_request_t* q = buffer_file_readp (&file, sizeof (registry_query_request_t));
-  if (q == 0) {
-    form_query_response (aid, REGISTRY_BAD_REQUEST, 0);
-    return;
-  }
-  const void* specification = buffer_file_readp (&file, q->specification_size);
-  if (specification == 0) {
-    form_query_response (aid, REGISTRY_BAD_REQUEST, q->method);
-    return;
+  if (d != 0) {
+    form_register_response (aid, REGISTRY_NOT_UNIQUE);
+    end_action (false, bd, bd_size);
   }
 
   /* Inspect the method. */
-  switch (q->method) {
+  switch (method) {
   case REGISTRY_STRING_EQUAL:
     /* Okay. */
     break;
   default:
-    form_query_response (aid, REGISTRY_UNKNOWN_METHOD, q->method);
-    return;
+    form_register_response (aid, REGISTRY_UNKNOWN_METHOD);
+    end_action (false, bd, bd_size);
     break;
   }
 
-  size_t answer_bd_size = size_to_pages (sizeof (registry_query_response_t));
-  bd_t answer_bd = buffer_create (answer_bd_size);
-  buffer_file_t answer;
-  buffer_file_open (&answer, answer_bd, answer_bd_size, true);
-
-  /* Skip over the header. */
-  buffer_file_seek (&answer, sizeof (registry_query_response_t), BUFFER_FILE_SET);
-
-  size_t count = 0;
-  description_t* d;
+  /* Insert a new description or replace an existing description. */
   for (d = description_head; d != 0; d = d->next) {
-    if (d->method == q->method &&
-	match (d->method, d->description, d->description_size, specification, q->specification_size)) {
-      /* Write a match. */
-      registry_query_result_t result;
-      result.aid = d->aid;
-      result.description_size = d->description_size;
-      buffer_file_write (&answer, &result, sizeof (registry_query_result_t));
-      buffer_file_write (&answer, d->description, d->description_size);
-      ++count;
+    if (d->aid == aid &&
+	d->method == method) {
+      /* Found a description for this automaton and method. */
+      break;
     }
   }
-
-  /* Write the header. */
-  buffer_file_seek (&answer, 0, BUFFER_FILE_SET);
-  
-  registry_query_response_t response;
-  response.error = REGISTRY_SUCCESS;
-  response.method = q->method;
-  response.count = count;
-  buffer_file_write (&answer, &response, sizeof (registry_query_response_t));
-
-  buffer_queue_push (&qr_queue, aid, answer_bd, buffer_file_size (&answer));
-}
-
-static void
-schedule (void);
-
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
-{
-  {
-    const char* s = "registry: init\n";
-    syslog (s, strlen (s));
+  if (d == 0) {
+    /* Create a new description. */
+    d = create_description (aid, method, description, size);
+    d->next = description_head;
+    description_head = d;
+  }
+  else {
+    /* Replace the existing description. */
+    description_replace_description (d, description, size);
+    free (d->description);
+    d->description = malloc (size);
+    memcpy (d->description, description, size);
+    d->description_size = size;
   }
 
-  initialize ();
-  schedule ();
-  buffer_destroy (bd);
-  scheduler_finish (false, -1);
-}
-
-BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "", register_request, aid_t aid, bd_t bd, size_t bd_size)
-{
-  {
-    const char* s = "registry: register_request\n";
-    syslog (s, strlen (s));
-  }
-
-  initialize ();
+  /* This must succeed as they are bound to this input. */
   subscribe_destroyed (aid, REGISTRY_DESTROYED_NO);
-  process_register (aid, bd, bd_size);
-  buffer_destroy (bd);
-  schedule ();
-  scheduler_finish (false, -1);
+  form_register_response (aid, REGISTRY_SUCCESS);
+
+  end_action (false, bd, bd_size);
 }
 
+/* register_response
+   -----------------
+   Relay the result of registration to a user.
+
+   Pre:  the register response queue contains a response for the given automaton
+   Post: the first response in the query response queue is removed and returned
+ */
 BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, "", register_response, aid_t aid, size_t bc)
 {
-  {
-    const char* s = "registry: register_response\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("registry: register_response\n");
   initialize ();
   scheduler_remove (REGISTRY_REGISTER_RESPONSE_NO, aid);
 
@@ -379,40 +277,72 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
     bd_t bd = buffer_queue_item_bd (item);
     size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&rr_queue, item);
-
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    end_action (true, bd, bd_size);
   }
   else {
     /* Did not find a response. */
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
 }
 
+/* query_request
+   -------------
+   Receive a query.
+
+   Post: the end of the query response queue will contain a response to the query
+ */
 BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "", query_request, aid_t aid, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "registry: query_request\n";
-    syslog (s, strlen (s));
+  ssyslog ("registry: query_request\n");
+  initialize ();
+
+  registry_method_t method;
+  const void* specification;
+  size_t size;
+
+  if (read_registry_query_request (bd, bd_size, &method, &specification, &size) == -1) {
+    form_query_response (aid, REGISTRY_BAD_REQUEST, 0);
+    end_action (false, bd, bd_size);
   }
 
-  initialize ();
-  process_query (aid, bd, bd_size);
-  buffer_destroy (bd);
-  schedule ();
-  scheduler_finish (false, -1);
+  /* Inspect the method. */
+  switch (method) {
+  case REGISTRY_STRING_EQUAL:
+    /* Okay. */
+    break;
+  default:
+    form_query_response (aid, REGISTRY_UNKNOWN_METHOD, method);
+    return;
+    break;
+  }
+
+  registry_query_response_t r;
+  bd_t answer_bd = registry_query_response_init (&r, REGISTRY_SUCCESS, method);
+
+  description_t* d;
+  for (d = description_head; d != 0; d = d->next) {
+    if (d->method == method &&
+	match (d->method, d->description, d->description_size, specification, size)) {
+      /* Write a match. */
+      registry_query_response_append (&r, d->aid, d->description, d->description_size);
+    }
+  }
+
+  buffer_queue_push (&qr_queue, aid, answer_bd, registry_query_response_bd_size (&r));
+
+  end_action (false, bd, bd_size);
 }
 
+/* query_response
+   --------------
+   Relay the result of a query to a user.
+
+   Pre:  the query response queue contains a response for the given automaton
+   Post: the first response in the query response queue is removed and returned
+ */
 BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, "", query_response, aid_t aid, size_t bc)
 {
-  {
-    const char* s = "registry: query_response\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("registry: query_response\n");
   initialize ();
   scheduler_remove (REGISTRY_QUERY_RESPONSE_NO, aid);
 
@@ -424,26 +354,24 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONS
     bd_t bd = buffer_queue_item_bd (item);
     size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&qr_queue, item);
-
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    end_action (true, bd, bd_size);
   }
   else {
     /* Did not find a response. */
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
 }
 
+/* destroyed
+   ---------
+   An automaton that has registered has been destroyed.
+   Purge the automaton from the registry.
+
+   Post: the list of descriptions contains no descriptions for the given aid
+ */
 BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "registry: destroyed\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("registry: destroyed\n");
   initialize ();
 
   /* The automaton corresponding to aid has been destroyed.
@@ -460,11 +388,18 @@ BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bd
     }
   }
 
-  buffer_destroy (bd);
-  schedule ();
-  scheduler_finish (false, -1);
+  end_action (false, bd, bd_size);
 }
 
+/* destroy_buffers
+   ---------------
+   Destroys all of the buffers in destroy_queue.
+   This is useful for output actions that need to destroy the buffer *after* the output has fired.
+   To schedule a buffer for destruction, just add it to destroy_queue.
+
+   Pre:  Destroy queue is not empty.
+   Post: Destroy queue is empty.
+ */
 static bool
 destroy_buffers_precondition (void)
 {
@@ -473,11 +408,7 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  {
-    const char* s = "registry: destroy_buffers\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("registry: destroy_buffers\n");
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
   if (destroy_buffers_precondition ()) {
@@ -487,13 +418,23 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
       buffer_queue_pop (&destroy_queue);
     }
   }
-  schedule ();
-  scheduler_finish (false, -1);
+
+  end_action (false, -1, 0);
 }
 
+/* end_action is a helper function for terminating actions.
+   If the buffer is not -1, it schedules it to be destroyed.
+   end_action schedules local actions and calls scheduler_finish to finish the action.
+*/
 static void
-schedule (void)
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size)
 {
+  if (bd != -1) {
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
+  }
+
   if (!buffer_queue_empty (&rr_queue)) {
     scheduler_add (REGISTRY_REGISTER_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&rr_queue)));
   }
@@ -503,4 +444,6 @@ schedule (void)
   if (destroy_buffers_precondition ()) {
     scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
+
+  scheduler_finish (output_fired, bd);
 }

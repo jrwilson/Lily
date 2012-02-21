@@ -80,6 +80,22 @@ buffer_file_seek (buffer_file_t* bf,
 }
 
 int
+buffer_file_read (buffer_file_t* bf,
+		  void* ptr,
+		  size_t size)
+{
+  int new_position = bf->position + size;
+  if (new_position < bf->position) {
+    return -1;
+  }
+
+  memcpy (ptr, bf->ptr + bf->position, size);
+  bf->position = new_position;
+
+  return 0;
+}
+
+int
 buffer_file_write (buffer_file_t* bf,
 		   const void* ptr,
 		   size_t size)

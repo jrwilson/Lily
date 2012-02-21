@@ -71,7 +71,7 @@ mount_handler (void* data,
 	       size_t bd_size)
 {
   vfs_error_t error = VFS_SUCCESS;
-  if (mount_response (bd, bd_size, &error) == -1) {
+  if (vfs_mount_response (bd, bd_size, &error) == -1) {
     ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
     exit ();
   }
@@ -199,7 +199,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
 
   /* Mount tmpfs on ROOT_PATH. */
   size_t mount_bd_size = 0;
-  bd_t mount_bd = mount_request (tmpfs, ROOT_PATH, &mount_bd_size);
+  bd_t mount_bd = vfs_mount_request (tmpfs, ROOT_PATH, &mount_bd_size);
   rr_queue_push (&vfs_queue, mount_bd, mount_bd_size, mount_handler, 0);
 
   /* Create the init automaton. */

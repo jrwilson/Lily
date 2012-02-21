@@ -16,10 +16,10 @@ boot_data : $(BOOT_PROGRAMS)
 	cp -t init_fs $^
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
-registry : registry.o
+registry : registry.o registry_msg.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
-vfs : vfs.o
+vfs : vfs.o registry_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 tmpfs : tmpfs.o cpio.o
