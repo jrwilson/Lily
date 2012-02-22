@@ -13,26 +13,47 @@
 #define VFS_REQUEST_NAME "request"
 #define VFS_RESPONSE_NAME "response"
 
+/* Request types. */
+typedef enum {
+  VFS_UNKNOWN,
+  VFS_MOUNT,
+} vfs_type_t;
+
 /* Result codes. */
 typedef enum {
   VFS_SUCCESS,
-  VFS_NO_BUFFER,
-  VFS_NO_MAP,
   VFS_BAD_REQUEST,
+  VFS_BAD_REQUEST_TYPE,
   VFS_BAD_PATH,
 } vfs_error_t;
 
-/* Create a mount request. */
-bd_t
-vfs_mount_request (aid_t aid,
-		   const char* path,
-		   size_t* bd_size);
-
-/* Parse a mount response. */
 int
-vfs_mount_response (bd_t bd,
-		    size_t bd_size,
-		    vfs_error_t* error);
+read_vfs_request_type (bd_t bd,
+		       size_t bd_size,
+		       vfs_type_t* type);
+
+bd_t
+write_vfs_response (vfs_type_t type,
+		    vfs_error_t error,
+		    size_t* bd_size);
+
+int
+read_vfs_response (bd_t bd,
+		   size_t bd_size,
+		   vfs_type_t* type,
+		   vfs_error_t* error);
+
+bd_t
+write_vfs_mount_request (aid_t aid,
+			 const char* path,
+			 size_t* bd_size);
+
+int
+read_vfs_mount_request (bd_t bd,
+			size_t bd_size,
+			aid_t* aid,
+			const char** path,
+			size_t* path_size);
 
 /*
   File System Section

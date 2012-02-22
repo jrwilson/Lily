@@ -3,10 +3,9 @@
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <buffer_queue.h>
-#include <rr_queue.h>
 #include <description.h>
 #include "cpio.h"
-#include "vfs_user.h"
+#include "vfs_msg.h"
 
 /*
   The Boot Automaton
@@ -36,8 +35,9 @@ static bool initialized = false;
 /* File containing the init automaton. */
 static cpio_file_t* init_file = 0;
 
-/* Queue for interacting with the vfs. */
-static rr_queue_t vfs_queue;
+/* Buffer containing the mount command. */
+static bd_t mount_bd = -1;
+static size_t mount_bd_size;
 
 /* Queue of buffers that need to be destroyed. */
 static buffer_queue_t destroy_queue;
@@ -53,7 +53,6 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    rr_queue_init (&vfs_queue);
     buffer_queue_init (&destroy_queue);
   }
 }
@@ -62,34 +61,6 @@ static void
 ssyslog (const char* msg)
 {
   syslog (msg, strlen (msg));
-}
-
-static void
-mount_handler (void* data,
-	       int param,
-	       bd_t bd,
-	       size_t bd_size)
-{
-  vfs_error_t error = VFS_SUCCESS;
-  if (vfs_mount_response (bd, bd_size, &error) == -1) {
-    ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
-    exit ();
-  }
-
-  if (error != VFS_SUCCESS) {
-    ssyslog ("boot_automaton: error: mounting root file system failed\n");
-    exit ();
-  }
-
-  /* Now that the root file system is mounted, create the init automaton. */
-  aid_t init = create (init_file->bd, true, -1);
-  cpio_file_destroy (init_file);
-  if (init == -1) {
-    ssyslog ("boot_automaton: error: Could not create init\n");
-    exit ();
-  }
-
-  end_action (false, bd, bd_size);
 }
 
 /* init
@@ -198,9 +169,8 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
   }
 
   /* Mount tmpfs on ROOT_PATH. */
-  size_t mount_bd_size = 0;
-  bd_t mount_bd = vfs_mount_request (tmpfs, ROOT_PATH, &mount_bd_size);
-  rr_queue_push (&vfs_queue, mount_bd, mount_bd_size, mount_handler, 0);
+  mount_bd_size = 0;
+  mount_bd = write_vfs_mount_request (tmpfs, ROOT_PATH, &mount_bd_size);
 
   /* Create the init automaton. */
   if (init_file == 0) {
@@ -215,13 +185,13 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
    -----------
    Sent a request to mount tmpfs as the root file system of vfs.
 
-   Pre:  the vfs_queue is not empty
-   Post: the vfs_queue is shifted once
+   Pre:  mount_bd != -1
+   Post: mount_bd == -1
  */
 static bool
 vfs_request_precondition (void)
 {
-  return !rr_queue_request_empty (&vfs_queue);
+  return mount_bd != -1;
 }
 
 BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_t bc)
@@ -231,10 +201,11 @@ BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_
   
   if (vfs_request_precondition ()) {
     ssyslog ("boot_automaton: vfs_request\n");
-    const rr_queue_item_t* item = rr_queue_request_front (&vfs_queue);
-    bd_t bd = rr_queue_item_bd (item);
-    size_t bd_size = rr_queue_item_size (item);
-    rr_queue_shift (&vfs_queue);
+    bd_t bd = mount_bd;
+    size_t bd_size = mount_bd_size;
+
+    mount_bd = -1;
+    mount_bd_size = 0;
 
     end_action (true, bd, bd_size);
   }
@@ -247,26 +218,31 @@ BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_
    ------------
    Receive a response from the vfs_automaton.
 
-   Post: the vfs_queue is popped once
+   Post: exit on error, otherwise, create the init automaton
  */
 BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bd, size_t bd_size)
 {
   ssyslog ("boot_automaton: vfs_response\n");
   initialize ();
 
-  if (rr_queue_handler_empty (&vfs_queue)) {
-    /* The vfs violated the protocol by producing a response without a request. */
-    ssyslog ("boot_automaton: error: Spurious response from the vfs\n");
+  vfs_type_t type;
+  vfs_error_t error;
+  if (read_vfs_response (bd, bd_size, &type, &error) == -1) {
+    ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
     exit ();
   }
 
-  const rr_queue_item_t* item = rr_queue_handler_front (&vfs_queue);
-  void (*handler) (void*, int, bd_t, size_t) = rr_queue_item_handler (item);
-  void* data = rr_queue_item_data (item);
-  rr_queue_pop (&vfs_queue);
+  if (type != VFS_MOUNT  || error != VFS_SUCCESS) {
+    ssyslog ("boot_automaton: error: mounting root file system failed\n");
+    exit ();
+  }
 
-  if (handler != 0) {
-    handler (data, param, bd, bd_size);
+  /* Now that the root file system is mounted, create the init automaton. */
+  aid_t init = create (init_file->bd, true, -1);
+  cpio_file_destroy (init_file);
+  if (init == -1) {
+    ssyslog ("boot_automaton: error: Could not create init\n");
+    exit ();
   }
 
   end_action (false, bd, bd_size);

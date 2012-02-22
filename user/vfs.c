@@ -1,5 +1,4 @@
-#include "vfs_user.h"
-#include "vfs_priv.h"
+#include "vfs_msg.h"
 #include <automaton.h>
 #include <io.h>
 #include <string.h>
@@ -12,7 +11,7 @@
 /*
   VFS
   ===
-nn  The virtual file system presents a unified hierarchical namespace for managing files.
+  The virtual file system presents a unified hierarchical namespace for managing files.
   The VFS translates high-level requests from clients into low-level file-system operations.
   
   Client 1              File system A
@@ -22,59 +21,16 @@ nn  The virtual file system presents a unified hierarchical namespace for managi
   
   Implementation
   --------------
-  The implementation is based around four queues called the client request queue, the client response queue, the file system request queue, and the file system response queue.
-  The core algorithm takes items from the client request queue and file system response queue and puts items on the client response queue and file system request queue.
-  client requests            file system requests
-                   Processor
-  client responses           file system responses
-
-  Assume that a client request Q has a direct mapping to the file system request Q'.
-  Suppose also that the responses are R and R', respectively.
-  If no other requests are made, the operation of the system resembles:
-
-  Start empty:
-  (empty)           (empty)             
-          Processor
-  (empty)           (empty)              
-
-  Client makes a request:
-  Q                 (empty)             
-          Processor
-  (empty)           (empty)              
-
-  Request is translated to file system operation (AA):
-  Q                 Q'             
-          Processor
-  (empty)           (empty)              
-
-  File system request sent (BB):
-  Q                 (empty)
-          Processor
-  (empty)           (empty)              
-
-  File system response received (CC):
-  Q                 (empty)
-          Processor
-  (empty)           R'
-
-  A client response is generated and the request is consumed:
-  (empty)           (empty)
-          Processor
-  R                 (empty)
-
-  The client request is sent:
-  (empty)           (empty)
-          Processor
-  (empty)           (empty)
-
-  Obviously, there is not always a one-to-one mapping between client requests and file system requests.
-  In this case, the sequence AA-BB-CC can be repeated as many times as are necessary to fulfill the request.
+  The current implementation is a simple queue processor.
+  Client requests are placed on a queue and processed in FIFO order.
+  Client responses are placed on a queue and processed in FIFO order per client.
+  The core piece is the logic that translates client requests into file system requests.
 
   This implementation is not very efficient as it serializes everything.
   Performance can be increased by exploiting situations where client requests are independent and the fact that file system are independent.
   Thus, instead of having one pair of queues for client requests, one could have a queue for each client.
-  Similarly, instead of having one pair of queues for file system requests, one could have a queue for each file system.
-    
+  Similar optimizations apply for the file systems.
+
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
 */
@@ -86,46 +42,63 @@ nn  The virtual file system presents a unified hierarchical namespace for managi
 #define VFS_FS_REQUEST_NO 5
 #define VFS_FS_RESPONSE_NO 6
 #define DESTROY_BUFFERS_NO 7
-#define LOAD_NO 8
+#define DECODE_NO 8
 
 #define DESCRIPTION "vfs"
+
+/* A virtual inode. */
+typedef struct {
+  aid_t aid;	/* The automaton holding this file system. */
+  size_t inode;	/* The inode in that file system. */
+} vnode_t;
+
+typedef struct mount_table_item mount_table_item_t;
+struct mount_table_item {
+  vnode_t a;
+  vnode_t b;
+  mount_table_item_t* next;
+};
 
 /* Initialization flag. */
 static bool initialized = false;
 
-/* State machine for registration. */
-typedef enum {
-  START,
-  REGISTER,
-  SENT,
-  DONE,
-} register_state_t;
-static register_state_t register_state = START;
+/* Register message. */
+static bd_t register_bd = -1;
+static size_t register_bd_size = 0;
 
 /* Queue for client requests. */
 static buffer_queue_t client_request_queue;
 
-/* Queue for file system requests. */
-static buffer_queue_t file_system_request_queue;
-
-/* Queue for file system responses. */
-static buffer_queue_t file_system_response_queue;
-
 /* Queue for client responses. */
 static buffer_queue_t client_response_queue;
+
+/* Variables for a message going to a file system. */
+static aid_t fs_aid = -1;
+static bd_t fs_bd = -1;
+static size_t fs_bd_size = 0;
 
 /* Queue of buffers to destroy. */
 static buffer_queue_t destroy_queue;
 
+/* Table to translate vnodes based on mounting. */
+static mount_table_item_t* mount_table_head = 0;
+
 /* State machine for client requests. */
-typedef enum {
-  EMPTY,
-  FULL,
-} load_state_t;
-static load_state_t load_state = EMPTY;
-  
+static aid_t client_request_aid = -1;
+static bd_t client_request_bd = -1;
+static size_t client_request_bd_size = 0;
+static vfs_type_t client_request_type;
+static aid_t client_request_aid_arg;
+static const char* client_request_path;
+static size_t client_request_path_size;
+
+static vnode_t path_lookup_current;
+static bool path_lookup_done;
+
 static void
-schedule (void);
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size);
 
 static void
 initialize (void)
@@ -134,29 +107,46 @@ initialize (void)
     initialized = true;
 
     buffer_queue_init (&client_request_queue);
-    buffer_queue_init (&file_system_request_queue);
-    buffer_queue_init (&file_system_response_queue);
     buffer_queue_init (&client_response_queue);
     buffer_queue_init (&destroy_queue);
   }
 }
 
 static void
-registerf (aid_t vfs_aid)
+ssyslog (const char* msg)
 {
+  syslog (msg, strlen (msg));
+}
+
+static bool
+vnode_equal (const vnode_t* x,
+	     const vnode_t* y)
+{
+  return x->aid == y->aid && x->inode == y->inode;
+}
+
+/* init
+   ----
+   Binds to the registry and produces a registration message.
+   
+   Post: register_bd != -1
+ */
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t vfs_aid, bd_t bd, size_t bd_size)
+{
+  ssyslog ("vfs: init\n");
+  initialize ();
+
   /* Look up the registry. */
   aid_t registry_aid = get_registry ();
   if (registry_aid == -1) {
-    const char* s = "vfs: warning: no registry\n";
-    syslog (s, strlen (s));
-    return;
+    ssyslog ("vfs: warning: no registry\n");
+    end_action (false, bd, bd_size);
   }
 
   description_t desc;
   if (description_init (&desc, registry_aid) == -1) {
-    const char* s = "vfs: warning: no registry description\n";
-    syslog (s, strlen (s));
-    return;
+    ssyslog ("vfs: warning: no registry description\n");
+    end_action (false, bd, bd_size);
   }
 
   const ano_t register_request = description_name_to_number (&desc, REGISTRY_REGISTER_REQUEST_NAME);
@@ -164,70 +154,62 @@ registerf (aid_t vfs_aid)
 
   description_fini (&desc);
 
+  /* Bind to the response first so they don't get lost. */
   if (bind (registry_aid, register_response, 0, vfs_aid, VFS_REGISTER_RESPONSE_NO, 0) == -1 ||
       bind (vfs_aid, VFS_REGISTER_REQUEST_NO, 0, registry_aid, register_request, 0) == -1) {
-    const char* s = "vfs: warning: couldn't bind to registry\n";
-    syslog (s, strlen (s));
+    ssyslog ("vfs: warning: couldn't bind to registry\n");
+    end_action (false, bd, bd_size);
   }
-  else {
-    register_state = REGISTER;
-  }
+
+  register_bd_size = 0;
+  register_bd = write_registry_register_request (REGISTRY_STRING_EQUAL, DESCRIPTION, strlen (DESCRIPTION) + 1, &register_bd_size);
+
+  end_action (false, bd, bd_size);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t vfs_aid, bd_t bd, size_t bd_size)
-{
-  {
-    const char* s = "vfs: init\n";
-    syslog (s, strlen (s));
-  }
+/* register_request
+   ----------------
+   Send the registration message to the registry.
 
-  initialize ();
-  registerf (vfs_aid);
-  buffer_destroy (bd);
-  schedule ();
-  scheduler_finish (false, -1);
-}
-
+   Pre:  register_bd != -1
+   Post: register_bd == -1
+ */
 static bool
 register_request_precondition (void)
 {
-  return register_state == REGISTER;
+  return register_bd != -1;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, int param, size_t bc)
 {
-  {
-    const char* s = "vfs: register_request\n";
-    syslog (s, strlen (s));
-  }
+  ssyslog ("vfs: register_request\n");
 
   initialize ();
   scheduler_remove (VFS_REGISTER_REQUEST_NO, param);
 
   if (register_request_precondition ()) {
-    size_t bd_size = 0;
-    bd_t bd = write_registry_register_request (REGISTRY_STRING_EQUAL, DESCRIPTION, strlen (DESCRIPTION) + 1, &bd_size);
+    bd_t bd = register_bd;
+    size_t bd_size = register_bd_size;
 
-    register_state = SENT;
+    register_bd = -1;
+    register_bd_size = 0;
 
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    end_action (true, bd, bd_size);
   }
   else {
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
 }
 
+/* register_response
+   -----------------
+   Receive a response to the registration message.
+
+   Post: none
+ */
 BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, int param, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "vfs: register_response\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("vfs: register_response\n");
   initialize ();
 
   registry_error_t error = REGISTRY_SUCCESS;
@@ -238,41 +220,42 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
       break;
     default:
       {
-	const char* s = "vfs: warning: failed to register\n";
-	syslog (s, strlen (s));
+	ssyslog ("vfs: warning: failed to register\n");
       }
       break;
     }
   }
   else {
-    const char* s = "vfs: warning: couldn't map registry response\n";
-    syslog (s, strlen (s));
+    ssyslog ("vfs: warning: couldn't map registry response\n");
   }
 
-  schedule ();
-  scheduler_finish (false, -1);
+  end_action (false, bd, bd_size);
 }
 
+/* client_request
+   --------------
+   Receive a request from a client.
+
+   Post: the request is at the end of the client_request_queue
+ */
 BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "vfs: client_request\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("vfs: client_request\n");
   initialize ();
   buffer_queue_push (&client_request_queue, aid, bd, bd_size);
-  schedule ();
-  scheduler_finish (false, -1);
+  end_action (false, -1, 0);
 }
 
+/* client_response
+   ---------------
+   Send a response to a client.
+
+   Pre:  The client indicated by aid has a response in the queue
+   Post: The first response for the client indicated by aid is removed from the queue
+ */
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid, size_t bc)
 {
-  {
-    const char* s = "vfs: client_response\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("vfs: client_response\n");
   initialize ();
   scheduler_remove (VFS_RESPONSE_NO, aid);
 
@@ -285,62 +268,70 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
     size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&client_response_queue, item);
 
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    end_action (true, bd, bd_size);
   }
   else {
     /* Did not find a response. */
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
+}
+
+/* file_system_request
+   -------------------
+   Send a request to a file system.
+
+   Pre:  fs_aid != -1 && fs_bd != -1 && fs_bd_size != 0
+   Post: fs_aid == -1 && fs_bd == -1 && fs_bd_size == 0
+ */
+static bool
+file_system_request_precondition (aid_t aid)
+{
+  return fs_aid == aid && fs_aid != -1 && fs_bd != -1 && fs_bd_size != 0;
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid, size_t bc)
 {
-  {
-    const char* s = "vfs: file_system_request\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("vfs: file_system_request\n");
   initialize ();
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
 
-  /* Find in the queue. */
-  buffer_queue_item_t* item = buffer_queue_find (&file_system_request_queue, aid);
+  if (file_system_request_precondition (aid)) {
+    bd_t bd = fs_bd;
+    size_t bd_size = fs_bd_size;
 
-  if (item != 0) {
-    /* Found a request.  Execute. */
-    bd_t bd = buffer_queue_item_bd (item);
-    size_t bd_size = buffer_queue_item_size (item);
-    buffer_queue_erase (&file_system_request_queue, item);
+    fs_aid = -1;
+    fs_bd = -1;
+    fs_bd_size = 0;
 
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    end_action (true, bd, bd_size);
   }
   else {
     /* Did not find a request. */
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
 }
 
+/* file_system_response
+   --------------------
+   Process a response from a file system.
+
+   Post: 
+ */
 BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "vfs: file_system_response\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("vfs: file_system_response\n");
   initialize ();
-  buffer_queue_push (&file_system_response_queue, aid, bd, bd_size);
-  schedule ();
-  scheduler_finish (false, -1);
+  /* TODO */
+  end_action (false, bd, bd_size);
 }
 
+/* destroy_buffers
+   ---------------
+   Destroy buffers that have accumulated.  Useful for destroying a buffer after an output has produced it.
+
+   Pre:  destroy_queue is not empty
+   Post: destroy_queue is empty
+ */
 static bool
 destroy_buffers_precondition (void)
 {
@@ -349,11 +340,7 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  {
-    const char* s = "vfs: destroy_buffers\n";
-    syslog (s, strlen (s));
-  }
-
+  ssyslog ("vfs: destroy_buffers\n");
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
   if (destroy_buffers_precondition ()) {
@@ -363,153 +350,183 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
       buffer_queue_pop (&destroy_queue);
     }
   }
-  schedule ();
-  scheduler_finish (false, -1);
+
+  end_action (false, -1, 0);
 }
 
 static void
-form_response (aid_t aid,
-	       vfs_type_t type,
+form_response (vfs_type_t type,
 	       vfs_error_t error)
 {
   /* Create a response. */
-  size_t bd_size = size_to_pages (sizeof (vfs_response_t));
-  bd_t bd = buffer_create (bd_size);
-  vfs_response_t* rr = buffer_map (bd);
-  rr->type = type;
-  rr->error = error;
-  /* We don't unmap it because we are going to destroy it when we respond. */
-  buffer_queue_push (&client_response_queue, aid, bd, bd_size);
+  size_t bd_size;
+  bd_t bd = write_vfs_response (type, error, &bd_size);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, bd_size);
 }
 
 static void
-process_load2 (void)
+reset_client_state (void)
 {
-  /* /\* Map in the request. *\/ */
-  /* void* ptr= buffer_map (request_bd); */
-  /* if (ptr == 0) { */
-  /*   form_response (aid, VFS_UNKNOWN, VFS_NO_MAP); */
-  /*   return; */
-  /* } */
-
-  /* buffer_file_t file; */
-  /* buffer_file_open (&file, bd, bd_size, ptr, false); */
-
-  /* const vfs_request_t* r = buffer_file_readp (&file, sizeof (vfs_request_t)); */
-  /* if (r == 0) { */
-  /*   form_response (aid, VFS_UNKNOWN, VFS_BAD_REQUEST); */
-  /*   return; */
-  /* } */
-
-  /* switch (r->type) { */
-  /* case VFS_MOUNT: */
-  /*   { */
-  /*     if (r->u.mount.path_size == 0) { */
-  /* 	/\* No path. *\/ */
-  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-  /* 	return; */
-  /*     } */
-
-  /*     const char* path = buffer_file_readp (&file, r->u.mount.path_size); */
-  /*     if (path == 0) { */
-  /* 	/\* Path is too long or unreadable. *\/ */
-  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-  /* 	return; */
-  /*     } */
-
-  /*     if (path[0] != '/') { */
-  /* 	/\* Must be absolute. *\/ */
-  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-  /* 	return; */
-  /*     } */
-
-  /*     if (path[r->u.mount.path_size - 1] != 0) { */
-  /* 	/\* Path is not null terminated. *\/ */
-  /* 	form_response (aid, VFS_MOUNT, VFS_BAD_PATH); */
-  /* 	return; */
-  /*     } */
-
-  /*     /\* TODO *\/ */
-  /*     syslog (path, r->u.mount.path_size); */
-
-  /*     return; */
-  /*   } */
-  /*   break; */
-  /* default: */
-  /*   form_response (aid, VFS_UNKNOWN, VFS_BAD_REQUEST); */
-  /*   return; */
-  /* } */
+  client_request_aid = -1;
+  buffer_destroy (client_request_bd);
+  client_request_bd = -1;
+  client_request_bd_size = 0;
 }
 
-static void
-process_load (aid_t aid,
-	      bd_t bd,
-	      size_t bd_size)
-{
-  /* TODO */
-  if (bd == -1) {
-    form_response (aid, VFS_UNKNOWN, VFS_NO_BUFFER);
-    buffer_queue_pop (&client_request_queue);
-    return;
-  }
-
-  /* Create a buffer that contains the request. */
-  bd_t request_bd = buffer_copy (bd, 0, size_to_pages (sizeof (vfs_request_t)));
-  if (request_bd == -1) {
-    form_response (aid, VFS_UNKNOWN, VFS_NO_MAP);
-    buffer_queue_pop (&client_request_queue);
-    return;
-  }
-
-  process_load2 ();
-
-  buffer_destroy (request_bd);
-}
-
-/* This internal action begins the process of executing a client request. */
 static bool
-load_precondition (void)
+check_absolute_path (const char* path,
+		     size_t path_size)
 {
-  return load_state == EMPTY && !buffer_queue_empty (&client_request_queue);
-}
+  /* path_size includes the null-terminator. */
 
-BEGIN_INTERNAL (NO_PARAMETER, LOAD_NO, "", "", load, int param)
-{
-  {
-    const char* s = "vfs: load\n";
-    syslog (s, strlen (s));
+  if (path_size < 2) {
+    /* The smallest absolute path is "/".  This path is not big enough. */
+    return false;
   }
 
-  initialize ();
-  scheduler_remove (LOAD_NO, param);
-  if (load_precondition ()) {
-    load_state = FULL;
-    const buffer_queue_item_t* front = buffer_queue_front (&client_request_queue);
-    aid_t aid = buffer_queue_item_parameter (front);
-    bd_t bd = buffer_queue_item_bd (front);
-    size_t bd_size = buffer_queue_item_size (front);
-    process_load (aid, bd, bd_size);
+  if (path[0] != '/') {
+    /* Absolute path does not begin with /. */
+    return false;
   }
-  schedule ();
-  scheduler_finish (false, -1);
+
+  if (path[path_size - 1] != 0) {
+    /* The path is not null-terminated. */
+    return false;
+  }
+
+  if (strlen (path) + 1 != path_size) {
+    /* Contains a null character. */
+    return false;
+  }
+  
+  return true;
 }
 
 static void
-schedule (void)
+path_lookup_init (void)
 {
+  /* Start at the virtual root. */
+  path_lookup_current.aid = -1;
+  path_lookup_current.inode = 0;
+  path_lookup_done = false;
+}
+
+static void
+path_lookup_resume (void)
+{
+  if (!path_lookup_done) {
+    /* First, look for an entry in the mount table. */
+    mount_table_item_t* item;
+    for (item = mount_table_head; item != 0; item = item->next) {
+      if (vnode_equal (&item->a, &path_lookup_current)) {
+	/* Found an entry. Translate and recur. */
+	path_lookup_current = item->b;
+	path_lookup_resume ();
+	break;
+      }
+    }
+
+
+
+    ssyslog ("vfs:  ####\n");
+    syslog (client_request_path, client_request_path_size);
+  }
+  
+  /* TODO */
+}
+
+/* decode
+   ------
+   Load the internal state machine with a client request.
+
+   Pre:  the internal state machine is not loaded (client_request_bd == -1) and there is a request on the queue
+   Post: the internal state machine is loaded (client_request_bd != -1) and the request is removed from the queue
+ */
+static bool
+decode_precondition (void)
+{
+  return !buffer_queue_empty (&client_request_queue) && client_request_bd == -1;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
+{
+  ssyslog ("vfs: decode\n");
+  initialize ();
+  scheduler_remove (DECODE_NO, param);
+  if (decode_precondition ()) {
+    /* Get the request from the queue. */
+    const buffer_queue_item_t* front = buffer_queue_front (&client_request_queue);
+    client_request_aid = buffer_queue_item_parameter (front);
+    client_request_bd = buffer_queue_item_bd (front);
+    client_request_bd_size = buffer_queue_item_size (front);
+    buffer_queue_pop (&client_request_queue);
+
+    if (read_vfs_request_type (client_request_bd, client_request_bd_size, &client_request_type) == -1) {
+      form_response (VFS_UNKNOWN, VFS_BAD_REQUEST);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+
+    switch (client_request_type) {
+    case VFS_MOUNT:
+      {
+	if (read_vfs_mount_request (client_request_bd, client_request_bd_size, &client_request_aid_arg, &client_request_path, &client_request_path_size) == -1) {
+	  form_response (VFS_MOUNT, VFS_BAD_REQUEST);
+	  reset_client_state ();
+	  end_action (false, -1, 0);
+	}
+	
+	if (!check_absolute_path (client_request_path, client_request_path_size)) {
+	  form_response (VFS_MOUNT, VFS_BAD_PATH);
+	  reset_client_state ();
+	  end_action (false, -1, 0);
+	}
+
+	/*
+	  To mount, we must:
+	  1.  Traverse the existing virtual file system to find the vnode A indicated by the path.
+	  2.  Bind to the file system.  Let B be the vnode representing the root of its file system.
+	  3.  Insert an entry in the mount table that causes future path traversals to substitute A -> B.
+	 */
+
+	path_lookup_init ();
+	path_lookup_resume ();
+      }
+      break;
+    default:
+      form_response (client_request_type, VFS_BAD_REQUEST_TYPE);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+  }
+
+  end_action (false, -1, 0);
+}
+
+static void
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size)
+{
+  if (bd != -1) {
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
+  }
+
   if (register_request_precondition ()) {
     scheduler_add (VFS_REGISTER_REQUEST_NO, 0);
   }
   if (!buffer_queue_empty (&client_response_queue)) {
     scheduler_add (VFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&client_response_queue)));
   }
-  if (!buffer_queue_empty (&file_system_request_queue)) {
-    scheduler_add (VFS_FS_REQUEST_NO, buffer_queue_item_parameter (buffer_queue_front (&file_system_request_queue)));
+  if (file_system_request_precondition (fs_aid)) {
+    scheduler_add (VFS_FS_REQUEST_NO, fs_aid);
   }
   if (destroy_buffers_precondition ()) {
     scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
-  if (load_precondition ()) {
-    scheduler_add (LOAD_NO, 0);
+  if (decode_precondition ()) {
+    scheduler_add (DECODE_NO, 0);
   }
+
+  scheduler_finish (output_fired, bd);
 }

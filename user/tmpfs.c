@@ -6,7 +6,7 @@
 #include <buffer_file.h>
 #include <buffer_queue.h>
 #include "cpio.h"
-#include "vfs_user.h"
+#include "vfs_msg.h"
 
 /*
   Tmpfs
