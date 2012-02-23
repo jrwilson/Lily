@@ -60,9 +60,9 @@ typedef struct {
 } registry_query_response_t;
 
 bd_t
-registry_query_response_init (registry_query_response_t* r,
-			      registry_error_t error,
-			      registry_method_t method);
+registry_query_response_initw (registry_query_response_t* r,
+			       registry_error_t error,
+			       registry_method_t method);
 
 int
 registry_query_response_append (registry_query_response_t* r,
@@ -72,6 +72,20 @@ registry_query_response_append (registry_query_response_t* r,
 
 size_t
 registry_query_response_bd_size (const registry_query_response_t* r);
+
+int
+registry_query_response_initr (registry_query_response_t* r,
+			       bd_t bd,
+			       size_t bd_size,
+			       registry_error_t* error,
+			       registry_method_t* method,
+			       size_t* count);
+
+int
+registry_query_response_read (registry_query_response_t* r,
+			      aid_t* aid,
+			      const void** description,
+			      size_t* size);
 
 /* Action names. */
 #define REGISTRY_REGISTER_REQUEST_NAME "register_request"

@@ -46,8 +46,6 @@
 #define DECODE_NO 8
 #define MOUNT_NO 9
 
-#define DESCRIPTION "vfs"
-
 typedef enum {
   FILE,
   DIRECTORY,
@@ -191,7 +189,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
   }
 
   register_bd_size = 0;
-  register_bd = write_registry_register_request (REGISTRY_STRING_EQUAL, DESCRIPTION, strlen (DESCRIPTION) + 1, &register_bd_size);
+  register_bd = write_registry_register_request (REGISTRY_STRING_EQUAL, VFS_DESCRIPTION, VFS_DESCRIPTION_SIZE, &register_bd_size);
 
   end_action (false, bd, bd_size);
 }

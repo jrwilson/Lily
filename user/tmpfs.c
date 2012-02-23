@@ -42,9 +42,12 @@
   The third design introduces additional overhead to synchronize the request/response queues and the data queues.
   The problem is summarized by saying that the data cannot be placed on an outgoing queue until the corresponding request/response has been sent.
 
-  To make an informed decision, one needs estimates of the system call overhead for the first design which can be compared to the expected overhead of the second and third design.
-  Since I currently lack this information, I will go with the first design since it is easier.
-
+  I removed auto-mapping so that part of the discussion is no longer valid.
+  However, the control message vs. bulk data argument remains.
+  What we really want is a way to send two buffers at once:  one for the control message and one for the data.
+  Since this pattern seems generally applicable, I decided to change the kernel to pass two buffers instead of one when executing a output/input binding.
+  Thus, tmpfs and all other automata that move bulk data without processing it can be simplified.
+  
   Implementation Details
   ----------------------
   The main data structure is the inode.
@@ -52,11 +55,14 @@
   File inodes have a buffer.
   All inodes have a link to their parent, the first child, and their next sibling.
   This allows them to be organized into a tree structure.
-  Other organizations are possible, e.g., each nodes contains an array listing its children.
   The top-level inode is called the root.
 
-  The other important data structure is the inode list which is a vector that allows one to lookup an inode given its id.
+  The inode list is a vector that allows one to lookup an inode given its id.
   Thus, the first part of most requests will involve a table look-up to translate the given id into an inode.
+
+  The response queue is a queue of buffers that contain responses.
+  Currently, requests are processed immediately and the response placed on the queue.
+  An alternate strategy might use a request queue to buffer requests and an internal action that converts requests to responses.
   
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson

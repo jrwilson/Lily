@@ -151,7 +151,7 @@ read_registry_query_request (bd_t bd,
   }
 
   if (buffer_file_read (&file, method, sizeof (registry_method_t)) == -1 ||
-      buffer_file_read (&file, size, sizeof (size_t) == -1)) {
+      buffer_file_read (&file, size, sizeof (size_t)) == -1) {
     return -1;
   }
 
@@ -166,9 +166,9 @@ read_registry_query_request (bd_t bd,
 }
 
 bd_t
-registry_query_response_init (registry_query_response_t* r,
-			      registry_error_t error,
-			      registry_method_t method)
+registry_query_response_initw (registry_query_response_t* r,
+			       registry_error_t error,
+			       registry_method_t method)
 {
   size_t bd_sz = size_to_pages (sizeof (registry_error_t) + sizeof (registry_method_t) + sizeof (size_t));
   bd_t bd = buffer_create (bd_sz);
@@ -235,4 +235,46 @@ size_t
 registry_query_response_bd_size (const registry_query_response_t* r)
 {
   return buffer_file_size (&r->bf);
+}
+
+int
+registry_query_response_initr (registry_query_response_t* r,
+			       bd_t bd,
+			       size_t bd_size,
+			       registry_error_t* error,
+			       registry_method_t* method,
+			       size_t* count)
+{
+  if (buffer_file_open (&r->bf, bd, bd_size, false) == -1) {
+    return -1;
+  }
+
+  if (buffer_file_read (&r->bf, error, sizeof (registry_error_t)) == -1 ||
+      buffer_file_read (&r->bf, method, sizeof (registry_method_t)) == -1 ||
+      buffer_file_read (&r->bf, count, sizeof (registry_method_t)) == -1) {
+    return -1;
+  }
+
+  return 0;
+}
+
+int
+registry_query_response_read (registry_query_response_t* r,
+			      aid_t* aid,
+			      const void** description,
+			      size_t* size)
+{
+  if (buffer_file_read (&r->bf, aid, sizeof (aid_t)) == -1 ||
+      buffer_file_read (&r->bf, size, sizeof (size_t)) == -1) {
+    return -1;
+  }
+
+  const void* d = buffer_file_readp (&r->bf, *size);
+  if (d == 0) {
+    return -1;
+  }
+
+  *description = d;
+
+  return 0;
 }

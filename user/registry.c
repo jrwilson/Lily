@@ -169,7 +169,7 @@ form_query_response (aid_t aid,
 {
   /* Create a response. */
   registry_query_response_t qr;
-  bd_t bd = registry_query_response_init (&qr, error, method);
+  bd_t bd = registry_query_response_initw (&qr, error, method);
   size_t bd_size = registry_query_response_bd_size (&qr);
 
   buffer_queue_push (&qr_queue, aid, bd, bd_size);
@@ -318,7 +318,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_N
   }
 
   registry_query_response_t r;
-  bd_t answer_bd = registry_query_response_init (&r, REGISTRY_SUCCESS, method);
+  bd_t answer_bd = registry_query_response_initw (&r, REGISTRY_SUCCESS, method);
 
   description_t* d;
   for (d = description_head; d != 0; d = d->next) {

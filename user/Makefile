@@ -1,7 +1,7 @@
 CC=i586-pc-lily-gcc
-CFLAGS=-g -Wall -O2 -MD -std=c99
+CFLAGS=-Wall -O2 -MD -std=c99
 BOOT_PROGRAMS=registry vfs tmpfs init
-PROGRAMS=keyboard kb_us_104 shell terminal vga
+#PROGRAMS=keyboard kb_us_104 shell terminal vga
 TARGETS=boot_automaton boot_data
 
 .PHONY : all
@@ -10,11 +10,13 @@ all : $(TARGETS)
 boot_automaton : boot_automaton.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
-# $(PROGRAMS)
-boot_data : $(BOOT_PROGRAMS)
+boot_data : $(BOOT_PROGRAMS) hello.txt
 	mkdir -p init_fs
 	cp -t init_fs $^
 	(cd init_fs; find . | cpio -o -H newc) > $@
+
+hello.txt :
+	echo "Hello world!" > $@
 
 registry : registry.o registry_msg.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
@@ -25,8 +27,8 @@ vfs : vfs.o registry_msg.o vfs_msg.o
 tmpfs : tmpfs.o cpio.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
-init : init.o
-	$(CC) -o $@ $^
+init : init.o registry_msg.o
+	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 
 keyboard : keyboard.o
