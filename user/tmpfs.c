@@ -15,7 +15,7 @@
   Tmpfs is initialized with a cpio archive that contains the initial contents of the file system.
   Currently, only files and directories are supported.
 
-  Tmpfs is designed to work with a virtual file system.
+  Tmpfs is designed to work with a single virtual file system.
   All of the operations in tmpfs involve inodes which correspond to files, directories, etc.
   One reads and writes data by specifying the operation, the file's inode, and the data.
   One can traverse paths by specifying a directory's inode and the next element of the path to determine the next inode.
@@ -196,26 +196,26 @@ file_find_or_create (inode_t* parent,
 }
 
 static void
+ssyslog (const char* msg)
+{
+  syslog (msg, strlen (msg));
+}
+
+static void
 print (inode_t* node)
 {
   if (node != 0) {
     /* Print this node. */
     switch (node->type) {
     case FILE:
-      {
-	const char* s = "FILE ";
-	syslog (s, strlen (s));
-      }
+      ssyslog ("FILE ");
       break;
     case DIRECTORY:
-      {
-	const char* s = "DIRECTORY ";
-	syslog (s, strlen (s));
-      }
+      ssyslog ("DIRECTORY ");
       break;
     }
     syslog (node->name, node->name_size);
-    syslog ("\n", 1);
+    ssyslog ("\n");
 
     /* Print the children. */
     for (inode_t* child = node->first_child; child != 0; child = child->next_sibling) {
@@ -244,107 +244,32 @@ initialize (void)
   }
 }
 
-static void
-form_response (aid_t aid,
-	       vfs_fs_type_t type,
-	       vfs_fs_error_t error,
-	       bd_t request_bd)
-{
-  /* Create a response. */
-  size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t));
-  bd_t bd = buffer_create (bd_size);
-  vfs_fs_response_t* rr = buffer_map (bd);
-  rr->type = type;
-  rr->error = error;
-  /* We don't unmap it because we are going to destroy it when we respond. */
-  buffer_queue_push (&response_queue, aid, bd, bd_size);
+/* static void */
+/* form_response (vfs_fs_type_t type, */
+/* 	       vfs_fs_error_t error, */
+/* 	       bd_t request_bd) */
+/* { */
+/*   /\* Create a response. *\/ */
+/*   size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t)); */
+/*   bd_t bd = buffer_create (bd_size); */
+/*   vfs_fs_response_t* rr = buffer_map (bd); */
+/*   rr->type = type; */
+/*   rr->error = error; */
+/*   /\* We don't unmap it because we are going to destroy it when we respond. *\/ */
+/*   buffer_queue_push (&response_queue, 0, bd, bd_size); */
 
-  if (request_bd != -1) {
-    buffer_destroy (request_bd);
-  }
-}
-
-static void
-process_request (aid_t aid,
-		 bd_t bd,
-		 size_t bd_size)
-{
-  if (bd == -1) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_BUFFER, -1);
-    return;
-  }
-
-  /* Create a buffer that contains the request. */
-  size_t request_bd_size = size_to_pages (sizeof (vfs_fs_request_t));
-  bd_t request_bd = buffer_copy (bd, 0, request_bd_size);
-  if (request_bd == -1) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, -1);
-    return;
-  }
-
-  buffer_file_t file;
-  if (buffer_file_open (&file, request_bd, request_bd_size, false) == -1) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, request_bd);
-    return;
-  }
-
-  const vfs_fs_request_t* r = buffer_file_readp (&file, sizeof (vfs_fs_request_t));
-  if (r == 0) {
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd);
-    return;
-  }
-
-  switch (r->type) {
-  case VFS_FS_READ_FILE:
-    {
-      if (r->u.read_file.inode >= nodes_size) {
-	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd);
-	return;
-      }
-
-      inode_t* inode = nodes[r->u.read_file.inode];
-
-      if (inode == 0) {
-	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd);
-	return;
-      }
-
-      /* Create a response. */
-      size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t));
-      bd_t bd = buffer_create (bd_size);
-      vfs_fs_response_t* rr = buffer_map (bd);
-      rr->type = VFS_FS_READ_FILE;
-      rr->error = VFS_FS_SUCCESS;
-      rr->u.read_file.size = inode->size;
-      buffer_unmap (bd);
-      /* Append the file. */
-      bd_size += inode->bd_size;
-      buffer_append (bd, inode->bd, 0, inode->bd_size);
-
-      /* Enqueue the response. */
-      buffer_queue_push (&response_queue, aid, bd, bd_size);
-
-      buffer_destroy (request_bd);
-
-      return;
-    }
-    break;
-  default:
-    form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd);
-    return;
-  }
-}
+/*   if (request_bd != -1) { */
+/*     buffer_destroy (request_bd); */
+/*   } */
+/* } */
 
 static void
-schedule (void);
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size);
 
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "tmpfs: init\n";
-    syslog (s, strlen (s));
-  }
-
   initialize ();
 
   /* Parse the cpio archive looking for files that we need. */
@@ -393,54 +318,108 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
     print (root);
   }
 
-  buffer_destroy (bd);
-
-  schedule ();
-  scheduler_finish (false, -1);
+  end_action (false, bd, bd_size);
 }
 
-BEGIN_INPUT (AUTO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, aid_t aid, bd_t bd, size_t bd_size)
+BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bd, size_t bd_size)
 {
-  {
-    const char* s = "tmpfs: request\n";
-    syslog (s, strlen (s));
-  }
+  ssyslog ("tmpfs: request\n");
 
   initialize ();
-  process_request (aid, bd, bd_size);
-  buffer_destroy (bd);
-  schedule ();
-  scheduler_finish (false, -1);
+
+  /* TODO */
+
+  /* if (bd == -1) { */
+  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_BUFFER, -1); */
+  /*   return; */
+  /* } */
+
+  /* /\* Create a buffer that contains the request. *\/ */
+  /* size_t request_bd_size = size_to_pages (sizeof (vfs_fs_request_t)); */
+  /* bd_t request_bd = buffer_copy (bd, 0, request_bd_size); */
+  /* if (request_bd == -1) { */
+  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, -1); */
+  /*   return; */
+  /* } */
+
+  /* buffer_file_t file; */
+  /* if (buffer_file_open (&file, request_bd, request_bd_size, false) == -1) { */
+  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, request_bd); */
+  /*   return; */
+  /* } */
+
+  /* const vfs_fs_request_t* r = buffer_file_readp (&file, sizeof (vfs_fs_request_t)); */
+  /* if (r == 0) { */
+  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd); */
+  /*   return; */
+  /* } */
+
+  /* switch (r->type) { */
+  /* case VFS_FS_READ_FILE: */
+  /*   { */
+  /*     if (r->u.read_file.inode >= nodes_size) { */
+  /* 	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd); */
+  /* 	return; */
+  /*     } */
+
+  /*     inode_t* inode = nodes[r->u.read_file.inode]; */
+
+  /*     if (inode == 0) { */
+  /* 	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd); */
+  /* 	return; */
+  /*     } */
+
+  /*     /\* Create a response. *\/ */
+  /*     size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t)); */
+  /*     bd_t bd = buffer_create (bd_size); */
+  /*     vfs_fs_response_t* rr = buffer_map (bd); */
+  /*     rr->type = VFS_FS_READ_FILE; */
+  /*     rr->error = VFS_FS_SUCCESS; */
+  /*     rr->u.read_file.size = inode->size; */
+  /*     buffer_unmap (bd); */
+  /*     /\* Append the file. *\/ */
+  /*     bd_size += inode->bd_size; */
+  /*     buffer_append (bd, inode->bd, 0, inode->bd_size); */
+
+  /*     /\* Enqueue the response. *\/ */
+  /*     buffer_queue_push (&response_queue, aid, bd, bd_size); */
+
+  /*     buffer_destroy (request_bd); */
+
+  /*     return; */
+  /*   } */
+  /*   break; */
+  /* default: */
+  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd); */
+  /*   return; */
+  /* } */
+
+  end_action (false, bd, bd_size);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, aid_t aid, size_t bc)
+static bool
+response_precondition (void)
 {
-  {
-    const char* s = "tmpfs: response\n";
-    syslog (s, strlen (s));
-  }
+  return !buffer_queue_empty (&response_queue);
+}
 
+BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, int param, size_t bc)
+{
   initialize ();
-  scheduler_remove (TMPFS_RESPONSE_NO, aid);
+  scheduler_remove (TMPFS_RESPONSE_NO, 0);
 
-  /* Find in the queue. */
-  buffer_queue_item_t* item = buffer_queue_find (&response_queue, aid);
+  if (response_precondition ()) {
+    ssyslog ("tmpfs: response\n");
 
-  if (item != 0) {
-    /* Found a response.  Execute. */
+    const buffer_queue_item_t* item = buffer_queue_front (&response_queue);
     bd_t bd = buffer_queue_item_bd (item);
     size_t bd_size = buffer_queue_item_size (item);
-    buffer_queue_erase (&response_queue, item);
-
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
-
-    schedule ();
-    scheduler_finish (true, bd);
+    buffer_queue_pop (&response_queue);
+    
+    end_action (true, bd, bd_size);
   }
   else {
-    /* Did not find a response. */
-    schedule ();
-    scheduler_finish (false, -1);
+    end_action (false, -1, 0);
   }
 }
 
@@ -452,10 +431,7 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  {
-    const char* s = "registry: destroy_buffers\n";
-    syslog (s, strlen (s));
-  }
+  ssyslog ("registry: destroy_buffers\n");
 
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
@@ -466,17 +442,25 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
       buffer_queue_pop (&destroy_queue);
     }
   }
-  schedule ();
-  scheduler_finish (false, -1);
+
+  end_action (false, -1, 0);
 }
 
 static void
-schedule (void)
+end_action (bool output_fired,
+	    bd_t bd,
+	    size_t bd_size)
 {
+  if (bd != -1) {
+    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
+  }
+
   if (!buffer_queue_empty (&response_queue)) {
     scheduler_add (TMPFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&response_queue)));
   }
   if (destroy_buffers_precondition ()) {
     scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
+
+  scheduler_finish (output_fired, bd);
 }

@@ -265,7 +265,6 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQ
  */
 BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_RESPONSE_NAME, "", register_response, aid_t aid, size_t bc)
 {
-  ssyslog ("registry: register_response\n");
   initialize ();
   scheduler_remove (REGISTRY_REGISTER_RESPONSE_NO, aid);
 
@@ -273,6 +272,8 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
   buffer_queue_item_t* item = buffer_queue_find (&rr_queue, aid);
 
   if (item != 0) {
+    ssyslog ("registry: register_response\n");
+
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
     size_t bd_size = buffer_queue_item_size (item);
@@ -408,7 +409,6 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  ssyslog ("registry: destroy_buffers\n");
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
   if (destroy_buffers_precondition ()) {

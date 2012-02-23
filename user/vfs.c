@@ -6,6 +6,7 @@
 #include <buffer_file.h>
 #include <buffer_queue.h>
 #include <description.h>
+#include <dymem.h>
 #include "registry_msg.h"
 
 /*
@@ -43,21 +44,34 @@
 #define VFS_FS_RESPONSE_NO 6
 #define DESTROY_BUFFERS_NO 7
 #define DECODE_NO 8
+#define MOUNT_NO 9
 
 #define DESCRIPTION "vfs"
 
+typedef enum {
+  FILE,
+  DIRECTORY,
+} vnode_type_t;
+
 /* A virtual inode. */
 typedef struct {
+  vnode_type_t type;
   aid_t aid;	/* The automaton holding this file system. */
   size_t inode;	/* The inode in that file system. */
 } vnode_t;
 
-typedef struct mount_table_item mount_table_item_t;
-struct mount_table_item {
+typedef struct mount_item mount_item_t;
+struct mount_item {
   vnode_t a;
   vnode_t b;
-  mount_table_item_t* next;
+  mount_item_t* next;
 };
+
+/* The virtual root. */
+static vnode_t root = { .type = DIRECTORY, .aid = -1, .inode = 0 };
+
+/* Our aid. */
+static aid_t vfs_aid = -1;
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -81,7 +95,7 @@ static size_t fs_bd_size = 0;
 static buffer_queue_t destroy_queue;
 
 /* Table to translate vnodes based on mounting. */
-static mount_table_item_t* mount_table_head = 0;
+static mount_item_t* mount_head = 0;
 
 /* State machine for client requests. */
 static aid_t client_request_aid = -1;
@@ -94,6 +108,9 @@ static size_t client_request_path_size;
 
 static vnode_t path_lookup_current;
 static bool path_lookup_done;
+static bool path_lookup_error;
+static const char* path_lookup_begin;
+static const char* path_lookup_end;
 
 static void
 end_action (bool output_fired,
@@ -125,15 +142,27 @@ vnode_equal (const vnode_t* x,
   return x->aid == y->aid && x->inode == y->inode;
 }
 
+static mount_item_t*
+mount_item_create (const vnode_t* a,
+		   const vnode_t* b)
+{
+  mount_item_t* item = malloc (sizeof (mount_item_t));
+  memset (item, 0, sizeof (mount_item_t));
+  item->a = *a;
+  item->b = *b;
+  return item;
+}
+
 /* init
    ----
    Binds to the registry and produces a registration message.
    
    Post: register_bd != -1
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t vfs_aid, bd_t bd, size_t bd_size)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 {
-  ssyslog ("vfs: init\n");
+  vfs_aid = aid;
+
   initialize ();
 
   /* Look up the registry. */
@@ -219,9 +248,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
       /* Okay. */
       break;
     default:
-      {
-	ssyslog ("vfs: warning: failed to register\n");
-      }
+      ssyslog ("vfs: warning: failed to register\n");
       break;
     }
   }
@@ -255,7 +282,6 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
  */
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid, size_t bc)
 {
-  ssyslog ("vfs: client_response\n");
   initialize ();
   scheduler_remove (VFS_RESPONSE_NO, aid);
 
@@ -263,6 +289,8 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
   buffer_queue_item_t* item = buffer_queue_find (&client_response_queue, aid);
 
   if (item != 0) {
+    ssyslog ("vfs: client_response\n");
+
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
     size_t bd_size = buffer_queue_item_size (item);
@@ -291,11 +319,11 @@ file_system_request_precondition (aid_t aid)
 
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid, size_t bc)
 {
-  ssyslog ("vfs: file_system_request\n");
   initialize ();
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
 
   if (file_system_request_precondition (aid)) {
+    ssyslog ("vfs: file_system_request\n");
     bd_t bd = fs_bd;
     size_t bd_size = fs_bd_size;
 
@@ -340,7 +368,6 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  ssyslog ("vfs: destroy_buffers\n");
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
   if (destroy_buffers_precondition ()) {
@@ -406,9 +433,10 @@ static void
 path_lookup_init (void)
 {
   /* Start at the virtual root. */
-  path_lookup_current.aid = -1;
-  path_lookup_current.inode = 0;
+  path_lookup_current = root;
   path_lookup_done = false;
+  path_lookup_error = false;
+  path_lookup_end = client_request_path;
 }
 
 static void
@@ -416,8 +444,8 @@ path_lookup_resume (void)
 {
   if (!path_lookup_done) {
     /* First, look for an entry in the mount table. */
-    mount_table_item_t* item;
-    for (item = mount_table_head; item != 0; item = item->next) {
+    mount_item_t* item;
+    for (item = mount_head; item != 0; item = item->next) {
       if (vnode_equal (&item->a, &path_lookup_current)) {
 	/* Found an entry. Translate and recur. */
 	path_lookup_current = item->b;
@@ -426,13 +454,24 @@ path_lookup_resume (void)
       }
     }
 
+    /* Advance to the next element in the path. */
+    path_lookup_begin = path_lookup_end + 1;
 
+    if (*path_lookup_begin == 0) {
+      /* We are at the end of th path. */
+      path_lookup_done = true;
+      return;
+    }
+    
+    /* Find the terminator (0) or next path separator (/). */
+    path_lookup_end = path_lookup_begin + 1;
+    while (*path_lookup_end != 0 && *path_lookup_end != '/') {
+      ++path_lookup_end;
+    }
 
-    ssyslog ("vfs:  ####\n");
-    syslog (client_request_path, client_request_path_size);
+    ssyslog ("vfs:  TODO\n");
+    syslog (path_lookup_begin, path_lookup_end - path_lookup_begin);
   }
-  
-  /* TODO */
 }
 
 /* decode
@@ -475,20 +514,28 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 	  reset_client_state ();
 	  end_action (false, -1, 0);
 	}
-	
+
 	if (!check_absolute_path (client_request_path, client_request_path_size)) {
 	  form_response (VFS_MOUNT, VFS_BAD_PATH);
 	  reset_client_state ();
 	  end_action (false, -1, 0);
 	}
 
-	/*
-	  To mount, we must:
-	  1.  Traverse the existing virtual file system to find the vnode A indicated by the path.
-	  2.  Bind to the file system.  Let B be the vnode representing the root of its file system.
-	  3.  Insert an entry in the mount table that causes future path traversals to substitute A -> B.
-	 */
+	/* See if the file system is already mounted.
+	   If it is, its an error.
+	*/
+	mount_item_t* item;
+	for (item = mount_head; item != 0; item = item->next) {
+	  if (item->b.aid == client_request_aid_arg) {
+	    form_response (VFS_MOUNT, VFS_ALREADY_MOUNTED);
+	    reset_client_state ();
+	    end_action (false, -1, 0);
+	    break;
+	  }
+	}
+	
 
+	/* Start the process of converting the path to a vnode. */
 	path_lookup_init ();
 	path_lookup_resume ();
       }
@@ -498,6 +545,88 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
       reset_client_state ();
       end_action (false, -1, 0);
     }
+  }
+
+  end_action (false, -1, 0);
+}
+
+/* mount
+   -----
+   To mount, we must:
+   (1)  Convert the path to a vnode A.
+   (2)  Bind to the file system.  Let B be the vnode representing the root of its file system.
+   (3)  Insert an entry in the mount table that causes future path traversals to substitute A -> B.
+   Step (1) is started in the decode action.
+   Steps (2) and (3) are completed in this action.
+
+   Pre:  the internal state machine is loaded (client_request_bd != -1) with a mount request (client_request_type == MOUNT) and the path name lookup has finished (path_lookup_done == true)
+   Post: The internal state machine will be empty (client_request_bd == -1)
+ */
+static bool
+mount_precondition (void)
+{
+  return client_request_bd != -1 && client_request_type == VFS_MOUNT && path_lookup_done && vfs_aid != -1;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
+{
+  ssyslog ("vfs: mount\n");
+  initialize ();
+  scheduler_remove (MOUNT_NO, param);
+  if (mount_precondition ()) {
+
+    /* The path could not be translated. */
+    if (path_lookup_error) {
+      form_response (VFS_MOUNT, VFS_PATH_DNE);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+
+    /* The final destination was not a directory. */
+    if (path_lookup_current.type != DIRECTORY) {
+      form_response (VFS_MOUNT, VFS_NOT_DIRECTORY);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+
+    /* Bind to the file system. */
+    description_t desc;
+    if (description_init (&desc, client_request_aid_arg) == -1) {
+      form_response (VFS_MOUNT, VFS_AID_DNE);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+
+    const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME);
+    const ano_t response = description_name_to_number (&desc, VFS_FS_RESPONSE_NAME);
+
+    description_fini (&desc);
+
+    if (request == NO_ACTION ||
+	response == NO_ACTION) {
+      form_response (VFS_MOUNT, VFS_NOT_FS);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+
+    /* Bind to the response first so they don't get lost. */
+    if (bind (client_request_aid_arg, response, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0) == -1 ||
+	bind (vfs_aid, VFS_FS_REQUEST_NO, 0, client_request_aid_arg, request, 0) == -1) {
+      /* If binding fails, it is because the file system's actions are available. */
+      form_response (VFS_MOUNT, VFS_NOT_AVAILABLE);
+      reset_client_state ();
+      end_action (false, -1, 0);
+    }
+
+    /* The mount succeeded.  Insert an entry into the list. */
+    vnode_t b = {.type = DIRECTORY, .aid = client_request_aid_arg, .inode = 0};
+    mount_item_t* item = mount_item_create (&path_lookup_current, &b);
+    item->next = mount_head;
+    mount_head = item;
+
+    form_response (VFS_MOUNT, VFS_SUCCESS);
+    reset_client_state ();
+    end_action (false, -1, 0);
   }
 
   end_action (false, -1, 0);
@@ -526,6 +655,9 @@ end_action (bool output_fired,
   }
   if (decode_precondition ()) {
     scheduler_add (DECODE_NO, 0);
+  }
+  if (mount_precondition ()) {
+    scheduler_add (MOUNT_NO, 0);
   }
 
   scheduler_finish (output_fired, bd);

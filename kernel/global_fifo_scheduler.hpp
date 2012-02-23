@@ -220,7 +220,7 @@ private:
 	  size_t buffer_size = 0;
 	  
 	  if (output_buffer_ != 0) {
-	    // Copy the buffer to the input automaton and try to map it.
+	    // Copy the buffer to the input automaton.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
 	    buffer_size = output_buffer_->size ();
 	  }

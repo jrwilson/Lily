@@ -47,7 +47,7 @@ read_registry_register_request (bd_t bd,
   }
 
   if (buffer_file_read (&file, method, sizeof (registry_method_t)) == -1 ||
-      buffer_file_read (&file, size, sizeof (size_t) == -1)) {
+      buffer_file_read (&file, size, sizeof (size_t)) == -1) {
     return -1;
   }
 

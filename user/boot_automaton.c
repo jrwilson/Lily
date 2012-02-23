@@ -73,7 +73,6 @@ ssyslog (const char* msg)
  */
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
 {
-  ssyslog ("boot_automaton: init\n");
   initialize ();
 
   cpio_archive_t archive;
