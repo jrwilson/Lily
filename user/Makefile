@@ -24,10 +24,10 @@ registry : registry.o registry_msg.o
 vfs : vfs.o registry_msg.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
-tmpfs : tmpfs.o cpio.o
+tmpfs : tmpfs.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
-init : init.o registry_msg.o
+init : init.o registry_msg.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 

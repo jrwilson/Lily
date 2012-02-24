@@ -134,7 +134,6 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd, size_t bd_size)
   }
 
   /* Bind to the vfs so we can mount the tmpfs. */
-
   description_t vfs_description;
   if (description_init (&vfs_description, vfs) == -1) {
     ssyslog ("boot_automaton: error: Could not describe vfs\n");
@@ -224,14 +223,13 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
   ssyslog ("boot_automaton: vfs_response\n");
   initialize ();
 
-  vfs_type_t type;
   vfs_error_t error;
-  if (read_vfs_response (bd, bd_size, &type, &error) == -1) {
+  if (read_vfs_mount_response (bd, bd_size, &error) == -1) {
     ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
     exit ();
   }
 
-  if (type != VFS_MOUNT  || error != VFS_SUCCESS) {
+  if (error != VFS_SUCCESS) {
     ssyslog ("boot_automaton: error: mounting root file system failed\n");
     exit ();
   }

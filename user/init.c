@@ -21,6 +21,11 @@
 #define DESTROY_BUFFERS_NO 1
 #define QUERY_RESPONSE_NO 2
 #define QUERY_REQUEST_NO 3
+#define VFS_RESPONSE_NO 4
+#define VFS_REQUEST_NO 5
+
+/* Our aid. */
+static aid_t init_aid = -1;
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -32,8 +37,9 @@ static buffer_queue_t destroy_queue;
 static bd_t query_bd = -1;
 static size_t query_bd_size = 0;
 
-/* The aid of the vfs. */
-static aid_t vfs_aid = -1;
+/* Message to the vfs. */
+static bd_t vfs_bd = -1;
+static size_t vfs_bd_size = 0;
 
 static void
 ssyslog (const char* msg)
@@ -64,6 +70,8 @@ end_action (bool output_fired,
  */
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 {
+  init_aid = aid;
+
   ssyslog ("init: init\n");
   initialize ();
 
@@ -131,23 +139,24 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
 /* query_request
    -------------
    Query the registry for the vfs.
+   We check the init_aid so we can bind when we get the response.
 
-   Pre:  query_bd != -1
+   Pre:  query_bd != -1 && init_aid != -1
    Post: query_bd == -1
  */
 static bool
 query_request_precondition (void)
 {
-  return query_bd != -1;
+  return query_bd != -1 && init_aid != -1;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param, size_t bc)
 {
-  ssyslog ("init: query_request\n");
   initialize ();
   scheduler_remove (QUERY_REQUEST_NO, param);
 
   if (query_request_precondition ()) {
+    ssyslog ("init: query_request\n");
     bd_t bd = query_bd;
     size_t bd_size = query_bd_size;
 
@@ -164,8 +173,9 @@ BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param, 
 /* query_response
    --------------
    Extract the aid of the vfs from the response from the registry.
+   Request a file from the vfs.
 
-   Post: vfs_aid != -1
+   Post: vfs_bd != -1
  */
 BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param, bd_t bd, size_t bd_size)
 {
@@ -188,6 +198,7 @@ BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param,
     exit ();
   }
 
+  aid_t vfs_aid;
   const void* description;
   size_t size;
 
@@ -196,7 +207,123 @@ BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param,
     exit ();
   }
 
-  /* TODO:  Bind to vfs. */
+  description_t vfs_description;
+  if (description_init (&vfs_description, vfs_aid) == -1) {
+    ssyslog ("init: error: Could not describe vfs\n");
+    exit ();
+  }
+
+  /* If these actions don't exist, then attempts to bind below will fail. */
+  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME);
+  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME);
+
+  description_fini (&vfs_description);
+
+  /* We bind the response first so they don't get lost. */
+  if (bind (vfs_aid, vfs_response, 0, init_aid, VFS_RESPONSE_NO, 0) == -1 ||
+      bind (init_aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) {
+    ssyslog ("init: error: Couldn't bind to vfs\n");
+    exit ();
+  }
+
+  vfs_bd = write_vfs_readfile_request ("/hello.txt", &vfs_bd_size);
+  if (vfs_bd == -1) {
+    ssyslog ("init: error: Couldn't create readfile request\n");
+    exit ();
+  }
+
+  end_action (false, bd, bd_size);
+}
+
+/* vfs_request
+   -------------
+   Send a request to the vfs.
+
+   Pre:  vfs_bd != -1
+   Post: vfs_bd == -1
+ */
+static bool
+vfs_request_precondition (void)
+{
+  return vfs_bd != -1;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_t bc)
+{
+  initialize ();
+  scheduler_remove (VFS_REQUEST_NO, param);
+
+  if (vfs_request_precondition ()) {
+    ssyslog ("init: vfs_request\n");
+    bd_t bd = vfs_bd;
+    size_t bd_size = vfs_bd_size;
+
+    vfs_bd = -1;
+    vfs_bd_size = 0;
+
+    end_action (true, bd, bd_size);
+  }
+  else {
+    end_action (false, -1, 0);
+  }
+}
+
+/* vfs_response
+   --------------
+   Extract the aid of the vfs from the response from the registry.
+
+   Post: ???
+ */
+BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bd, size_t bd_size)
+{
+  ssyslog ("init: vfs_response\n");
+  initialize ();
+
+  /* registry_vfs_response_t r; */
+  /* registry_error_t error; */
+  /* registry_method_t method; */
+  /* size_t count; */
+
+  /* if (registry_vfs_response_initr (&r, bd, bd_size, &error, &method, &count) == -1) { */
+  /*   ssyslog ("init: error: couldn't read registry response\n"); */
+  /*   exit (); */
+  /* } */
+  
+  /* if (error != REGISTRY_SUCCESS || */
+  /*     method != REGISTRY_STRING_EQUAL) { */
+  /*   ssyslog ("init: error: bad registry response\n"); */
+  /*   exit (); */
+  /* } */
+
+  /* aid_t vfs_aid; */
+  /* const void* description; */
+  /* size_t size; */
+
+  /* if (count != 1 || registry_vfs_response_read (&r, &vfs_aid, &description, &size) == -1) { */
+  /*   ssyslog ("init: error: no vfs\n"); */
+  /*   exit (); */
+  /* } */
+
+  /* description_t vfs_description; */
+  /* if (description_init (&vfs_description, vfs_aid) == -1) { */
+  /*   ssyslog ("init: error: Could not describe vfs\n"); */
+  /*   exit (); */
+  /* } */
+
+  /* /\* If these actions don't exist, then attempts to bind below will fail. *\/ */
+  /* const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME); */
+  /* const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME); */
+
+  /* description_fini (&vfs_description); */
+
+  /* /\* We bind the response first so they don't get lost. *\/ */
+  /* if (bind (vfs_aid, vfs_response, 0, init_aid, VFS_RESPONSE_NO, 0) == -1 || */
+  /*     bind (init_aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) { */
+  /*   ssyslog ("init: error: Couldn't bind to vfs\n"); */
+  /*   exit (); */
+  /* } */
+
+  /* /\* TODO:  Prepare request to vfs. *\/ */
 
   end_action (false, bd, bd_size);
 }
@@ -219,6 +346,9 @@ end_action (bool output_fired,
   }
   if (query_request_precondition ()) {
     scheduler_add (QUERY_REQUEST_NO, 0);
+  }
+  if (vfs_request_precondition ()) {
+    scheduler_add (VFS_REQUEST_NO, 0);
   }
 
   scheduler_finish (output_fired, bd);

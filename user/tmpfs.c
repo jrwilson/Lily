@@ -73,17 +73,11 @@
 #define DESTROY_BUFFERS_NO 3
 
 /* Every inode in the filesystem is either a file or directory. */
-typedef enum {
-  FILE,
-  DIRECTORY,
-} inode_type_t;
-
-typedef struct inode_struct inode_t;
-struct inode_struct {
-  size_t id;
-  inode_type_t type;
+typedef struct inode inode_t;
+struct inode {
+  vfs_fs_node_t node;
   size_t name_size;
-  char* name;
+  char* name; /* Does not contain a terminating 0. */
   bd_t bd;
   size_t bd_size;
   size_t size;
@@ -96,9 +90,6 @@ struct inode_struct {
 static size_t nodes_capacity = 0;
 static size_t nodes_size = 0;
 static inode_t** nodes = 0;
-
-/* The root. */
-static inode_t* root = 0;
 
 /* A list of free inodes. */
 static inode_t* free_list = 0;
@@ -113,7 +104,7 @@ static buffer_queue_t response_queue;
 static buffer_queue_t destroy_queue;
 
 static inode_t*
-inode_create (inode_type_t type,
+inode_create (vfs_fs_node_type_t type,
 	     const char* name,
 	     size_t name_size,
 	     bd_t bd,
@@ -137,14 +128,14 @@ inode_create (inode_type_t type,
 
     /* Create a new node. */
     node = malloc (sizeof (inode_t));
-    node->id = nodes_size++;
+    node->node.id = nodes_size++;
   }
 
   /* Place the node in the index. */
-  nodes[node->id] = node;
+  nodes[node->node.id] = node;
 
   /* Initialize the node. */
-  node->type = type;
+  node->node.type = type;
   node->name_size = name_size;
   node->name = malloc (name_size);
   memcpy (node->name, name, name_size);
@@ -212,7 +203,7 @@ print (inode_t* node)
 {
   if (node != 0) {
     /* Print this node. */
-    switch (node->type) {
+    switch (node->node.type) {
     case FILE:
       ssyslog ("FILE ");
       break;
@@ -242,7 +233,8 @@ initialize (void)
     nodes = malloc (nodes_capacity * sizeof (inode_t*));
     
     /* Create the root. */
-    root = inode_create (DIRECTORY, "", 0, -1, 0, 0, 0);
+    nodes[nodes_size++] = inode_create (DIRECTORY, "", 0, -1, 0, 0, 0);
+    
     /* TODO:  Do we need to make the root its own parent? */
 
     buffer_queue_init (&response_queue);
@@ -250,24 +242,33 @@ initialize (void)
   }
 }
 
-/* static void */
-/* form_response (vfs_fs_type_t type, */
-/* 	       vfs_fs_error_t error, */
-/* 	       bd_t request_bd) */
-/* { */
-/*   /\* Create a response. *\/ */
-/*   size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t)); */
-/*   bd_t bd = buffer_create (bd_size); */
-/*   vfs_fs_response_t* rr = buffer_map (bd); */
-/*   rr->type = type; */
-/*   rr->error = error; */
-/*   /\* We don't unmap it because we are going to destroy it when we respond. *\/ */
-/*   buffer_queue_push (&response_queue, 0, bd, bd_size); */
+static void
+form_unknown_response (vfs_fs_error_t error)
+{
+  /* Create a response. */
+  size_t bd_size;
+  bd_t bd = write_vfs_fs_unknown_response (error, &bd_size);
+  buffer_queue_push (&response_queue, 0, bd, bd_size);
+}
 
-/*   if (request_bd != -1) { */
-/*     buffer_destroy (request_bd); */
-/*   } */
-/* } */
+static void
+form_descend_response (vfs_fs_error_t error,
+		       const vfs_fs_node_t* node)
+{
+  /* Create a response. */
+  size_t bd_size;
+  bd_t bd = write_vfs_fs_descend_response (error, node, &bd_size);
+  buffer_queue_push (&response_queue, 0, bd, bd_size);
+}
+
+static void
+form_readfile_response (vfs_fs_error_t error)
+{
+  /* Create a response. */
+  size_t bd_size;
+  bd_t bd = write_vfs_fs_readfile_response (error, &bd_size);
+  buffer_queue_push (&response_queue, 0, bd, bd_size);
+}
 
 static void
 end_action (bool output_fired,
@@ -288,7 +289,8 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
       /* Ignore the "." directory. */
       if (strcmp (file->name, ".") != 0) {
 	
-      	inode_t* parent = root;
+	/* Start at the root. */
+      	inode_t* parent = nodes[0];
 	
   	const char* begin;
       	for (begin = file->name; begin < file->name + file->name_size;) {
@@ -321,7 +323,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
     }
 
     /* TODO */
-    print (root);
+    print (nodes[0]);
   }
 
   end_action (false, bd, bd_size);
@@ -330,75 +332,93 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
 BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bd, size_t bd_size)
 {
   ssyslog ("tmpfs: request\n");
-
   initialize ();
 
-  /* TODO */
+  vfs_fs_type_t type;
+  if (read_vfs_fs_request_type (bd, bd_size, &type) == -1) {
+    form_unknown_response (VFS_FS_BAD_REQUEST);
+    end_action (false, bd, bd_size);
+  }
+  
+  switch (type) {
+  case VFS_FS_DESCEND:
+    {
+      size_t id;
+      const char* name;
+      size_t name_size;
+      vfs_fs_node_t no_node;
+      if (read_vfs_fs_descend_request (bd, bd_size, &id, &name, &name_size) == -1) {
+	form_descend_response (VFS_FS_BAD_REQUEST, &no_node);
+	end_action (false, bd, bd_size);
+      }
 
-  /* if (bd == -1) { */
-  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_BUFFER, -1); */
-  /*   return; */
-  /* } */
+      if (id >= nodes_size) {
+	form_descend_response (VFS_FS_BAD_NODE, &no_node);
+	end_action (false, bd, bd_size);
+      }
 
-  /* /\* Create a buffer that contains the request. *\/ */
-  /* size_t request_bd_size = size_to_pages (sizeof (vfs_fs_request_t)); */
-  /* bd_t request_bd = buffer_copy (bd, 0, request_bd_size); */
-  /* if (request_bd == -1) { */
-  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, -1); */
-  /*   return; */
-  /* } */
+      inode_t* inode = nodes[id];
 
-  /* buffer_file_t file; */
-  /* if (buffer_file_open (&file, request_bd, request_bd_size, false) == -1) { */
-  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_NO_MAP, request_bd); */
-  /*   return; */
-  /* } */
+      if (inode == 0) {
+	form_descend_response (VFS_FS_BAD_NODE, &no_node);
+	end_action (false, bd, bd_size);
+      }
 
-  /* const vfs_fs_request_t* r = buffer_file_readp (&file, sizeof (vfs_fs_request_t)); */
-  /* if (r == 0) { */
-  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd); */
-  /*   return; */
-  /* } */
+      if (inode->node.type != DIRECTORY) {
+	form_descend_response (VFS_FS_NOT_DIRECTORY, &no_node);
+	end_action (false, bd, bd_size);
+      }
 
-  /* switch (r->type) { */
-  /* case VFS_FS_READ_FILE: */
-  /*   { */
-  /*     if (r->u.read_file.inode >= nodes_size) { */
-  /* 	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd); */
-  /* 	return; */
-  /*     } */
+      inode_t* child;
+      for (child = inode->first_child; child != 0; child = child->next_sibling) {
+	if (child->name_size == name_size &&
+	    memcmp (child->name, name, name_size) == 0) {
+	  /* Found the child with the correct name. */
+	  form_descend_response (VFS_FS_SUCCESS, &child->node);
+	  end_action (false, bd, bd_size);
+	}
+      }
 
-  /*     inode_t* inode = nodes[r->u.read_file.inode]; */
+      /* Didn't find it. */
+      form_descend_response (VFS_FS_CHILD_DNE, &no_node);
+      end_action (false, bd, bd_size);
+    }
+    break;
+  case VFS_FS_READFILE:
+    {
+      size_t id;
+      if (read_vfs_fs_readfile_request (bd, bd_size, &id) == -1) {
+	form_readfile_response (VFS_FS_BAD_REQUEST);
+	end_action (false, bd, bd_size);
+      }
 
-  /*     if (inode == 0) { */
-  /* 	form_response (aid, VFS_FS_READ_FILE, VFS_FS_BAD_INODE, request_bd); */
-  /* 	return; */
-  /*     } */
+      if (id >= nodes_size) {
+	form_readfile_response (VFS_FS_BAD_NODE);
+	end_action (false, bd, bd_size);
+      }
 
-  /*     /\* Create a response. *\/ */
-  /*     size_t bd_size = size_to_pages (sizeof (vfs_fs_response_t)); */
-  /*     bd_t bd = buffer_create (bd_size); */
-  /*     vfs_fs_response_t* rr = buffer_map (bd); */
-  /*     rr->type = VFS_FS_READ_FILE; */
-  /*     rr->error = VFS_FS_SUCCESS; */
-  /*     rr->u.read_file.size = inode->size; */
-  /*     buffer_unmap (bd); */
-  /*     /\* Append the file. *\/ */
-  /*     bd_size += inode->bd_size; */
-  /*     buffer_append (bd, inode->bd, 0, inode->bd_size); */
+      inode_t* inode = nodes[id];
 
-  /*     /\* Enqueue the response. *\/ */
-  /*     buffer_queue_push (&response_queue, aid, bd, bd_size); */
+      if (inode == 0) {
+	form_readfile_response (VFS_FS_BAD_NODE);
+	end_action (false, bd, bd_size);
+      }
 
-  /*     buffer_destroy (request_bd); */
+      if (inode->node.type != FILE) {
+	form_readfile_response (VFS_FS_NOT_FILE);
+	end_action (false, bd, bd_size);
+      }
 
-  /*     return; */
-  /*   } */
-  /*   break; */
-  /* default: */
-  /*   form_response (aid, VFS_FS_UNKNOWN, VFS_FS_BAD_REQUEST, request_bd); */
-  /*   return; */
-  /* } */
+      /* TODO */
+      ssyslog ("tmpfs:  READFILE\n");
+
+      form_readfile_response (VFS_FS_SUCCESS);
+    }
+    break;
+  default:
+    form_unknown_response (VFS_FS_BAD_REQUEST_TYPE);
+    end_action (false, bd, bd_size);
+  }
 
   end_action (false, bd, bd_size);
 }
@@ -437,8 +457,6 @@ destroy_buffers_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
 {
-  ssyslog ("registry: destroy_buffers\n");
-
   initialize ();
   scheduler_remove (DESTROY_BUFFERS_NO, param);
   if (destroy_buffers_precondition ()) {
