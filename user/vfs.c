@@ -173,10 +173,11 @@ form_mount_response (vfs_error_t error)
 }
 
 static void
-form_readfile_response (vfs_error_t error)
+form_readfile_response (vfs_error_t error,
+			size_t size)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_readfile_response (error);
+  bd_t bd = write_vfs_readfile_response (error, size);
   buffer_queue_push (&client_response_queue, client_request_aid, bd);
 }
 
@@ -492,7 +493,8 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
   case VFS_FS_READFILE:
     {
       vfs_fs_error_t error;
-      if (read_vfs_fs_readfile_response (bda, &error) == -1) {
+      size_t size;
+      if (read_vfs_fs_readfile_response (bda, &error, &size) == -1) {
 	/* TODO:  This is a protocol violation. */
 	exit ();
       }
@@ -504,7 +506,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
 
       /* TODO */
       ssyslog ("vfs: READFILE\n");
-      form_readfile_response (VFS_SUCCESS);
+      form_readfile_response (VFS_SUCCESS, size);
     }
     break;
   }
@@ -606,13 +608,13 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     case VFS_READFILE:
       {
 	if (read_vfs_readfile_request (client_request_bd, &path_lookup_path, &path_lookup_path_size) == -1) {
-	  form_readfile_response (VFS_BAD_REQUEST);
+	  form_readfile_response (VFS_BAD_REQUEST, 0);
 	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
 
 	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
-	  form_readfile_response (VFS_BAD_PATH);
+	  form_readfile_response (VFS_BAD_PATH, 0);
 	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
@@ -748,14 +750,14 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
   if (readfile_request_precondition ()) {
     /* The path could not be translated. */
     if (path_lookup_error) {
-      form_readfile_response (VFS_PATH_DNE);
+      form_readfile_response (VFS_PATH_DNE, 0);
       reset_client_state ();
       end_action (false, -1, -1);
     }
 
     /* The final destination was not a file. */
     if (path_lookup_current.node.type != FILE) {
-      form_readfile_response (VFS_NOT_FILE);
+      form_readfile_response (VFS_NOT_FILE, 0);
       reset_client_state ();
       end_action (false, -1, -1);
     }

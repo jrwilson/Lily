@@ -79,7 +79,6 @@ struct inode {
   size_t name_size;
   char* name; /* Does not contain a terminating 0. */
   bd_t bd;
-  size_t bd_size;
   size_t size;
   inode_t* parent;
   inode_t* first_child;
@@ -108,7 +107,6 @@ inode_create (vfs_fs_node_type_t type,
 	     const char* name,
 	     size_t name_size,
 	     bd_t bd,
-	     size_t bd_size,
 	     size_t size,
 	     inode_t* parent)
 {
@@ -140,7 +138,6 @@ inode_create (vfs_fs_node_type_t type,
   node->name = malloc (name_size);
   memcpy (node->name, name, name_size);
   node->bd = bd;
-  node->bd_size = bd_size;
   node->size = size;
   node->parent = parent;
   node->first_child = 0;
@@ -164,7 +161,7 @@ directory_find_or_create (inode_t* parent,
   }
 
   /* Create a node. */
-  *ptr = inode_create (DIRECTORY, name, name_size, -1, 0, 0, parent);
+  *ptr = inode_create (DIRECTORY, name, name_size, -1, 0, parent);
 
   return *ptr;
 }
@@ -174,7 +171,6 @@ file_find_or_create (inode_t* parent,
 		     const char* name,
 		     size_t name_size,
 		     bd_t bd,
-		     size_t bd_size,
 		     size_t size)
 {
   /* Iterate over the parent's children looking for the name. */
@@ -187,7 +183,7 @@ file_find_or_create (inode_t* parent,
   }
 
   /* Create a node. */
-  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd, 0, bd_size), bd_size, size, parent);
+  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd, 0, buffer_size (bd)), size, parent);
 
   return *ptr;
 }
@@ -233,7 +229,7 @@ initialize (void)
     nodes = malloc (nodes_capacity * sizeof (inode_t*));
     
     /* Create the root. */
-    nodes[nodes_size++] = inode_create (DIRECTORY, "", 0, -1, 0, 0, 0);
+    nodes[nodes_size++] = inode_create (DIRECTORY, "", 0, -1, 0, 0);
     
     /* TODO:  Do we need to make the root its own parent? */
 
@@ -260,10 +256,11 @@ form_descend_response (vfs_fs_error_t error,
 }
 
 static void
-form_readfile_response (vfs_fs_error_t error)
+form_readfile_response (vfs_fs_error_t error,
+			size_t size)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_fs_readfile_response (error);
+  bd_t bd = write_vfs_fs_readfile_response (error, size);
   buffer_queue_push (&response_queue, 0, bd);
 }
 
@@ -307,7 +304,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 	
       	switch (file->mode & CPIO_TYPE_MASK) {
       	case CPIO_REGULAR:
-  	  file_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name), file->bd, file->bd_size, file->size);
+  	  file_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name), file->bd, file->size);
       	  break;
       	case CPIO_DIRECTORY:
       	  directory_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name));
@@ -385,31 +382,31 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
     {
       size_t id;
       if (read_vfs_fs_readfile_request (bda, &id) == -1) {
-	form_readfile_response (VFS_FS_BAD_REQUEST);
+	form_readfile_response (VFS_FS_BAD_REQUEST, 0);
 	end_action (false, bda, bdb);
       }
 
       if (id >= nodes_size) {
-	form_readfile_response (VFS_FS_BAD_NODE);
+	form_readfile_response (VFS_FS_BAD_NODE, 0);
 	end_action (false, bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-	form_readfile_response (VFS_FS_BAD_NODE);
+	form_readfile_response (VFS_FS_BAD_NODE, 0);
 	end_action (false, bda, bdb);
       }
 
       if (inode->node.type != FILE) {
-	form_readfile_response (VFS_FS_NOT_FILE);
+	form_readfile_response (VFS_FS_NOT_FILE, 0);
 	end_action (false, bda, bdb);
       }
 
       /* TODO */
       ssyslog ("tmpfs:  READFILE\n");
 
-      form_readfile_response (VFS_FS_SUCCESS);
+      form_readfile_response (VFS_FS_SUCCESS, inode->size);
     }
     break;
   default:

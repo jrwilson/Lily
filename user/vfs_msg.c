@@ -203,9 +203,10 @@ read_vfs_readfile_request (bd_t bd,
 }
 
 bd_t
-write_vfs_readfile_response (vfs_error_t error)
+write_vfs_readfile_response (vfs_error_t error,
+			     size_t size)
 {
-  size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (vfs_error_t));
+  size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (vfs_error_t) + sizeof (size_t));
   bd_t bd = buffer_create (bd_sz);
   if (bd == -1) {
     return -1;
@@ -219,13 +220,37 @@ write_vfs_readfile_response (vfs_error_t error)
   
   const vfs_type_t type = VFS_READFILE;
   if (buffer_file_write (&file, &type, sizeof (vfs_type_t)) == -1 ||
-      buffer_file_write (&file, &error, sizeof (vfs_error_t)) == -1) {
+      buffer_file_write (&file, &error, sizeof (vfs_error_t)) == -1 ||
+      buffer_file_write (&file, &size, sizeof (size_t)) == -1) {
     buffer_destroy (bd);
     return -1;
   }
   
   return bd;
 }
+
+int
+read_vfs_readfile_response (bd_t bd,
+			    vfs_error_t* error,
+			    size_t* size)
+{
+  buffer_file_t file;
+  if (buffer_file_open (&file, bd, false) == -1) {
+    return -1;
+  }
+  
+  vfs_type_t type;
+  if (buffer_file_read (&file, &type, sizeof (vfs_type_t)) == -1 ||
+      type != VFS_READFILE ||
+      buffer_file_read (&file, error, sizeof (vfs_error_t)) == -1 ||
+      buffer_file_read (&file, size, sizeof (size_t)) == -1) {
+    return -1;
+  }
+
+  return 0;
+}
+
+/* FILE SYSTEM SECTION. */
 
 int
 read_vfs_fs_request_type (bd_t bd,
@@ -420,9 +445,10 @@ read_vfs_fs_readfile_request (bd_t bd,
 }
 
 bd_t
-write_vfs_fs_readfile_response (vfs_fs_error_t error)
+write_vfs_fs_readfile_response (vfs_fs_error_t error,
+				size_t size)
 {
-  size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t));
+  size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t) + sizeof (size_t));
   bd_t bd = buffer_create (bd_sz);
   if (bd == -1) {
     return -1;
@@ -436,7 +462,8 @@ write_vfs_fs_readfile_response (vfs_fs_error_t error)
 
   const vfs_fs_type_t type = VFS_FS_READFILE;
   if (buffer_file_write (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
-      buffer_file_write (&file, &error, sizeof (vfs_fs_error_t)) == -1) {
+      buffer_file_write (&file, &error, sizeof (vfs_fs_error_t)) == -1 ||
+      buffer_file_write (&file, &size, sizeof (size_t)) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -446,7 +473,8 @@ write_vfs_fs_readfile_response (vfs_fs_error_t error)
 
 int
 read_vfs_fs_readfile_response (bd_t bd,
-			       vfs_fs_error_t* error)
+			       vfs_fs_error_t* error,
+			       size_t* size)
 {
   buffer_file_t file;
   if (buffer_file_open (&file, bd, false) == -1) {
@@ -456,7 +484,8 @@ read_vfs_fs_readfile_response (bd_t bd,
   vfs_fs_type_t type;
   if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
       type != VFS_FS_READFILE ||
-      buffer_file_read (&file, error, sizeof (vfs_fs_error_t)) == -1) {
+      buffer_file_read (&file, error, sizeof (vfs_fs_error_t)) == -1 ||
+      buffer_file_read (&file, size, sizeof (size_t)) == -1) {
     return -1;
   }
 

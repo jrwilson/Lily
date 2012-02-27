@@ -271,14 +271,20 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
   ssyslog ("init: vfs_response\n");
   initialize ();
 
+  vfs_error_t error;
+  size_t size;
+
+  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
+    ssyslog ("init: error: couldn't read hello.txt\n");
+    exit ();
+  }
+
   /* registry_vfs_response_t r; */
   /* registry_error_t error; */
   /* registry_method_t method; */
   /* size_t count; */
 
   /* if (registry_vfs_response_initr (&r, bd, bd_size, &error, &method, &count) == -1) { */
-  /*   ssyslog ("init: error: couldn't read registry response\n"); */
-  /*   exit (); */
   /* } */
   
   /* if (error != REGISTRY_SUCCESS || */

@@ -71,7 +71,13 @@ read_vfs_readfile_request (bd_t bd,
 			   size_t* path_size);
 
 bd_t
-write_vfs_readfile_response (vfs_error_t error);
+write_vfs_readfile_response (vfs_error_t error,
+			     size_t size);
+
+int
+read_vfs_readfile_response (bd_t bd,
+			    vfs_error_t* error,
+			    size_t* size);
 
 /*
   File System Section
@@ -144,10 +150,12 @@ read_vfs_fs_readfile_request (bd_t bd,
 			      size_t* id);
 
 bd_t
-write_vfs_fs_readfile_response (vfs_fs_error_t error);
+write_vfs_fs_readfile_response (vfs_fs_error_t error,
+				size_t size);
 
 int
 read_vfs_fs_readfile_response (bd_t bd,
-			       vfs_fs_error_t* error);
+			       vfs_fs_error_t* error,
+			       size_t* size);
 
 #endif /* VFS_USER_H */

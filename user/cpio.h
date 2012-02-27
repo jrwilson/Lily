@@ -25,7 +25,6 @@ typedef struct {
   size_t name_size;
   unsigned int mode;
   bd_t bd;
-  size_t bd_size;
   size_t size;
 } cpio_file_t;
 
