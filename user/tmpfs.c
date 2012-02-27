@@ -243,7 +243,7 @@ form_unknown_response (vfs_fs_error_t error)
 {
   /* Create a response. */
   bd_t bd = write_vfs_fs_unknown_response (error);
-  buffer_queue_push (&response_queue, 0, bd);
+  buffer_queue_push (&response_queue, 0, bd, -1);
 }
 
 static void
@@ -252,16 +252,17 @@ form_descend_response (vfs_fs_error_t error,
 {
   /* Create a response. */
   bd_t bd = write_vfs_fs_descend_response (error, node);
-  buffer_queue_push (&response_queue, 0, bd);
+  buffer_queue_push (&response_queue, 0, bd, -1);
 }
 
 static void
 form_readfile_response (vfs_fs_error_t error,
-			size_t size)
+			size_t size,
+			bd_t content)
 {
   /* Create a response. */
   bd_t bd = write_vfs_fs_readfile_response (error, size);
-  buffer_queue_push (&response_queue, 0, bd);
+  buffer_queue_push (&response_queue, 0, bd, content);
 }
 
 static void
@@ -382,31 +383,28 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
     {
       size_t id;
       if (read_vfs_fs_readfile_request (bda, &id) == -1) {
-	form_readfile_response (VFS_FS_BAD_REQUEST, 0);
+	form_readfile_response (VFS_FS_BAD_REQUEST, 0, -1);
 	end_action (false, bda, bdb);
       }
 
       if (id >= nodes_size) {
-	form_readfile_response (VFS_FS_BAD_NODE, 0);
+	form_readfile_response (VFS_FS_BAD_NODE, 0, -1);
 	end_action (false, bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-	form_readfile_response (VFS_FS_BAD_NODE, 0);
+	form_readfile_response (VFS_FS_BAD_NODE, 0, -1);
 	end_action (false, bda, bdb);
       }
 
       if (inode->node.type != FILE) {
-	form_readfile_response (VFS_FS_NOT_FILE, 0);
+	form_readfile_response (VFS_FS_NOT_FILE, 0, -1);
 	end_action (false, bda, bdb);
       }
 
-      /* TODO */
-      ssyslog ("tmpfs:  READFILE\n");
-
-      form_readfile_response (VFS_FS_SUCCESS, inode->size);
+      form_readfile_response (VFS_FS_SUCCESS, inode->size, buffer_copy (inode->bd, 0, buffer_size (inode->bd)));
     }
     break;
   default:
@@ -432,10 +430,11 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
     ssyslog ("tmpfs: response\n");
 
     const buffer_queue_item_t* item = buffer_queue_front (&response_queue);
-    bd_t bd = buffer_queue_item_bd (item);
+    bd_t bda = buffer_queue_item_bda (item);
+    bd_t bdb = buffer_queue_item_bdb (item);
     buffer_queue_pop (&response_queue);
     
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     end_action (false, -1, -1);
@@ -455,7 +454,17 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
   if (destroy_buffers_precondition ()) {
     /* Drain the queue. */
     while (!buffer_queue_empty (&destroy_queue)) {
-      buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
+      bd_t bd;
+      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
+      bd = buffer_queue_item_bda (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+      bd = buffer_queue_item_bdb (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+
       buffer_queue_pop (&destroy_queue);
     }
   }
@@ -468,11 +477,8 @@ end_action (bool output_fired,
 	    bd_t bda,
 	    bd_t bdb)
 {
-  if (bda != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda);
-  }
-  if (bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bdb);
+  if (bda != -1 || bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda, bdb);
   }
 
   if (!buffer_queue_empty (&response_queue)) {

@@ -158,7 +158,7 @@ form_register_response (aid_t aid,
 {
   /* Create a response. */
   bd_t bd = write_registry_register_response (error);
-  buffer_queue_push (&rr_queue, aid, bd);
+  buffer_queue_push (&rr_queue, aid, bd, -1);
 }
 
 static void
@@ -170,7 +170,7 @@ form_query_response (aid_t aid,
   registry_query_response_t qr;
   bd_t bd = registry_query_response_initw (&qr, error, method);
 
-  buffer_queue_push (&qr_queue, aid, bd);
+  buffer_queue_push (&qr_queue, aid, bd, -1);
 }
 
 static void
@@ -273,9 +273,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
     ssyslog ("registry: register_response\n");
 
     /* Found a response.  Execute. */
-    bd_t bd = buffer_queue_item_bd (item);
+    bd_t bda = buffer_queue_item_bda (item);
+    bd_t bdb = buffer_queue_item_bdb (item);
     buffer_queue_erase (&rr_queue, item);
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     /* Did not find a response. */
@@ -326,7 +327,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_N
     }
   }
 
-  buffer_queue_push (&qr_queue, aid, answer_bd);
+  buffer_queue_push (&qr_queue, aid, answer_bd, -1);
 
   end_action (false, bda, bdb);
 }
@@ -349,9 +350,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONS
 
   if (item != 0) {
     /* Found a response.  Execute. */
-    bd_t bd = buffer_queue_item_bd (item);
+    bd_t bda = buffer_queue_item_bda (item);
+    bd_t bdb = buffer_queue_item_bdb (item);
     buffer_queue_erase (&qr_queue, item);
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     /* Did not find a response. */
@@ -410,7 +412,17 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
   if (destroy_buffers_precondition ()) {
     /* Drain the queue. */
     while (!buffer_queue_empty (&destroy_queue)) {
-      buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
+      bd_t bd;
+      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
+      bd = buffer_queue_item_bda (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+      bd = buffer_queue_item_bdb (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+
       buffer_queue_pop (&destroy_queue);
     }
   }
@@ -427,11 +439,8 @@ end_action (bool output_fired,
 	    bd_t bda,
 	    bd_t bdb)
 {
-  if (bda != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda);
-  }
-  if (bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bdb);
+  if (bda != -1|| bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda, bdb);
   }
 
   if (!buffer_queue_empty (&rr_queue)) {

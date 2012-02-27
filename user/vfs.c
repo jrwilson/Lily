@@ -93,7 +93,8 @@ static mount_item_t* mount_head = 0;
 
 /* State machine for client requests. */
 static aid_t client_request_aid = -1;
-static bd_t client_request_bd = -1;
+static bd_t client_request_bda = -1;
+static bd_t client_request_bdb = -1;
 static vfs_type_t client_request_type;
 
 /* State machine for looking up paths. */
@@ -161,7 +162,7 @@ form_unknown_response (vfs_error_t error)
 {
   /* Create a response. */
   bd_t bd = write_vfs_unknown_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
 }
 
 static void
@@ -169,24 +170,31 @@ form_mount_response (vfs_error_t error)
 {
   /* Create a response. */
   bd_t bd = write_vfs_mount_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
 }
 
 static void
 form_readfile_response (vfs_error_t error,
-			size_t size)
+			size_t size,
+			bd_t content)
 {
   /* Create a response. */
   bd_t bd = write_vfs_readfile_response (error, size);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, content);
 }
 
 static void
 reset_client_state (void)
 {
   client_request_aid = -1;
-  buffer_destroy (client_request_bd);
-  client_request_bd = -1;
+  if (client_request_bda != -1) {
+    buffer_destroy (client_request_bda);
+    client_request_bda = -1;
+  }
+  if (client_request_bdb != -1) {
+    buffer_destroy (client_request_bdb);
+    client_request_bdb = -1;
+  }
 }
 
 static bool
@@ -386,7 +394,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
 {
   ssyslog ("vfs: client_request\n");
   initialize ();
-  buffer_queue_push (&client_request_queue, aid, bda);
+  buffer_queue_push (&client_request_queue, aid, bda, bdb);
   end_action (false, -1, -1);
 }
 
@@ -409,10 +417,12 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
     ssyslog ("vfs: client_response\n");
 
     /* Found a response.  Execute. */
-    bd_t bd = buffer_queue_item_bd (item);
+    bd_t bda = buffer_queue_item_bda (item);
+    bd_t bdb = buffer_queue_item_bdb (item);
+
     buffer_queue_erase (&client_response_queue, item);
 
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     /* Did not find a response. */
@@ -503,10 +513,15 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
 	/* TODO:  We just looked up a file but could not read it.  Something is wrong. */
 	exit ();
       }	
+      
+      if (size > buffer_size (bdb) * pagesize ()) {
+	/* TODO:  The size does not match the number of pages in the buffer. */
+	exit ();
+      }
 
-      /* TODO */
-      ssyslog ("vfs: READFILE\n");
-      form_readfile_response (VFS_SUCCESS, size);
+      form_readfile_response (VFS_SUCCESS, size, bdb);
+      /* Destroy bda, but keep bdb. */
+      end_action (false, bda, -1);
     }
     break;
   }
@@ -533,7 +548,17 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
   if (destroy_buffers_precondition ()) {
     /* Drain the queue. */
     while (!buffer_queue_empty (&destroy_queue)) {
-      buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
+      bd_t bd;
+      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
+      bd = buffer_queue_item_bda (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+      bd = buffer_queue_item_bdb (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+
       buffer_queue_pop (&destroy_queue);
     }
   }
@@ -551,7 +576,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
 static bool
 decode_precondition (void)
 {
-  return !buffer_queue_empty (&client_request_queue) && client_request_bd == -1;
+  return !buffer_queue_empty (&client_request_queue) && client_request_bda == -1;
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
@@ -563,10 +588,11 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     /* Get the request from the queue. */
     const buffer_queue_item_t* front = buffer_queue_front (&client_request_queue);
     client_request_aid = buffer_queue_item_parameter (front);
-    client_request_bd = buffer_queue_item_bd (front);
+    client_request_bda = buffer_queue_item_bda (front);
+    client_request_bdb = buffer_queue_item_bdb (front);
     buffer_queue_pop (&client_request_queue);
 
-    if (read_vfs_request_type (client_request_bd, &client_request_type) == -1) {
+    if (read_vfs_request_type (client_request_bda, &client_request_type) == -1) {
       form_unknown_response (VFS_BAD_REQUEST);
       reset_client_state ();
       end_action (false, -1, -1);
@@ -575,7 +601,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     switch (client_request_type) {
     case VFS_MOUNT:
       {
-	if (read_vfs_mount_request (client_request_bd, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
+	if (read_vfs_mount_request (client_request_bda, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_mount_response (VFS_BAD_REQUEST);
 	  reset_client_state ();
 	  end_action (false, -1, -1);
@@ -607,14 +633,14 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
       break;
     case VFS_READFILE:
       {
-	if (read_vfs_readfile_request (client_request_bd, &path_lookup_path, &path_lookup_path_size) == -1) {
-	  form_readfile_response (VFS_BAD_REQUEST, 0);
+	if (read_vfs_readfile_request (client_request_bda, &path_lookup_path, &path_lookup_path_size) == -1) {
+	  form_readfile_response (VFS_BAD_REQUEST, 0, -1);
 	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
 
 	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
-	  form_readfile_response (VFS_BAD_PATH, 0);
+	  form_readfile_response (VFS_BAD_PATH, 0, -1);
 	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
@@ -652,7 +678,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 static bool
 mount_precondition (void)
 {
-  return client_request_bd != -1 && client_request_type == VFS_MOUNT && path_lookup_done && vfs_aid != -1;
+  return client_request_bda != -1 && client_request_type == VFS_MOUNT && path_lookup_done && vfs_aid != -1;
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
@@ -738,7 +764,7 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
 static bool
 readfile_request_precondition (void)
 {
-  return client_request_bd != -1 && client_request_type == VFS_READFILE && path_lookup_done && fs_bd == -1 && readfile_sent == false;
+  return client_request_bda != -1 && client_request_type == VFS_READFILE && path_lookup_done && fs_bd == -1 && readfile_sent == false;
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int param)
@@ -750,14 +776,14 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
   if (readfile_request_precondition ()) {
     /* The path could not be translated. */
     if (path_lookup_error) {
-      form_readfile_response (VFS_PATH_DNE, 0);
+      form_readfile_response (VFS_PATH_DNE, 0, -1);
       reset_client_state ();
       end_action (false, -1, -1);
     }
 
     /* The final destination was not a file. */
     if (path_lookup_current.node.type != FILE) {
-      form_readfile_response (VFS_NOT_FILE, 0);
+      form_readfile_response (VFS_NOT_FILE, 0, -1);
       reset_client_state ();
       end_action (false, -1, -1);
     }
@@ -778,11 +804,8 @@ end_action (bool output_fired,
 	    bd_t bda,
 	    bd_t bdb)
 {
-  if (bda != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda);
-  }
-  if (bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bdb);
+  if (bda != -1 || bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda, bdb);
   }
 
   if (register_request_precondition ()) {

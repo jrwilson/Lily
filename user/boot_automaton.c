@@ -262,7 +262,17 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
 
   if (destroy_buffers_precondition ()) {
     while (!buffer_queue_empty (&destroy_queue)) {
-      buffer_destroy (buffer_queue_item_bd (buffer_queue_front (&destroy_queue)));
+      bd_t bd;
+      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
+      bd = buffer_queue_item_bda (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+      bd = buffer_queue_item_bdb (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+
       buffer_queue_pop (&destroy_queue);
     }
   }
@@ -279,11 +289,8 @@ end_action (bool output_fired,
 	    bd_t bda,
 	    bd_t bdb)
 {
-  if (bda != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda);
-  }
-  if (bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bdb);
+  if (bda != -1 || bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda, bdb);
   }
 
   if (vfs_request_precondition ()) {
