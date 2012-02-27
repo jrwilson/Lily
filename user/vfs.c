@@ -158,32 +158,6 @@ mount_item_create (const vnode_t* a,
 }
 
 static void
-form_unknown_response (vfs_error_t error)
-{
-  /* Create a response. */
-  bd_t bd = write_vfs_unknown_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
-}
-
-static void
-form_mount_response (vfs_error_t error)
-{
-  /* Create a response. */
-  bd_t bd = write_vfs_mount_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
-}
-
-static void
-form_readfile_response (vfs_error_t error,
-			size_t size,
-			bd_t content)
-{
-  /* Create a response. */
-  bd_t bd = write_vfs_readfile_response (error, size);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, content);
-}
-
-static void
 reset_client_state (void)
 {
   client_request_aid = -1;
@@ -195,6 +169,35 @@ reset_client_state (void)
     buffer_destroy (client_request_bdb);
     client_request_bdb = -1;
   }
+}
+
+static void
+form_unknown_response (vfs_error_t error)
+{
+  /* Create a response. */
+  bd_t bd = write_vfs_unknown_response (error);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
+  reset_client_state ();
+}
+
+static void
+form_mount_response (vfs_error_t error)
+{
+  /* Create a response. */
+  bd_t bd = write_vfs_mount_response (error);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
+  reset_client_state ();
+}
+
+static void
+form_readfile_response (vfs_error_t error,
+			size_t size,
+			bd_t content)
+{
+  /* Create a response. */
+  bd_t bd = write_vfs_readfile_response (error, size);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, content);
+  reset_client_state ();
 }
 
 static bool
@@ -240,14 +243,18 @@ static void
 path_lookup_resume (void)
 {
   if (!path_lookup_done) {
+    /* TODO:  We are vunerable to circular mounts. */
+
     /* First, look for an entry in the mount table. */
-    mount_item_t* item;
-    for (item = mount_head; item != 0; item = item->next) {
+    mount_item_t* item = mount_head;
+    while (item != 0) {
       if (vnode_equal (&item->a, &path_lookup_current)) {
-	/* Found an entry. Translate and recur. */
+	/* Found an entry. Translate and start over. */
 	path_lookup_current = item->b;
-	path_lookup_resume ();
-	break;
+	item = mount_head;
+      }
+      else {
+	item = item->next;
       }
     }
 
@@ -338,8 +345,6 @@ register_request_precondition (void)
 
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, int param)
 {
-  ssyslog ("vfs: register_request\n");
-
   initialize ();
   scheduler_remove (VFS_REGISTER_REQUEST_NO, param);
 
@@ -363,7 +368,6 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, i
  */
 BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, int param, bd_t bda, bd_t bdb)
 {
-  ssyslog ("vfs: register_response\n");
   initialize ();
 
   registry_error_t error = REGISTRY_SUCCESS;
@@ -594,7 +598,6 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 
     if (read_vfs_request_type (client_request_bda, &client_request_type) == -1) {
       form_unknown_response (VFS_BAD_REQUEST);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
@@ -603,13 +606,11 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
       {
 	if (read_vfs_mount_request (client_request_bda, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_mount_response (VFS_BAD_REQUEST);
-	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
 
 	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
 	  form_mount_response (VFS_BAD_PATH);
-	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
 
@@ -620,7 +621,6 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 	for (item = mount_head; item != 0; item = item->next) {
 	  if (item->b.aid == mount_aid) {
 	    form_mount_response (VFS_ALREADY_MOUNTED);
-	    reset_client_state ();
 	    end_action (false, -1, -1);
 	    break;
 	  }
@@ -635,13 +635,11 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
       {
 	if (read_vfs_readfile_request (client_request_bda, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_readfile_response (VFS_BAD_REQUEST, 0, -1);
-	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
 
 	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
 	  form_readfile_response (VFS_BAD_PATH, 0, -1);
-	  reset_client_state ();
 	  end_action (false, -1, -1);
 	}
 
@@ -655,7 +653,6 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
       break;
     default:
       form_unknown_response (VFS_BAD_REQUEST_TYPE);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
   }
@@ -691,14 +688,12 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     /* The path could not be translated. */
     if (path_lookup_error) {
       form_mount_response (VFS_PATH_DNE);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
     /* The final destination was not a directory. */
     if (path_lookup_current.node.type != DIRECTORY) {
       form_mount_response (VFS_NOT_DIRECTORY);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
@@ -706,7 +701,6 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     description_t desc;
     if (description_init (&desc, mount_aid) == -1) {
       form_mount_response (VFS_AID_DNE);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
@@ -718,7 +712,6 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     if (request == NO_ACTION ||
 	response == NO_ACTION) {
       form_mount_response (VFS_NOT_FS);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
@@ -728,7 +721,6 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
       /* If binding fails, it is because the file system's actions are available. */
       /* TODO:  Unbind. */
       form_mount_response (VFS_NOT_AVAILABLE);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
@@ -742,7 +734,6 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     mount_head = item;
 
     form_mount_response (VFS_SUCCESS);
-    reset_client_state ();
   }
 
   end_action (false, -1, -1);
@@ -777,14 +768,12 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
     /* The path could not be translated. */
     if (path_lookup_error) {
       form_readfile_response (VFS_PATH_DNE, 0, -1);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 
     /* The final destination was not a file. */
     if (path_lookup_current.node.type != FILE) {
       form_readfile_response (VFS_NOT_FILE, 0, -1);
-      reset_client_state ();
       end_action (false, -1, -1);
     }
 

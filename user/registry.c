@@ -128,12 +128,6 @@ initialize (void)
   }
 }
 
-static void
-ssyslog (const char* msg)
-{
-  syslog (msg, strlen (msg));
-}
-
 static bool
 match (registry_method_t method,
        const void* description,
@@ -187,7 +181,6 @@ end_action (bool output_fired,
  */
 BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "", register_request, aid_t aid, bd_t bda, bd_t bdb)
 {
-  ssyslog ("registry: register_request\n");
   initialize ();
 
   registry_method_t method;
@@ -270,8 +263,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
   buffer_queue_item_t* item = buffer_queue_find (&rr_queue, aid);
 
   if (item != 0) {
-    ssyslog ("registry: register_response\n");
-
     /* Found a response.  Execute. */
     bd_t bda = buffer_queue_item_bda (item);
     bd_t bdb = buffer_queue_item_bdb (item);
@@ -292,7 +283,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
  */
 BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "", query_request, aid_t aid, bd_t bda, bd_t bdb)
 {
-  ssyslog ("registry: query_request\n");
   initialize ();
 
   registry_method_t method;
@@ -341,7 +331,6 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_N
  */
 BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONSE_NAME, "", query_response, aid_t aid)
 {
-  ssyslog ("registry: query_response\n");
   initialize ();
   scheduler_remove (REGISTRY_QUERY_RESPONSE_NO, aid);
 
@@ -370,7 +359,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONS
  */
 BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t bdb)
 {
-  ssyslog ("registry: destroyed\n");
   initialize ();
 
   /* The automaton corresponding to aid has been destroyed.

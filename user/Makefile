@@ -1,6 +1,7 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-BOOT_PROGRAMS=registry vfs tmpfs init
+PROGRAMS=registry vfs tmpfs init
+BIN_PROGRAMS=jsh
 #PROGRAMS=keyboard kb_us_104 shell terminal vga
 TARGETS=boot_automaton boot_data
 
@@ -10,9 +11,11 @@ all : $(TARGETS)
 boot_automaton : boot_automaton.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
-boot_data : $(BOOT_PROGRAMS) hello.txt
+boot_data : $(PROGRAMS) $(BIN_PROGRAMS) hello.txt
 	mkdir -p init_fs
-	cp -t init_fs $^
+	cp -t init_fs $(PROGRAMS) hello.txt
+	mkdir -p init_fs/bin
+	cp -t init_fs/bin $(BIN_PROGRAMS)
 	(cd init_fs; find . | cpio -o -H newc) > $@
 
 hello.txt :
@@ -28,8 +31,10 @@ tmpfs : tmpfs.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 init : init.o registry_msg.o vfs_msg.o
-	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring
 
+jsh : jsh.o
+	$(CC) -o $@ $^ -lio -lbuffer_queue -lfifo_scheduler -ldymem -lstring
 
 keyboard : keyboard.o
 	$(CC) -o $@ $^ -lio -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
@@ -51,7 +56,7 @@ vga : vga.o
 
 .PHONY : clean
 clean :
-	-rm -f $(TARGETS) $(BOOT_PROGRAMS) $(PROGRAMS) *.o
+	-rm -f $(TARGETS) $(PROGRAMS) *.o
 	-rm -rf init_fs
 
 .PHONY : depclean

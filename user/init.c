@@ -2,6 +2,7 @@
 #include <io.h>
 #include <string.h>
 #include <buffer_queue.h>
+#include <callback_queue.h>
 #include <fifo_scheduler.h>
 #include <description.h>
 #include "registry_msg.h"
@@ -23,6 +24,10 @@
 #define QUERY_REQUEST_NO 3
 #define VFS_RESPONSE_NO 4
 #define VFS_REQUEST_NO 5
+#define LAUNCH_SHELL_NO 6
+
+#define SHELL_PATH "/bin/jsh"
+#define SCRIPT_PATH "/hello.txt"
 
 /* Our aid. */
 static aid_t init_aid = -1;
@@ -36,8 +41,17 @@ static buffer_queue_t destroy_queue;
 /* Message for querying the registry for the vfs. */
 static bd_t query_bd = -1;
 
-/* Message to the vfs. */
-static bd_t vfs_bd = -1;
+/* Messages to the vfs. */
+static buffer_queue_t vfs_request_queue;
+
+/* Callbacks to execute from the vfs. */
+static callback_queue_t vfs_response_queue;
+
+/* Buffer containing the text of the shell. */
+static bd_t shell_bd = -1;
+
+/* Buffer containing the text of the script. */
+static bd_t script_bd = -1;
 
 static void
 ssyslog (const char* msg)
@@ -52,7 +66,41 @@ initialize (void)
     initialized = true;
 
     buffer_queue_init (&destroy_queue);
+    buffer_queue_init (&vfs_request_queue);
+    callback_queue_init (&vfs_response_queue);
   }
+}
+
+static void
+shell_callback (void* data,
+		 bd_t bda,
+		 bd_t bdb)
+{
+  vfs_error_t error;
+  size_t size;
+  
+  if (read_vfs_readfile_response (bda, &error, &size) == -1 || error != VFS_SUCCESS) {
+    ssyslog ("init: error: couldn't read " SHELL_PATH "\n");
+    exit ();
+  }
+
+  shell_bd = buffer_copy (bdb, 0, buffer_size (bdb));
+}
+
+static void
+script_callback (void* data,
+		 bd_t bda,
+		 bd_t bdb)
+{
+  vfs_error_t error;
+  size_t size;
+  
+  if (read_vfs_readfile_response (bda, &error, &size) == -1 || error != VFS_SUCCESS) {
+    ssyslog ("init: error: couldn't read " SCRIPT_PATH "\n");
+    exit ();
+  }
+  
+  script_bd = buffer_copy (bdb, 0, buffer_size (bdb));
 }
 
 static void
@@ -163,7 +211,6 @@ BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param)
   scheduler_remove (QUERY_REQUEST_NO, param);
 
   if (query_request_precondition ()) {
-    ssyslog ("init: query_request\n");
     bd_t bd = query_bd;
 
     query_bd = -1;
@@ -184,7 +231,6 @@ BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param)
  */
 BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param, bd_t bda, bd_t bdb)
 {
-  ssyslog ("init: query_response\n");
   initialize ();
 
   registry_query_response_t r;
@@ -231,10 +277,24 @@ BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param,
     exit ();
   }
 
-  vfs_bd = write_vfs_readfile_request ("/hello.txt");
-  if (vfs_bd == -1) {
-    ssyslog ("init: error: Couldn't create readfile request\n");
-    exit ();
+  {
+    bd_t bd = write_vfs_readfile_request (SHELL_PATH);
+    if (bd == -1) {
+      ssyslog ("init: error: Couldn't create readfile request\n");
+      exit ();
+    }
+    buffer_queue_push (&vfs_request_queue, 0, bd, -1);
+    callback_queue_push (&vfs_response_queue, shell_callback, 0);
+  }
+
+  {
+    bd_t bd = write_vfs_readfile_request (SCRIPT_PATH);
+    if (bd == -1) {
+      ssyslog ("init: error: Couldn't create readfile request\n");
+      exit ();
+    }
+    buffer_queue_push (&vfs_request_queue, 0, bd, -1);
+    callback_queue_push (&vfs_response_queue, script_callback, 0);
   }
 
   end_action (false, bda, bdb);
@@ -250,7 +310,7 @@ BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param,
 static bool
 vfs_request_precondition (void)
 {
-  return vfs_bd != -1;
+  return !buffer_queue_empty (&vfs_request_queue);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
@@ -260,10 +320,12 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 
   if (vfs_request_precondition ()) {
     ssyslog ("init: vfs_request\n");
-    bd_t bd = vfs_bd;
-    vfs_bd = -1;
+    const buffer_queue_item_t* item = buffer_queue_front (&vfs_request_queue);
+    bd_t bda = buffer_queue_item_bda (item);
+    bd_t bdb = buffer_queue_item_bdb (item);
+    buffer_queue_pop (&vfs_request_queue);
 
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     end_action (false, -1, -1);
@@ -281,62 +343,54 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
   ssyslog ("init: vfs_response\n");
   initialize ();
 
-  vfs_error_t error;
-  size_t size;
-
-  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
-    ssyslog ("init: error: couldn't read hello.txt\n");
+  if (callback_queue_empty (&vfs_response_queue)) {
+    ssyslog ("init: error: vfs produced spurious response\n");
     exit ();
   }
 
-  const char* str = buffer_map (bdb);
-  syslog (str, size);
+  const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
+  callback_t callback = callback_queue_item_callback (item);
+  void* data = callback_queue_item_data (item);
+  callback_queue_pop (&vfs_response_queue);
 
-  /* registry_vfs_response_t r; */
-  /* registry_error_t error; */
-  /* registry_method_t method; */
-  /* size_t count; */
-
-  /* if (registry_vfs_response_initr (&r, bd, bd_size, &error, &method, &count) == -1) { */
-  /* } */
-  
-  /* if (error != REGISTRY_SUCCESS || */
-  /*     method != REGISTRY_STRING_EQUAL) { */
-  /*   ssyslog ("init: error: bad registry response\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* aid_t vfs_aid; */
-  /* const void* description; */
-  /* size_t size; */
-
-  /* if (count != 1 || registry_vfs_response_read (&r, &vfs_aid, &description, &size) == -1) { */
-  /*   ssyslog ("init: error: no vfs\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* description_t vfs_description; */
-  /* if (description_init (&vfs_description, vfs_aid) == -1) { */
-  /*   ssyslog ("init: error: Could not describe vfs\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* /\* If these actions don't exist, then attempts to bind below will fail. *\/ */
-  /* const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME); */
-  /* const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME); */
-
-  /* description_fini (&vfs_description); */
-
-  /* /\* We bind the response first so they don't get lost. *\/ */
-  /* if (bind (vfs_aid, vfs_response, 0, init_aid, VFS_RESPONSE_NO, 0) == -1 || */
-  /*     bind (init_aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) { */
-  /*   ssyslog ("init: error: Couldn't bind to vfs\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* /\* TODO:  Prepare request to vfs. *\/ */
+  callback (data, bda, bdb);
 
   end_action (false, bda, bdb);
+}
+
+/* launch_shell
+   ------------
+   Launch the shell will the specified script.
+
+   Pre:  shell_bd != -1 && script_bd != -1
+   Post: shell_bd == -1 && script_bd == -1
+ */
+static bool
+launch_shell_precondition (void)
+{
+  return shell_bd != -1 && script_bd != -1;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, LAUNCH_SHELL_NO, "", "", launch_shell, int param)
+{
+  initialize ();
+  scheduler_remove (LAUNCH_SHELL_NO, param);
+
+  if (launch_shell_precondition ()) {
+    ssyslog ("init: launch_shell\n");
+
+    if (create (shell_bd, true, script_bd) == -1) {
+      ssyslog ("init: error: couldn't create shell automaton\n");
+      exit ();
+    }
+
+    buffer_destroy (shell_bd);
+    shell_bd = -1;
+    buffer_destroy (script_bd);
+    script_bd = -1;
+  }
+
+  end_action (false, -1, -1);
 }
 
 /* end_action is a helper function for terminating actions.
@@ -361,57 +415,9 @@ end_action (bool output_fired,
   if (vfs_request_precondition ()) {
     scheduler_add (VFS_REQUEST_NO, 0);
   }
+  if (launch_shell_precondition ()) {
+    scheduler_add (LAUNCH_SHELL_NO, 0);
+  }
 
   scheduler_finish (output_fired, bda, bdb);
 }
-
-/* #include "keyboard.h" */
-/* #include "kb_us_104.h" */
-/* #include "shell.h" */
-/* #include "terminal.h" */
-/* #include "vga.h" */
-
-  /* aid_t keyboard = -1; */
-  /* for (file_t* f = head; f != 0; f = f->next) { */
-  /*   if (strcmp (f->name, "keyboard") == 0) { */
-  /*     //print ("name = "); print (f->name); put ('\n'); */
-  /*     keyboard = create (f->buffer, f->buffer_size, true, -1); */
-  /*   } */
-  /* } */
-
-  /* aid_t kb_us_104 = -1; */
-  /* for (file_t* f = head; f != 0; f = f->next) { */
-  /*   if (strcmp (f->name, "kb_us_104") == 0) { */
-  /*     //print ("name = "); print (f->name); put ('\n'); */
-  /*     kb_us_104 = create (f->buffer, f->buffer_size, true, -1); */
-  /*   } */
-  /* } */
-
-  /* aid_t shell = -1; */
-  /* for (file_t* f = head; f != 0; f = f->next) { */
-  /*   if (strcmp (f->name, "shell") == 0) { */
-  /*     //print ("name = "); print (f->name); put ('\n'); */
-  /*     shell = create (f->buffer, f->buffer_size, true, -1); */
-  /*   } */
-  /* } */
-
-  /* aid_t terminal = -1; */
-  /* for (file_t* f = head; f != 0; f = f->next) { */
-  /*   if (strcmp (f->name, "terminal") == 0) { */
-  /*     //print ("name = "); print (f->name); put ('\n'); */
-  /*     terminal = create (f->buffer, f->buffer_size, true, -1); */
-  /*   } */
-  /* } */
-
-  /* aid_t vga = -1; */
-  /* for (file_t* f = head; f != 0; f = f->next) { */
-  /*   if (strcmp (f->name, "vga") == 0) { */
-  /*     //print ("name = "); print (f->name); put ('\n'); */
-  /*     vga = create (f->buffer, f->buffer_size, true, -1); */
-  /*   } */
-  /* } */
-
-  /* bind (keyboard, KEYBOARD_SCAN_CODE, 0, kb_us_104, KB_US_104_SCAN_CODE, 0); */
-  /* bind (kb_us_104, KB_US_104_STRING, 0, shell, SHELL_STDIN, 0); */
-  /* bind (shell, SHELL_STDOUT, 0, terminal, TERMINAL_DISPLAY, 0); */
-  /* bind (terminal, TERMINAL_VGA_OP, 0, vga, VGA_OP, 0); */
