@@ -70,6 +70,7 @@ namespace rts {
 
     // Allocate a frame.
     frame_t frame = frame_manager::alloc ();
+    kassert (frame != vm::zero_frame ());
     // Map the page directory.
     vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE, false);
     vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
@@ -541,10 +542,19 @@ namespace rts {
 
     const kstring& desc = pos->second->get_description ();
 
-    // Create a buffer.
-    pair<bd_t, int> r = a->buffer_create (align_up (desc.size (), PAGE_SIZE) / PAGE_SIZE);
+    // Create a buffer for the description.
+    // We create an empty buffer and then manually add frames to it.
+    // This avoids using the zero_frame which is important because the copy-on-write system won't be triggered since we are in supervisor mode.
+    pair<bd_t, int> r = a->buffer_create (0);
     if (r.first == -1) {
       return r;
+    }
+    buffer* b = a->lookup_buffer (r.first);
+    size_t page_count = align_up (desc.size (), PAGE_SIZE) / PAGE_SIZE;
+    for (size_t idx = 0; idx != page_count; ++idx) {
+      frame_t frame = frame_manager::alloc ();
+      kassert (frame != vm::zero_frame ());
+      b->append_frame (frame);
     }
 
     pair<void*, int> s = a->buffer_map (r.first);
@@ -555,6 +565,7 @@ namespace rts {
     }
 
     memcpy (s.first, desc.c_str (), desc.size ());
+    memset (reinterpret_cast<char*> (s.first) + desc.size (), 0, page_count * PAGE_SIZE - desc.size ());
 
     return make_pair (r.first, LILY_SYSCALL_ESUCCESS);
   }

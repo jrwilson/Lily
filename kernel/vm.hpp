@@ -293,13 +293,17 @@ namespace vm {
        map_mode_t map_mode,
        bool not_in_frame_manager)
   {
+    kassert (fr != vm::zero_frame () || map_mode == vm::MAP_COPY_ON_WRITE || map_mode == vm::MAP_READ_ONLY);
+
     page_directory* page_directory = get_page_directory ();
     page_table* pt = get_page_table (logical_addr);
     const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
     const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
 
     if (page_directory->entry[directory_entry].present_ == NOT_PRESENT) {
-      page_directory->entry[directory_entry] = page_directory_entry (frame_manager::alloc (), USER, PRESENT);
+      frame_t frame = frame_manager::alloc ();
+      kassert (frame != vm::zero_frame ());
+      page_directory->entry[directory_entry] = page_directory_entry (frame, USER, PRESENT);
       // Flush the TLB.
       asm ("invlpg (%0)\n" :: "r"(pt));
       // Initialize the page table.
@@ -332,6 +336,8 @@ namespace vm {
 	 page_privilege_t privilege,
 	 map_mode_t map_mode)
   {
+    kassert (logical_address_to_frame (logical_addr) != vm::zero_frame () || map_mode == vm::MAP_COPY_ON_WRITE || map_mode == vm::MAP_READ_ONLY);
+
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
     const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
@@ -491,6 +497,25 @@ namespace vm {
   {
     return (error & (1 << 4)) != 0;
   }
+
+  // inline bool
+  // check_zero_frame (void)
+  // {
+  //   bool flag = true;
+  //   vm::map (vm::get_stub1 (), vm::zero_frame (), vm::USER, vm::MAP_READ_ONLY, false);
+  //   const char* c = reinterpret_cast<const char*> (vm::get_stub1 ());
+  //   for (size_t idx = 0; idx != PAGE_SIZE; ++idx) {
+  //     flag = (flag && c[idx] == 0);
+  //     if (c[idx] != 0) {
+  // 	kout << "(" << idx << "," << c[idx] << ") ";
+  //     }
+  //   }
+  //   if (!flag) {
+  //     kout << endl;
+  //   }
+  //   vm::unmap (vm::get_stub1 ());
+  //   return flag;
+  // }
 
 };
 

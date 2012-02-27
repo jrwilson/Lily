@@ -44,35 +44,13 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   ssyslog ("jsh: init\n");
   initialize ();
 
-  const char* str = buffer_map (bda);
+  char* str = buffer_map (bda);
+  str[0] = 'J';
   ssyslog (str);
 
-  /* /\* Look up the registry. *\/ */
-  /* aid_t registry_aid = get_registry (); */
-  /* if (registry_aid == -1) { */
-  /*   ssyslog ("init: error: no registry\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* description_t desc; */
-  /* if (description_init (&desc, registry_aid) == -1) { */
-  /*   ssyslog ("init: error: no registry description\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* const ano_t request = description_name_to_number (&desc, REGISTRY_QUERY_REQUEST_NAME); */
-  /* const ano_t response = description_name_to_number (&desc, REGISTRY_QUERY_RESPONSE_NAME); */
-
-  /* description_fini (&desc); */
-
-  /* /\* Bind to the response first so they don't get lost. *\/ */
-  /* if (bind (registry_aid, response, 0, aid, QUERY_RESPONSE_NO, 0) == -1 || */
-  /*     bind (aid, QUERY_REQUEST_NO, 0, registry_aid, request, 0) == -1) { */
-  /*   ssyslog ("init: error: couldn't bind to registry\n"); */
-  /*   exit (); */
-  /* } */
-
-  /* query_bd = write_registry_query_request (REGISTRY_STRING_EQUAL, VFS_DESCRIPTION, VFS_DESCRIPTION_SIZE); */
+  if (strlen (str) == 26) {
+    ssyslog ("was 26 long\n");
+  }
 
   end_action (false, bda, bdb);
 }

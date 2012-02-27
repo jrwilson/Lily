@@ -311,9 +311,12 @@ public:
       vm::remap (heap_area_->begin (), vm::USER, vm::MAP_COPY_ON_WRITE);
     }
 
-    // Map the stack using copy-on-write of the zero page.
+    // Map the stack.
+    // We do not try to copy-on-write the zero page because copy-on-write only works in user mode and we write to the stack in supervisor mode.
     for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
-      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
+      frame_t frame = frame_manager::alloc ();
+      kassert (frame != vm::zero_frame ());
+      vm::map (address, frame, vm::USER, vm::MAP_READ_WRITE, false);
     }
   }
 

@@ -27,7 +27,7 @@
 #define LAUNCH_SHELL_NO 6
 
 #define SHELL_PATH "/bin/jsh"
-#define SCRIPT_PATH "/hello.txt"
+#define SCRIPT_PATH "/scr/start.jsh"
 
 /* Our aid. */
 static aid_t init_aid = -1;

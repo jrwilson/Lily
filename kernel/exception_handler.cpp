@@ -189,16 +189,17 @@ exception_dispatch (volatile registers regs)
       	// Copy-on-write.
       	// Allocate a frame.
       	frame_t dst_frame = frame_manager::alloc ();
+	kassert (dst_frame != vm::zero_frame ());
       	// Map it in at the stub.
       	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Copy.
       	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
       	// Unmap the source.
       	vm::unmap (address);
-      	// Map in the destination.
-      	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Unmap the stub.
       	vm::unmap (vm::get_stub1 ());
+      	// Map in the destination.
+      	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Remove the reference from allocation.
       	frame_manager::decref (dst_frame);
 

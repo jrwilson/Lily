@@ -21,7 +21,9 @@ kernel_alloc::sbrk (size_t size)
     physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
     // Back with frames.
     for (size_t x = 0; x != size; x += PAGE_SIZE) {
-      vm::map (retval + x, frame_manager::alloc (), vm::USER, vm::MAP_READ_WRITE, false);
+      frame_t frame = frame_manager::alloc ();
+      kassert (frame != vm::zero_frame ());
+      vm::map (retval + x, frame, vm::USER, vm::MAP_READ_WRITE, false);
     }
     // Switch back.
     vm::switch_to_directory (old);
