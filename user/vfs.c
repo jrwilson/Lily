@@ -113,7 +113,8 @@ static bool readfile_sent = false;
 
 static void
 end_action (bool output_fired,
-	    bd_t bd);
+	    bd_t bda,
+	    bd_t bdb);
 
 static void
 initialize (void)
@@ -277,7 +278,7 @@ path_lookup_resume (void)
    
    Post: register_bd != -1
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
   vfs_aid = aid;
 
@@ -287,13 +288,13 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd)
   aid_t registry_aid = get_registry ();
   if (registry_aid == -1) {
     ssyslog ("vfs: warning: no registry\n");
-    end_action (false, bd);
+    end_action (false, bda, bdb);
   }
 
   description_t desc;
   if (description_init (&desc, registry_aid) == -1) {
     ssyslog ("vfs: warning: no registry description\n");
-    end_action (false, bd);
+    end_action (false, bda, bdb);
   }
 
   const ano_t register_request = description_name_to_number (&desc, REGISTRY_REGISTER_REQUEST_NAME);
@@ -305,12 +306,12 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd)
   if (bind (registry_aid, register_response, 0, vfs_aid, VFS_REGISTER_RESPONSE_NO, 0) == -1 ||
       bind (vfs_aid, VFS_REGISTER_REQUEST_NO, 0, registry_aid, register_request, 0) == -1) {
     ssyslog ("vfs: warning: couldn't bind to registry\n");
-    end_action (false, bd);
+    end_action (false, bda, bdb);
   }
 
   register_bd = write_registry_register_request (REGISTRY_STRING_EQUAL, VFS_DESCRIPTION, VFS_DESCRIPTION_SIZE);
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* register_request
@@ -326,7 +327,7 @@ register_request_precondition (void)
   return register_bd != -1;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, int param)
 {
   ssyslog ("vfs: register_request\n");
 
@@ -338,10 +339,10 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, i
 
     register_bd = -1;
 
-    end_action (true, bd);
+    end_action (true, bd, -1);
   }
   else {
-    end_action (false, -1);
+    end_action (false, -1, -1);
   }
 }
 
@@ -351,13 +352,13 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, i
 
    Post: none
  */
-BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, int param, bd_t bd)
+BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, int param, bd_t bda, bd_t bdb)
 {
   ssyslog ("vfs: register_response\n");
   initialize ();
 
   registry_error_t error = REGISTRY_SUCCESS;
-  if (read_registry_register_response (bd, &error) == 0) {
+  if (read_registry_register_response (bda, &error) == 0) {
     switch (error) {
     case REGISTRY_SUCCESS:
       /* Okay. */
@@ -371,7 +372,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
     ssyslog ("vfs: warning: couldn't map registry response\n");
   }
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* client_request
@@ -380,12 +381,12 @@ BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, 
 
    Post: the request is at the end of the client_request_queue
  */
-BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bd)
+BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bda, bd_t bdb)
 {
   ssyslog ("vfs: client_request\n");
   initialize ();
-  buffer_queue_push (&client_request_queue, aid, bd);
-  end_action (false, -1);
+  buffer_queue_push (&client_request_queue, aid, bda);
+  end_action (false, -1, -1);
 }
 
 /* client_response
@@ -395,7 +396,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
    Pre:  The client indicated by aid has a response in the queue
    Post: The first response for the client indicated by aid is removed from the queue
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_RESPONSE_NO, aid);
@@ -410,11 +411,11 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
     bd_t bd = buffer_queue_item_bd (item);
     buffer_queue_erase (&client_response_queue, item);
 
-    end_action (true, bd);
+    end_action (true, bd, -1);
   }
   else {
     /* Did not find a response. */
-    end_action (false, -1);
+    end_action (false, -1, -1);
   }
 }
 
@@ -431,7 +432,7 @@ file_system_request_precondition (aid_t aid)
   return fs_aid == aid && fs_aid != -1 && fs_bd != -1;
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
@@ -443,11 +444,11 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
     fs_aid = -1;
     fs_bd = -1;
 
-    end_action (true, bd);
+    end_action (true, bd, -1);
   }
   else {
     /* Did not find a request. */
-    end_action (false, -1);
+    end_action (false, -1, -1);
   }
 }
 
@@ -457,7 +458,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
 
    Post: 
  */
-BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bd)
+BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bda, bd_t bdb)
 {
   ssyslog ("vfs: file_system_response\n");
   initialize ();
@@ -470,7 +471,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
     {
       vfs_fs_error_t error;
       vfs_fs_node_t node;
-      if (read_vfs_fs_descend_response (bd, &error, &node) == -1) {
+      if (read_vfs_fs_descend_response (bda, &error, &node) == -1) {
 	/* TODO:  This is a protocol violation. */
 	exit ();
       }
@@ -479,7 +480,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
 	/* A less serious error. */
 	path_lookup_done = true;
 	path_lookup_error = true;
-	end_action (false, bd);
+	end_action (false, bda, bdb);
       }	
 
       /* Update the current location. */
@@ -491,7 +492,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
   case VFS_FS_READFILE:
     {
       vfs_fs_error_t error;
-      if (read_vfs_fs_readfile_response (bd, &error) == -1) {
+      if (read_vfs_fs_readfile_response (bda, &error) == -1) {
 	/* TODO:  This is a protocol violation. */
 	exit ();
       }
@@ -507,7 +508,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
     }
     break;
   }
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* destroy_buffers
@@ -535,7 +536,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
     }
   }
 
-  end_action (false, -1);
+  end_action (false, -1, -1);
 }
 
 /* decode
@@ -566,7 +567,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     if (read_vfs_request_type (client_request_bd, &client_request_type) == -1) {
       form_unknown_response (VFS_BAD_REQUEST);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     switch (client_request_type) {
@@ -575,13 +576,13 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 	if (read_vfs_mount_request (client_request_bd, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_mount_response (VFS_BAD_REQUEST);
 	  reset_client_state ();
-	  end_action (false, -1);
+	  end_action (false, -1, -1);
 	}
 
 	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
 	  form_mount_response (VFS_BAD_PATH);
 	  reset_client_state ();
-	  end_action (false, -1);
+	  end_action (false, -1, -1);
 	}
 
 	/* See if the file system is already mounted.
@@ -592,7 +593,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 	  if (item->b.aid == mount_aid) {
 	    form_mount_response (VFS_ALREADY_MOUNTED);
 	    reset_client_state ();
-	    end_action (false, -1);
+	    end_action (false, -1, -1);
 	    break;
 	  }
 	}
@@ -607,13 +608,13 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 	if (read_vfs_readfile_request (client_request_bd, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_readfile_response (VFS_BAD_REQUEST);
 	  reset_client_state ();
-	  end_action (false, -1);
+	  end_action (false, -1, -1);
 	}
 
 	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
 	  form_readfile_response (VFS_BAD_PATH);
 	  reset_client_state ();
-	  end_action (false, -1);
+	  end_action (false, -1, -1);
 	}
 
 	/* We have not send the readfile request yet. */
@@ -627,11 +628,11 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     default:
       form_unknown_response (VFS_BAD_REQUEST_TYPE);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
   }
 
-  end_action (false, -1);
+  end_action (false, -1, -1);
 }
 
 /* mount
@@ -663,14 +664,14 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     if (path_lookup_error) {
       form_mount_response (VFS_PATH_DNE);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     /* The final destination was not a directory. */
     if (path_lookup_current.node.type != DIRECTORY) {
       form_mount_response (VFS_NOT_DIRECTORY);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     /* Bind to the file system. */
@@ -678,7 +679,7 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     if (description_init (&desc, mount_aid) == -1) {
       form_mount_response (VFS_AID_DNE);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME);
@@ -690,7 +691,7 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
 	response == NO_ACTION) {
       form_mount_response (VFS_NOT_FS);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     /* Bind to the response first so they don't get lost. */
@@ -700,7 +701,7 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
       /* TODO:  Unbind. */
       form_mount_response (VFS_NOT_AVAILABLE);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     /* The mount succeeded.  Insert an entry into the list. */
@@ -716,7 +717,7 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
     reset_client_state ();
   }
 
-  end_action (false, -1);
+  end_action (false, -1, -1);
 }
 
 /* readfile
@@ -749,14 +750,14 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
     if (path_lookup_error) {
       form_readfile_response (VFS_PATH_DNE);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     /* The final destination was not a file. */
     if (path_lookup_current.node.type != FILE) {
       form_readfile_response (VFS_NOT_FILE);
       reset_client_state ();
-      end_action (false, -1);
+      end_action (false, -1, -1);
     }
 
     /* Form a message to a file system. */
@@ -767,15 +768,19 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
     readfile_sent = true;
   }
 
-  end_action (false, -1);
+  end_action (false, -1, -1);
 }
 
 static void
 end_action (bool output_fired,
-	    bd_t bd)
+	    bd_t bda,
+	    bd_t bdb)
 {
-  if (bd != -1) {
-    buffer_queue_push (&destroy_queue, 0, bd);
+  if (bda != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda);
+  }
+  if (bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bdb);
   }
 
   if (register_request_precondition ()) {
@@ -801,5 +806,5 @@ end_action (bool output_fired,
   }
 
 
-  scheduler_finish (output_fired, bd);
+  scheduler_finish (output_fired, bda, bdb);
 }

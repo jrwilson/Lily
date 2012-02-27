@@ -14,6 +14,7 @@ scheduler_remove (ano_t action_number,
 		  int parameter);
 void
 scheduler_finish (bool output_fired,
-		  bd_t bd);
+		  bd_t bda,
+		  bd_t bdb);
 
 #endif /* FIFO_SCHEDULER_H */

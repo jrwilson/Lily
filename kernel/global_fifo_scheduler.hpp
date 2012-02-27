@@ -84,7 +84,8 @@ private:
     caction action_;
     const automaton::input_action_set_type* input_actions_;
     automaton::input_action_set_type::const_iterator input_action_pos_;
-    buffer* output_buffer_;
+    buffer* output_buffer_a_;
+    buffer* output_buffer_b_;
     bool destroy_buffer_;
 
   public:
@@ -98,7 +99,8 @@ private:
     {
       action_.action = 0;
       action_.parameter = 0;
-      output_buffer_ = 0;
+      output_buffer_a_ = 0;
+      output_buffer_b_ = 0;
       destroy_buffer_ = false;
     }
 
@@ -126,7 +128,8 @@ private:
 	break;
       case SYSTEM_INPUT:
 	// Load the buffer.
-	output_buffer_ = action_.system_input_buffer;
+	output_buffer_a_ = action_.system_input_buffer_a;
+	output_buffer_b_ = action_.system_input_buffer_b;
 	destroy_buffer_ = true;
 	break;
       }
@@ -134,7 +137,8 @@ private:
 
     inline void
     finish_action (bool output_fired,
-		   bd_t bd)
+		   bd_t bda,
+		   bd_t bdb)
 
     {
       if (action_.action != 0) {	
@@ -151,19 +155,29 @@ private:
 	  // Fall through.
 	case SYSTEM_INPUT:
 	  // Finished executing input actions.
-	  if (output_buffer_ != 0 && destroy_buffer_) {
-	    delete output_buffer_;
+	  if (output_buffer_a_ != 0 && destroy_buffer_) {
+	    delete output_buffer_a_;
+	    output_buffer_a_ = 0;
 	  }
-	  output_buffer_ = 0;
+	  if (output_buffer_b_ != 0 && destroy_buffer_) {
+	    delete output_buffer_b_;
+	    output_buffer_b_ = 0;
+	  }
 	  destroy_buffer_ = false;
 	  break;
 	case OUTPUT:
 	  if (output_fired) {
 	    // The output did something.
-	    output_buffer_ = action_.action->automaton->lookup_buffer (bd);
+	    output_buffer_a_ = action_.action->automaton->lookup_buffer (bda);
 	    // Synchronize.
-	    if (output_buffer_ != 0) {
-	      output_buffer_->sync (0, output_buffer_->size ());
+	    if (output_buffer_a_ != 0) {
+	      output_buffer_a_->sync (0, output_buffer_a_->size ());
+	    }
+	    // The output did something.
+	    output_buffer_b_ = action_.action->automaton->lookup_buffer (bdb);
+	    // Synchronize.
+	    if (output_buffer_b_ != 0) {
+	      output_buffer_b_->sync (0, output_buffer_b_->size ());
 	    }
 	    destroy_buffer_ = false;
 	    if (input_actions_ != 0) {
@@ -174,7 +188,8 @@ private:
 	      execute ();
 	    }
 	    // There were no inputs.
-	    output_buffer_ = 0;
+	    output_buffer_a_ = 0;
+	    output_buffer_b_ = 0;
 	    destroy_buffer_ = false;
 	  }
 	  break;
@@ -216,28 +231,25 @@ private:
       case INPUT:
       case SYSTEM_INPUT:
 	{
-	  bd_t input_buffer = -1;
+	  bd_t bda = -1;
+	  bd_t bdb = -1;
 	  
-	  if (output_buffer_ != 0) {
+	  if (output_buffer_a_ != 0) {
 	    // Copy the buffer to the input automaton.
-	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
+	    bda = action_.action->automaton->buffer_create (*output_buffer_a_);
 	  }
 
-	  // Push the buffer.
-	  *--stack_pointer = input_buffer;	
+	  if (output_buffer_b_ != 0) {
+	    // Copy the buffer to the input automaton.
+	    bdb = action_.action->automaton->buffer_create (*output_buffer_b_);
+	  }
+
+	  // Push the buffers.
+	  *--stack_pointer = bdb;
+	  *--stack_pointer = bda;
 	}
 	break;
       case OUTPUT:
-	{
-	  // Push the binding count.
-	  if (input_actions_ != 0) {
-	    *--stack_pointer = input_actions_->size ();
-	  }
-	  else {
-	    *--stack_pointer = 0;
-	  }
-	}
-	break;
       case INTERNAL:
 	// Do nothing.
 	break;
@@ -326,10 +338,11 @@ public:
   
   static inline void
   finish (bool output_fired,
-	  bd_t bd)
+	  bd_t bda,
+	  bd_t bdb)
   {
     // This call won't return when executing input actions.
-    exec_context_.finish_action (output_fired, bd);
+    exec_context_.finish_action (output_fired, bda, bdb);
 
     // Check for interrupts.
     interrupts::enable ();

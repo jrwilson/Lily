@@ -32,7 +32,8 @@ namespace rts {
 	  ano_t action_number,
 	  int parameter,
 	  bool output_fired,
-	  bd_t bd);
+	  bd_t bda,
+	  bd_t bdb);
   
   pair<aid_t, int>
   create (automaton* a,

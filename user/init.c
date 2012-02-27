@@ -57,7 +57,8 @@ initialize (void)
 
 static void
 end_action (bool output_fired,
-	    bd_t bd);
+	    bd_t bda,
+	    bd_t bdb);
 
 /* init
    ----
@@ -65,7 +66,7 @@ end_action (bool output_fired,
 
    Post: query_bd != -1
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
   init_aid = aid;
 
@@ -99,7 +100,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd)
 
   query_bd = write_registry_query_request (REGISTRY_STRING_EQUAL, VFS_DESCRIPTION, VFS_DESCRIPTION_SIZE);
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* destroy_buffers
@@ -129,7 +130,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
     }
   }
 
-  end_action (false, -1);
+  end_action (false, -1, -1);
 }
 
 /* query_request
@@ -146,7 +147,7 @@ query_request_precondition (void)
   return query_bd != -1 && init_aid != -1;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param)
 {
   initialize ();
   scheduler_remove (QUERY_REQUEST_NO, param);
@@ -157,10 +158,10 @@ BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param, 
 
     query_bd = -1;
 
-    end_action (true, bd);
+    end_action (true, bd, -1);
   }
   else {
-    end_action (false, -1);
+    end_action (false, -1, -1);
   }
 }
 
@@ -171,7 +172,7 @@ BEGIN_OUTPUT (NO_PARAMETER, QUERY_REQUEST_NO, "", "", query_request, int param, 
 
    Post: vfs_bd != -1
  */
-BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param, bd_t bd)
+BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param, bd_t bda, bd_t bdb)
 {
   ssyslog ("init: query_response\n");
   initialize ();
@@ -181,7 +182,7 @@ BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param,
   registry_method_t method;
   size_t count;
 
-  if (registry_query_response_initr (&r, bd, &error, &method, &count) == -1) {
+  if (registry_query_response_initr (&r, bda, &error, &method, &count) == -1) {
     ssyslog ("init: error: couldn't read registry response\n");
     exit ();
   }
@@ -226,7 +227,7 @@ BEGIN_INPUT (NO_PARAMETER, QUERY_RESPONSE_NO, "", "", query_response, int param,
     exit ();
   }
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* vfs_request
@@ -242,7 +243,7 @@ vfs_request_precondition (void)
   return vfs_bd != -1;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 {
   initialize ();
   scheduler_remove (VFS_REQUEST_NO, param);
@@ -252,10 +253,10 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size
     bd_t bd = vfs_bd;
     vfs_bd = -1;
 
-    end_action (true, bd);
+    end_action (true, bd, -1);
   }
   else {
-    end_action (false, -1);
+    end_action (false, -1, -1);
   }
 }
 
@@ -265,7 +266,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size
 
    Post: ???
  */
-BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bd)
+BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
 {
   ssyslog ("init: vfs_response\n");
   initialize ();
@@ -316,7 +317,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
 
   /* /\* TODO:  Prepare request to vfs. *\/ */
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* end_action is a helper function for terminating actions.
@@ -325,10 +326,14 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
 */
 static void
 end_action (bool output_fired,
-	    bd_t bd)
+	    bd_t bda,
+	    bd_t bdb)
 {
-  if (bd != -1) {
-    buffer_queue_push (&destroy_queue, 0, bd);
+  if (bda != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda);
+  }
+  if (bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bdb);
   }
 
   if (destroy_buffers_precondition ()) {
@@ -341,7 +346,7 @@ end_action (bool output_fired,
     scheduler_add (VFS_REQUEST_NO, 0);
   }
 
-  scheduler_finish (output_fired, bd);
+  scheduler_finish (output_fired, bda, bdb);
 }
 
 /* #include "keyboard.h" */

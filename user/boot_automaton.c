@@ -43,7 +43,8 @@ static buffer_queue_t destroy_queue;
 
 static void
 end_action (bool output_fired,
-	    bd_t bd);
+	    bd_t bda,
+	    bd_t bdb);
 
 static void
 initialize (void)
@@ -69,12 +70,12 @@ ssyslog (const char* msg)
    
    Post: mount_state == MOUNT && tmpfs != -1 && init_file != 0
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
   cpio_archive_t archive;
-  if (cpio_archive_init (&archive, bd) == -1) {
+  if (cpio_archive_init (&archive, bda) == -1) {
     ssyslog ("boot_automaton: error: Could not initialize cpio archive\n");
     exit ();
   }
@@ -157,7 +158,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd)
     exit ();
   }
   /* Note:  We pass the buffer containing the cpio archive. */
-  aid_t tmpfs = create (tmpfs_file->bd, true, bd);
+  aid_t tmpfs = create (tmpfs_file->bd, true, bda);
   cpio_file_destroy (tmpfs_file);
   if (tmpfs == -1) {
     ssyslog ("boot_automaton: error: Could not create tmpfs\n");
@@ -173,7 +174,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bd)
     exit ();
   }
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* vfs_request
@@ -189,7 +190,7 @@ vfs_request_precondition (void)
   return mount_bd != -1;
 }
 
-BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_t bc)
+BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 {
   initialize ();
   scheduler_remove (VFS_REQUEST_NO, param);
@@ -199,10 +200,10 @@ BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_
     bd_t bd = mount_bd;
     mount_bd = -1;
 
-    end_action (true, bd);
+    end_action (true, bd, -1);
   }
   else {
-    end_action (false, -1);
+    end_action (false, -1, -1);
   }
 }
 
@@ -212,13 +213,13 @@ BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param, size_
 
    Post: exit on error, otherwise, create the init automaton
  */
-BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bd)
+BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
 {
   ssyslog ("boot_automaton: vfs_response\n");
   initialize ();
 
   vfs_error_t error;
-  if (read_vfs_mount_response (bd, &error) == -1) {
+  if (read_vfs_mount_response (bda, &error) == -1) {
     ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
     exit ();
   }
@@ -236,7 +237,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
     exit ();
   }
 
-  end_action (false, bd);
+  end_action (false, bda, bdb);
 }
 
 /* destroy_buffers
@@ -266,7 +267,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
     }
   }
 
-  end_action (false, -1);
+  end_action (false, -1, -1);
 }
 
 /* end_action is a helper function for terminating actions.
@@ -275,10 +276,14 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
 */
 static void
 end_action (bool output_fired,
-	    bd_t bd)
+	    bd_t bda,
+	    bd_t bdb)
 {
-  if (bd != -1) {
-    buffer_queue_push (&destroy_queue, 0, bd);
+  if (bda != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda);
+  }
+  if (bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bdb);
   }
 
   if (vfs_request_precondition ()) {
@@ -288,5 +293,5 @@ end_action (bool output_fired,
     scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
 
-  scheduler_finish (output_fired, bd);
+  scheduler_finish (output_fired, bda, bdb);
 }

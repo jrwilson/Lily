@@ -38,7 +38,8 @@ struct finish_args {
   ano_t action_number;
   int parameter;
   bool output_fired;
-  bd_t bd;
+  bd_t bda;
+  bd_t bdb;
 };
 
 struct create_args {
@@ -188,7 +189,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      rts::finish (current, ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bd);
+      rts::finish (current, ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bda, ptr->bdb);
       return;
     }
     break;

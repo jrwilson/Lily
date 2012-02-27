@@ -49,27 +49,32 @@ private:
 struct caction {
   const paction* action;
   int parameter;
-  buffer* system_input_buffer;
+  buffer* system_input_buffer_a;
+  buffer* system_input_buffer_b;
 
   caction () :
     action (0),
     parameter (0),
-    system_input_buffer (0)
+    system_input_buffer_a (0),
+    system_input_buffer_b (0)
   { }
 
   caction (const paction* act,
 	   int p) :
     action (act),
     parameter (p),
-    system_input_buffer (0)
+    system_input_buffer_a (0),
+    system_input_buffer_b (0)
   { }
 
   caction (const paction* act,
 	   int p,
+	   buffer* a,
 	   buffer* b) :
     action (act),
     parameter (p),
-    system_input_buffer (b)
+    system_input_buffer_a (a),
+    system_input_buffer_b (b)
   { }
   
   inline bool

@@ -255,10 +255,10 @@ namespace rts {
       halt ();
     }
 
-    scheduler::schedule (caction (action, child->aid (), data_buffer));
+    scheduler::schedule (caction (action, child->aid (), data_buffer, 0));
 
     // Start the scheduler.  Doesn't return.
-    scheduler::finish (false, -1);
+    scheduler::finish (false, -1, -1);
   }
 
   // The automaton has finished the current action.
@@ -289,7 +289,8 @@ namespace rts {
 	  ano_t action_number,
 	  int parameter,
 	  bool output_fired,
-	  bd_t bd)
+	  bd_t bda,
+	  bd_t bdb)
   {
     automaton* a = current.action->automaton;
     const paction* action = a->find_action (action_number);
@@ -318,7 +319,7 @@ namespace rts {
       }
     }
 
-    scheduler::finish (output_fired, bd);
+    scheduler::finish (output_fired, bda, bdb);
   }
 
   pair<aid_t, int>
@@ -372,7 +373,7 @@ namespace rts {
     const paction* action = child->find_action (LILY_ACTION_INIT);
     if (action != 0) {
       if (data_buffer != 0) {
-	scheduler::schedule (caction (action, child->aid (), new buffer (*data_buffer)));
+	scheduler::schedule (caction (action, child->aid (), new buffer (*data_buffer), 0));
       }
       else {
 	scheduler::schedule (caction (action, child->aid ()));
