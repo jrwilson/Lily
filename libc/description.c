@@ -12,8 +12,9 @@ description_init (description_t* d,
   if (bd == -1) {
     return -1;
   }
-  size_t bd_size = buffer_size (bd);
-  buffer_file_open (&d->bf, bd, bd_size, false);
+  if (buffer_file_open (&d->bf, bd, false) == -1) {
+    return -1;
+  }
   return 0;
 }
 

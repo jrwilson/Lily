@@ -40,47 +40,38 @@ typedef enum {
 
 int
 read_vfs_request_type (bd_t bd,
-		       size_t bd_size,
 		       vfs_type_t* type);
 
 bd_t
-write_vfs_unknown_response (vfs_error_t error,
-			    size_t* bd_size);
+write_vfs_unknown_response (vfs_error_t error);
 
 bd_t
 write_vfs_mount_request (aid_t aid,
-			 const char* path,
-			 size_t* bd_size);
+			 const char* path);
 
 int
 read_vfs_mount_request (bd_t bd,
-			size_t bd_size,
 			aid_t* aid,
 			const char** path,
 			size_t* path_size);
 
 bd_t
-write_vfs_mount_response (vfs_error_t error,
-			  size_t* bd_size);
+write_vfs_mount_response (vfs_error_t error);
 
 int
 read_vfs_mount_response (bd_t bd,
-			 size_t bd_size,
 			 vfs_error_t* error);
 
 bd_t
-write_vfs_readfile_request (const char* path,
-			    size_t* bd_size);
+write_vfs_readfile_request (const char* path);
 
 int
 read_vfs_readfile_request (bd_t bd,
-			   size_t bd_size,
 			   const char** path,
 			   size_t* path_size);
 
 bd_t
-write_vfs_readfile_response (vfs_error_t error,
-			     size_t* bd_size);
+write_vfs_readfile_response (vfs_error_t error);
 
 /*
   File System Section
@@ -120,53 +111,43 @@ typedef enum {
 
 int
 read_vfs_fs_request_type (bd_t bd,
-			  size_t bd_size,
 			  vfs_fs_type_t* type);
 
 bd_t
-write_vfs_fs_unknown_response (vfs_fs_error_t error,
-			       size_t* bd_size);
+write_vfs_fs_unknown_response (vfs_fs_error_t error);
 
 bd_t
 write_vfs_fs_descend_request (size_t id,
 			      const char* name,
-			      size_t name_size,
-			      size_t* bd_size);
+			      size_t name_size);
 
 int
 read_vfs_fs_descend_request (bd_t bd,
-			     size_t bd_size,
 			     size_t* id,
 			     const char** name,
 			     size_t* name_size);
 
 bd_t
 write_vfs_fs_descend_response (vfs_fs_error_t error,
-			       const vfs_fs_node_t* node,
-			       size_t* bd_size);
+			       const vfs_fs_node_t* node);
 
 int
 read_vfs_fs_descend_response (bd_t bd,
-			      size_t bd_size,
 			      vfs_fs_error_t* error,
 			      vfs_fs_node_t* node);
 
 bd_t
-write_vfs_fs_readfile_request (size_t id,
-			       size_t* bd_size);
+write_vfs_fs_readfile_request (size_t id);
 
 int
 read_vfs_fs_readfile_request (bd_t bd,
-			      size_t bd_size,
 			      size_t* id);
 
 bd_t
-write_vfs_fs_readfile_response (vfs_fs_error_t error,
-				size_t* bd_size);
+write_vfs_fs_readfile_response (vfs_fs_error_t error);
 
 int
 read_vfs_fs_readfile_response (bd_t bd,
-			       size_t bd_size,
 			       vfs_fs_error_t* error);
 
 #endif /* VFS_USER_H */

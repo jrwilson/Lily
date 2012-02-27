@@ -217,16 +217,12 @@ private:
       case SYSTEM_INPUT:
 	{
 	  bd_t input_buffer = -1;
-	  size_t buffer_size = 0;
 	  
 	  if (output_buffer_ != 0) {
 	    // Copy the buffer to the input automaton.
 	    input_buffer = action_.action->automaton->buffer_create (*output_buffer_);
-	    buffer_size = output_buffer_->size ();
 	  }
 
-	  // Push the buffer capacity.
-	  *--stack_pointer = buffer_size;
 	  // Push the buffer.
 	  *--stack_pointer = input_buffer;	
 	}

@@ -246,9 +246,8 @@ static void
 form_unknown_response (vfs_fs_error_t error)
 {
   /* Create a response. */
-  size_t bd_size;
-  bd_t bd = write_vfs_fs_unknown_response (error, &bd_size);
-  buffer_queue_push (&response_queue, 0, bd, bd_size);
+  bd_t bd = write_vfs_fs_unknown_response (error);
+  buffer_queue_push (&response_queue, 0, bd);
 }
 
 static void
@@ -256,32 +255,29 @@ form_descend_response (vfs_fs_error_t error,
 		       const vfs_fs_node_t* node)
 {
   /* Create a response. */
-  size_t bd_size;
-  bd_t bd = write_vfs_fs_descend_response (error, node, &bd_size);
-  buffer_queue_push (&response_queue, 0, bd, bd_size);
+  bd_t bd = write_vfs_fs_descend_response (error, node);
+  buffer_queue_push (&response_queue, 0, bd);
 }
 
 static void
 form_readfile_response (vfs_fs_error_t error)
 {
   /* Create a response. */
-  size_t bd_size;
-  bd_t bd = write_vfs_fs_readfile_response (error, &bd_size);
-  buffer_queue_push (&response_queue, 0, bd, bd_size);
+  bd_t bd = write_vfs_fs_readfile_response (error);
+  buffer_queue_push (&response_queue, 0, bd);
 }
 
 static void
 end_action (bool output_fired,
-	    bd_t bd,
-	    size_t bd_size);
+	    bd_t bd);
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd)
 {
   initialize ();
 
   /* Parse the cpio archive looking for files that we need. */
   cpio_archive_t archive;
-  if (cpio_archive_init (&archive, bd, bd_size) == 0) {
+  if (cpio_archive_init (&archive, bd) == 0) {
 
     cpio_file_t* file;
     while ((file = cpio_archive_next_file (&archive)) != 0) {
@@ -326,18 +322,18 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bd, size_t bd_size)
     print (nodes[0]);
   }
 
-  end_action (false, bd, bd_size);
+  end_action (false, bd);
 }
 
-BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bd, size_t bd_size)
+BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bd)
 {
   ssyslog ("tmpfs: request\n");
   initialize ();
 
   vfs_fs_type_t type;
-  if (read_vfs_fs_request_type (bd, bd_size, &type) == -1) {
+  if (read_vfs_fs_request_type (bd, &type) == -1) {
     form_unknown_response (VFS_FS_BAD_REQUEST);
-    end_action (false, bd, bd_size);
+    end_action (false, bd);
   }
   
   switch (type) {
@@ -347,26 +343,26 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
       const char* name;
       size_t name_size;
       vfs_fs_node_t no_node;
-      if (read_vfs_fs_descend_request (bd, bd_size, &id, &name, &name_size) == -1) {
+      if (read_vfs_fs_descend_request (bd, &id, &name, &name_size) == -1) {
 	form_descend_response (VFS_FS_BAD_REQUEST, &no_node);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       if (id >= nodes_size) {
 	form_descend_response (VFS_FS_BAD_NODE, &no_node);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
 	form_descend_response (VFS_FS_BAD_NODE, &no_node);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       if (inode->node.type != DIRECTORY) {
 	form_descend_response (VFS_FS_NOT_DIRECTORY, &no_node);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       inode_t* child;
@@ -375,38 +371,38 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
 	    memcmp (child->name, name, name_size) == 0) {
 	  /* Found the child with the correct name. */
 	  form_descend_response (VFS_FS_SUCCESS, &child->node);
-	  end_action (false, bd, bd_size);
+	  end_action (false, bd);
 	}
       }
 
       /* Didn't find it. */
       form_descend_response (VFS_FS_CHILD_DNE, &no_node);
-      end_action (false, bd, bd_size);
+      end_action (false, bd);
     }
     break;
   case VFS_FS_READFILE:
     {
       size_t id;
-      if (read_vfs_fs_readfile_request (bd, bd_size, &id) == -1) {
+      if (read_vfs_fs_readfile_request (bd, &id) == -1) {
 	form_readfile_response (VFS_FS_BAD_REQUEST);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       if (id >= nodes_size) {
 	form_readfile_response (VFS_FS_BAD_NODE);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
 	form_readfile_response (VFS_FS_BAD_NODE);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       if (inode->node.type != FILE) {
 	form_readfile_response (VFS_FS_NOT_FILE);
-	end_action (false, bd, bd_size);
+	end_action (false, bd);
       }
 
       /* TODO */
@@ -417,10 +413,10 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
     break;
   default:
     form_unknown_response (VFS_FS_BAD_REQUEST_TYPE);
-    end_action (false, bd, bd_size);
+    end_action (false, bd);
   }
 
-  end_action (false, bd, bd_size);
+  end_action (false, bd);
 }
 
 static bool
@@ -439,13 +435,12 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
 
     const buffer_queue_item_t* item = buffer_queue_front (&response_queue);
     bd_t bd = buffer_queue_item_bd (item);
-    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_pop (&response_queue);
     
-    end_action (true, bd, bd_size);
+    end_action (true, bd);
   }
   else {
-    end_action (false, -1, 0);
+    end_action (false, -1);
   }
 }
 
@@ -467,16 +462,15 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
     }
   }
 
-  end_action (false, -1, 0);
+  end_action (false, -1);
 }
 
 static void
 end_action (bool output_fired,
-	    bd_t bd,
-	    size_t bd_size)
+	    bd_t bd)
 {
   if (bd != -1) {
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
+    buffer_queue_push (&destroy_queue, 0, bd);
   }
 
   if (!buffer_queue_empty (&response_queue)) {

@@ -46,10 +46,9 @@ typedef struct {
 
 int
 cpio_archive_init (cpio_archive_t* ar,
-		   bd_t bd,
-		   size_t bd_size)
+		   bd_t bd)
 {
-  if (buffer_file_open (&ar->bf, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&ar->bf, bd, false) == -1) {
     return -1;
   }
 

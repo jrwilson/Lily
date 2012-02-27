@@ -157,9 +157,8 @@ form_register_response (aid_t aid,
 			registry_error_t error)
 {
   /* Create a response. */
-  size_t bd_size;
-  bd_t bd = write_registry_register_response (error, &bd_size);
-  buffer_queue_push (&rr_queue, aid, bd, bd_size);
+  bd_t bd = write_registry_register_response (error);
+  buffer_queue_push (&rr_queue, aid, bd);
 }
 
 static void
@@ -170,15 +169,13 @@ form_query_response (aid_t aid,
   /* Create a response. */
   registry_query_response_t qr;
   bd_t bd = registry_query_response_initw (&qr, error, method);
-  size_t bd_size = registry_query_response_bd_size (&qr);
 
-  buffer_queue_push (&qr_queue, aid, bd, bd_size);
+  buffer_queue_push (&qr_queue, aid, bd);
 }
 
 static void
 end_action (bool output_fired,
-	    bd_t bd,
-	    size_t bd_size);
+	    bd_t bd);
 
 /* register_request
    ----------------
@@ -187,7 +184,7 @@ end_action (bool output_fired,
    Post: The end of the registration response queue will contain a response to the query.
          If the registration is successful, we will be subscribed to the automaton.
  */
-BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "", register_request, aid_t aid, bd_t bd, size_t bd_size)
+BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQUEST_NAME, "", register_request, aid_t aid, bd_t bd)
 {
   ssyslog ("registry: register_request\n");
   initialize ();
@@ -196,9 +193,9 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQ
   const void* description;
   size_t size;
 
-  if (read_registry_register_request (bd, bd_size, &method, &description, &size) == -1) {
+  if (read_registry_register_request (bd, &method, &description, &size) == -1) {
     form_register_response (aid, REGISTRY_BAD_REQUEST);
-    end_action (false, bd, bd_size);
+    end_action (false, bd);
   }
 
   /* Check that no description is equal to the given description. */
@@ -212,7 +209,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQ
   }
   if (d != 0) {
     form_register_response (aid, REGISTRY_NOT_UNIQUE);
-    end_action (false, bd, bd_size);
+    end_action (false, bd);
   }
 
   /* Inspect the method. */
@@ -222,7 +219,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQ
     break;
   default:
     form_register_response (aid, REGISTRY_UNKNOWN_METHOD);
-    end_action (false, bd, bd_size);
+    end_action (false, bd);
     break;
   }
 
@@ -253,7 +250,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_REGISTER_REQUEST_NO, REGISTRY_REGISTER_REQ
   subscribe_destroyed (aid, REGISTRY_DESTROYED_NO);
   form_register_response (aid, REGISTRY_SUCCESS);
 
-  end_action (false, bd, bd_size);
+  end_action (false, bd);
 }
 
 /* register_response
@@ -276,13 +273,12 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
 
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
-    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&rr_queue, item);
-    end_action (true, bd, bd_size);
+    end_action (true, bd);
   }
   else {
     /* Did not find a response. */
-    end_action (false, -1, 0);
+    end_action (false, -1);
   }
 }
 
@@ -292,7 +288,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_REGISTER_RESPONSE_NO, REGISTRY_REGISTER_R
 
    Post: the end of the query response queue will contain a response to the query
  */
-BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "", query_request, aid_t aid, bd_t bd, size_t bd_size)
+BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_NAME, "", query_request, aid_t aid, bd_t bd)
 {
   ssyslog ("registry: query_request\n");
   initialize ();
@@ -301,9 +297,9 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_N
   const void* specification;
   size_t size;
 
-  if (read_registry_query_request (bd, bd_size, &method, &specification, &size) == -1) {
+  if (read_registry_query_request (bd, &method, &specification, &size) == -1) {
     form_query_response (aid, REGISTRY_BAD_REQUEST, 0);
-    end_action (false, bd, bd_size);
+    end_action (false, bd);
   }
 
   /* Inspect the method. */
@@ -329,9 +325,9 @@ BEGIN_INPUT (AUTO_PARAMETER, REGISTRY_QUERY_REQUEST_NO, REGISTRY_QUERY_REQUEST_N
     }
   }
 
-  buffer_queue_push (&qr_queue, aid, answer_bd, registry_query_response_bd_size (&r));
+  buffer_queue_push (&qr_queue, aid, answer_bd);
 
-  end_action (false, bd, bd_size);
+  end_action (false, bd);
 }
 
 /* query_response
@@ -353,13 +349,12 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONS
   if (item != 0) {
     /* Found a response.  Execute. */
     bd_t bd = buffer_queue_item_bd (item);
-    size_t bd_size = buffer_queue_item_size (item);
     buffer_queue_erase (&qr_queue, item);
-    end_action (true, bd, bd_size);
+    end_action (true, bd);
   }
   else {
     /* Did not find a response. */
-    end_action (false, -1, 0);
+    end_action (false, -1);
   }
 }
 
@@ -370,7 +365,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, REGISTRY_QUERY_RESPONSE_NO, REGISTRY_QUERY_RESPONS
 
    Post: the list of descriptions contains no descriptions for the given aid
  */
-BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bd, size_t bd_size)
+BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bd)
 {
   ssyslog ("registry: destroyed\n");
   initialize ();
@@ -389,7 +384,7 @@ BEGIN_SYSTEM_INPUT (REGISTRY_DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bd
     }
   }
 
-  end_action (false, bd, bd_size);
+  end_action (false, bd);
 }
 
 /* destroy_buffers
@@ -419,7 +414,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
     }
   }
 
-  end_action (false, -1, 0);
+  end_action (false, -1);
 }
 
 /* end_action is a helper function for terminating actions.
@@ -428,11 +423,10 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
 */
 static void
 end_action (bool output_fired,
-	    bd_t bd,
-	    size_t bd_size)
+	    bd_t bd)
 {
   if (bd != -1) {
-    buffer_queue_push (&destroy_queue, 0, bd, bd_size);
+    buffer_queue_push (&destroy_queue, 0, bd);
   }
 
   if (!buffer_queue_empty (&rr_queue)) {

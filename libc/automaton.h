@@ -36,15 +36,15 @@
   "3: .balign 4\n" \
        ".popsection\n");
 
-#define BEGIN_SYSTEM_INPUT(action_no, action_name, action_desc, func, param, bd, size) \
-void func (param, bd, size); \
+#define BEGIN_SYSTEM_INPUT(action_no, action_name, action_desc, func, param, bd) \
+void func (param, bd); \
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_SYSTEM_INPUT, PARAMETER, func, action_no, action_name, action_desc); \
-void func (param, bd, size)
+void func (param, bd)
 
-#define BEGIN_INPUT(parameter_mode, action_no, action_name, action_desc, func, param, bd, size) \
-void func (param, bd, size); \
+#define BEGIN_INPUT(parameter_mode, action_no, action_name, action_desc, func, param, bd) \
+void func (param, bd); \
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INPUT, parameter_mode, func, action_no, action_name, action_desc); \
-void func (param, bd, size)
+void func (param, bd)
 
 #define BEGIN_OUTPUT(parameter_mode, action_no, action_name, action_desc, func, param, bc) \
 void func (param, bc); \

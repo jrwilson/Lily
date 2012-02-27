@@ -21,34 +21,28 @@ typedef enum {
 bd_t
 write_registry_register_request (registry_method_t method,
 				 const void* description,
-				 size_t size,
-				 size_t* bd_size);
+				 size_t size);
 
 int
 read_registry_register_request (bd_t bd,
-				size_t bd_size,
 				registry_method_t* method,
 				const void** description,
 				size_t* size);
 
 bd_t
-write_registry_register_response (registry_error_t error,
-				  size_t* bd_size);
+write_registry_register_response (registry_error_t error);
 
 int
 read_registry_register_response (bd_t bd,
-				 size_t bd_size,
 				 registry_error_t* error);
 
 bd_t
 write_registry_query_request (registry_method_t method,
 			      const void* specification,
-			      size_t size,
-			      size_t* bd_size);
+			      size_t size);
 
 int
 read_registry_query_request (bd_t bd,
-			     size_t bd_size,
 			     registry_method_t* method,
 			     const void** specification,
 			     size_t* size);
@@ -70,13 +64,9 @@ registry_query_response_append (registry_query_response_t* r,
 				const void* description,
 				size_t size);
 
-size_t
-registry_query_response_bd_size (const registry_query_response_t* r);
-
 int
 registry_query_response_initr (registry_query_response_t* r,
 			       bd_t bd,
-			       size_t bd_size,
 			       registry_error_t* error,
 			       registry_method_t* method,
 			       size_t* count);

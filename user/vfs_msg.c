@@ -5,11 +5,10 @@
 
 int
 read_vfs_request_type (bd_t bd,
-		       size_t bd_size,
 		       vfs_type_t* type)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
 
@@ -21,8 +20,7 @@ read_vfs_request_type (bd_t bd,
 }
 
 bd_t
-write_vfs_unknown_response (vfs_error_t error,
-			    size_t* bd_size)
+write_vfs_unknown_response (vfs_error_t error)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (vfs_error_t));
   bd_t bd = buffer_create (bd_sz);
@@ -31,7 +29,7 @@ write_vfs_unknown_response (vfs_error_t error,
   }
   
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -43,17 +41,12 @@ write_vfs_unknown_response (vfs_error_t error,
     return -1;
   }
   
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-  
   return bd;
 }
 
 bd_t
 write_vfs_mount_request (aid_t aid,
-			 const char* path,
-			 size_t* bd_size)
+			 const char* path)
 {
   vfs_type_t type = VFS_MOUNT;
   size_t path_size = strlen (path) + 1;
@@ -65,7 +58,7 @@ write_vfs_mount_request (aid_t aid,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -78,22 +71,17 @@ write_vfs_mount_request (aid_t aid,
     return -1;
   }
 
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-
   return bd;
 }
 
 int
 read_vfs_mount_request (bd_t bd,
-			size_t bd_size,
 			aid_t* aid,
 			const char** path,
 			size_t* path_size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
 
@@ -116,8 +104,7 @@ read_vfs_mount_request (bd_t bd,
 }
 
 bd_t
-write_vfs_mount_response (vfs_error_t error,
-			  size_t* bd_size)
+write_vfs_mount_response (vfs_error_t error)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (vfs_error_t));
   bd_t bd = buffer_create (bd_sz);
@@ -126,7 +113,7 @@ write_vfs_mount_response (vfs_error_t error,
   }
   
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -138,20 +125,15 @@ write_vfs_mount_response (vfs_error_t error,
     return -1;
   }
   
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-  
   return bd;
 }
 
 int
 read_vfs_mount_response (bd_t bd,
-			 size_t bd_size,
 			 vfs_error_t* error)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
   
@@ -166,8 +148,7 @@ read_vfs_mount_response (bd_t bd,
 }
 
 bd_t
-write_vfs_readfile_request (const char* path,
-			    size_t* bd_size)
+write_vfs_readfile_request (const char* path)
 {
   vfs_type_t type = VFS_READFILE;
   size_t path_size = strlen (path) + 1;
@@ -179,7 +160,7 @@ write_vfs_readfile_request (const char* path,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -191,21 +172,16 @@ write_vfs_readfile_request (const char* path,
     return -1;
   }
 
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-
   return bd;
 }
 
 int
 read_vfs_readfile_request (bd_t bd,
-			   size_t bd_size,
 			   const char** path,
 			   size_t* path_size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
 
@@ -227,8 +203,7 @@ read_vfs_readfile_request (bd_t bd,
 }
 
 bd_t
-write_vfs_readfile_response (vfs_error_t error,
-			     size_t* bd_size)
+write_vfs_readfile_response (vfs_error_t error)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (vfs_error_t));
   bd_t bd = buffer_create (bd_sz);
@@ -237,7 +212,7 @@ write_vfs_readfile_response (vfs_error_t error,
   }
   
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -249,20 +224,15 @@ write_vfs_readfile_response (vfs_error_t error,
     return -1;
   }
   
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-  
   return bd;
 }
 
 int
 read_vfs_fs_request_type (bd_t bd,
-			  size_t bd_size,
 			  vfs_fs_type_t* type)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
 
@@ -274,8 +244,7 @@ read_vfs_fs_request_type (bd_t bd,
 }
 
 bd_t
-write_vfs_fs_unknown_response (vfs_fs_error_t error,
-			       size_t* bd_size)
+write_vfs_fs_unknown_response (vfs_fs_error_t error)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t));
   bd_t bd = buffer_create (bd_sz);
@@ -284,7 +253,7 @@ write_vfs_fs_unknown_response (vfs_fs_error_t error,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -296,18 +265,13 @@ write_vfs_fs_unknown_response (vfs_fs_error_t error,
     return -1;
   }
   
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-
   return bd;
 }
 
 bd_t
 write_vfs_fs_descend_request (size_t id,
 			      const char* name,
-			      size_t name_size,
-			      size_t* bd_size)
+			      size_t name_size)
 {
   vfs_fs_type_t type = VFS_FS_DESCEND;
 
@@ -318,7 +282,7 @@ write_vfs_fs_descend_request (size_t id,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -331,22 +295,17 @@ write_vfs_fs_descend_request (size_t id,
     return -1;
   }
 
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-
   return bd;
 }
 
 int
 read_vfs_fs_descend_request (bd_t bd,
-			     size_t bd_size,
 			     size_t* id,
 			     const char** name,
 			     size_t* name_size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
 
@@ -370,8 +329,7 @@ read_vfs_fs_descend_request (bd_t bd,
 
 bd_t
 write_vfs_fs_descend_response (vfs_fs_error_t error,
-			       const vfs_fs_node_t* node,
-			       size_t* bd_size)
+			       const vfs_fs_node_t* node)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t) + sizeof (vfs_fs_node_t));
   bd_t bd = buffer_create (bd_sz);
@@ -380,7 +338,7 @@ write_vfs_fs_descend_response (vfs_fs_error_t error,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -392,22 +350,17 @@ write_vfs_fs_descend_response (vfs_fs_error_t error,
     buffer_destroy (bd);
     return -1;
   }
-  
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
 
   return bd;
 }
 
 int
 read_vfs_fs_descend_response (bd_t bd,
-			      size_t bd_size,
 			      vfs_fs_error_t* error,
 			      vfs_fs_node_t* node)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
   
@@ -423,8 +376,7 @@ read_vfs_fs_descend_response (bd_t bd,
 }
 
 bd_t
-write_vfs_fs_readfile_request (size_t id,
-			       size_t* bd_size)
+write_vfs_fs_readfile_request (size_t id)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (size_t));
   bd_t bd = buffer_create (bd_sz);
@@ -433,7 +385,7 @@ write_vfs_fs_readfile_request (size_t id,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -445,20 +397,15 @@ write_vfs_fs_readfile_request (size_t id,
     return -1;
   }
 
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-
   return bd;
 }
 
 int
 read_vfs_fs_readfile_request (bd_t bd,
-			      size_t bd_size,
 			      size_t* id)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
   
@@ -473,8 +420,7 @@ read_vfs_fs_readfile_request (bd_t bd,
 }
 
 bd_t
-write_vfs_fs_readfile_response (vfs_fs_error_t error,
-				size_t* bd_size)
+write_vfs_fs_readfile_response (vfs_fs_error_t error)
 {
   size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t));
   bd_t bd = buffer_create (bd_sz);
@@ -483,7 +429,7 @@ write_vfs_fs_readfile_response (vfs_fs_error_t error,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_sz, true) == -1) {
+  if (buffer_file_open (&file, bd, true) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -495,20 +441,15 @@ write_vfs_fs_readfile_response (vfs_fs_error_t error,
     return -1;
   }
 
-  if (bd_size != 0) {
-    *bd_size = buffer_file_size (&file);
-  }
-
   return bd;
 }
 
 int
 read_vfs_fs_readfile_response (bd_t bd,
-			       size_t bd_size,
 			       vfs_fs_error_t* error)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, bd_size, false) == -1) {
+  if (buffer_file_open (&file, bd, false) == -1) {
     return -1;
   }
   

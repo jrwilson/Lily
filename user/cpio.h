@@ -35,8 +35,7 @@ typedef struct {
 
 int
 cpio_archive_init (cpio_archive_t* ar,
-		   bd_t bd,
-		   size_t bd_size);
+		   bd_t bd);
 
 cpio_file_t*
 cpio_archive_next_file (cpio_archive_t* ar);

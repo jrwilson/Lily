@@ -22,7 +22,6 @@ typedef struct {
 int
 buffer_file_open (buffer_file_t* bf,
 		  bd_t bd,
-		  size_t bd_size,
 		  bool can_update);
 
 const void*
