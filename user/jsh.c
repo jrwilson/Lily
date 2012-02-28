@@ -3,6 +3,7 @@
 #include <string.h>
 #include <buffer_queue.h>
 #include <fifo_scheduler.h>
+#include "argv.h"
 
 #define DESTROY_BUFFERS_NO 1
 
@@ -44,12 +45,14 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   ssyslog ("jsh: init\n");
   initialize ();
 
-  char* str = buffer_map (bda);
-  str[0] = 'J';
-  ssyslog (str);
-
-  if (strlen (str) == 26) {
-    ssyslog ("was 26 long\n");
+  argv_t argv;
+  size_t count;
+  if (argv_initr (&argv, bda, bdb, &count) != -1) {
+    for (size_t i = 0; i != count; ++i) {
+      const char* arg = argv_arg (&argv, i);
+      ssyslog (arg);
+      ssyslog ("\n");
+    }
   }
 
   end_action (false, bda, bdb);

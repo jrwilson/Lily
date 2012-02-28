@@ -179,8 +179,7 @@ registry_query_response_initw (registry_query_response_t* r,
     return -1;
   }
 
-  return bd;
-  
+  return bd;  
 }
 
 int

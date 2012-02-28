@@ -3,17 +3,17 @@
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <buffer_queue.h>
+#include <callback_queue.h>
 #include <description.h>
 #include "cpio.h"
 #include "vfs_msg.h"
+#include "argv.h"
 
 /*
   The Boot Automaton
   ==================
   The goal of the boot automaton is to create an environment that allows automata to load other automata from a store.
-  The boot automaton receives a buffer containing a cpio archive.
-  The boot automaton looks for the following file names:  registry, vfs, tmpfs, and init.
-  The boot automaton then tries to create automata based on the contents of the registry, vfs, tmpfs, and init files.
+  The boot automaton receives a buffer containing a cpio archive containing a registry, vfs, tmpfs, and shell from which is tries to create automata.
   The buffer supplied to the boot automaton is passed to the tmpfs automaton.
   Any failures cause the boot automaton to exit.
 
@@ -27,19 +27,29 @@
 #define VFS_RESPONSE_NO 2
 #define DESTROY_BUFFERS_NO 3
 
+/* Paths in the cpio archive. */
+#define REGISTRY_PATH "bin/registry"
+#define VFS_PATH "bin/vfs"
+#define TMPFS_PATH "bin/tmpfs"
+
+/* Mount the tmpfs here. */
 #define ROOT_PATH "/"
+
+/* Create a shell located here with this argument. */
+#define SHELL_PATH "/bin/jsh"
+#define SHELL_CMDLINE "This is the command line!"
 
 /* Initialization flag. */
 static bool initialized = false;
 
-/* File containing the init automaton. */
-static cpio_file_t* init_file = 0;
-
-/* Buffer containing the mount command. */
-static bd_t mount_bd = -1;
-
 /* Queue of buffers that need to be destroyed. */
 static buffer_queue_t destroy_queue;
+
+/* Messages to the vfs. */
+static buffer_queue_t vfs_request_queue;
+
+/* Callbacks to execute from the vfs. */
+static callback_queue_t vfs_response_queue;
 
 static void
 end_action (bool output_fired,
@@ -53,6 +63,8 @@ initialize (void)
     initialized = true;
 
     buffer_queue_init (&destroy_queue);
+    buffer_queue_init (&vfs_request_queue);
+    callback_queue_init (&vfs_response_queue);
   }
 }
 
@@ -60,6 +72,71 @@ static void
 ssyslog (const char* msg)
 {
   syslog (msg, strlen (msg));
+}
+
+static void
+readfile_callback (void* data,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  vfs_error_t error;
+  size_t size;
+  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
+    ssyslog ("boot_automaton: error: vfs provide bad readfile response\n");
+    exit ();
+  }
+
+  if (error != VFS_SUCCESS) {
+    ssyslog ("boot_automaton: error: reading " SHELL_PATH " failed \n");
+    exit ();
+  }
+
+  bd_t bd1;
+  bd_t bd2;
+
+  argv_t argv;
+  if (argv_initw (&argv, &bd1, &bd2) == -1) {
+    ssyslog ("boot_automaton: error: could not initialize argv\n");
+    exit ();
+  }
+
+  if (argv_append (&argv, SHELL_CMDLINE) == -1) {
+    ssyslog ("boot_automaton: error: could not initialize argv\n");
+    exit ();
+  }
+
+  if (create (bdb, size, bd1, bd2, true) == -1) {
+    ssyslog ("boot_automaton: error: could not create the shell\n");
+    exit ();
+  }
+}
+
+static void
+mount_callback (void* data,
+		bd_t bda,
+		bd_t bdb)
+{
+  vfs_error_t error;
+  if (read_vfs_mount_response (bda, &error) == -1) {
+    ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
+    exit ();
+  }
+
+  if (error != VFS_SUCCESS) {
+    ssyslog ("boot_automaton: error: mounting root file system failed\n");
+    exit ();
+  }
+
+  /* Request the shell. */
+  {
+    bd_t bd = write_vfs_readfile_request (SHELL_PATH);
+    if (bd == -1) {
+      ssyslog ("boot_automaton: error: Couldn't create readfile request\n");
+      exit ();
+    }
+    buffer_queue_push (&vfs_request_queue, 0, bd, -1);
+    callback_queue_push (&vfs_response_queue, readfile_callback, 0);
+  }
 }
 
 /* init
@@ -85,17 +162,14 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   cpio_file_t* tmpfs_file = 0;
   cpio_file_t* file;
   while ((file = cpio_archive_next_file (&archive)) != 0) {
-    if (strcmp (file->name, "registry") == 0) {
+    if (strcmp (file->name, REGISTRY_PATH) == 0) {
       registry_file = file;
     }
-    else if (strcmp (file->name, "vfs") == 0) {
+    else if (strcmp (file->name, VFS_PATH) == 0) {
       vfs_file = file;
     }
-    else if (strcmp (file->name, "tmpfs") == 0) {
+    else if (strcmp (file->name, TMPFS_PATH) == 0) {
       tmpfs_file = file;
-    }
-    else if (strcmp (file->name, "init") == 0) {
-      init_file = file;
     }
     else {
       /* Destroy the file if we don't need it. */
@@ -108,7 +182,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     ssyslog ("boot_automaton: error: No registry file\n");
     exit ();
   }
-  aid_t registry = create (registry_file->bd, true, -1);
+  aid_t registry = create (registry_file->bd, registry_file->size, -1, -1, true);
   cpio_file_destroy (registry_file);
   registry_file = 0;
   if (registry == -1) {
@@ -125,7 +199,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     ssyslog ("boot_automaton: error: No vfs file\n");
     exit ();
   }
-  aid_t vfs = create (vfs_file->bd, true, -1);
+  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, true);
   cpio_file_destroy (vfs_file);
   if (vfs == -1) {
     ssyslog ("boot_automaton: error: Could not create vfs\n");
@@ -158,7 +232,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     exit ();
   }
   /* Note:  We pass the buffer containing the cpio archive. */
-  aid_t tmpfs = create (tmpfs_file->bd, true, bda);
+  aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, true);
   cpio_file_destroy (tmpfs_file);
   if (tmpfs == -1) {
     ssyslog ("boot_automaton: error: Could not create tmpfs\n");
@@ -166,41 +240,45 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   }
 
   /* Mount tmpfs on ROOT_PATH. */
-  mount_bd = write_vfs_mount_request (tmpfs, ROOT_PATH);
-
-  /* Create the init automaton. */
-  if (init_file == 0) {
-    ssyslog ("boot_automaton: error: No init file\n");
-    exit ();
+  {
+    bd_t bd = write_vfs_mount_request (tmpfs, ROOT_PATH);
+    if (bd == -1) {
+      ssyslog ("boot_automaton: error: Couldn't create mount request\n");
+      exit ();
+    }
+    buffer_queue_push (&vfs_request_queue, 0, bd, -1);
+    callback_queue_push (&vfs_response_queue, mount_callback, 0);
   }
 
   end_action (false, bda, bdb);
 }
 
 /* vfs_request
-   -----------
-   Sent a request to mount tmpfs as the root file system of vfs.
+   -------------
+   Send a request to the vfs.
 
-   Pre:  mount_bd != -1
-   Post: mount_bd == -1
+   Pre:  vfs_bd != -1
+   Post: vfs_bd == -1
  */
 static bool
 vfs_request_precondition (void)
 {
-  return mount_bd != -1;
+  return !buffer_queue_empty (&vfs_request_queue);
 }
 
-BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 {
   initialize ();
   scheduler_remove (VFS_REQUEST_NO, param);
-  
+
   if (vfs_request_precondition ()) {
     ssyslog ("boot_automaton: vfs_request\n");
-    bd_t bd = mount_bd;
-    mount_bd = -1;
+    const buffer_queue_item_t* item = buffer_queue_front (&vfs_request_queue);
+    bd_t bda = buffer_queue_item_bda (item);
+    bd_t bdb = buffer_queue_item_bdb (item);
+    buffer_queue_pop (&vfs_request_queue);
 
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     end_action (false, -1, -1);
@@ -208,34 +286,27 @@ BEGIN_OUTPUT(NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 }
 
 /* vfs_response
-   ------------
-   Receive a response from the vfs_automaton.
+   --------------
+   Extract the aid of the vfs from the response from the registry.
 
-   Post: exit on error, otherwise, create the init automaton
+   Post: ???
  */
 BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
 {
   ssyslog ("boot_automaton: vfs_response\n");
   initialize ();
 
-  vfs_error_t error;
-  if (read_vfs_mount_response (bda, &error) == -1) {
-    ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
+  if (callback_queue_empty (&vfs_response_queue)) {
+    ssyslog ("boot_automaton: error: vfs produced spurious response\n");
     exit ();
   }
 
-  if (error != VFS_SUCCESS) {
-    ssyslog ("boot_automaton: error: mounting root file system failed\n");
-    exit ();
-  }
+  const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
+  callback_t callback = callback_queue_item_callback (item);
+  void* data = callback_queue_item_data (item);
+  callback_queue_pop (&vfs_response_queue);
 
-  /* Now that the root file system is mounted, create the init automaton. */
-  aid_t init = create (init_file->bd, true, -1);
-  cpio_file_destroy (init_file);
-  if (init == -1) {
-    ssyslog ("boot_automaton: error: Could not create init\n");
-    exit ();
-  }
+  callback (data, bda, bdb);
 
   end_action (false, bda, bdb);
 }

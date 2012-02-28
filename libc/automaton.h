@@ -70,8 +70,10 @@ exit (void);
 
 aid_t
 create (bd_t text_bd,
-	bool retain_privilege,
-	bd_t data_bd);
+	size_t text_size,
+	bd_t bda,
+	bd_t bdb,
+	bool retain_privilege);
 
 bid_t
 bind (aid_t output_automaton,

@@ -45,8 +45,10 @@ struct finish_args {
 struct create_args {
   uint32_t eip;
   bd_t text_bd;
+  size_t text_size;
+  bd_t bda;
+  bd_t bdb;
   bool retain_privilege;
-  bd_t data_bd;
 };
 
 struct bind_args {
@@ -208,7 +210,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<aid_t, int> r = rts::create (a, ptr->text_bd, ptr->retain_privilege, ptr->data_bd);
+      pair<aid_t, int> r = rts::create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->retain_privilege);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

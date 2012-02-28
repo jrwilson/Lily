@@ -326,8 +326,10 @@ namespace rts {
   pair<aid_t, int>
   create (automaton* a,
 	  bd_t text_bd,
-	  bool retain_privilege,
-	  bd_t data_bd)
+	  size_t /*text_size*/,
+	  bd_t bda,
+	  bd_t bdb,
+	  bool retain_privilege)
   {
     // Find the text buffer.
     buffer* text_buffer = a->lookup_buffer (text_bd);
@@ -363,22 +365,30 @@ namespace rts {
 
     text_buffer->override (begin, end);
 
-    // Find the data buffer.
-    buffer* data_buffer = a->lookup_buffer (data_bd);
-    if (data_buffer != 0) {
-      // Synchronize the buffer so the frames listed in the buffer are correct.
-      data_buffer->sync (0, data_buffer->size ());
+    // Find and synchronize the data buffers so the frames listed in the buffers are correct.
+    buffer* buffer_a = a->lookup_buffer (bda);
+    if (buffer_a != 0) {
+      buffer_a->sync (0, buffer_a->size ());
+
+    }
+    buffer* buffer_b = a->lookup_buffer (bdb);
+    if (buffer_b != 0) {
+      buffer_b->sync (0, buffer_b->size ());
+
     }
 
     // Schedule the init action.
     const paction* action = child->find_action (LILY_ACTION_INIT);
     if (action != 0) {
-      if (data_buffer != 0) {
-	scheduler::schedule (caction (action, child->aid (), new buffer (*data_buffer), 0));
+      // Replace the buffers with copies.
+      if (buffer_a != 0) {
+	buffer_a = new buffer (*buffer_a);
       }
-      else {
-	scheduler::schedule (caction (action, child->aid ()));
+      if (buffer_b != 0) {
+	buffer_b = new buffer (*buffer_b);
       }
+
+      scheduler::schedule (caction (action, child->aid (), buffer_a, buffer_b));
     }
     
     return make_pair (child->aid (), LILY_SYSCALL_ESUCCESS);

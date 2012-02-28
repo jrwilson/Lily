@@ -117,15 +117,6 @@ cpio_archive_next_file (cpio_archive_t* ar)
   /* Create a buffer and copy the file content. */
   size_t bd_size = ALIGN_UP (filesize, pagesize ()) / pagesize ();
   f->bd = buffer_create (bd_size);
-  char* d = buffer_map (f->bd);
-  char sum = 0;
-  for (size_t i = 0; i < bd_size * pagesize (); ++i) {
-    sum += d[i];
-  }
-  if (sum != 0) {
-    syslog ("Sum was not 0\n", 14);
-    exit ();
-  }
   memcpy (buffer_map (f->bd), data, filesize);
   buffer_unmap (f->bd);
   f->size = filesize;

@@ -38,8 +38,10 @@ namespace rts {
   pair<aid_t, int>
   create (automaton* a,
 	  bd_t text_bd,
-	  bool retain_privilege,
-	  bd_t data_bd);
+	  size_t text_size,
+	  bd_t bda,
+	  bd_t bdb,
+	  bool retain_privilege);
 
   pair<bid_t, int>
   bind (automaton* a,
