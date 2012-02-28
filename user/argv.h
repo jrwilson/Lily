@@ -6,7 +6,7 @@
 typedef struct {
   buffer_file_t argv_bf;
   buffer_file_t string_bf;
-  size_t count;
+  size_t argc;
 } argv_t;
 
 int
@@ -22,7 +22,7 @@ int
 argv_initr (argv_t* a,
 	    bd_t bda,
 	    bd_t bdb,
-	    size_t* count);
+	    size_t* argc);
 
 const char*
 argv_arg (argv_t* a,

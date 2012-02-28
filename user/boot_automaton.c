@@ -13,7 +13,7 @@
   The Boot Automaton
   ==================
   The goal of the boot automaton is to create an environment that allows automata to load other automata from a store.
-  The boot automaton receives a buffer containing a cpio archive containing a registry, vfs, tmpfs, and shell from which is tries to create automata.
+  The boot automaton receives a buffer containing a cpio archive containing programs for a vfs, tmpfs, and shell from which is tries to create automata.
   The buffer supplied to the boot automaton is passed to the tmpfs automaton.
   Any failures cause the boot automaton to exit.
 
@@ -27,8 +27,10 @@
 #define VFS_RESPONSE_NO 2
 #define DESTROY_BUFFERS_NO 3
 
+/* Name to register the VFS under. */
+#define VFS_NAME "vfs"
+
 /* Paths in the cpio archive. */
-#define REGISTRY_PATH "bin/registry"
 #define VFS_PATH "bin/vfs"
 #define TMPFS_PATH "bin/tmpfs"
 
@@ -37,7 +39,7 @@
 
 /* Create a shell located here with this argument. */
 #define SHELL_PATH "/bin/jsh"
-#define SHELL_CMDLINE "This is the command line!"
+#define SHELL_CMDLINE "/scr/start.jsh"
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -100,6 +102,11 @@ readfile_callback (void* data,
     exit ();
   }
 
+  if (argv_append (&argv, SHELL_PATH) == -1) {
+    ssyslog ("boot_automaton: error: could not initialize argv\n");
+    exit ();
+  }
+
   if (argv_append (&argv, SHELL_CMDLINE) == -1) {
     ssyslog ("boot_automaton: error: could not initialize argv\n");
     exit ();
@@ -157,15 +164,11 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     exit ();
   }
 
-  cpio_file_t* registry_file = 0;
   cpio_file_t* vfs_file = 0;
   cpio_file_t* tmpfs_file = 0;
   cpio_file_t* file;
   while ((file = cpio_archive_next_file (&archive)) != 0) {
-    if (strcmp (file->name, REGISTRY_PATH) == 0) {
-      registry_file = file;
-    }
-    else if (strcmp (file->name, VFS_PATH) == 0) {
+    if (strcmp (file->name, VFS_PATH) == 0) {
       vfs_file = file;
     }
     else if (strcmp (file->name, TMPFS_PATH) == 0) {
@@ -175,23 +178,6 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
       /* Destroy the file if we don't need it. */
       cpio_file_destroy (file);
     }
-  }
-
-  /* Create the registry first so the other automata can use it. */
-  if (registry_file == 0) {
-    ssyslog ("boot_automaton: error: No registry file\n");
-    exit ();
-  }
-  aid_t registry = create (registry_file->bd, registry_file->size, -1, -1, true);
-  cpio_file_destroy (registry_file);
-  registry_file = 0;
-  if (registry == -1) {
-    ssyslog ("boot_automaton: error: Could not create the registry\n");
-    exit ();
-  }
-  if (set_registry (registry) == -1) {
-    ssyslog ("boot_automaton: error: Could not set the registry\n");
-    exit ();
   }
   
   /* Create the vfs. */
@@ -203,6 +189,12 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   cpio_file_destroy (vfs_file);
   if (vfs == -1) {
     ssyslog ("boot_automaton: error: Could not create vfs\n");
+    exit ();
+  }
+
+  /* Register the vfs. */
+  if (enter (VFS_NAME, strlen (VFS_NAME), vfs) == -1) {
+    ssyslog ("boot_automaton: error: Could not register vfs\n");
     exit ();
   }
 

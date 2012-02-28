@@ -29,8 +29,8 @@
 #define LILY_SYSCALL_BUFFER_UNMAP          0x48
 
 #define LILY_SYSCALL_SYSCONF               0x50
-#define LILY_SYSCALL_SET_REGISTRY          0x51
-#define LILY_SYSCALL_GET_REGISTRY          0x52
+#define LILY_SYSCALL_ENTER                 0x51
+#define LILY_SYSCALL_LOOKUP                0x52
 #define LILY_SYSCALL_DESCRIBE              0x53
 
 /* Privileged system calls. */
@@ -71,5 +71,6 @@
 #define LILY_SYSCALL_EIAIDDNE 18
 #define LILY_SYSCALL_EOBADANO 19
 #define LILY_SYSCALL_EIBADANO 20
+#define LILY_SYSCALL_EALREADY 21
 
 #endif /* LILY_SYSCALL_H */

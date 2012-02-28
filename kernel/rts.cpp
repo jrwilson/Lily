@@ -9,6 +9,10 @@
 #include "lily/syscall.h"
 
 namespace rts {
+
+  // A registry that maps a string (name) to an aid.
+  typedef unordered_map<kstring, automaton*, kstring_hash> registry_map_type;
+  registry_map_type registry_map_;
   
   // Bitset marking which frames are used for memory-mapped I/O.
   // I assume the region from 0x0 to 0x00100000 is used for memory-mapped I/O.
@@ -43,8 +47,6 @@ namespace rts {
 
   typedef vector<pair<logical_address_t, logical_address_t> > clear_list_type;
   static clear_list_type clear_list_;
-
-  static automaton* registry = 0;
 
   static automaton*
   create_automaton (buffer* text,
@@ -512,32 +514,55 @@ namespace rts {
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  // The automaton is requesting to become the registry.
-  // Succeed unless the registry is already set.
   pair<int, int>
-  set_registry (aid_t aid)
+  enter (automaton* a,
+	 const char* name,
+	 size_t size,
+	 aid_t aid)
   {
+    // Check the name.
+    if (!a->verify_span (name, size)) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+    
+    // Check the automaton.
     aid_map_type::iterator pos = aid_map_.find (aid);
     if (pos == aid_map_.end ()) {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
 
-    if (registry != 0) {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+    // Check the name in the map.
+    const kstring n (name, size);
+    
+    registry_map_type::const_iterator pos2 = registry_map_.find (n);
+    if (pos2 != registry_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EALREADY);
     }
 
-    registry = pos->second;
+    registry_map_.insert (make_pair (n, pos->second));
+
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   pair<aid_t, int>
-  get_registry (void)
+  lookup (automaton* a,
+	  const char* name,
+	  size_t size)
   {
-    if (registry != 0) {
-      return make_pair (registry->aid (), LILY_SYSCALL_ESUCCESS);
+    // Check the name.
+    if (!a->verify_span (name, size)) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    // Check the name in the map.
+    const kstring n (name, size);
+
+    registry_map_type::const_iterator pos = registry_map_.find (n);
+    if (pos != registry_map_.end ()) {
+      return make_pair (pos->second->aid (), LILY_SYSCALL_ESUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+      return make_pair (-1, LILY_SYSCALL_ESUCCESS);
     }
   }
 

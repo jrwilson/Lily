@@ -7,7 +7,6 @@
 #include <buffer_queue.h>
 #include <description.h>
 #include <dymem.h>
-#include "registry_msg.h"
 
 /*
   VFS
@@ -38,8 +37,6 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define VFS_REGISTER_REQUEST_NO 1
-#define VFS_REGISTER_RESPONSE_NO 2
 #define VFS_REQUEST_NO 3
 #define VFS_RESPONSE_NO 4
 #define VFS_FS_REQUEST_NO 5
@@ -70,9 +67,6 @@ static aid_t vfs_aid = -1;
 
 /* Initialization flag. */
 static bool initialized = false;
-
-/* Register message. */
-static bd_t register_bd = -1;
 
 /* Queue for client requests. */
 static buffer_queue_t client_request_queue;
@@ -290,100 +284,14 @@ path_lookup_resume (void)
 
 /* init
    ----
-   Binds to the registry and produces a registration message.
    
-   Post: register_bd != -1
+   Post: ???
  */
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
   vfs_aid = aid;
 
   initialize ();
-
-  /* Look up the registry. */
-  aid_t registry_aid = get_registry ();
-  if (registry_aid == -1) {
-    ssyslog ("vfs: warning: no registry\n");
-    end_action (false, bda, bdb);
-  }
-
-  description_t desc;
-  if (description_init (&desc, registry_aid) == -1) {
-    ssyslog ("vfs: warning: no registry description\n");
-    end_action (false, bda, bdb);
-  }
-
-  const ano_t register_request = description_name_to_number (&desc, REGISTRY_REGISTER_REQUEST_NAME);
-  const ano_t register_response = description_name_to_number (&desc, REGISTRY_REGISTER_RESPONSE_NAME);
-
-  description_fini (&desc);
-
-  /* Bind to the response first so they don't get lost. */
-  if (bind (registry_aid, register_response, 0, vfs_aid, VFS_REGISTER_RESPONSE_NO, 0) == -1 ||
-      bind (vfs_aid, VFS_REGISTER_REQUEST_NO, 0, registry_aid, register_request, 0) == -1) {
-    ssyslog ("vfs: warning: couldn't bind to registry\n");
-    end_action (false, bda, bdb);
-  }
-
-  register_bd = write_registry_register_request (REGISTRY_STRING_EQUAL, VFS_DESCRIPTION, VFS_DESCRIPTION_SIZE);
-
-  end_action (false, bda, bdb);
-}
-
-/* register_request
-   ----------------
-   Send the registration message to the registry.
-
-   Pre:  register_bd != -1
-   Post: register_bd == -1
- */
-static bool
-register_request_precondition (void)
-{
-  return register_bd != -1;
-}
-
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REGISTER_REQUEST_NO, "", "", reqister_request, int param)
-{
-  initialize ();
-  scheduler_remove (VFS_REGISTER_REQUEST_NO, param);
-
-  if (register_request_precondition ()) {
-    bd_t bd = register_bd;
-
-    register_bd = -1;
-
-    end_action (true, bd, -1);
-  }
-  else {
-    end_action (false, -1, -1);
-  }
-}
-
-/* register_response
-   -----------------
-   Receive a response to the registration message.
-
-   Post: none
- */
-BEGIN_INPUT (NO_PARAMETER, VFS_REGISTER_RESPONSE_NO, "", "", register_response, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  registry_error_t error = REGISTRY_SUCCESS;
-  if (read_registry_register_response (bda, &error) == 0) {
-    switch (error) {
-    case REGISTRY_SUCCESS:
-      /* Okay. */
-      break;
-    default:
-      ssyslog ("vfs: warning: failed to register\n");
-      break;
-    }
-  }
-  else {
-    ssyslog ("vfs: warning: couldn't map registry response\n");
-  }
 
   end_action (false, bda, bdb);
 }
@@ -797,9 +705,6 @@ end_action (bool output_fired,
     buffer_queue_push (&destroy_queue, 0, bda, bdb);
   }
 
-  if (register_request_precondition ()) {
-    scheduler_add (VFS_REGISTER_REQUEST_NO, 0);
-  }
   if (!buffer_queue_empty (&client_response_queue)) {
     scheduler_add (VFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&client_response_queue)));
   }

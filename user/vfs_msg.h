@@ -4,9 +4,6 @@
 #include <stddef.h>
 #include <lily/types.h>
 
-#define VFS_DESCRIPTION "vfs"
-#define VFS_DESCRIPTION_SIZE 4
-
 /*
   User Section
   ============

@@ -18,9 +18,9 @@ argv_initw (argv_t* a,
     return -1;
   }
   
-  a->count = 0;
+  a->argc = 0;
   
-  if (buffer_file_write (&a->argv_bf, &a->count, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) == -1) {
     buffer_destroy (*bda);
     return -1;
   }
@@ -62,11 +62,11 @@ argv_append (argv_t* a,
   }
 
   /* Increment and overwrite the count. */
-  ++a->count;
+  ++a->argc;
 
   size_t argv_offset = buffer_file_seek (&a->argv_bf, 0, BUFFER_FILE_CURRENT);
   buffer_file_seek (&a->argv_bf, 0, BUFFER_FILE_SET);
-  if (buffer_file_write (&a->argv_bf, &a->count, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) == -1) {
     return -1;
   }
   buffer_file_seek (&a->argv_bf, argv_offset, BUFFER_FILE_SET);
@@ -78,7 +78,7 @@ int
 argv_initr (argv_t* a,
 	    bd_t bda,
 	    bd_t bdb,
-	    size_t* count)
+	    size_t* argc)
 {
   if (buffer_file_open (&a->argv_bf, bda, false) == -1) {
     return -1;
@@ -88,12 +88,12 @@ argv_initr (argv_t* a,
     return -1;
   }
 
-  if (buffer_file_read (&a->argv_bf, &a->count, sizeof (size_t)) == -1) {
+  if (buffer_file_read (&a->argv_bf, &a->argc, sizeof (size_t)) == -1) {
     return -1;
   }
 
   /* Read through all of the strings. */
-  for (size_t i = 0; i != a->count; ++i) {
+  for (size_t i = 0; i != a->argc; ++i) {
     size_t offset;
     size_t size;
     if (buffer_file_read (&a->argv_bf, &offset, sizeof (size_t)) == -1 ||
@@ -112,7 +112,7 @@ argv_initr (argv_t* a,
     }
   }
 
-  *count = a->count;
+  *argc = a->argc;
 
   return 0;
 }
@@ -121,7 +121,7 @@ const char*
 argv_arg (argv_t* a,
 	  size_t idx)
 {
-  if (idx >= a->count) {
+  if (idx >= a->argc) {
     /* Out of range. */
     return 0;
   }

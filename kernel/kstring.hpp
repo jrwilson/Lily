@@ -96,10 +96,9 @@ struct kstring_hash {
   operator() (const kstring& str) const
   {
     size_t retval = 0;
-    for (const char* begin = str.c_str ();
-	 *begin != 0;
-	 ++begin) {
-      retval += *begin;
+    const char* ptr = str.c_str ();
+    for (size_t i = 0; i != str.size (); ++i, ++ptr) {
+      retval += *ptr;
       retval *= 1142821ul;
     }
 

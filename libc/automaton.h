@@ -152,10 +152,13 @@ size_t
 size_to_pages (size_t size);
 
 int
-set_registry (aid_t aid);
+enter (const char* name,
+       size_t size,
+       aid_t aid);
 
 aid_t
-get_registry (void);
+lookup (const char* name,
+	size_t size);
 
 bd_t
 describe (aid_t aid);

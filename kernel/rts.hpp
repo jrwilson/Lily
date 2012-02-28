@@ -64,10 +64,15 @@ namespace rts {
 		       aid_t aid);
 
   pair<int, int>
-  set_registry (aid_t aid);
+  enter (automaton* a,
+	 const char* name,
+	 size_t size,
+	 aid_t aid);
 
   pair<aid_t, int>
-  get_registry (void);
+  lookup (automaton* a,
+	  const char* name,
+	  size_t size);
 
   pair<bd_t, int>
   describe (automaton* a,

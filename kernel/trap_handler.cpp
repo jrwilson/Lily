@@ -153,13 +153,17 @@ struct sysconf_args {
   int name;
 };
 
-struct set_registry_args {
+struct enter_args {
   uint32_t eip;
+  const char* name;
+  size_t size;
   aid_t aid;
 };
 
-struct get_registry_args {
+struct lookup_args {
   uint32_t eip;
+  const char* name;
+  size_t size;
 };
 
 struct describe_args {
@@ -169,7 +173,7 @@ struct describe_args {
 
 struct syslog_args {
   uint32_t eip;
-  char* string;
+  const char* string;
   size_t size;
 };
 
@@ -435,29 +439,29 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_SET_REGISTRY:
+  case LILY_SYSCALL_ENTER:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      set_registry_args* ptr = reinterpret_cast<set_registry_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (set_registry_args))) {
+      enter_args* ptr = reinterpret_cast<enter_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (enter_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<int, int> r = rts::set_registry (ptr->aid);
+      pair<int, int> r = rts::enter (a, ptr->name, ptr->size, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
     }
     break;
-  case LILY_SYSCALL_GET_REGISTRY:
+  case LILY_SYSCALL_LOOKUP:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      get_registry_args* ptr = reinterpret_cast<get_registry_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (get_registry_args))) {
+      lookup_args* ptr = reinterpret_cast<lookup_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (lookup_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<int, int> r = rts::get_registry ();
+      pair<int, int> r = rts::lookup (a, ptr->name, ptr->size);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

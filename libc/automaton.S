@@ -115,16 +115,16 @@ sysconf:
 	mov %ecx, automatonerrno
 	ret
 
-	.global set_registry
-set_registry:
-	mov $LILY_SYSCALL_SET_REGISTRY, %eax
+	.global enter
+enter:
+	mov $LILY_SYSCALL_ENTER, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret
 
-	.global get_registry
-get_registry:
-	mov $LILY_SYSCALL_GET_REGISTRY, %eax
+	.global lookup
+lookup:
+	mov $LILY_SYSCALL_LOOKUP, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret
