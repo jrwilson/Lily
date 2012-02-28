@@ -18,7 +18,9 @@ void
 buffer_queue_push (buffer_queue_t* bq,
 		   int parameter,
 		   bd_t bda,
-		   bd_t bdb);
+		   size_t sizea,
+		   bd_t bdb,
+		   size_t sizeb);
 
 void
 buffer_queue_pop (buffer_queue_t* bq);
@@ -43,7 +45,13 @@ buffer_queue_item_parameter (const buffer_queue_item_t* item);
 bd_t
 buffer_queue_item_bda (const buffer_queue_item_t* item);
 
+size_t
+buffer_queue_item_sizea (const buffer_queue_item_t* item);
+
 bd_t
 buffer_queue_item_bdb (const buffer_queue_item_t* item);
+
+size_t
+buffer_queue_item_sizeb (const buffer_queue_item_t* item);
 
 #endif /* BUFFER_QUEUE_H */

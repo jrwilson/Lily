@@ -141,7 +141,7 @@ mount_callback (void* data,
       ssyslog ("boot_automaton: error: Couldn't create readfile request\n");
       exit ();
     }
-    buffer_queue_push (&vfs_request_queue, 0, bd, -1);
+    buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
     callback_queue_push (&vfs_response_queue, readfile_callback, 0);
   }
 }
@@ -238,7 +238,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
       ssyslog ("boot_automaton: error: Couldn't create mount request\n");
       exit ();
     }
-    buffer_queue_push (&vfs_request_queue, 0, bd, -1);
+    buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
     callback_queue_push (&vfs_response_queue, mount_callback, 0);
   }
 
@@ -353,7 +353,7 @@ end_action (bool output_fired,
 	    bd_t bdb)
 {
   if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, bdb);
+    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
   }
 
   if (vfs_request_precondition ()) {

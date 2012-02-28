@@ -1,8 +1,8 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=vfs tmpfs jsh
+PROGRAMS=vfs tmpfs jsh keyboard
+# kb_us_104 shell terminal vga
 SCRIPTS=start.jsh
-#PROGRAMS=keyboard kb_us_104 shell terminal vga
 TARGETS=boot_automaton boot_data
 
 .PHONY : all
@@ -30,8 +30,8 @@ tmpfs : tmpfs.o cpio.o vfs_msg.o
 jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring
 
-# keyboard : keyboard.o
-# 	$(CC) -o $@ $^ -lio -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
+keyboard : keyboard.o
+	$(CC) -o $@ $^
 
 # kb_us_104 : kb_us_104.o
 # 	$(CC) -o $@ $^ -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring

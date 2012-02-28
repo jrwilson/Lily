@@ -170,7 +170,7 @@ form_unknown_response (vfs_error_t error)
 {
   /* Create a response. */
   bd_t bd = write_vfs_unknown_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, 0, -1, 0);
   reset_client_state ();
 }
 
@@ -179,7 +179,7 @@ form_mount_response (vfs_error_t error)
 {
   /* Create a response. */
   bd_t bd = write_vfs_mount_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, -1);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, 0, -1, 0);
   reset_client_state ();
 }
 
@@ -190,7 +190,7 @@ form_readfile_response (vfs_error_t error,
 {
   /* Create a response. */
   bd_t bd = write_vfs_readfile_response (error, size);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, content);
+  buffer_queue_push (&client_response_queue, client_request_aid, bd, 0, content, 0);
   reset_client_state ();
 }
 
@@ -306,7 +306,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
 {
   ssyslog ("vfs: client_request\n");
   initialize ();
-  buffer_queue_push (&client_request_queue, aid, bda, bdb);
+  buffer_queue_push (&client_request_queue, aid, bda, 0, bdb, 0);
   end_action (false, -1, -1);
 }
 
@@ -702,7 +702,7 @@ end_action (bool output_fired,
 	    bd_t bdb)
 {
   if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, bdb);
+    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
   }
 
   if (!buffer_queue_empty (&client_response_queue)) {

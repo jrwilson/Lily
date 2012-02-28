@@ -80,8 +80,6 @@ struct buffer_create_args {
 struct buffer_copy_args {
   uint32_t eip;
   bd_t src;
-  size_t offset;
-  size_t length;
 };
 
 struct buffer_resize_args {
@@ -319,7 +317,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<bd_t, int> r = a->buffer_copy (ptr->src, ptr->offset, ptr->length);
+      pair<bd_t, int> r = a->buffer_copy (ptr->src);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

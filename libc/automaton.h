@@ -105,9 +105,7 @@ bd_t
 buffer_create (size_t size);
 
 bd_t
-buffer_copy (bd_t bd,
-	     size_t begin,
-	     size_t end);
+buffer_copy (bd_t bd);
 
 int
 buffer_destroy (bd_t bd);
@@ -119,18 +117,18 @@ size_t
 buffer_resize (bd_t bd,
 	       size_t size);
 
-int
-buffer_assign (bd_t dest,
-	       size_t dest_begin,
-	       bd_t src,
-	       size_t src_begin,
-	       size_t src_end);
+/* int */
+/* buffer_assign (bd_t dest, */
+/* 	       size_t dest_begin, */
+/* 	       bd_t src, */
+/* 	       size_t src_begin, */
+/* 	       size_t src_end); */
 
-size_t
-buffer_append (bd_t dest,
-	       bd_t src,
-	       size_t begin,
-	       size_t end);
+/* size_t */
+/* buffer_append (bd_t dest, */
+/* 	       bd_t src, */
+/* 	       size_t begin, */
+/* 	       size_t end); */
 
 void*
 buffer_map (bd_t bd);

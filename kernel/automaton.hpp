@@ -662,16 +662,10 @@ public:
 
     return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
-  
-  pair<bd_t, int>
-  buffer_copy (bd_t other,
-	       size_t begin,
-	       size_t end)
-  {
-    if (begin > end) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
 
+  pair<bd_t, int>
+  buffer_copy (bd_t other)
+  {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
     if (bpos == bd_to_buffer_map_.end ()) {
       // Buffer does not exist.
@@ -679,20 +673,47 @@ public:
     }
 
     buffer* b = bpos->second;
-    if (end > b->size ()) {
-      // End is past end of buffer.
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
 
     // Generate an id.
     bd_t bd = generate_bd ();
     
     // Create the buffer and insert it into the map.
-    buffer* n = new buffer (*b, begin, end);
+    buffer* n = new buffer (*b, 0, b->size ());
     bd_to_buffer_map_.insert (make_pair (bd, n));
     
     return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
+  
+  // pair<bd_t, int>
+  // buffer_copy (bd_t other,
+  // 	       size_t begin,
+  // 	       size_t end)
+  // {
+  //   if (begin > end) {
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
+  //   if (bpos == bd_to_buffer_map_.end ()) {
+  //     // Buffer does not exist.
+  //     return make_pair (-1, LILY_SYSCALL_EBDDNE);
+  //   }
+
+  //   buffer* b = bpos->second;
+  //   if (end > b->size ()) {
+  //     // End is past end of buffer.
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+
+  //   // Generate an id.
+  //   bd_t bd = generate_bd ();
+    
+  //   // Create the buffer and insert it into the map.
+  //   buffer* n = new buffer (*b, begin, end);
+  //   bd_to_buffer_map_.insert (make_pair (bd, n));
+    
+  //   return make_pair (bd, LILY_SYSCALL_ESUCCESS);
+  // }
 
   bd_t
   buffer_create (const buffer& other)

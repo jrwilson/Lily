@@ -183,7 +183,7 @@ file_find_or_create (inode_t* parent,
   }
 
   /* Create a node. */
-  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd, 0, buffer_size (bd)), size, parent);
+  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd), size, parent);
 
   return *ptr;
 }
@@ -243,7 +243,7 @@ form_unknown_response (vfs_fs_error_t error)
 {
   /* Create a response. */
   bd_t bd = write_vfs_fs_unknown_response (error);
-  buffer_queue_push (&response_queue, 0, bd, -1);
+  buffer_queue_push (&response_queue, 0, bd, 0, -1, 0);
 }
 
 static void
@@ -252,7 +252,7 @@ form_descend_response (vfs_fs_error_t error,
 {
   /* Create a response. */
   bd_t bd = write_vfs_fs_descend_response (error, node);
-  buffer_queue_push (&response_queue, 0, bd, -1);
+  buffer_queue_push (&response_queue, 0, bd, 0, -1, 0);
 }
 
 static void
@@ -262,7 +262,7 @@ form_readfile_response (vfs_fs_error_t error,
 {
   /* Create a response. */
   bd_t bd = write_vfs_fs_readfile_response (error, size);
-  buffer_queue_push (&response_queue, 0, bd, content);
+  buffer_queue_push (&response_queue, 0, bd, 0, content, 0);
 }
 
 static void
@@ -404,7 +404,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
 	end_action (false, bda, bdb);
       }
 
-      form_readfile_response (VFS_FS_SUCCESS, inode->size, buffer_copy (inode->bd, 0, buffer_size (inode->bd)));
+      form_readfile_response (VFS_FS_SUCCESS, inode->size, buffer_copy (inode->bd));
     }
     break;
   default:
@@ -478,7 +478,7 @@ end_action (bool output_fired,
 	    bd_t bdb)
 {
   if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, bdb);
+    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
   }
 
   if (!buffer_queue_empty (&response_queue)) {
