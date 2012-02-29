@@ -31,7 +31,7 @@ jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring
 
 keyboard : keyboard.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lio -lbuffer_queue -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 # kb_us_104 : kb_us_104.o
 # 	$(CC) -o $@ $^ -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
