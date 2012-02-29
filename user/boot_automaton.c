@@ -193,7 +193,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   }
 
   /* Register the vfs. */
-  if (enter (VFS_NAME, strlen (VFS_NAME), vfs) == -1) {
+  if (enter (VFS_NAME, strlen (VFS_NAME) + 1, vfs) == -1) {
     ssyslog ("boot_automaton: error: Could not register vfs\n");
     exit ();
   }

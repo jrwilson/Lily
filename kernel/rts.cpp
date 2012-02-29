@@ -521,7 +521,7 @@ namespace rts {
 	 aid_t aid)
   {
     // Check the name.
-    if (!a->verify_span (name, size)) {
+    if (!a->verify_span (name, size) || name[size - 1] != 0) {
       return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
     
@@ -550,7 +550,7 @@ namespace rts {
 	  size_t size)
   {
     // Check the name.
-    if (!a->verify_span (name, size)) {
+    if (!a->verify_span (name, size) || name[size -1] != 0) {
       return make_pair (-1, LILY_SYSCALL_EINVAL);
     }
 

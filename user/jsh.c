@@ -642,7 +642,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   initialize ();
 
   /* Bind to the vfs. */
-  vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME));
+  vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
   if (vfs_aid == -1) {
     ssyslog ("jsh: error: no vfs\n");
     exit ();
