@@ -16,7 +16,8 @@ argv_initw (argv_t* a,
 
 int
 argv_append (argv_t* a,
-	     const char* str);
+	     const void* ptr,
+	     size_t size);
 
 int
 argv_initr (argv_t* a,
@@ -24,8 +25,10 @@ argv_initr (argv_t* a,
 	    bd_t bdb,
 	    size_t* argc);
 
-const char*
+int
 argv_arg (argv_t* a,
-	  size_t idx);
+	  size_t idx,
+	  const void** ptr,
+	  size_t* size);
 
 #endif /* ARGV_H */

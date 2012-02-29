@@ -76,7 +76,8 @@ static buffer_queue_t client_response_queue;
 
 /* Variables for a message going to a file system. */
 static aid_t fs_aid = -1;
-static bd_t fs_bd = -1;
+static bd_t fs_bda = -1;
+static bd_t fs_bdb = -1;
 static vfs_fs_type_t fs_type;
 
 /* Queue of buffers to destroy. */
@@ -169,8 +170,13 @@ static void
 form_unknown_response (vfs_error_t error)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_unknown_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, 0, -1, 0);
+  bd_t bda;
+  bd_t bdb;
+  if (write_vfs_unknown_response (error, &bda, &bdb) == -1) {
+    ssyslog ("vfs: error: Could not prepare vfs response\n");
+    exit ();
+  }
+  buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, bdb, 0);
   reset_client_state ();
 }
 
@@ -178,8 +184,13 @@ static void
 form_mount_response (vfs_error_t error)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_mount_response (error);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, 0, -1, 0);
+  bd_t bda;
+  bd_t bdb;
+  if (write_vfs_mount_response (error, &bda, &bdb) == -1) {
+    ssyslog ("vfs: error: Could not prepare vfs response\n");
+    exit ();
+  }
+  buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, bdb, 0);
   reset_client_state ();
 }
 
@@ -189,8 +200,12 @@ form_readfile_response (vfs_error_t error,
 			bd_t content)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_readfile_response (error, size);
-  buffer_queue_push (&client_response_queue, client_request_aid, bd, 0, content, 0);
+  bd_t bda;
+  if (write_vfs_readfile_response (error, size, &bda) == -1) {
+    ssyslog ("vfs: error: Could not prepare vfs response\n");
+    exit ();
+  }
+  buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, content, 0);
   reset_client_state ();
 }
 
@@ -277,7 +292,10 @@ path_lookup_resume (void)
 
     /* Form a message to a file system. */
     fs_aid = path_lookup_current.aid;
-    fs_bd = write_vfs_fs_descend_request (path_lookup_current.node.id, path_lookup_begin, path_lookup_end - path_lookup_begin);
+    if (write_vfs_fs_descend_request (path_lookup_current.node.id, path_lookup_begin, path_lookup_end - path_lookup_begin, &fs_bda, &fs_bdb) == -1) {
+      ssyslog ("vfs: error: Could not prepare descend request\n");
+      exit ();
+    }
     fs_type = VFS_FS_DESCEND;
   }
 }
@@ -352,7 +370,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
 static bool
 file_system_request_precondition (aid_t aid)
 {
-  return fs_aid == aid && fs_aid != -1 && fs_bd != -1;
+  return fs_aid == aid && fs_aid != -1 && fs_bda != -1;
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid)
@@ -362,12 +380,14 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
 
   if (file_system_request_precondition (aid)) {
     ssyslog ("vfs: file_system_request\n");
-    bd_t bd = fs_bd;
+    bd_t bda = fs_bda;
+    bd_t bdb = fs_bdb;
 
     fs_aid = -1;
-    fs_bd = -1;
+    fs_bda = -1;
+    fs_bdb = -1;
 
-    end_action (true, bd, -1);
+    end_action (true, bda, bdb);
   }
   else {
     /* Did not find a request. */
@@ -394,7 +414,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
     {
       vfs_fs_error_t error;
       vfs_fs_node_t node;
-      if (read_vfs_fs_descend_response (bda, &error, &node) == -1) {
+      if (read_vfs_fs_descend_response (bda, bdb, &error, &node) == -1) {
 	/* TODO:  This is a protocol violation. */
 	exit ();
       }
@@ -416,7 +436,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
     {
       vfs_fs_error_t error;
       size_t size;
-      if (read_vfs_fs_readfile_response (bda, &error, &size) == -1) {
+      if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) == -1) {
 	/* TODO:  This is a protocol violation. */
 	exit ();
       }
@@ -504,7 +524,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     client_request_bdb = buffer_queue_item_bdb (front);
     buffer_queue_pop (&client_request_queue);
 
-    if (read_vfs_request_type (client_request_bda, &client_request_type) == -1) {
+    if (read_vfs_request_type (client_request_bda, client_request_bdb, &client_request_type) == -1) {
       form_unknown_response (VFS_BAD_REQUEST);
       end_action (false, -1, -1);
     }
@@ -512,7 +532,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
     switch (client_request_type) {
     case VFS_MOUNT:
       {
-	if (read_vfs_mount_request (client_request_bda, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
+	if (read_vfs_mount_request (client_request_bda, client_request_bdb, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_mount_response (VFS_BAD_REQUEST);
 	  end_action (false, -1, -1);
 	}
@@ -541,7 +561,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
       break;
     case VFS_READFILE:
       {
-	if (read_vfs_readfile_request (client_request_bda, &path_lookup_path, &path_lookup_path_size) == -1) {
+	if (read_vfs_readfile_request (client_request_bda, client_request_bdb, &path_lookup_path, &path_lookup_path_size) == -1) {
 	  form_readfile_response (VFS_BAD_REQUEST, 0, -1);
 	  end_action (false, -1, -1);
 	}
@@ -663,7 +683,7 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
 static bool
 readfile_request_precondition (void)
 {
-  return client_request_bda != -1 && client_request_type == VFS_READFILE && path_lookup_done && fs_bd == -1 && readfile_sent == false;
+  return client_request_bda != -1 && client_request_type == VFS_READFILE && path_lookup_done && fs_bda == -1 && readfile_sent == false;
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int param)
@@ -687,7 +707,10 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
 
     /* Form a message to a file system. */
     fs_aid = path_lookup_current.aid;
-    fs_bd = write_vfs_fs_readfile_request (path_lookup_current.node.id);
+    if (write_vfs_fs_readfile_request (path_lookup_current.node.id, &fs_bda, &fs_bdb) == -1) {
+      ssyslog ("vfs: error: Could not prepare readfile request\n");
+      exit ();
+    }
     fs_type = VFS_FS_READFILE;
 
     readfile_sent = true;

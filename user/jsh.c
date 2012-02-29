@@ -263,16 +263,17 @@ create_ (token_list_item_t* var,
   
   while ((string = accept (STRING)) != 0) {
     /* Add the string to argv. */
-    argv_append (&cc->argv, string->string);
+    argv_append (&cc->argv, string->string, string->size);
   }
   
   /* Request the text of the automaton. */
-  bd_t bd = write_vfs_readfile_request (filename->string);
-  if (bd == -1) {
+  bd_t bda;
+  bd_t bdb;
+  if (write_vfs_readfile_request (filename->string, &bda, &bdb) == -1) {
     ssyslog ("jsh: error: Couldn't create readfile request\n");
     exit ();
   }
-  buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
+  buffer_queue_push (&vfs_request_queue, 0, bda, 0, bdb, 0);
   callback_queue_push (&vfs_response_queue, create_callback, cc);
   /* Set the flag so we stop trying to evaluate. */
   evaluating = true;
@@ -675,14 +676,20 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   if (argv_initr (&argv, bda, bdb, &argc) != -1) {
     if (argc >= 2) {
       /* Request the script. */
-      const char* filename = argv_arg (&argv, 1);
+      const char* filename;
+      size_t size;
+      if (argv_arg (&argv, 1, (const void**)&filename, &size) == -1) {
+	ssyslog ("jsh: error: Couldn't read filename argument\n");
+	exit ();
+      }
 
-      bd_t bd = write_vfs_readfile_request (filename);
-      if (bd == -1) {
+      bd_t bda2;
+      bd_t bdb2;
+      if (write_vfs_readfile_request (filename, &bda2, &bdb2) == -1) {
 	ssyslog ("jsh: error: Couldn't create readfile request\n");
 	exit ();
       }
-      buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
+      buffer_queue_push (&vfs_request_queue, 0, bda2, 0, bdb2, 0);
       callback_queue_push (&vfs_response_queue, readscript_callback, 0);
     }
   }

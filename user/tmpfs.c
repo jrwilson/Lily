@@ -242,8 +242,13 @@ static void
 form_unknown_response (vfs_fs_error_t error)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_fs_unknown_response (error);
-  buffer_queue_push (&response_queue, 0, bd, 0, -1, 0);
+  bd_t bda;
+  bd_t bdb;
+  if (write_vfs_fs_unknown_response (error, &bda, &bdb) == -1) {
+    ssyslog ("tmpfs: error: Could not prepare response\n");
+    exit ();
+  }
+  buffer_queue_push (&response_queue, 0, bda, 0, bdb, 0);
 }
 
 static void
@@ -251,8 +256,13 @@ form_descend_response (vfs_fs_error_t error,
 		       const vfs_fs_node_t* node)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_fs_descend_response (error, node);
-  buffer_queue_push (&response_queue, 0, bd, 0, -1, 0);
+  bd_t bda;
+  bd_t bdb;
+  if (write_vfs_fs_descend_response (error, node, &bda, &bdb) == -1) {
+    ssyslog ("tmpfs: error: Could not prepare descend response\n");
+    exit ();
+  }
+  buffer_queue_push (&response_queue, 0, bda, 0, bdb, 0);
 }
 
 static void
@@ -261,8 +271,12 @@ form_readfile_response (vfs_fs_error_t error,
 			bd_t content)
 {
   /* Create a response. */
-  bd_t bd = write_vfs_fs_readfile_response (error, size);
-  buffer_queue_push (&response_queue, 0, bd, 0, content, 0);
+  bd_t bda;
+  if (write_vfs_fs_readfile_response (error, size, &bda) == -1) {
+    ssyslog ("tmpfs: error: Could not prepare readfile response\n");
+    exit ();
+  }
+  buffer_queue_push (&response_queue, 0, bda, 0, content, 0);
 }
 
 static void
@@ -330,7 +344,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   initialize ();
 
   vfs_fs_type_t type;
-  if (read_vfs_fs_request_type (bda, &type) == -1) {
+  if (read_vfs_fs_request_type (bda, bdb, &type) == -1) {
     form_unknown_response (VFS_FS_BAD_REQUEST);
     end_action (false, bda, bdb);
   }
@@ -342,7 +356,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
       const char* name;
       size_t name_size;
       vfs_fs_node_t no_node;
-      if (read_vfs_fs_descend_request (bda, &id, &name, &name_size) == -1) {
+      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) == -1) {
 	form_descend_response (VFS_FS_BAD_REQUEST, &no_node);
 	end_action (false, bda, bdb);
       }
@@ -382,7 +396,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   case VFS_FS_READFILE:
     {
       size_t id;
-      if (read_vfs_fs_readfile_request (bda, &id) == -1) {
+      if (read_vfs_fs_readfile_request (bda, bdb, &id) == -1) {
 	form_readfile_response (VFS_FS_BAD_REQUEST, 0, -1);
 	end_action (false, bda, bdb);
       }

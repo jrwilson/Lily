@@ -43,21 +43,20 @@ argv_initw (argv_t* a,
 
 int
 argv_append (argv_t* a,
-	     const char* str)
+	     const void* ptr,
+	     size_t size)
 {
-  size_t string_size = strlen (str) + 1;
-
   /* Get the current offset. */
   size_t string_offset = buffer_file_seek (&a->string_bf, 0, BUFFER_FILE_CURRENT);
 
   /* Write the string. */
-  if (buffer_file_write (&a->string_bf, str, string_size) == -1) {
+  if (buffer_file_write (&a->string_bf, ptr, size) == -1) {
     return -1;
   }
 
   /* Write the offset and size. */
   if (buffer_file_write (&a->argv_bf, &string_offset, sizeof (size_t)) == -1 ||
-      buffer_file_write (&a->argv_bf, &string_size, sizeof (size_t)) == -1) {
+      buffer_file_write (&a->argv_bf, &size, sizeof (size_t)) == -1) {
     return -1;
   }
 
@@ -117,32 +116,29 @@ argv_initr (argv_t* a,
   return 0;
 }
 
-const char*
+int
 argv_arg (argv_t* a,
-	  size_t idx)
+	  size_t idx,
+	  const void** ptr,
+	  size_t* size)
 {
   if (idx >= a->argc) {
     /* Out of range. */
-    return 0;
+    return -1;
   }
 
   buffer_file_seek (&a->argv_bf, sizeof (size_t) + idx * (sizeof (size_t) + sizeof (size_t)), BUFFER_FILE_SET);
   size_t offset;
-  size_t size;
   if (buffer_file_read (&a->argv_bf, &offset, sizeof (size_t)) == -1 ||
-      buffer_file_read (&a->argv_bf, &size, sizeof (size_t)) == -1) {
-    return 0;
+      buffer_file_read (&a->argv_bf, size, sizeof (size_t)) == -1) {
+    return -1;
   }
 
   buffer_file_seek (&a->string_bf, offset, BUFFER_FILE_SET);
-  const char* str = buffer_file_readp (&a->string_bf, size);
-  if (str == 0) {
-    return 0;
-  }
-  if (str[size - 1] != 0) {
-    /* Not null-terminated. */
-    return 0;
+  *ptr = buffer_file_readp (&a->string_bf, *size);
+  if (*ptr == 0) {
+    return -1;
   }
 
-  return str;
+  return 0;
 }

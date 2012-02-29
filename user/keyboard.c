@@ -7,8 +7,7 @@
 
 typedef struct {
   size_t size;
-  buffer_file_t bfa;
-  buffer_file_t bfb;
+  buffer_file_t bf;
 } scan_code_array_t;
 
 int
@@ -18,32 +17,23 @@ scan_code_array_initw (scan_code_array_t* sca,
 {
   sca->size = 0;
 
-  bd_t a = buffer_create (1);
-  if (a == -1) {
+  bd_t bd = buffer_create (1);
+  if (bd == -1) {
     return -1;
   }
 
-  if (buffer_file_open (&sca->bfa, a, true) == -1) {
-    buffer_destroy (a);
-    return -1;
-  }
-
-  bd_t b = buffer_create (1);
-  if (b == -1) {
-    return -1;
-  }
-
-  if (buffer_file_open (&sca->bfb, b, true) == -1) {
-    buffer_destroy (a);
-    buffer_destroy (b);
+  if (buffer_file_open (&sca->bf, bd, true) == -1) {
+    buffer_destroy (bd);
     return -1;
   }
   
-  if (buffer_file_write (&sca->bfa, &sca->size, sizeof (size_t)) == -1) {
-    buffer_destroy (a);
-    buffer_destroy (b);
+  if (buffer_file_write (&sca->bf, &sca->size, sizeof (size_t)) == -1) {
+    buffer_destroy (bd);
     return -1;
   }
+
+  *bda = bd;
+  *bdb = -1;
 
   return 0;
 }
@@ -52,17 +42,19 @@ int
 scan_code_array_append (scan_code_array_t* sca,
 			char c)
 {
-  /* Update and overwrite the size. */
-  ++sca->size;
-  buffer_file_seek (&sca->bfa, 0, BUFFER_FILE_SET);
-  if (buffer_file_write (&sca->bfa, &sca->size, sizeof (size_t)) == -1) {
+  /* Write the byte. */
+  if (buffer_file_write (&sca->bf, &c, 1) == -1) {
     return -1;
   }
 
-  /* Write the byte. */
-  if (buffer_file_write (&sca->bfb, &c, 1) == -1) {
+  /* Update and overwrite the size. */
+  size_t position = buffer_file_seek (&sca->bf, 0, BUFFER_FILE_CURRENT);
+  ++sca->size;
+  buffer_file_seek (&sca->bf, 0, BUFFER_FILE_SET);
+  if (buffer_file_write (&sca->bf, &sca->size, sizeof (size_t)) == -1) {
     return -1;
   }
+  buffer_file_seek (&sca->bf, position, BUFFER_FILE_SET);
 
   return 0;
 }

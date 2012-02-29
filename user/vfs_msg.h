@@ -36,40 +36,53 @@ typedef enum {
 } vfs_error_t;
 
 int
-read_vfs_request_type (bd_t bd,
+read_vfs_request_type (bd_t bda,
+		       bd_t bdb,
 		       vfs_type_t* type);
 
-bd_t
-write_vfs_unknown_response (vfs_error_t error);
-
-bd_t
-write_vfs_mount_request (aid_t aid,
-			 const char* path);
+int
+write_vfs_unknown_response (vfs_error_t error,
+			    bd_t* bda,
+			    bd_t* bdb);
 
 int
-read_vfs_mount_request (bd_t bd,
+write_vfs_mount_request (aid_t aid,
+			 const char* path,
+			 bd_t* bda,
+			 bd_t* bdb);
+
+int
+read_vfs_mount_request (bd_t bda,
+			bd_t bdb,
 			aid_t* aid,
 			const char** path,
 			size_t* path_size);
 
-bd_t
-write_vfs_mount_response (vfs_error_t error);
+int
+write_vfs_mount_response (vfs_error_t error,
+			  bd_t* bda,
+			  bd_t* bdb);
 
 int
-read_vfs_mount_response (bd_t bd,
+read_vfs_mount_response (bd_t bda,
+			 bd_t bdb,
 			 vfs_error_t* error);
 
-bd_t
-write_vfs_readfile_request (const char* path);
+int
+write_vfs_readfile_request (const char* path,
+			    bd_t* bda,
+			    bd_t* bdb);
 
 int
-read_vfs_readfile_request (bd_t bd,
+read_vfs_readfile_request (bd_t bda,
+			   bd_t bdb,
 			   const char** path,
 			   size_t* path_size);
 
-bd_t
+int
 write_vfs_readfile_response (vfs_error_t error,
-			     size_t size);
+			     size_t size,
+			     bd_t* bda);
 
 int
 read_vfs_readfile_response (bd_t bd,
@@ -113,45 +126,59 @@ typedef enum {
 } vfs_fs_error_t;
 
 int
-read_vfs_fs_request_type (bd_t bd,
+read_vfs_fs_request_type (bd_t bda,
+			  bd_t bdb,
 			  vfs_fs_type_t* type);
 
-bd_t
-write_vfs_fs_unknown_response (vfs_fs_error_t error);
-
-bd_t
-write_vfs_fs_descend_request (size_t id,
-			      const char* name,
-			      size_t name_size);
+int
+write_vfs_fs_unknown_response (vfs_fs_error_t error,
+			       bd_t* bda,
+			       bd_t* bdb);
 
 int
-read_vfs_fs_descend_request (bd_t bd,
+write_vfs_fs_descend_request (size_t id,
+			      const char* name,
+			      size_t name_size,
+			      bd_t* bda,
+			      bd_t* bdb);
+
+int
+read_vfs_fs_descend_request (bd_t bda,
+			     bd_t bdb,
 			     size_t* id,
 			     const char** name,
 			     size_t* name_size);
 
-bd_t
+int
 write_vfs_fs_descend_response (vfs_fs_error_t error,
-			       const vfs_fs_node_t* node);
+			       const vfs_fs_node_t* node,
+			       bd_t* bda,
+			       bd_t* bdb);
 
 int
-read_vfs_fs_descend_response (bd_t bd,
+read_vfs_fs_descend_response (bd_t bda,
+			      bd_t bdb,
 			      vfs_fs_error_t* error,
 			      vfs_fs_node_t* node);
 
-bd_t
-write_vfs_fs_readfile_request (size_t id);
+int
+write_vfs_fs_readfile_request (size_t id,
+			       bd_t* bda,
+			       bd_t* bdb);
 
 int
-read_vfs_fs_readfile_request (bd_t bd,
+read_vfs_fs_readfile_request (bd_t bda,
+			      bd_t bdb,
 			      size_t* id);
 
-bd_t
+int
 write_vfs_fs_readfile_response (vfs_fs_error_t error,
-				size_t size);
+				size_t size,
+				bd_t* bda);
 
 int
-read_vfs_fs_readfile_response (bd_t bd,
+read_vfs_fs_readfile_response (bd_t bda,
+			       bd_t bdb,
 			       vfs_fs_error_t* error,
 			       size_t* size);
 

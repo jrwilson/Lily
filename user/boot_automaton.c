@@ -102,12 +102,12 @@ readfile_callback (void* data,
     exit ();
   }
 
-  if (argv_append (&argv, SHELL_PATH) == -1) {
+  if (argv_append (&argv, SHELL_PATH, strlen (SHELL_PATH) + 1) == -1) {
     ssyslog ("boot_automaton: error: could not initialize argv\n");
     exit ();
   }
 
-  if (argv_append (&argv, SHELL_CMDLINE) == -1) {
+  if (argv_append (&argv, SHELL_CMDLINE, strlen (SHELL_CMDLINE) + 1) == -1) {
     ssyslog ("boot_automaton: error: could not initialize argv\n");
     exit ();
   }
@@ -124,7 +124,7 @@ mount_callback (void* data,
 		bd_t bdb)
 {
   vfs_error_t error;
-  if (read_vfs_mount_response (bda, &error) == -1) {
+  if (read_vfs_mount_response (bda, bdb, &error) == -1) {
     ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
     exit ();
   }
@@ -136,12 +136,13 @@ mount_callback (void* data,
 
   /* Request the shell. */
   {
-    bd_t bd = write_vfs_readfile_request (SHELL_PATH);
-    if (bd == -1) {
+    bd_t bda;
+    bd_t bdb;
+    if (write_vfs_readfile_request (SHELL_PATH, &bda, &bdb) == 1) {
       ssyslog ("boot_automaton: error: Couldn't create readfile request\n");
       exit ();
     }
-    buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
+    buffer_queue_push (&vfs_request_queue, 0, bda, 0, bdb, 0);
     callback_queue_push (&vfs_response_queue, readfile_callback, 0);
   }
 }
@@ -233,12 +234,13 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
 
   /* Mount tmpfs on ROOT_PATH. */
   {
-    bd_t bd = write_vfs_mount_request (tmpfs, ROOT_PATH);
-    if (bd == -1) {
+    bd_t bda2;
+    bd_t bdb2;
+    if (write_vfs_mount_request (tmpfs, ROOT_PATH, &bda2, &bdb2) == -1) {
       ssyslog ("boot_automaton: error: Couldn't create mount request\n");
       exit ();
     }
-    buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
+    buffer_queue_push (&vfs_request_queue, 0, bda2, 0, bdb2, 0);
     callback_queue_push (&vfs_response_queue, mount_callback, 0);
   }
 
