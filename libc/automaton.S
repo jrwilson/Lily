@@ -115,6 +115,13 @@ sysconf:
 	mov %ecx, automatonerrno
 	ret
 
+	.global syslogn
+syslogn:
+	mov $LILY_SYSCALL_SYSLOG, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
 	.global enter
 enter:
 	mov $LILY_SYSCALL_ENTER, %eax

@@ -1,10 +1,8 @@
-#include "kb_us_104.h"
 #include <automaton.h>
-#include <string.h>
-#include <buffer_heap.h>
+#include <buffer_queue.h>
 #include <fifo_scheduler.h>
-#include "keyboard.h"
-#include "string_buffer.h"
+#include <string.h>
+#include "byte_buffer.h"
 
 /*
   Driver for a 104-key US keyboard
@@ -12,15 +10,6 @@
   This driver converts scan codes from a keyboard to ASCII text.
   The ultimate goal should be to support some standard such as UTF-8.
 */
-
-/* Initial capacity of the ASCII array. */
-#define INITIAL_CAPACITY 4000
-
-/*
-  An array of ASCII characters implemented with a buffer.
-  This allows us to output the array when the STRING output fires.
-*/
-static string_buffer_t string_buffer;
 
 static bool left_shift = false;
 static bool right_shift = false;
@@ -203,140 +192,222 @@ static char upper_case[128] = {
   /* Num Lock, / * - + 1234567890. Enter*/
 };
 
+#define DESTROY_BUFFERS_NO 1
+#define SCAN_CODE_NO 2
+#define OUTPUT_NO 3
+
+/* Initialization flag. */
+static bool initialized = false;
+
+/* Queue of buffers that need to be destroyed. */
+static buffer_queue_t destroy_queue;
+
+/* Processed scan codes. */
+static byte_buffer_t buffer;
+static bd_t buffer_bda = -1;
+static bd_t buffer_bdb = -1;
+
 static void
-schedule (void);
+end_action (bool output_fired,
+	    bd_t bda,
+	    bd_t bdb);
 
-void
-init (int param,
-      bd_t bd,
-      void* ptr,
-      size_t buffer_size)
+static void
+initialize (void)
 {
-  string_buffer_init (&string_buffer, INITIAL_CAPACITY);
+  if (!initialized) {
+    initialized = true;
 
-  schedule ();
-  scheduler_finish (-1, FINISH_NO);
+    buffer_queue_init (&destroy_queue);
+    if (byte_buffer_initw (&buffer, &buffer_bda, &buffer_bdb) == -1) {
+      syslog ("kb_us_104: error: Could not initialize output buffer");
+      exit ();
+    }
+  }
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, NO_PARAMETER, INIT, init);
 
-void
-kb_us_104_scan_code (int param,
-		     bd_t bd,
-		     void* ptr,
-		     size_t size)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
-  if (ptr != 0) {
-    string_buffer_t sb;
-    if (string_buffer_parse (&sb, bd, ptr, size)) {
-      unsigned char* codes = string_buffer_data (&sb);
-      for (size_t idx = 0; idx != string_buffer_size (&sb); ++idx) {
-	unsigned char c = codes[idx];
-	if (c < BREAK) {
-	  /* Make. */
-	  switch (c) {
-	  case LEFT_SHIFT:
-	    left_shift = true;
-	    break;
-	  case RIGHT_SHIFT:
-	    right_shift = true;
-	    break;
-	  case CAPS_LOCK:
-	    caps_lock = !caps_lock;
-	    break;
-	  case CONTROL:
-	    control = true;
-	    break;
-	  case ALT:
-	    alt = true;
-	    break;
-	  default:
-	    {
-	      char t = lower_case[c];
-		/*
-		  The first clause says that an alphabetic character should be capitalized if either shifting or caps lock exclusively.
-		  The second clause says that all other characters can be shifted if a definition exists.
-		*/
-	      if ((t >= 'a' && t <= 'z') &&
-		  (((left_shift || right_shift) && !caps_lock) ||
-		   (!(left_shift || right_shift) && caps_lock))) {
-		t = upper_case[c];
-	      }
-	      else if ((left_shift || right_shift) && upper_case[c] != 0) {
-		t = upper_case[c];
-	      }
-	      
-	      if (t != 0) {
-		string_buffer_putc (&string_buffer, t);
-	      }
-	      /* else { */
-	      /*   /\* TODO *\/ */
-	      /*   char buf[256]; */
-	      /*   int cnt = snprintf (buf, 256, " %x ", c); */
-	      /*   for (int i = 0; i != cnt; ++i) { */
-	      /*     put (buf[i]); */
-	      /*   } */
-	      /* } */
-	    }
-	    break;
+  initialize ();
+  end_action (false, bda, bdb);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "byte_buffer", scan_code, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  size_t size;
+  byte_buffer_t bb;
+  if (byte_buffer_initr (&bb, bda, bdb, &size) == -1) {
+    end_action (false, bda, bdb);
+  }
+
+  const unsigned char* codes = byte_buffer_readp (&bb, size);
+  if (codes == 0) {
+    end_action (false, bda, bdb);
+  }
+
+  for (size_t idx = 0; idx != size; ++idx) {
+    unsigned char c = codes[idx];
+    if (c < BREAK) {
+      /* Make. */
+      switch (c) {
+      case LEFT_SHIFT:
+	left_shift = true;
+	break;
+      case RIGHT_SHIFT:
+	right_shift = true;
+	break;
+      case CAPS_LOCK:
+	caps_lock = !caps_lock;
+	break;
+      case CONTROL:
+	control = true;
+	break;
+      case ALT:
+	alt = true;
+	break;
+      default:
+	{
+	  char t = lower_case[c];
+	  /*
+	    The first clause says that an alphabetic character should be capitalized if either shifting or caps lock exclusively.
+	    The second clause says that all other characters can be shifted if a definition exists.
+	  */
+	  if ((t >= 'a' && t <= 'z') &&
+	      (((left_shift || right_shift) && !caps_lock) ||
+	       (!(left_shift || right_shift) && caps_lock))) {
+	    t = upper_case[c];
 	  }
-	}
-	else {
-	  /* Break. */
-	  c -= BREAK;
-	  switch (c) {
-	  case LEFT_SHIFT:
-	    left_shift = false;
-	    break;
-	  case RIGHT_SHIFT:
-	    right_shift = false;
-	    break;
-	  case CONTROL:
-	    control = false;
-	    break;
-	  case ALT:
-	    alt = false;
-	    break;
+	  else if ((left_shift || right_shift) && upper_case[c] != 0) {
+	    t = upper_case[c];
 	  }
+	  
+	  if (t != 0) {
+	    byte_buffer_put (&buffer, t);
+	  }
+	  /* else { */
+	  /*   /\* TODO *\/ */
+	  /*   char buf[256]; */
+	  /*   int cnt = snprintf (buf, 256, " %x ", c); */
+	  /*   for (int i = 0; i != cnt; ++i) { */
+	  /*     put (buf[i]); */
+	  /*   } */
+	  /* } */
 	}
+	break;
+      }
+    }
+    else {
+      /* Break. */
+      c -= BREAK;
+      switch (c) {
+      case LEFT_SHIFT:
+	left_shift = false;
+	break;
+      case RIGHT_SHIFT:
+	right_shift = false;
+	break;
+      case CONTROL:
+	control = false;
+	break;
+      case ALT:
+	alt = false;
+	break;
       }
     }
   }
 
-  schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  end_action (false, bda, bdb);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, KB_US_104_SCAN_CODE, kb_us_104_scan_code);
 
 static bool
-kb_us_104_string_precondition (void)
+output_precondition (void)
 {
-  /* Don't care if we are bound. */
-  return string_buffer_size (&string_buffer) != 0;
+  return !byte_buffer_empty (&buffer);
 }
 
-void
-kb_us_104_string (int param,
-		     size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, OUTPUT_NO, "", "", output, int param)
 {
-  scheduler_remove (KB_US_104_STRING, param);
+  initialize ();
+  scheduler_remove (OUTPUT_NO, param);
 
-  if (kb_us_104_string_precondition ()) {
-    bd_t bd = string_buffer_bd (&string_buffer);
-    string_buffer_init (&string_buffer, INITIAL_CAPACITY);
-    schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+  if (output_precondition ()) {
+    syslog ("kb_us_104: output");
+
+    bd_t bda = buffer_bda;
+    bd_t bdb = buffer_bdb;
+    if (byte_buffer_initw (&buffer, &buffer_bda, &buffer_bdb) == -1) {
+      syslog ("kb_us_104: error:  Could not initialize output buffer");
+      exit ();
+    }
+
+    end_action (true, bda, bdb);
   }
   else {
-    schedule ();
-    scheduler_finish (-1, FINISH_NO);
+    end_action (false, -1, -1);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, KB_US_104_STRING, kb_us_104_string);
 
-static void
-schedule (void)
+/* destroy_buffers
+   ---------------
+   Destroys all of the buffers in destroy_queue.
+   This is useful for output actions that need to destroy the buffer *after* the output has fired.
+   To schedule a buffer for destruction, just add it to destroy_queue.
+
+   Pre:  Destroy queue is not empty.
+   Post: Destroy queue is empty.
+ */
+static bool
+destroy_buffers_precondition (void)
 {
-  if (kb_us_104_string_precondition ()) {
-    scheduler_add (KB_US_104_STRING, 0);
+  return !buffer_queue_empty (&destroy_queue);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
+{
+  initialize ();
+  scheduler_remove (DESTROY_BUFFERS_NO, param);
+
+  if (destroy_buffers_precondition ()) {
+    while (!buffer_queue_empty (&destroy_queue)) {
+      bd_t bd;
+      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
+      bd = buffer_queue_item_bda (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+      bd = buffer_queue_item_bdb (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+
+      buffer_queue_pop (&destroy_queue);
+    }
   }
+
+  end_action (false, -1, -1);
+}
+
+/* end_action is a helper function for terminating actions.
+   If the buffer is not -1, it schedules it to be destroyed.
+   end_action schedules local actions and calls scheduler_finish to finish the action.
+*/
+static void
+end_action (bool output_fired,
+	    bd_t bda,
+	    bd_t bdb)
+{
+  if (bda != -1 || bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
+  }
+
+  if (destroy_buffers_precondition ()) {
+    scheduler_add (DESTROY_BUFFERS_NO, 0);
+  }
+  if (output_precondition ()) {
+    scheduler_add (OUTPUT_NO, 0);
+  }
+
+  scheduler_finish (output_fired, bda, bdb);
 }

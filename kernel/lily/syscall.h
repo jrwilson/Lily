@@ -29,9 +29,10 @@
 #define LILY_SYSCALL_BUFFER_UNMAP          0x48
 
 #define LILY_SYSCALL_SYSCONF               0x50
-#define LILY_SYSCALL_ENTER                 0x51
-#define LILY_SYSCALL_LOOKUP                0x52
-#define LILY_SYSCALL_DESCRIBE              0x53
+#define LILY_SYSCALL_SYSLOG                0x51
+#define LILY_SYSCALL_ENTER                 0x52
+#define LILY_SYSCALL_LOOKUP                0x53
+#define LILY_SYSCALL_DESCRIBE              0x54
 
 /* Privileged system calls. */
 #define LILY_SYSCALL_MAP                   0x100
@@ -45,7 +46,7 @@
 #define LILY_SYSCALL_SUBSCRIBE_IRQ         0x120
 #define LILY_SYSCALL_UNSUBSCRIBE_IRQ       0x121
 
-#define LILY_SYSCALL_SYSLOG                0x130
+
 
 /* Names for sysconf. */
 #define LILY_SYSCALL_SYSCONF_PAGESIZE 0

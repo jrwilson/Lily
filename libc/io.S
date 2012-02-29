@@ -40,10 +40,3 @@ subscribe_irq:
 	int $0x80
 	mov %ecx, ioerrno
 	ret
-
-	.global syslog
-syslog:
-	mov $LILY_SYSCALL_SYSLOG, %eax
-	int $0x80
-	mov %ecx, ioerrno
-	ret

@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <io.h>
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <buffer_queue.h>
@@ -71,12 +70,6 @@ initialize (void)
 }
 
 static void
-ssyslog (const char* msg)
-{
-  syslog (msg, strlen (msg));
-}
-
-static void
 readfile_callback (void* data,
 		   bd_t bda,
 		   bd_t bdb)
@@ -84,12 +77,12 @@ readfile_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) == -1) {
-    ssyslog ("boot_automaton: error: vfs provide bad readfile response\n");
+    syslog ("boot_automaton: error: vfs provided bad readfile response");
     exit ();
   }
 
   if (error != VFS_SUCCESS) {
-    ssyslog ("boot_automaton: error: reading " SHELL_PATH " failed \n");
+    syslog ("boot_automaton: error: Could not read " SHELL_PATH);
     exit ();
   }
 
@@ -98,22 +91,22 @@ readfile_callback (void* data,
 
   argv_t argv;
   if (argv_initw (&argv, &bd1, &bd2) == -1) {
-    ssyslog ("boot_automaton: error: could not initialize argv\n");
+    syslog ("boot_automaton: error: Could not initialize argv");
     exit ();
   }
 
   if (argv_append (&argv, SHELL_PATH, strlen (SHELL_PATH) + 1) == -1) {
-    ssyslog ("boot_automaton: error: could not initialize argv\n");
+    syslog ("boot_automaton: error: Could not write to argv");
     exit ();
   }
 
   if (argv_append (&argv, SHELL_CMDLINE, strlen (SHELL_CMDLINE) + 1) == -1) {
-    ssyslog ("boot_automaton: error: could not initialize argv\n");
+    syslog ("boot_automaton: error: Could not write to argv");
     exit ();
   }
 
   if (create (bdb, size, bd1, bd2, true) == -1) {
-    ssyslog ("boot_automaton: error: could not create the shell\n");
+    syslog ("boot_automaton: error: Could not create " SHELL_PATH);
     exit ();
   }
 }
@@ -125,12 +118,12 @@ mount_callback (void* data,
 {
   vfs_error_t error;
   if (read_vfs_mount_response (bda, bdb, &error) == -1) {
-    ssyslog ("boot_automaton: error: vfs provide bad mount response\n");
+    syslog ("boot_automaton: error: vfs provided bad mount response");
     exit ();
   }
 
   if (error != VFS_SUCCESS) {
-    ssyslog ("boot_automaton: error: mounting root file system failed\n");
+    syslog ("boot_automaton: error: mounting tmpfs on " ROOT_PATH " failed");
     exit ();
   }
 
@@ -139,7 +132,7 @@ mount_callback (void* data,
     bd_t bda;
     bd_t bdb;
     if (write_vfs_readfile_request (SHELL_PATH, &bda, &bdb) == 1) {
-      ssyslog ("boot_automaton: error: Couldn't create readfile request\n");
+      syslog ("boot_automaton: error: Could not create readfile request");
       exit ();
     }
     buffer_queue_push (&vfs_request_queue, 0, bda, 0, bdb, 0);
@@ -161,7 +154,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
 
   cpio_archive_t archive;
   if (cpio_archive_init (&archive, bda) == -1) {
-    ssyslog ("boot_automaton: error: Could not initialize cpio archive\n");
+    syslog ("boot_automaton: error: Could not initialize cpio archive");
     exit ();
   }
 
@@ -183,52 +176,52 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   
   /* Create the vfs. */
   if (vfs_file == 0) {
-    ssyslog ("boot_automaton: error: No vfs file\n");
+    syslog ("boot_automaton: error: No vfs file");
     exit ();
   }
-  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, true);
+  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, false);
   cpio_file_destroy (vfs_file);
   if (vfs == -1) {
-    ssyslog ("boot_automaton: error: Could not create vfs\n");
+    syslog ("boot_automaton: error: Could not create vfs");
     exit ();
   }
 
   /* Register the vfs. */
   if (enter (VFS_NAME, strlen (VFS_NAME) + 1, vfs) == -1) {
-    ssyslog ("boot_automaton: error: Could not register vfs\n");
+    syslog ("boot_automaton: error: Could not register vfs");
     exit ();
   }
 
   /* Bind to the vfs so we can mount the tmpfs. */
   description_t vfs_description;
   if (description_init (&vfs_description, vfs) == -1) {
-    ssyslog ("boot_automaton: error: Could not describe vfs\n");
+    syslog ("boot_automaton: error: Could not describe vfs");
     exit ();
   }
 
   /* If these actions don't exist, then attempts to bind below will fail. */
-  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME);
-  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME);
+  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
+  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
 
   description_fini (&vfs_description);
 
   /* We bind the response first so they don't get lost. */
   if (bind (vfs, vfs_response, 0, boot_aid, VFS_RESPONSE_NO, 0) == -1 ||
       bind (boot_aid, VFS_REQUEST_NO, 0, vfs, vfs_request, 0) == -1) {
-    ssyslog ("boot_automaton: error: Couldn't bind to vfs\n");
+    syslog ("boot_automaton: error: Could not bind to vfs");
     exit ();
   }
 
   /* Create the tmpfs. */
   if (tmpfs_file == 0) {
-    ssyslog ("boot_automaton: error: No tmpfs file\n");
+    syslog ("boot_automaton: error: No tmpfs file\n");
     exit ();
   }
   /* Note:  We pass the buffer containing the cpio archive. */
-  aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, true);
+  aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, false);
   cpio_file_destroy (tmpfs_file);
   if (tmpfs == -1) {
-    ssyslog ("boot_automaton: error: Could not create tmpfs\n");
+    syslog ("boot_automaton: error: Could not create tmpfs");
     exit ();
   }
 
@@ -237,7 +230,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     bd_t bda2;
     bd_t bdb2;
     if (write_vfs_mount_request (tmpfs, ROOT_PATH, &bda2, &bdb2) == -1) {
-      ssyslog ("boot_automaton: error: Couldn't create mount request\n");
+      syslog ("boot_automaton: error: Could not create mount request");
       exit ();
     }
     buffer_queue_push (&vfs_request_queue, 0, bda2, 0, bdb2, 0);
@@ -266,7 +259,6 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    ssyslog ("boot_automaton: vfs_request\n");
     const buffer_queue_item_t* item = buffer_queue_front (&vfs_request_queue);
     bd_t bda = buffer_queue_item_bda (item);
     bd_t bdb = buffer_queue_item_bdb (item);
@@ -287,11 +279,10 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
  */
 BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
 {
-  ssyslog ("boot_automaton: vfs_response\n");
   initialize ();
 
   if (callback_queue_empty (&vfs_response_queue)) {
-    ssyslog ("boot_automaton: error: vfs produced spurious response\n");
+    syslog ("boot_automaton: error: vfs produced spurious response");
     exit ();
   }
 

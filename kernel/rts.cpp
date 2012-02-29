@@ -295,30 +295,36 @@ namespace rts {
 	  bd_t bda,
 	  bd_t bdb)
   {
-    automaton* a = current.action->automaton;
-    const paction* action = a->find_action (action_number);
-    if (action != 0) {
-      /* Correct the parameter. */
-      switch (action->parameter_mode) {
-      case NO_PARAMETER:
-	parameter = 0;
-	break;
-      case PARAMETER:
-      case AUTO_PARAMETER:
-	/* No correction necessary. */
-	break;
+    if (action_number != LILY_ACTION_NO_ACTION) {
+      automaton* a = current.action->automaton;
+      const paction* action = a->find_action (action_number);
+      if (action != 0) {
+	/* Correct the parameter. */
+	switch (action->parameter_mode) {
+	case NO_PARAMETER:
+	  parameter = 0;
+	  break;
+	case PARAMETER:
+	case AUTO_PARAMETER:
+	  /* No correction necessary. */
+	  break;
+	}
+	
+	switch (action->type) {
+	case OUTPUT:
+	case INTERNAL:
+	  scheduler::schedule (caction (action, parameter));
+	  break;
+	case INPUT:
+	case SYSTEM_INPUT:
+	  // Can't schedule non-local actions.
+	  kassert (0);
+	  break;
+	}
       }
-
-      switch (action->type) {
-      case OUTPUT:
-      case INTERNAL:
-	scheduler::schedule (caction (action, parameter));
-	break;
-      case INPUT:
-      case SYSTEM_INPUT:
-	// Can't schedule non-local actions.
+      else {
+	// Scheduled an action that doesn't exist.
 	kassert (0);
-	break;
       }
     }
 

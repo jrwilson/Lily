@@ -18,6 +18,7 @@ description_fini (description_t* d);
 
 ano_t
 description_name_to_number (description_t* d,
-			    const char* action_name);
+			    const char* action_name,
+			    size_t size);
 
 #endif /* DESCRIPTION_H */

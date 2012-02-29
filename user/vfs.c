@@ -1,6 +1,5 @@
 #include "vfs_msg.h"
 #include <automaton.h>
-#include <io.h>
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <buffer_file.h>
@@ -128,12 +127,6 @@ initialize (void)
   }
 }
 
-static void
-ssyslog (const char* msg)
-{
-  syslog (msg, strlen (msg));
-}
-
 static bool
 vnode_equal (const vnode_t* x,
 	     const vnode_t* y)
@@ -173,7 +166,7 @@ form_unknown_response (vfs_error_t error)
   bd_t bda;
   bd_t bdb;
   if (write_vfs_unknown_response (error, &bda, &bdb) == -1) {
-    ssyslog ("vfs: error: Could not prepare vfs response\n");
+    syslog ("vfs: error: Could not prepare vfs response");
     exit ();
   }
   buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, bdb, 0);
@@ -187,7 +180,7 @@ form_mount_response (vfs_error_t error)
   bd_t bda;
   bd_t bdb;
   if (write_vfs_mount_response (error, &bda, &bdb) == -1) {
-    ssyslog ("vfs: error: Could not prepare vfs response\n");
+    syslog ("vfs: error: Could not prepare vfs response");
     exit ();
   }
   buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, bdb, 0);
@@ -202,7 +195,7 @@ form_readfile_response (vfs_error_t error,
   /* Create a response. */
   bd_t bda;
   if (write_vfs_readfile_response (error, size, &bda) == -1) {
-    ssyslog ("vfs: error: Could not prepare vfs response\n");
+    syslog ("vfs: error: Could not prepare vfs response");
     exit ();
   }
   buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, content, 0);
@@ -293,7 +286,7 @@ path_lookup_resume (void)
     /* Form a message to a file system. */
     fs_aid = path_lookup_current.aid;
     if (write_vfs_fs_descend_request (path_lookup_current.node.id, path_lookup_begin, path_lookup_end - path_lookup_begin, &fs_bda, &fs_bdb) == -1) {
-      ssyslog ("vfs: error: Could not prepare descend request\n");
+      syslog ("vfs: error: Could not prepare descend request");
       exit ();
     }
     fs_type = VFS_FS_DESCEND;
@@ -322,7 +315,6 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
  */
 BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bda, bd_t bdb)
 {
-  ssyslog ("vfs: client_request\n");
   initialize ();
   buffer_queue_push (&client_request_queue, aid, bda, 0, bdb, 0);
   end_action (false, -1, -1);
@@ -344,8 +336,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
   buffer_queue_item_t* item = buffer_queue_find (&client_response_queue, aid);
 
   if (item != 0) {
-    ssyslog ("vfs: client_response\n");
-
     /* Found a response.  Execute. */
     bd_t bda = buffer_queue_item_bda (item);
     bd_t bdb = buffer_queue_item_bdb (item);
@@ -379,7 +369,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
 
   if (file_system_request_precondition (aid)) {
-    ssyslog ("vfs: file_system_request\n");
     bd_t bda = fs_bda;
     bd_t bdb = fs_bdb;
 
@@ -403,7 +392,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
  */
 BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bda, bd_t bdb)
 {
-  ssyslog ("vfs: file_system_response\n");
   initialize ();
 
   switch (fs_type) {
@@ -513,7 +501,6 @@ decode_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
 {
-  ssyslog ("vfs: decode\n");
   initialize ();
   scheduler_remove (DECODE_NO, param);
   if (decode_precondition ()) {
@@ -608,7 +595,6 @@ mount_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
 {
-  ssyslog ("vfs: mount\n");
   initialize ();
   scheduler_remove (MOUNT_NO, param);
   if (mount_precondition ()) {
@@ -632,8 +618,8 @@ BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
       end_action (false, -1, -1);
     }
 
-    const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME);
-    const ano_t response = description_name_to_number (&desc, VFS_FS_RESPONSE_NAME);
+    const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME, strlen (VFS_FS_REQUEST_NAME) + 1);
+    const ano_t response = description_name_to_number (&desc, VFS_FS_RESPONSE_NAME, strlen (VFS_FS_RESPONSE_NAME) + 1);
 
     description_fini (&desc);
 
@@ -688,7 +674,6 @@ readfile_request_precondition (void)
 
 BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int param)
 {
-  ssyslog ("vfs: readfile_request\n");
   initialize ();
   scheduler_remove (READFILE_REQUEST_NO, param);
 
@@ -708,7 +693,7 @@ BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int
     /* Form a message to a file system. */
     fs_aid = path_lookup_current.aid;
     if (write_vfs_fs_readfile_request (path_lookup_current.node.id, &fs_bda, &fs_bdb) == -1) {
-      ssyslog ("vfs: error: Could not prepare readfile request\n");
+      syslog ("vfs: error: Could not prepare readfile request");
       exit ();
     }
     fs_type = VFS_FS_READFILE;

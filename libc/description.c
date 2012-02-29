@@ -26,7 +26,8 @@ description_fini (description_t* d)
 
 ano_t
 description_name_to_number (description_t* d,
-			    const char* action_name)
+			    const char* action_name,
+			    size_t size)
 {
   buffer_file_seek (&d->bf, 0, BUFFER_FILE_SET);
   const size_t* count = buffer_file_readp (&d->bf, sizeof (size_t));
@@ -50,7 +51,7 @@ description_name_to_number (description_t* d,
       return NO_ACTION;
     }
 
-    if (strcmp (name, action_name) == 0) {
+    if (size == ad->name_size && memcmp (name, action_name, size) == 0) {
       return ad->number;
     }
   }

@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <io.h>
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <dymem.h>
@@ -188,34 +187,28 @@ file_find_or_create (inode_t* parent,
   return *ptr;
 }
 
-static void
-ssyslog (const char* msg)
-{
-  syslog (msg, strlen (msg));
-}
+/* static void */
+/* print (inode_t* node) */
+/* { */
+/*   if (node != 0) { */
+/*     /\* Print this node. *\/ */
+/*     switch (node->node.type) { */
+/*     case FILE: */
+/*       ssyslog ("FILE "); */
+/*       break; */
+/*     case DIRECTORY: */
+/*       ssyslog ("DIRECTORY "); */
+/*       break; */
+/*     } */
+/*     syslog (node->name, node->name_size); */
+/*     ssyslog ("\n"); */
 
-static void
-print (inode_t* node)
-{
-  if (node != 0) {
-    /* Print this node. */
-    switch (node->node.type) {
-    case FILE:
-      ssyslog ("FILE ");
-      break;
-    case DIRECTORY:
-      ssyslog ("DIRECTORY ");
-      break;
-    }
-    syslog (node->name, node->name_size);
-    ssyslog ("\n");
-
-    /* Print the children. */
-    for (inode_t* child = node->first_child; child != 0; child = child->next_sibling) {
-      print (child);
-    }
-  }
-}
+/*     /\* Print the children. *\/ */
+/*     for (inode_t* child = node->first_child; child != 0; child = child->next_sibling) { */
+/*       print (child); */
+/*     } */
+/*   } */
+/* } */
 
 static void
 initialize (void)
@@ -245,7 +238,7 @@ form_unknown_response (vfs_fs_error_t error)
   bd_t bda;
   bd_t bdb;
   if (write_vfs_fs_unknown_response (error, &bda, &bdb) == -1) {
-    ssyslog ("tmpfs: error: Could not prepare response\n");
+    syslog ("tmpfs: error: Could not prepare response");
     exit ();
   }
   buffer_queue_push (&response_queue, 0, bda, 0, bdb, 0);
@@ -259,7 +252,7 @@ form_descend_response (vfs_fs_error_t error,
   bd_t bda;
   bd_t bdb;
   if (write_vfs_fs_descend_response (error, node, &bda, &bdb) == -1) {
-    ssyslog ("tmpfs: error: Could not prepare descend response\n");
+    syslog ("tmpfs: error: Could not prepare descend response");
     exit ();
   }
   buffer_queue_push (&response_queue, 0, bda, 0, bdb, 0);
@@ -273,7 +266,7 @@ form_readfile_response (vfs_fs_error_t error,
   /* Create a response. */
   bd_t bda;
   if (write_vfs_fs_readfile_response (error, size, &bda) == -1) {
-    ssyslog ("tmpfs: error: Could not prepare readfile response\n");
+    syslog ("tmpfs: error: Could not prepare readfile response");
     exit ();
   }
   buffer_queue_push (&response_queue, 0, bda, 0, content, 0);
@@ -330,9 +323,6 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
       /* Destroy the cpio file. */
       cpio_file_destroy (file);
     }
-
-    /* TODO */
-    print (nodes[0]);
   }
 
   end_action (false, bda, bdb);
@@ -340,7 +330,6 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 
 BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bda, bd_t bdb)
 {
-  ssyslog ("tmpfs: request\n");
   initialize ();
 
   vfs_fs_type_t type;
@@ -441,8 +430,6 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
   scheduler_remove (TMPFS_RESPONSE_NO, 0);
 
   if (response_precondition ()) {
-    ssyslog ("tmpfs: response\n");
-
     const buffer_queue_item_t* item = buffer_queue_front (&response_queue);
     bd_t bda = buffer_queue_item_bda (item);
     bd_t bdb = buffer_queue_item_bdb (item);

@@ -150,6 +150,13 @@ size_t
 size_to_pages (size_t size);
 
 int
+syslog (const char* msg);
+
+int
+syslogn (const char* msg,
+	 size_t size);
+
+int
 enter (const char* name,
        size_t size,
        aid_t aid);

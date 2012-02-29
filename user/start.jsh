@@ -9,7 +9,7 @@
 
 # Load a driver to interpret keyscan codes.
 # We assume a US 104-key keyboard.
-#@kb_us_104 = create /bin/kb_us_104
+@kb_us_104 = create /bin/kb_us_104
 
 # Load the terminal driver so we can multiplex the display.
 #terminal = create /bin/terminal
@@ -18,7 +18,7 @@
 #vga = createp /bin/vga
 
 # Bind everything together.
-#bind keyboard stdout kb_us_104 stdin
+bind @keyboard scan_code @kb_us_104 scan_code
 #bind kb_us_104 stdout this stdin
 #bind this stdout terminal stdin
 #bind terminal stdout vga stdin

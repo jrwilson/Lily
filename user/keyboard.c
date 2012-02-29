@@ -4,66 +4,7 @@
 #include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
-
-typedef struct {
-  size_t size;
-  buffer_file_t bf;
-} scan_code_array_t;
-
-int
-scan_code_array_initw (scan_code_array_t* sca,
-		       bd_t* bda,
-		       bd_t* bdb)
-{
-  sca->size = 0;
-
-  bd_t bd = buffer_create (1);
-  if (bd == -1) {
-    return -1;
-  }
-
-  if (buffer_file_open (&sca->bf, bd, true) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-  
-  if (buffer_file_write (&sca->bf, &sca->size, sizeof (size_t)) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  *bda = bd;
-  *bdb = -1;
-
-  return 0;
-}
-
-int
-scan_code_array_append (scan_code_array_t* sca,
-			char c)
-{
-  /* Write the byte. */
-  if (buffer_file_write (&sca->bf, &c, 1) == -1) {
-    return -1;
-  }
-
-  /* Update and overwrite the size. */
-  size_t position = buffer_file_seek (&sca->bf, 0, BUFFER_FILE_CURRENT);
-  ++sca->size;
-  buffer_file_seek (&sca->bf, 0, BUFFER_FILE_SET);
-  if (buffer_file_write (&sca->bf, &sca->size, sizeof (size_t)) == -1) {
-    return -1;
-  }
-  buffer_file_seek (&sca->bf, position, BUFFER_FILE_SET);
-
-  return 0;
-}
-
-bool
-scan_code_array_empty (const scan_code_array_t* sca)
-{
-  return sca->size == 0;
-}
+#include "byte_buffer.h"
 
 /*
   Keyboard Driver
@@ -110,19 +51,13 @@ static bool initialized = false;
 static buffer_queue_t destroy_queue;
 
 /* Array of scan codes. */
-static scan_code_array_t sca;
+static byte_buffer_t sca;
 static bd_t sca_bda = -1;
 static bd_t sca_bdb = -1;
 
 #define KEYBOARD_INTERRUPT_NO 1
 #define SCAN_CODE_NO 2
 #define DESTROY_BUFFERS_NO 3
-
-static void
-ssyslog (const char* msg)
-{
-  syslog (msg, strlen (msg));
-}
 
 static void
 end_action (bool output_fired,
@@ -136,22 +71,22 @@ initialize (void)
     initialized = true;
 
     buffer_queue_init (&destroy_queue);
-    if (scan_code_array_initw (&sca, &sca_bda, &sca_bdb) == -1) {
-      ssyslog ("keyboard: error:  Couldn't initialize scan code array\n");
+    if (byte_buffer_initw (&sca, &sca_bda, &sca_bdb) == -1) {
+      syslog ("keyboard: error:  Could not initialize output buffer");
       exit ();
     }
 
     /* Reserve system resources. */
     if (reserve_port (KEYBOARD_DATA_PORT) == -1) {
-      ssyslog ("keyboard: error:  Couldn't reserve data port\n");
+      syslog ("keyboard: error:  Could not reserve data port");
       exit ();
     }
     if (reserve_port (KEYBOARD_CONTROLLER_PORT) == -1) {
-      ssyslog ("keyboard: error:  Couldn't reserve controller port\n");
+      syslog ("keyboard: error:  Could not reserve controller port");
       exit ();
     }
     if (subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0) == -1) {
-      ssyslog ("keyboard: error:  Couldn't subscribe to keyboard irq\n");
+      syslog ("keyboard: error:  Could not subscribe to keyboard irq");
       exit ();
     }
   }
@@ -166,29 +101,26 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  ssyslog ("keyboard: keyboard_interrupt\n");
-  scan_code_array_append (&sca, inb (KEYBOARD_DATA_PORT));
+  byte_buffer_put (&sca, inb (KEYBOARD_DATA_PORT));
   end_action (false, bda, bdb);
 }
 
 static bool
 scan_code_precondition (void)
 {
-  return !scan_code_array_empty (&sca);
+  return !byte_buffer_empty (&sca);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "", "", scan_code, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "byte_buffer", scan_code, int param)
 {
   initialize ();
   scheduler_remove (SCAN_CODE_NO, param);
 
   if (scan_code_precondition ()) {
-    ssyslog ("keyboard: scan_code\n");
-
     bd_t bda = sca_bda;
     bd_t bdb = sca_bdb;
-    if (scan_code_array_initw (&sca, &sca_bda, &sca_bdb) == -1) {
-      ssyslog ("keyboard: error:  Couldn't initialize scan code array\n");
+    if (byte_buffer_initw (&sca, &sca_bda, &sca_bdb) == -1) {
+      syslog ("keyboard: error:  Could not initialize output buffer");
       exit ();
     }
 

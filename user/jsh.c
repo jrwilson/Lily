@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <io.h>
 #include <string.h>
 #include <buffer_queue.h>
 #include <callback_queue.h>
@@ -8,12 +7,6 @@
 #include <dymem.h>
 #include "vfs_msg.h"
 #include "argv.h"
-
-static void
-ssyslog (const char* msg)
-{
-  syslog (msg, strlen (msg));
-}
 
 /* Queue of buffers that need to be destroyed. */
 static buffer_queue_t destroy_queue;
@@ -32,6 +25,7 @@ static callback_queue_t vfs_response_queue;
 typedef struct automaton_var automaton_var_t;
 struct automaton_var {
   char* name;
+  size_t name_size;
   aid_t aid;
   automaton_var_t* next;
 };
@@ -46,6 +40,7 @@ create_automaton_var (const char* name,
   memset (var, 0, sizeof (automaton_var_t));
   var->name = malloc (size);
   memcpy (var->name, name, size);
+  var->name_size = size;
   var->aid = -1;
   var->next = automaton_var_head;
   automaton_var_head = var;
@@ -59,7 +54,7 @@ find_automaton_var (const char* name,
 {
   automaton_var_t* var;
   for (var = automaton_var_head; var != 0; var = var->next) {
-    if (strncmp (var->name, name, size) == 0) {
+    if (var->name_size == size && memcmp (var->name, name, size) == 0) {
       break;
     }
   }
@@ -103,7 +98,7 @@ create_create_context (const char* var_name,
   memcpy (cc->var_name, var_name, var_name_size);
   cc->var_name_size = var_name_size;
   if (argv_initw (&cc->argv, &cc->bda, &cc->bdb) == -1) {
-    ssyslog ("jsh: error: could create argv\n");
+    syslog ("jsh: error: could create argv");
     exit ();
   }
   cc->retain_privilege = retain_privilege;
@@ -127,13 +122,14 @@ create_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) == -1) {
-    ssyslog ("jsh: error: vfs provide bad readfile response\n");
+    syslog ("jsh: error: vfs provide bad readfile response");
     exit ();
   }
 
   if (error == VFS_SUCCESS) {
     aid_t aid = create (bdb, size, cc->bda, cc->bdb, cc->retain_privilege);
     if (aid != -1) {
+      syslog ("TODO:  Subscribe to created automaton");
       /* Assign the result to a variable. */
       automaton_var_t* var = find_automaton_var (cc->var_name, cc->var_name_size);
       if (var == 0) {
@@ -142,11 +138,11 @@ create_callback (void* data,
       var->aid = aid;
     }
     else {
-      ssyslog ("TODO:  createp create failed\n");
+      syslog ("TODO:  createp create failed");
     }
   }
   else {
-    ssyslog ("TODO:  createp:  couldn't read file\n");
+    syslog ("TODO:  createp:  couldn't read file");
   }
 
   destroy_create_context (cc);
@@ -246,14 +242,14 @@ create_ (token_list_item_t* var,
   token_list_item_t* filename;
   
   if ((filename = accept (STRING)) == 0) {
-    ssyslog ("TODO:  Expected a filename\n");
+    syslog ("TODO:  Expected a filename");
     return;
   }
 
   token_list_item_t* string;
   for (string = current_token; string != 0; string = string->next) {
     if (string->type != STRING) {
-      ssyslog ("TODO:  Expected a string\n");
+      syslog ("TODO:  Expected a string");
       return;
     }
   }
@@ -270,7 +266,7 @@ create_ (token_list_item_t* var,
   bd_t bda;
   bd_t bdb;
   if (write_vfs_readfile_request (filename->string, &bda, &bdb) == -1) {
-    ssyslog ("jsh: error: Couldn't create readfile request\n");
+    syslog ("jsh: error: Couldn't create readfile request");
     exit ();
   }
   buffer_queue_push (&vfs_request_queue, 0, bda, 0, bdb, 0);
@@ -282,14 +278,90 @@ create_ (token_list_item_t* var,
 static void
 bind_ (void)
 {
-  ssyslog ("TODO:  BIND\n");
+  /* Get the argument tokens. */
+  token_list_item_t* output_automaton_token;
+  token_list_item_t* output_action_token;
+  token_list_item_t* input_automaton_token;
+  token_list_item_t* input_action_token;
+  if ((output_automaton_token = accept (AUTOMATON_VAR)) == 0) {
+    syslog ("TODO:  Expected an automaton variable");
+    return;
+  }
+
+  if ((output_action_token = accept (STRING)) == 0) {
+    syslog ("TODO:  Expected a string");
+    return;
+  }
+
+  if ((input_automaton_token = accept (AUTOMATON_VAR)) == 0) {
+    syslog ("TODO:  Expected an automaton variable");
+    return;
+  }
+
+  if ((input_action_token = accept (STRING)) == 0) {
+    syslog ("TODO:  Expected a string");
+    return;
+  }
+
+  if (current_token != 0) {
+    syslog ("TODO:  Expected no more tokens");
+    return;
+  }
+
+  /* Look up the variables for the output and input automaton. */
+  automaton_var_t* output_automaton = find_automaton_var (output_automaton_token->string, output_automaton_token->size);
+  if (output_automaton == 0) {
+    syslog ("TODO:  Output automaton is not defined");
+    return;
+  }
+  automaton_var_t* input_automaton = find_automaton_var (input_automaton_token->string, input_automaton_token->size);
+  if (input_automaton == 0) {
+    syslog ("TODO:  Input automaton is not defined");
+    return;
+  }
+
+  /* Describe the output and input automaton. */
+  description_t output_description;
+  description_t input_description;
+  if (description_init (&output_description, output_automaton->aid) == -1) {
+    syslog ("TODO:  Could not describe output");
+    return;
+  }
+  if (description_init (&input_description, input_automaton->aid) == -1) {
+    syslog ("TODO:  Could not describe input");
+    return;
+  }
+
+  /* Look up the actions. */
+  const ano_t output_action = description_name_to_number (&output_description, output_action_token->string, output_action_token->size);
+  const ano_t input_action = description_name_to_number (&input_description, input_action_token->string, input_action_token->size);
+
+  description_fini (&output_description);
+  description_fini (&input_description);
+
+  if (output_action == NO_ACTION) {
+    syslog ("TODO:  Output action does not exist");
+    return;
+  }
+
+  if (input_action == NO_ACTION) {
+    syslog ("TODO:  Input action does not exist");
+    return;
+  }
+
+  if (bind (output_automaton->aid, output_action, 0, input_automaton->aid, input_action, 0) == -1) {
+    syslog ("TODO:  Bind failed");
+    return;
+  }
+
+  syslog ("TODO:  Subscribe to binding??");
 }
 
 static void
 automaton_assignment (token_list_item_t* var)
 {
   if (accept (ASSIGN) == 0) {
-    ssyslog ("TODO:  Expected =\n");
+    syslog ("TODO:  Expected =");
     return;
   }
   
@@ -301,7 +373,7 @@ automaton_assignment (token_list_item_t* var)
     create_ (var, true);
   }
   else {
-    ssyslog ("TODO:  syntax error\n");
+    syslog ("TODO:  syntax error");
   }
 }
 
@@ -317,7 +389,7 @@ statement (void)
     bind_ ();
   }
   else {
-    ssyslog ("TODO:  syntax error\n");
+    syslog ("TODO:  syntax error");
   }
 }
 
@@ -543,9 +615,8 @@ put (char c)
 	char* string;
 	size_t size;
 	scan_string_steal (&string, &size);
-	ssyslog ("syntax error near: ");
-	syslog (string, size);
-	ssyslog ("\n");
+	syslog ("syntax error near: ");
+	syslogn (string, size);
 	free (string);
 	scan_state = SCAN_START;
       }
@@ -612,18 +683,18 @@ end_action (bool output_fired,
 
 static void
 readscript_callback (void* data,
-		   bd_t bda,
-		   bd_t bdb)
+		     bd_t bda,
+		     bd_t bdb)
 {
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) == -1) {
-    ssyslog ("jsh: error: vfs provide bad readfile response\n");
+    syslog ("jsh: error: vfs provide bad readfile response");
     exit ();
   }
 
   if (error != VFS_SUCCESS) {
-    ssyslog ("jsh: error: readfile failed \n");
+    syslog ("jsh: error: readfile failed");
     exit ();
   }
 
@@ -639,35 +710,34 @@ readscript_callback (void* data,
  */
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
-  ssyslog ("jsh: init\n");
   initialize ();
 
   /* Bind to the vfs. */
   vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
   if (vfs_aid == -1) {
-    ssyslog ("jsh: error: no vfs\n");
+    syslog ("jsh: error: no vfs");
     exit ();
   }
 
   description_t vfs_description;
   if (description_init (&vfs_description, vfs_aid) == -1) {
-    ssyslog ("jsh: error: couldn't describe vfs\n");
+    syslog ("jsh: error: couldn't describe vfs");
     exit ();
   }
-  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME);
-  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME);
+  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
+  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
   description_fini (&vfs_description);
 
   if (vfs_request == NO_ACTION ||
       vfs_response == NO_ACTION) {
-    ssyslog ("jsh: error: the vfs does not appear to be a vfs\n");
+    syslog ("jsh: error: the vfs does not appear to be a vfs");
     exit ();
   }
 
   /* We bind the response first so they don't get lost. */
   if (bind (vfs_aid, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
       bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) {
-    ssyslog ("jsh: error: Couldn't bind to vfs\n");
+    syslog ("jsh: error: Couldn't bind to vfs");
     exit ();
   }
 
@@ -679,14 +749,14 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
       const char* filename;
       size_t size;
       if (argv_arg (&argv, 1, (const void**)&filename, &size) == -1) {
-	ssyslog ("jsh: error: Couldn't read filename argument\n");
+	syslog ("jsh: error: Couldn't read filename argument");
 	exit ();
       }
 
       bd_t bda2;
       bd_t bdb2;
       if (write_vfs_readfile_request (filename, &bda2, &bdb2) == -1) {
-	ssyslog ("jsh: error: Couldn't create readfile request\n");
+	syslog ("jsh: error: Couldn't create readfile request");
 	exit ();
       }
       buffer_queue_push (&vfs_request_queue, 0, bda2, 0, bdb2, 0);
@@ -756,7 +826,6 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    ssyslog ("jsh: vfs_request\n");
     const buffer_queue_item_t* item = buffer_queue_front (&vfs_request_queue);
     bd_t bda = buffer_queue_item_bda (item);
     bd_t bdb = buffer_queue_item_bdb (item);
@@ -777,11 +846,10 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
  */
 BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
 {
-  ssyslog ("jsh: vfs_response\n");
   initialize ();
 
   if (callback_queue_empty (&vfs_response_queue)) {
-    ssyslog ("jsh: error: vfs produced spurious response\n");
+    syslog ("jsh: error: vfs produced spurious response");
     exit ();
   }
 
@@ -814,7 +882,6 @@ BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, int param)
   scheduler_remove (LOAD_TEXT_NO, param);
 
   if (load_text_precondition ()) {
-    ssyslog ("jsh: load_text\n");
     const buffer_queue_item_t* item = buffer_queue_front (&interpret_queue);
     bd_t bda = buffer_queue_item_bda (item);
     bd_t bdb = buffer_queue_item_bdb (item);
@@ -864,8 +931,6 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, int param)
   scheduler_remove (PROCESS_TEXT_NO, param);
 
   if (process_text_precondition ()) {
-    ssyslog ("jsh: process_text\n");
-
     while (!evaluating && interpret_string_idx != interpret_string_size) {
       put (interpret_string[interpret_string_idx++]);
     }
