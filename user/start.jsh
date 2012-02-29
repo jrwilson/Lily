@@ -5,11 +5,11 @@
 
 # Load the keyboard driver.
 # The keyboard driver has the same privilege as this automaton.
-keyboard = createp /bin/keyboard
+@keyboard = createp /bin/keyboard
 
 # Load a driver to interpret keyscan codes.
 # We assume a US 104-key keyboard.
-#kb_us_104 = create /bin/kb_us_104
+#@kb_us_104 = create /bin/kb_us_104
 
 # Load the terminal driver so we can multiplex the display.
 #terminal = create /bin/terminal

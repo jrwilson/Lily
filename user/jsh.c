@@ -9,22 +9,14 @@
 #include "vfs_msg.h"
 #include "argv.h"
 
-#define DESTROY_BUFFERS_NO 1
-#define VFS_RESPONSE_NO 2
-#define VFS_REQUEST_NO 3
-#define LOAD_TEXT_NO 4
-#define PROCESS_TEXT_NO 5
-
-#define VFS_NAME "vfs"
-
-/* Initialization flag. */
-static bool initialized = false;
+static void
+ssyslog (const char* msg)
+{
+  syslog (msg, strlen (msg));
+}
 
 /* Queue of buffers that need to be destroyed. */
 static buffer_queue_t destroy_queue;
-
-/* The aid of the vfs. */
-static aid_t vfs_aid = -1;
 
 /* Messages to the vfs. */
 static buffer_queue_t vfs_request_queue;
@@ -32,26 +24,149 @@ static buffer_queue_t vfs_request_queue;
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
 
-/* Buffers to interpret. */
-static buffer_queue_t interpret_queue;
+/*
+  Begin Model Section
+  ==========================
+*/
 
-/* Text to interpret. */
-static bd_t interpret_bd = -1;
-static const char* interpret_string;
-static size_t interpret_string_size;
-static size_t interpret_string_idx;
+typedef struct automaton_var automaton_var_t;
+struct automaton_var {
+  char* name;
+  aid_t aid;
+  automaton_var_t* next;
+};
 
-/* Flag indicating if we are asynchronously evaluating. */
-static bool evaluating = false;
+static automaton_var_t* automaton_var_head = 0;
 
-static void
-ssyslog (const char* msg)
+static automaton_var_t*
+create_automaton_var (const char* name,
+		      size_t size)
 {
-  syslog (msg, strlen (msg));
+  automaton_var_t* var = malloc (sizeof (automaton_var_t));
+  memset (var, 0, sizeof (automaton_var_t));
+  var->name = malloc (size);
+  memcpy (var->name, name, size);
+  var->aid = -1;
+  var->next = automaton_var_head;
+  automaton_var_head = var;
+
+  return var;
 }
 
-/* Parsing functions. */
+static automaton_var_t*
+find_automaton_var (const char* name,
+		    size_t size)
+{
+  automaton_var_t* var;
+  for (var = automaton_var_head; var != 0; var = var->next) {
+    if (strncmp (var->name, name, size) == 0) {
+      break;
+    }
+  }
+  
+  return var;
+}
+
+/*
+  End Model Section
+  ========================
+*/
+
+/*
+  Begin Asynchronous Create Section
+  =================================
+*/
+
+/*
+  Flag indicating that we are asynchronously evaluating.
+  Usually, this means we are waiting on I/O.
+*/
+static bool evaluating = false;
+
+typedef struct {
+  char* var_name;
+  size_t var_name_size;
+  bd_t bda;
+  bd_t bdb;
+  argv_t argv;
+  bool retain_privilege;
+} create_context_t;
+
+static create_context_t*
+create_create_context (const char* var_name,
+		       size_t var_name_size,
+		       bool retain_privilege)
+{
+  create_context_t* cc = malloc (sizeof (create_context_t));
+  memset (cc, 0, sizeof (create_context_t));
+  cc->var_name = malloc (var_name_size);
+  memcpy (cc->var_name, var_name, var_name_size);
+  cc->var_name_size = var_name_size;
+  if (argv_initw (&cc->argv, &cc->bda, &cc->bdb) == -1) {
+    ssyslog ("jsh: error: could create argv\n");
+    exit ();
+  }
+  cc->retain_privilege = retain_privilege;
+  return cc;
+}
+
+static void
+destroy_create_context (create_context_t* cc)
+{
+  buffer_queue_push (&destroy_queue, 0, cc->bda, 0, cc->bdb, 0);  
+  free (cc->var_name);
+  free (cc);
+}
+
+static void
+create_callback (void* data,
+		 bd_t bda,
+		 bd_t bdb)
+{
+  create_context_t* cc = data;
+  vfs_error_t error;
+  size_t size;
+  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
+    ssyslog ("jsh: error: vfs provide bad readfile response\n");
+    exit ();
+  }
+
+  if (error == VFS_SUCCESS) {
+    aid_t aid = create (bdb, size, cc->bda, cc->bdb, cc->retain_privilege);
+    if (aid != -1) {
+      /* Assign the result to a variable. */
+      automaton_var_t* var = find_automaton_var (cc->var_name, cc->var_name_size);
+      if (var == 0) {
+	var = create_automaton_var (cc->var_name, cc->var_name_size);
+      }
+      var->aid = aid;
+    }
+    else {
+      ssyslog ("TODO:  createp create failed\n");
+    }
+  }
+  else {
+    ssyslog ("TODO:  createp:  couldn't read file\n");
+  }
+
+  destroy_create_context (cc);
+
+  /* No longer evaluating. */
+  evaluating = false;
+}
+
+/*
+  End Asynchronous Create Section
+  ===============================
+*/
+
+/*
+  Begin Parser/Evaluator Section
+  ==============================
+*/
+
 typedef enum {
+  AUTOMATON_VAR,
   CREATE,
   CREATEP,
   BIND,
@@ -114,98 +229,79 @@ clean_tokens (void)
 static token_list_item_t*
 accept (token_type_t type)
 {
-  if (current_token == 0) {
-    return 0;
-  }
-
-  if (current_token->type == type) {
-    token_list_item_t* item = current_token;
-    current_token = current_token->next;
-    return item;
-  }
-  else {
-    return 0;
-  }
-}
-
-static token_list_item_t*
-expect (token_type_t type,
-	const char* error)
-{
   if (current_token != 0 && current_token->type == type) {
     token_list_item_t* item = current_token;
     current_token = current_token->next;
     return item;
   }
   else {
-    /* TODO */
-    ssyslog (error);
     return 0;
   }
 }
 
 static void
-create_ (void)
+create_ (token_list_item_t* var,
+	 bool retain_privilege)
 {
-  /* TODO */
-  ssyslog ("CREATE\n");
-}
+  token_list_item_t* filename;
+  
+  if ((filename = accept (STRING)) == 0) {
+    ssyslog ("TODO:  Expected a filename\n");
+    return;
+  }
 
-static void
-createp_callback (void* data,
-		  bd_t bda,
-		  bd_t bdb)
-{
-  vfs_error_t error;
-  size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
-    ssyslog ("jsh: error: vfs provide bad readfile response\n");
+  token_list_item_t* string;
+  for (string = current_token; string != 0; string = string->next) {
+    if (string->type != STRING) {
+      ssyslog ("TODO:  Expected a string\n");
+      return;
+    }
+  }
+
+  /* Create context for the create callback. */
+  create_context_t* cc = create_create_context (var->string, var->size, retain_privilege);
+  
+  while ((string = accept (STRING)) != 0) {
+    /* Add the string to argv. */
+    argv_append (&cc->argv, string->string);
+  }
+  
+  /* Request the text of the automaton. */
+  bd_t bd = write_vfs_readfile_request (filename->string);
+  if (bd == -1) {
+    ssyslog ("jsh: error: Couldn't create readfile request\n");
     exit ();
   }
-
-  if (error == VFS_SUCCESS) {
-    /* TODO:  Create an argv for the automaton. */
-    aid_t aid = create (bdb, size, -1, -1, true);
-    if (aid == -1) {
-      /* TODO */
-      ssyslog ("createp create fail\n");
-    }
-    /* TODO */
-    ssyslog ("assign createp result to variable\n");
-  }
-  else {
-    /* TODO */
-    ssyslog ("createp:  couldn't read file\n");
-  }
-
-  /* No longer evaluating. */
-  evaluating = false;
-}
-
-static void
-createp (void)
-{
-  token_list_item_t* f;
-  
-  if ((f = expect (STRING, "Expected a file\n")) != 0) {
-    /* Request the text of the automaton. */
-    bd_t bd = write_vfs_readfile_request (f->string);
-    if (bd == -1) {
-      ssyslog ("jsh: error: Couldn't create readfile request\n");
-      exit ();
-    }
-    buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
-    callback_queue_push (&vfs_response_queue, createp_callback, 0);
-    /* Set the flag so we stop trying to evaluate. */
-    evaluating = true;
-  }
+  buffer_queue_push (&vfs_request_queue, 0, bd, 0, -1, 0);
+  callback_queue_push (&vfs_response_queue, create_callback, cc);
+  /* Set the flag so we stop trying to evaluate. */
+  evaluating = true;
 }
 
 static void
 bind_ (void)
 {
-  /* TODO */
-  ssyslog ("BIND\n");
+  ssyslog ("TODO:  BIND\n");
+}
+
+static void
+automaton_assignment (token_list_item_t* var)
+{
+  if (accept (ASSIGN) == 0) {
+    ssyslog ("TODO:  Expected =\n");
+    return;
+  }
+  
+  token_list_item_t* t;
+  if ((t = accept (CREATE)) != 0) {
+    create_ (var, false);
+  }
+  else if ((t = accept (CREATEP)) != 0) {
+    create_ (var, true);
+  }
+  else {
+    ssyslog ("TODO:  syntax error\n");
+  }
 }
 
 static void
@@ -213,28 +309,14 @@ statement (void)
 {
   token_list_item_t* t;
 
-  if ((t = accept (STRING)) != 0) {
-    if (expect (ASSIGN, "Expected =\n") == 0) {
-      return;
-    }
-    /* TODO: Set up machinery to assign a variable. */
-    ssyslog ("ASSIGN ");
-    syslog (t->string, t->size);
-    ssyslog (" ");
-  }
-
-  if ((t = accept (CREATE)) != 0) {
-    create_ ();
-  }
-  else if ((t = accept (CREATEP)) != 0) {
-    createp ();
+  if ((t = accept (AUTOMATON_VAR)) != 0) {
+    automaton_assignment (t);
   }
   else if ((t = accept (BIND)) != 0) {
     bind_ ();
   }
   else {
-    /* TODO: Syntax error. */
-    ssyslog ("syntax error\n");
+    ssyslog ("TODO:  syntax error\n");
   }
 }
 
@@ -249,17 +331,37 @@ evaluate (void)
   }
 }
 
-/* Scanning functions. */
+/*
+  End Parser/Evaluator Section
+  ============================
+*/
+
+/*
+  Begin Scanner Section
+  =====================
+*/
+
 typedef enum {
   SCAN_START,
+  SCAN_AUTOMATON_VAR,
   SCAN_STRING,
   SCAN_COMMENT,
+  SCAN_ERROR,
 } scan_state_t;
 
 static scan_state_t scan_state = SCAN_START;
 static char* scan_string = 0;
 static size_t scan_string_size = 0;
 static size_t scan_string_capacity = 0;
+
+static void
+scan_string_init (void)
+{
+  /* Potentially make this the average size of a string. */
+  scan_string_capacity = 1;
+  scan_string = malloc (scan_string_capacity);
+  scan_string_size = 0;
+}
 
 static void
 scan_string_append (char c)
@@ -272,15 +374,18 @@ scan_string_append (char c)
 }
 
 static void
-scan_string_reset (void)
+scan_string_steal (char** string,
+		   size_t* size)
 {
+  *string = scan_string;
+  *size = scan_string_size;
   /* Potentially make this the average size of a string. */
   scan_string_capacity = 1;
   scan_string = malloc (scan_string_capacity);
   scan_string_size = 0;
 }
 
-/* Language
+/* Tokens
 
    string - [a-zA-Z0-9_/]+
 
@@ -291,6 +396,8 @@ scan_string_reset (void)
    comment - #[^\n]*
 
    evaluation symbol - [;\n]
+
+   automaton variable - @[a-zA-Z0-9_]+
  */
 static void
 put (char c)
@@ -308,6 +415,10 @@ put (char c)
     }
 
     switch (c) {
+    case '@':
+      scan_string_append ('@');
+      scan_state = SCAN_AUTOMATON_VAR;
+      break;
     case '=':
       push_token (ASSIGN, 0, 0);
       break;
@@ -323,9 +434,8 @@ put (char c)
       /* Each whitespace. */
       break;
     default:
-      ssyslog ("ignoring: ");
-      syslog (&c, 1);
-      ssyslog ("\n");
+      scan_string_append (c);
+      scan_state = SCAN_ERROR;
       break;
     }
     break;
@@ -341,10 +451,14 @@ put (char c)
       break;
     }
 
-    /* Terminate with null. */
-    scan_string_append (0);
-    push_token (STRING, scan_string, scan_string_size);
-    scan_string_reset ();
+    {
+      /* Terminate with null. */
+      scan_string_append (0);
+      char* string;
+      size_t size;
+      scan_string_steal (&string, &size);
+      push_token (STRING, string, size);
+    }
     
     switch (c) {
     case '=':
@@ -364,9 +478,49 @@ put (char c)
       scan_state = SCAN_START;
       break;
     default:
-      ssyslog ("ignoring: ");
-      syslog (&c, 1);
-      ssyslog ("\n");
+      scan_state = SCAN_ERROR;
+      break;
+    }
+    break;
+
+  case SCAN_AUTOMATON_VAR:
+    if ((c >= 'a' && c <= 'z') ||
+	(c >= 'A' && c <= 'Z') ||
+	(c >= '0' && c <= '9') ||
+	c == '_') {
+      /* Continue. */
+      scan_string_append (c);
+      break;
+    }
+
+    {
+      /* Terminate with null. */
+      scan_string_append (0);
+      char* string;
+      size_t size;
+      scan_string_steal (&string, &size);
+      push_token (AUTOMATON_VAR, string, size);
+    }
+    
+    switch (c) {
+    case '=':
+      push_token (ASSIGN, 0, 0);
+      scan_state = SCAN_START;
+      break;
+    case '#':
+      scan_state = SCAN_COMMENT;
+      break;
+    case ';':
+    case '\n':
+      evaluate ();
+      scan_state = SCAN_START;
+      break;
+    case ' ':
+    case '\t':
+      scan_state = SCAN_START;
+      break;
+    default:
+      scan_state = SCAN_ERROR;
       break;
     }
     break;
@@ -379,8 +533,62 @@ put (char c)
       break;
     }
     break;
+
+  case SCAN_ERROR:
+    switch (c) {
+    case ';':
+    case '\n':
+      {
+	char* string;
+	size_t size;
+	scan_string_steal (&string, &size);
+	ssyslog ("syntax error near: ");
+	syslog (string, size);
+	ssyslog ("\n");
+	free (string);
+	scan_state = SCAN_START;
+      }
+      break;
+    default:
+      scan_string_append (c);
+      break;
+    }
+    break;
   }
 }
+
+/*
+  End Scanner Section
+  ===================
+*/
+
+/*
+  Begin Automaton Section
+  =======================
+*/
+
+#define DESTROY_BUFFERS_NO 1
+#define VFS_RESPONSE_NO 2
+#define VFS_REQUEST_NO 3
+#define LOAD_TEXT_NO 4
+#define PROCESS_TEXT_NO 5
+
+#define VFS_NAME "vfs"
+
+/* Initialization flag. */
+static bool initialized = false;
+
+/* The aid of the vfs. */
+static aid_t vfs_aid = -1;
+
+/* Buffers to interpret. */
+static buffer_queue_t interpret_queue;
+
+/* Text to interpret. */
+static bd_t interpret_bd = -1;
+static const char* interpret_string;
+static size_t interpret_string_size;
+static size_t interpret_string_idx;
 
 static void
 initialize (void)
@@ -392,7 +600,7 @@ initialize (void)
     buffer_queue_init (&vfs_request_queue);
     callback_queue_init (&vfs_response_queue);
     buffer_queue_init (&interpret_queue);
-    scan_string_reset ();
+    scan_string_init ();
   }
 }
 
@@ -693,3 +901,8 @@ end_action (bool output_fired,
 
   scheduler_finish (output_fired, bda, bdb);
 }
+
+/*
+  End Automaton Section
+  =======================
+*/
