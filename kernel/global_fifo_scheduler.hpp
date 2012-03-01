@@ -345,8 +345,9 @@ public:
     exec_context_.finish_action (output_fired, bda, bdb);
 
     // Check for interrupts.
-    interrupts::enable ();
-    interrupts::disable ();
+    asm volatile ("sti\n"
+		  "nop\n"
+		  "cli\n");
 
     for (;;) {
       if (!ready_queue_.empty ()) {
@@ -373,9 +374,9 @@ public:
 
       /* Out of actions.  Halt. */
       exec_context_.clear ();
-      interrupts::enable ();
-      asm volatile ("hlt");
-      interrupts::disable ();
+      asm volatile ("sti\n"
+		    "hlt\n"
+		    "cli\n");
     }
   }
 

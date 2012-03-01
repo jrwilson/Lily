@@ -14,14 +14,12 @@
   Justin R. Wilson
 */
 
-#include "interrupts.hpp"
-
 static inline void __attribute__((noreturn))
 halt (void)
 {
   for (;;) {
-    interrupts::disable ();
-    asm volatile ("hlt");
+    asm volatile ("cli\n"
+		  "hlt\n");
   }
 }
 
