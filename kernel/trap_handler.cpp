@@ -92,8 +92,6 @@ struct buffer_append_args {
   uint32_t eip;
   bd_t dst;
   bd_t src;
-  size_t offset;
-  size_t length;
 };
 
 struct buffer_map_args {
@@ -380,7 +378,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<bd_t, int> r = a->buffer_append (ptr->dst, ptr->src, ptr->offset, ptr->length);
+      pair<bd_t, int> r = a->buffer_append (ptr->dst, ptr->src);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

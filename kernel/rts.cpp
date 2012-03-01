@@ -582,6 +582,7 @@ namespace rts {
     }
 
     const kstring& desc = pos->second->get_description ();
+    const size_t total_size = sizeof (size_t) + desc.size ();
 
     // Create a buffer for the description.
     // We create an empty buffer and then manually add frames to it.
@@ -591,7 +592,7 @@ namespace rts {
       return r;
     }
     buffer* b = a->lookup_buffer (r.first);
-    size_t page_count = align_up (desc.size (), PAGE_SIZE) / PAGE_SIZE;
+    size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
     for (size_t idx = 0; idx != page_count; ++idx) {
       frame_t frame = frame_manager::alloc ();
       kassert (frame != vm::zero_frame ());
@@ -605,8 +606,9 @@ namespace rts {
       return make_pair (-1, s.second);
     }
 
-    memcpy (s.first, desc.c_str (), desc.size ());
-    memset (reinterpret_cast<char*> (s.first) + desc.size (), 0, page_count * PAGE_SIZE - desc.size ());
+    memcpy (s.first, &total_size, sizeof (size_t));
+    memcpy (reinterpret_cast<char*> (s.first) + sizeof (size_t), desc.c_str (), desc.size ());
+    memset (reinterpret_cast<char*> (s.first) + total_size, 0, page_count * PAGE_SIZE - total_size);
 
     return make_pair (r.first, LILY_SYSCALL_ESUCCESS);
   }

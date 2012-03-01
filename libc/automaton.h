@@ -124,11 +124,9 @@ buffer_resize (bd_t bd,
 /* 	       size_t src_begin, */
 /* 	       size_t src_end); */
 
-/* size_t */
-/* buffer_append (bd_t dest, */
-/* 	       bd_t src, */
-/* 	       size_t begin, */
-/* 	       size_t end); */
+size_t
+buffer_append (bd_t dest,
+	       bd_t src);
 
 void*
 buffer_map (bd_t bd);

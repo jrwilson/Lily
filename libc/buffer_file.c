@@ -3,96 +3,25 @@
 #include "string.h"
 
 int
-buffer_file_open (buffer_file_t* bf,
-		  bd_t bd,
-		  bool can_update)
+buffer_file_initc (buffer_file_t* bf,
+		   bd_t bd)
 {
   bf->bd = bd;
   bf->bd_size = buffer_size (bd);
   if (bf->bd_size == -1) {
     return -1;
   }
+  bf->capacity = bf->bd_size * pagesize ();
   bf->ptr = buffer_map (bd);
   if (bf->ptr == 0) {
     return -1;
   }
-  bf->can_update = can_update;
-  bf->size = bf->bd_size * pagesize ();
-  bf->position = 0;
+  bf->size = sizeof (size_t);
+  bf->position = sizeof (size_t);
+  bf->can_update = true;
 
-  return 0;
-}
-
-const void*
-buffer_file_readp (buffer_file_t* bf,
-		   size_t size)
-{
-  if (bf->can_update) {
-    /* Error: Cannot form pointers. */
-    return 0;
-  }
-
-  if (bf->position + size > bf->size) {
-    /* Error: Underflow. */
-    return 0;
-  }
-
-  /* Success.
-     Return the current position. */
-  void* retval = bf->ptr + bf->position;
-  /* Advance. */
-  bf->position += size;
-  return retval;
-}
-
-int
-buffer_file_seek (buffer_file_t* bf,
-		  int offset,
-		  buffer_file_seek_t s)
-{
-  switch (s) {
-  case BUFFER_FILE_SET:
-    if (offset >= 0) {
-      bf->position = offset;
-      return bf->position;
-    }
-    else {
-      return -1;
-    }
-    break;
-  case BUFFER_FILE_CURRENT:
-    {
-      int new_position = bf->position + offset;
-      if (offset > 0 && new_position < bf->position) {
-	/* Overflow. */
-	return -1;
-      }
-      if (offset < 0 && new_position > bf->position) {
-	/* Underflow. */
-	return -1;
-      }
-      
-      bf->position = new_position;
-      return bf->position;
-    }
-    break;
-  }
-
-  return -1;
-}
-
-int
-buffer_file_read (buffer_file_t* bf,
-		  void* ptr,
-		  size_t size)
-{
-  int new_position = bf->position + size;
-  if (new_position < bf->position) {
-    return -1;
-  }
-
-  memcpy (ptr, bf->ptr + bf->position, size);
-  bf->position = new_position;
+  /* Write the size. */
+  *((size_t*)bf->ptr) = bf->size;
 
   return 0;
 }
@@ -106,8 +35,9 @@ buffer_file_write (buffer_file_t* bf,
     return -1;
   }
 
-  int new_position = bf->position + size;
+  size_t new_position = bf->position + size;
   if (new_position < bf->position) {
+    /* Overflow. */
     return -1;
   }
 
@@ -116,8 +46,8 @@ buffer_file_write (buffer_file_t* bf,
     if (buffer_unmap (bf->bd) == -1) {
       return -1;
     }
-    bf->size = ALIGN_UP (new_position, pagesize ());
-    bf->bd_size = bf->size / pagesize ();
+    bf->capacity = ALIGN_UP (new_position, pagesize ());
+    bf->bd_size = bf->capacity / pagesize ();
     if (buffer_resize (bf->bd, bf->bd_size) == -1) {
       return -1;
     }
@@ -129,6 +59,69 @@ buffer_file_write (buffer_file_t* bf,
 
   memcpy (bf->ptr + bf->position, ptr, size);
   bf->position = new_position;
+  if (bf->position > bf->size) {
+    bf->size = bf->position;
+    *((size_t*)bf->ptr) = bf->size;
+  }
+
+  return 0;
+}
+
+int
+buffer_file_initr (buffer_file_t* bf,
+		   bd_t bd)
+{
+  bf->bd = bd;
+  bf->bd_size = buffer_size (bd);
+  if (bf->bd_size == -1) {
+    return -1;
+  }
+  bf->capacity = bf->bd_size * pagesize ();
+  bf->ptr = buffer_map (bd);
+  if (bf->ptr == 0) {
+    return -1;
+  }
+  bf->size = *((size_t*)bf->ptr);
+  bf->position = sizeof (size_t);
+  bf->can_update = false;
+
+  return 0;
+}
+
+const void*
+buffer_file_readp (buffer_file_t* bf,
+		   size_t size)
+{
+  if (bf->can_update) {
+    /* Error: Cannot form pointers. */
+    return 0;
+  }
+
+  if (size > (bf->size - bf->position)) {
+    /* Error: Not enough data. */
+    return 0;
+  }
+  
+  /* Success.
+     Return the current position. */
+  void* retval = bf->ptr + bf->position;
+  /* Advance. */
+  bf->position += size;
+  return retval;
+}
+
+int
+buffer_file_read (buffer_file_t* bf,
+		  void* ptr,
+		  size_t size)
+{
+  if (size > (bf->size - bf->position)) {
+    /* Error: Not enough data. */
+    return 0;
+  }
+
+  memcpy (ptr, bf->ptr + bf->position, size);
+  bf->position += size;
 
   return 0;
 }
@@ -142,8 +135,33 @@ buffer_file_bd (const buffer_file_t* bf)
 size_t
 buffer_file_size (const buffer_file_t* bf)
 {
-  return bf->bd_size;
+  return bf->size - sizeof (size_t);
 }
+
+size_t
+buffer_file_position (const buffer_file_t* bf)
+{
+  return bf->position - sizeof (size_t);
+}
+
+int
+buffer_file_seek (buffer_file_t* bf,
+		  size_t position)
+{
+  position += sizeof (size_t);
+
+  if (position < sizeof (size_t)) {
+    return -1;
+  }
+
+  if (position > bf->size) {
+    return -1;
+  }
+
+  bf->position = position;
+  return 0;
+}
+
 
 /* #ifndef STRING_BUFFER_H */
 /* #define STRING_BUFFER_H */

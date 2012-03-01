@@ -9,7 +9,7 @@ read_vfs_request_type (bd_t bda,
 		       vfs_type_t* type)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
 
@@ -32,7 +32,7 @@ write_vfs_unknown_response (vfs_error_t error,
   }
   
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -66,7 +66,7 @@ write_vfs_mount_request (aid_t aid,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -93,7 +93,7 @@ read_vfs_mount_request (bd_t bda,
 			size_t* path_size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
 
@@ -127,7 +127,7 @@ write_vfs_mount_response (vfs_error_t error,
   }
   
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -151,7 +151,7 @@ read_vfs_mount_response (bd_t bda,
 			 vfs_error_t* error)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
   
@@ -180,7 +180,7 @@ write_vfs_readfile_request (const char* path,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -205,7 +205,7 @@ read_vfs_readfile_request (bd_t bda,
 			   size_t* path_size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
 
@@ -238,7 +238,7 @@ write_vfs_readfile_response (vfs_error_t error,
   }
   
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -262,7 +262,7 @@ read_vfs_readfile_response (bd_t bd,
 			    size_t* size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, false) == -1) {
+  if (buffer_file_initr (&file, bd) == -1) {
     return -1;
   }
   
@@ -285,7 +285,7 @@ read_vfs_fs_request_type (bd_t bda,
 			  vfs_fs_type_t* type)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
 
@@ -308,7 +308,7 @@ write_vfs_fs_unknown_response (vfs_fs_error_t error,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -342,7 +342,7 @@ write_vfs_fs_descend_request (size_t id,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -369,7 +369,7 @@ read_vfs_fs_descend_request (bd_t bda,
 			     size_t* name_size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
 
@@ -404,7 +404,7 @@ write_vfs_fs_descend_response (vfs_fs_error_t error,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -430,7 +430,7 @@ read_vfs_fs_descend_response (bd_t bda,
 			      vfs_fs_node_t* node)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
   
@@ -457,7 +457,7 @@ write_vfs_fs_readfile_request (size_t id,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -481,7 +481,7 @@ read_vfs_fs_readfile_request (bd_t bda,
 			      size_t* id)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
   
@@ -507,7 +507,7 @@ write_vfs_fs_readfile_response (vfs_fs_error_t error,
   }
 
   buffer_file_t file;
-  if (buffer_file_open (&file, bd, true) == -1) {
+  if (buffer_file_initc (&file, bd) == -1) {
     buffer_destroy (bd);
     return -1;
   }
@@ -532,7 +532,7 @@ read_vfs_fs_readfile_response (bd_t bda,
 			       size_t* size)
 {
   buffer_file_t file;
-  if (buffer_file_open (&file, bda, false) == -1) {
+  if (buffer_file_initr (&file, bda) == -1) {
     return -1;
   }
   

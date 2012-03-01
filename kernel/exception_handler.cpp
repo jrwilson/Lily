@@ -193,6 +193,8 @@ exception_dispatch (volatile registers regs)
       	// Map it in at the stub.
       	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Copy.
+	static size_t copy_count = 0;
+	kout << "copy_count = " << ++copy_count << endl;
       	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
       	// Unmap the source.
       	vm::unmap (address);

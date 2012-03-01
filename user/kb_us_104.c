@@ -2,7 +2,7 @@
 #include <buffer_queue.h>
 #include <fifo_scheduler.h>
 #include <string.h>
-#include "byte_buffer.h"
+#include <buffer_file.h>
 
 /*
   Driver for a 104-key US keyboard
@@ -194,7 +194,7 @@ static char upper_case[128] = {
 
 #define DESTROY_BUFFERS_NO 1
 #define SCAN_CODE_NO 2
-#define OUTPUT_NO 3
+#define TEXT_NO 3
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -203,14 +203,27 @@ static bool initialized = false;
 static buffer_queue_t destroy_queue;
 
 /* Processed scan codes. */
-static byte_buffer_t buffer;
-static bd_t buffer_bda = -1;
-static bd_t buffer_bdb = -1;
+static buffer_file_t output_buffer;
+static bd_t output_buffer_bd = -1;
 
 static void
 end_action (bool output_fired,
 	    bd_t bda,
 	    bd_t bdb);
+
+static void
+initialize_output_buffer (void)
+{
+  output_buffer_bd = buffer_create (1);
+  if (output_buffer_bd == -1) {
+    syslog ("kb_us_104: error: Could not create output buffer");
+    exit ();
+  }
+  if (buffer_file_initc (&output_buffer, output_buffer_bd) == -1) {
+    syslog ("kb_us_104: error: Could not initialize output buffer");
+    exit ();
+  }
+}
 
 static void
 initialize (void)
@@ -219,10 +232,7 @@ initialize (void)
     initialized = true;
 
     buffer_queue_init (&destroy_queue);
-    if (byte_buffer_initw (&buffer, &buffer_bda, &buffer_bdb) == -1) {
-      syslog ("kb_us_104: error: Could not initialize output buffer");
-      exit ();
-    }
+    initialize_output_buffer ();
   }
 }
 
@@ -232,17 +242,17 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   end_action (false, bda, bdb);
 }
 
-BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "byte_buffer", scan_code, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  size_t size;
-  byte_buffer_t bb;
-  if (byte_buffer_initr (&bb, bda, bdb, &size) == -1) {
+  buffer_file_t input_buffer;
+  if (buffer_file_initr (&input_buffer, bda) == -1) {
     end_action (false, bda, bdb);
   }
 
-  const unsigned char* codes = byte_buffer_readp (&bb, size);
+  size_t size = buffer_file_size (&input_buffer);
+  const unsigned char* codes = buffer_file_readp (&input_buffer, size);
   if (codes == 0) {
     end_action (false, bda, bdb);
   }
@@ -284,7 +294,7 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "byte_buffer", scan_code, 
 	  }
 	  
 	  if (t != 0) {
-	    byte_buffer_put (&buffer, t);
+	    buffer_file_write (&output_buffer, &t, 1);
 	  }
 	  /* else { */
 	  /*   /\* TODO *\/ */
@@ -322,27 +332,20 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "byte_buffer", scan_code, 
 }
 
 static bool
-output_precondition (void)
+text_precondition (void)
 {
-  return !byte_buffer_empty (&buffer);
+  return buffer_file_size (&output_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, OUTPUT_NO, "", "", output, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, int param)
 {
   initialize ();
-  scheduler_remove (OUTPUT_NO, param);
+  scheduler_remove (TEXT_NO, param);
 
-  if (output_precondition ()) {
-    syslog ("kb_us_104: output");
-
-    bd_t bda = buffer_bda;
-    bd_t bdb = buffer_bdb;
-    if (byte_buffer_initw (&buffer, &buffer_bda, &buffer_bdb) == -1) {
-      syslog ("kb_us_104: error:  Could not initialize output buffer");
-      exit ();
-    }
-
-    end_action (true, bda, bdb);
+  if (text_precondition ()) {
+    bd_t bd = output_buffer_bd;
+    initialize_output_buffer ();
+    end_action (true, bd, -1);
   }
   else {
     end_action (false, -1, -1);
@@ -405,8 +408,8 @@ end_action (bool output_fired,
   if (destroy_buffers_precondition ()) {
     scheduler_add (DESTROY_BUFFERS_NO, 0);
   }
-  if (output_precondition ()) {
-    scheduler_add (OUTPUT_NO, 0);
+  if (text_precondition ()) {
+    scheduler_add (TEXT_NO, 0);
   }
 
   scheduler_finish (output_fired, bda, bdb);

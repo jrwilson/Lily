@@ -4,7 +4,6 @@
 #include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
-#include "byte_buffer.h"
 
 /*
   Keyboard Driver
@@ -50,10 +49,9 @@ static bool initialized = false;
 /* Queue of buffers that need to be destroyed. */
 static buffer_queue_t destroy_queue;
 
-/* Array of scan codes. */
-static byte_buffer_t sca;
-static bd_t sca_bda = -1;
-static bd_t sca_bdb = -1;
+/* Output buffer containing scan codes. */
+static buffer_file_t output_buffer;
+static bd_t output_buffer_bd = -1;
 
 #define KEYBOARD_INTERRUPT_NO 1
 #define SCAN_CODE_NO 2
@@ -65,16 +63,27 @@ end_action (bool output_fired,
 	    bd_t bdb);
 
 static void
+initialize_output_buffer (void)
+{
+  output_buffer_bd = buffer_create (1);
+  if (output_buffer_bd == -1) {
+    syslog ("keyboard: error:  Could not create output buffer");
+    exit ();
+  }      
+  if (buffer_file_initc (&output_buffer, output_buffer_bd) == -1) {
+    syslog ("keyboard: error:  Could not initialize output buffer");
+    exit ();
+  }
+}
+
+static void
 initialize (void)
 {
   if (!initialized) {
     initialized = true;
 
     buffer_queue_init (&destroy_queue);
-    if (byte_buffer_initw (&sca, &sca_bda, &sca_bdb) == -1) {
-      syslog ("keyboard: error:  Could not initialize output buffer");
-      exit ();
-    }
+    initialize_output_buffer ();
 
     /* Reserve system resources. */
     if (reserve_port (KEYBOARD_DATA_PORT) == -1) {
@@ -101,30 +110,29 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  byte_buffer_put (&sca, inb (KEYBOARD_DATA_PORT));
+  char c = inb (KEYBOARD_DATA_PORT);
+  if (buffer_file_write (&output_buffer, &c, 1) == -1) {
+    syslog ("keyboard: error:  Could not write to output buffer");
+    exit ();
+  }
   end_action (false, bda, bdb);
 }
 
 static bool
 scan_code_precondition (void)
 {
-  return !byte_buffer_empty (&sca);
+  return buffer_file_size (&output_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "byte_buffer", scan_code, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param)
 {
   initialize ();
   scheduler_remove (SCAN_CODE_NO, param);
 
   if (scan_code_precondition ()) {
-    bd_t bda = sca_bda;
-    bd_t bdb = sca_bdb;
-    if (byte_buffer_initw (&sca, &sca_bda, &sca_bdb) == -1) {
-      syslog ("keyboard: error:  Could not initialize output buffer");
-      exit ();
-    }
-
-    end_action (true, bda, bdb);
+    bd_t bd = output_buffer_bd;
+    initialize_output_buffer ();
+    end_action (true, bd, -1);
   }
   else {
     end_action (false, -1, -1);

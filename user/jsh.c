@@ -138,11 +138,11 @@ create_callback (void* data,
       var->aid = aid;
     }
     else {
-      syslog ("TODO:  createp create failed");
+      syslog ("TODO:  create create failed");
     }
   }
   else {
-    syslog ("TODO:  createp:  couldn't read file");
+    syslog ("TODO:  create:  couldn't read file");
   }
 
   destroy_create_context (cc);
@@ -164,7 +164,6 @@ create_callback (void* data,
 typedef enum {
   AUTOMATON_VAR,
   CREATE,
-  CREATEP,
   BIND,
   STRING,
   ASSIGN,
@@ -191,9 +190,6 @@ push_token (token_type_t type,
   if (type == STRING) {
     if (strncmp ("create", string, size) == 0) {
       type = CREATE;
-    }
-    else if (strncmp ("createp", string, size) == 0) {
-      type = CREATEP;
     }
     else if (strncmp ("bind", string, size) == 0) {
       type = BIND;
@@ -236,14 +232,25 @@ accept (token_type_t type)
 }
 
 static void
-create_ (token_list_item_t* var,
-	 bool retain_privilege)
+create_ (token_list_item_t* var)
 {
+  bool retain_privilege = false;
   token_list_item_t* filename;
-  
+
   if ((filename = accept (STRING)) == 0) {
-    syslog ("TODO:  Expected a filename");
+    syslog ("TODO:  Expected a filename or argument");
     return;
+  }
+
+  if (strcmp (filename->string, "-p") == 0) {
+    /* Got an argument to retain privilege. */
+    retain_privilege = true;
+
+    /* Get the filename again. */
+    if ((filename = accept (STRING)) == 0) {
+      syslog ("TODO:  Expected a filename");
+      return;
+    }
   }
 
   token_list_item_t* string;
@@ -367,10 +374,7 @@ automaton_assignment (token_list_item_t* var)
   
   token_list_item_t* t;
   if ((t = accept (CREATE)) != 0) {
-    create_ (var, false);
-  }
-  else if ((t = accept (CREATEP)) != 0) {
-    create_ (var, true);
+    create_ (var);
   }
   else {
     syslog ("TODO:  syntax error");
@@ -460,7 +464,7 @@ scan_string_steal (char** string,
 
 /* Tokens
 
-   string - [a-zA-Z0-9_/]+
+   string - [a-zA-Z0-9_/-]+
 
    assign symbol - =
 
@@ -481,7 +485,8 @@ put (char c)
 	(c >= 'A' && c <= 'Z') ||
 	(c >= '0' && c <= '9') ||
 	c == '_' ||
-	c == '/') {
+	c == '/' ||
+	c == '-') {
       scan_string_append (c);
       scan_state = SCAN_STRING;
       break;
@@ -518,7 +523,8 @@ put (char c)
 	(c >= 'A' && c <= 'Z') ||
 	(c >= '0' && c <= '9') ||
 	c == '_' ||
-	c == '/') {
+	c == '/' ||
+	c == '-') {
       /* Continue. */
       scan_string_append (c);
       break;
@@ -891,13 +897,17 @@ BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, int param)
     if (bdb == -1) {
       end_action (false, bda, -1);
     }
-    
-    buffer_file_t bf;
-    if (buffer_file_open (&bf, bdb, false) == -1) {
+
+    size_t bdb_bd_size = buffer_size (bdb);
+    if (bdb_bd_size == -1) {
+      end_action (false, bda, -1);
+    }
+
+    if (sizeb > bdb_bd_size * pagesize ()) {
       end_action (false, bda, bdb);
     }
 
-    const char* s = buffer_file_readp (&bf, sizeb);
+    const char* s = buffer_map (bdb);
     if (s == 0) {
       end_action (false, bda, bdb);
     }

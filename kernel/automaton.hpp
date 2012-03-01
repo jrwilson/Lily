@@ -748,14 +748,8 @@ public:
 
   pair<size_t, int>
   buffer_append (bd_t dst,
-		 bd_t src,
-		 size_t begin,
-		 size_t end)
+		 bd_t src)
   {
-    if (begin > end) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
-
     bd_to_buffer_map_type::const_iterator dst_pos = bd_to_buffer_map_.find (dst);
     bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
     if (dst_pos == bd_to_buffer_map_.end () ||
@@ -766,10 +760,6 @@ public:
 
     buffer* d = dst_pos->second;
     buffer* s = src_pos->second;
-    if (end > s->size ()) {
-      // Offset is past end of source.
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
     
     if (d->begin () != 0) {
       // The destination is mapped.
@@ -777,8 +767,42 @@ public:
     }
 
     // Append.
-    return make_pair (d->append (*s, begin, end), LILY_SYSCALL_ESUCCESS);
+    return make_pair (d->append (*s, 0, s->size ()), LILY_SYSCALL_ESUCCESS);
   }
+
+  // pair<size_t, int>
+  // buffer_append (bd_t dst,
+  // 		 bd_t src,
+  // 		 size_t begin,
+  // 		 size_t end)
+  // {
+  //   if (begin > end) {
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator dst_pos = bd_to_buffer_map_.find (dst);
+  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+  //   if (dst_pos == bd_to_buffer_map_.end () ||
+  // 	src_pos == bd_to_buffer_map_.end ()) {
+  //     // One of the buffers does not exist.
+  //     return make_pair (-1, LILY_SYSCALL_EBDDNE);
+  //   }
+
+  //   buffer* d = dst_pos->second;
+  //   buffer* s = src_pos->second;
+  //   if (end > s->size ()) {
+  //     // Offset is past end of source.
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+    
+  //   if (d->begin () != 0) {
+  //     // The destination is mapped.
+  //     return make_pair (-1, LILY_SYSCALL_EMAPPED);
+  //   }
+
+  //   // Append.
+  //   return make_pair (d->append (*s, begin, end), LILY_SYSCALL_ESUCCESS);
+  // }
 
   int
   buffer_assign (bd_t dest,

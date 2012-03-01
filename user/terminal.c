@@ -1,11 +1,11 @@
 #include "terminal.h"
-#include "vga.h"
 #include <automaton.h>
-#include <string.h>
 #include <dymem.h>
+#include <string.h>
+#include <buffer_queue.h>
 #include <fifo_scheduler.h>
-#include <buffer_heap.h>
-#include "string_buffer.h"
+#include <buffer_file.h>
+#include "vga_msg.h"
 
 /*
   VGA Terminal Server
@@ -219,6 +219,11 @@
   VTS  - LINE TABULATION SET
 */
 
+#define DESTROY_BUFFERS_NO 1
+#define DESTROYED_NO 2
+#define TEXT_NO 3
+#define VGA_OP_NO 4
+
 #define LINE_HOME_POSITION 0
 #define LINE_LIMIT_POSITION 80
 #define PAGE_HOME_POSITION 0
@@ -271,8 +276,6 @@ struct client {
 static client_t* client_list_head = 0;
 /* The active client. */
 static client_t* active_client = 0;
-/* The number of actions bound to the terminal_vga_op output.  By making this non-zero to start, we force an update. */
-static size_t terminal_vga_op_binding_count = 1;
 
 static client_t*
 find_client (aid_t aid)
@@ -309,7 +312,10 @@ create_client (aid_t aid)
   client->next = client_list_head;
   client_list_head = client;
 
-  subscribe_destroyed (aid);
+  if (subscribe_destroyed (aid, DESTROYED_NO) == -1) {
+    syslog ("terminal: Could not subscribe");
+    exit ();
+  }
 
   return client;
 }
@@ -352,27 +358,46 @@ scroll (client_t* client)
   client->cursor_refresh = true;
 }
 
-static void schedule (void);
+/* Initialization flag. */
+static bool initialized = false;
 
-typedef struct {
-  aid_t aid;
-} focus_arg_t;
+/* Queue of buffers that need to be destroyed. */
+static buffer_queue_t destroy_queue;
 
-void
-terminal_focus (int param,
-		bd_t bd,
-		focus_arg_t* a,
-		size_t buffer_size)
+static void
+initialize (void)
 {
-  if (a != 0 && buffer_size >= sizeof (focus_arg_t)) {
-    /* We don't care if the client is null. */
-    switch_to_client (find_client (a->aid));
-  }
+  if (!initialized) {
+    initialized = true;
 
-  schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+    buffer_queue_init (&destroy_queue);
+  }
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, TERMINAL_FOCUS, terminal_focus);
+
+static void
+end_action (bool output_fired,
+	    bd_t bda,
+	    bd_t bdb);
+
+/* typedef struct { */
+/*   aid_t aid; */
+/* } focus_arg_t; */
+
+/* void */
+/* terminal_focus (int param, */
+/* 		bd_t bd, */
+/* 		focus_arg_t* a, */
+/* 		size_t buffer_size) */
+/* { */
+/*   if (a != 0 && buffer_size >= sizeof (focus_arg_t)) { */
+/*     /\* We don't care if the client is null. *\/ */
+/*     switch_to_client (find_client (a->aid)); */
+/*   } */
+
+/*   schedule (); */
+/*   scheduler_finish (bd, FINISH_DESTROY); */
+/* } */
+/* EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, TERMINAL_FOCUS, terminal_focus); */
 
 static void
 process_normal (client_t* client,
@@ -495,7 +520,7 @@ process_control (client_t* client,
       }
       /* Shift the line. */
       for (unsigned short dest_x = LINE_LIMIT_POSITION - 1; dest_x != client->active_position_x && dest_x >= count; --dest_x) {
-	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] = 
+	client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] =
 	  client->buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x - count];
       }
       /* Replace with spaces. */
@@ -658,21 +683,19 @@ process_control (client_t* client,
   }
 }
 
-static void
-display (aid_t aid,
-	 bd_t bd,
-	 void* ptr,
-	 size_t buffer_size)
+BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd_t bda, bd_t bdb)
 {
-  if (ptr == 0) {
-    /* Either no data or we can't map it. */
-    return;
+  initialize ();
+
+  buffer_file_t input_buffer;
+  if (buffer_file_initr (&input_buffer, bda) == -1) {
+    end_action (false, bda, bdb);
   }
-  
-  string_buffer_t sb;
-  if (!string_buffer_parse (&sb, bd, ptr, buffer_size)) {
-    /* Bad buffer. */
-    return;
+
+  size_t size = buffer_file_size (&input_buffer);
+  const char* begin = buffer_file_readp (&input_buffer, size);
+  if (begin == 0) {
+    end_action (false, bda, bdb);
   }
 
   /* Find or create the client. */
@@ -680,13 +703,11 @@ display (aid_t aid,
   if (client == 0) {
     client = create_client (aid);
   }
-  
+
   /* Process the string. */
-  char* begin = string_buffer_data (&sb);
-  const char* end = begin + string_buffer_size (&sb);
+  const char* end = begin + size;
   for (; begin != end; ++begin) {
     const char c = *begin;
-
     if ((c & 0x80) == 0) {
       switch (client->mode) {
       case NORMAL:
@@ -701,98 +722,63 @@ display (aid_t aid,
       }
     }
   }
-  
+
   /* TODO:  Remove this line. */
   switch_to_client (client);
-}
 
-void
-terminal_display (aid_t aid,
-		  bd_t bd,
-		  void* ptr,
-		  size_t buffer_size)
-{
-  display (aid, bd, ptr, buffer_size);
-
-  schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  end_action (false, bda, bdb);
 }
-EMBED_ACTION_DESCRIPTOR (INPUT, AUTO_PARAMETER, TERMINAL_DISPLAY, terminal_display);
 
 static bool
-terminal_vga_precondition (void)
+vga_op_precondition (void)
 {
-  return active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh) && terminal_vga_op_binding_count != 0;
+  return active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh);
 }
 
-void
-terminal_vga_op (int param,
-		 size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int param)
 {
-  scheduler_remove (TERMINAL_VGA_OP, param);
-  terminal_vga_op_binding_count = bc;
+  initialize ();
+  scheduler_remove (VGA_OP_NO, param);
 
-  if (terminal_vga_precondition ()) {
-    size_t op_count = 0;
-    if (active_client->graphics_refresh) {
-      ++op_count;
-    }
-    if (active_client->cursor_refresh) {
-      ++op_count;
+  if (vga_op_precondition ()) {
+    bd_t bda;
+    bd_t bdb;
+    vga_op_list_t vol;
+
+    if (vga_op_list_initw (&vol, &bda, &bdb) == -1) {
+      syslog ("terminal: Could not initialize vga op list");
+      exit ();
     }
 
-    size_t buffer_size = op_count * sizeof (vga_op_t);
-    bd_t bd = buffer_create (buffer_size);
-    size_t data_offset = 0;
-    if (active_client->graphics_refresh) {
-      data_offset = buffer_append (bd, active_client->bd, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
-    }
-    void* ptr = buffer_map (bd);
-    buffer_heap_t heap;
-    buffer_heap_init (&heap, ptr, buffer_size);
-    
-    vga_op_t* assign_op = 0;
     if (active_client->graphics_refresh) {
       /* Send the data. */
-      assign_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
-      assign_op->type = VGA_ASSIGN;
-      assign_op->arg.assign.address = 0;
-      assign_op->arg.assign.size = PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE;
-      assign_op->arg.assign.data = (buffer_heap_begin (&heap) + data_offset) - (void*)&assign_op->arg.assign.data;
-      assign_op->next = 0;
+      if (vga_op_list_write_assign (&vol, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) == -1) {
+      	syslog ("terminal: Could not write vga op list");
+      	exit ();
+      }
+      active_client->graphics_refresh = false;
     }
-    
+
     if (active_client->cursor_refresh) {
       /* Send the cursor. */
-      vga_op_t* set_cursor_op = buffer_heap_alloc (&heap, sizeof (vga_op_t));
-      set_cursor_op->type = VGA_SET_CURSOR_LOCATION;
-      set_cursor_op->arg.set_cursor_location.location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
-      set_cursor_op->next = 0;
-
-      if (assign_op != 0) {
-	assign_op->next = (void*)set_cursor_op - (void*)&assign_op->next;
+      if (vga_op_list_write_set_cursor_location (&vol, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) == -1) {
+      	syslog ("terminal: Could not write vga op list");
+      	exit ();
       }
+      active_client->cursor_refresh = false;
     }
 
-    active_client->graphics_refresh = false;
-    active_client->cursor_refresh = false;
-
-    schedule ();
-    scheduler_finish (bd, FINISH_DESTROY);
+    end_action (true, bda, bdb);
   }
   else {
-    schedule ();
-    scheduler_finish (-1, FINISH_NO);
+    end_action (false, -1, -1);
   }
 }
-EMBED_ACTION_DESCRIPTOR (OUTPUT, NO_PARAMETER, TERMINAL_VGA_OP, terminal_vga_op);
 
-void
-destroyed (aid_t aid,
-	   bd_t bd,
-	   void* p,
-	   size_t buffer_size)
+BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t bdb)
 {
+  initialize ();
+
   /* Destroy the client. */
   client_t** ptr = &client_list_head;
   for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;;
@@ -802,15 +788,68 @@ destroyed (aid_t aid,
     destroy_client (temp);
   }
 
-  schedule ();
-  scheduler_finish (bd, FINISH_DESTROY);
+  end_action (false, bda, bdb);
 }
-EMBED_ACTION_DESCRIPTOR (SYSTEM_INPUT, PARAMETER, DESTROYED, destroyed);
 
-static void
-schedule (void)
+/* destroy_buffers
+   ---------------
+   Destroys all of the buffers in destroy_queue.
+   This is useful for output actions that need to destroy the buffer *after* the output has fired.
+   To schedule a buffer for destruction, just add it to destroy_queue.
+
+   Pre:  Destroy queue is not empty.
+   Post: Destroy queue is empty.
+ */
+static bool
+destroy_buffers_precondition (void)
 {
-  if (terminal_vga_precondition ()) {
-    scheduler_add (TERMINAL_VGA_OP, 0);
+  return !buffer_queue_empty (&destroy_queue);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
+{
+  initialize ();
+  scheduler_remove (DESTROY_BUFFERS_NO, param);
+
+  if (destroy_buffers_precondition ()) {
+    while (!buffer_queue_empty (&destroy_queue)) {
+      bd_t bd;
+      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
+      bd = buffer_queue_item_bda (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+      bd = buffer_queue_item_bdb (item);
+      if (bd != -1) {
+	buffer_destroy (bd);
+      }
+
+      buffer_queue_pop (&destroy_queue);
+    }
   }
+
+  end_action (false, -1, -1);
+}
+
+/* end_action is a helper function for terminating actions.
+   If the buffer is not -1, it schedules it to be destroyed.
+   end_action schedules local actions and calls scheduler_finish to finish the action.
+*/
+static void
+end_action (bool output_fired,
+	    bd_t bda,
+	    bd_t bdb)
+{
+  if (bda != -1 || bdb != -1) {
+    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
+  }
+
+  if (destroy_buffers_precondition ()) {
+    scheduler_add (DESTROY_BUFFERS_NO, 0);
+  }
+  if (vga_op_precondition ()) {
+    scheduler_add (VGA_OP_NO, 0);
+  }
+
+  scheduler_finish (output_fired, bda, bdb);
 }

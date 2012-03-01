@@ -48,7 +48,7 @@ int
 cpio_archive_init (cpio_archive_t* ar,
 		   bd_t bd)
 {
-  if (buffer_file_open (&ar->bf, bd, false) == -1) {
+  if (buffer_file_initr (&ar->bf, bd) == -1) {
     return -1;
   }
 
@@ -59,9 +59,11 @@ cpio_file_t*
 cpio_archive_next_file (cpio_archive_t* ar)
 {
   /* Align to a 4-byte boundary. */
-  int pos = buffer_file_seek (&ar->bf, 0, BUFFER_FILE_CURRENT);
+  size_t pos = buffer_file_position (&ar->bf);
   pos = align_up (pos, 4);
-  buffer_file_seek (&ar->bf, pos, BUFFER_FILE_SET);
+  if (buffer_file_seek (&ar->bf, pos) == -1) {
+    return 0;
+  }
 
   const cpio_header_t* h = buffer_file_readp (&ar->bf, sizeof (cpio_header_t));
   if (h == 0) {
@@ -92,9 +94,11 @@ cpio_archive_next_file (cpio_archive_t* ar)
   }
 
   /* Align to a 4-byte boundary. */
-  pos = buffer_file_seek (&ar->bf, 0, BUFFER_FILE_CURRENT);
+  pos = buffer_file_position (&ar->bf);
   pos = align_up (pos, 4);
-  buffer_file_seek (&ar->bf, pos, BUFFER_FILE_SET);
+  if (buffer_file_seek (&ar->bf, pos) == -1) {
+    return 0;
+  }
 
   const char* data = buffer_file_readp (&ar->bf, filesize);
   if (data == 0) {

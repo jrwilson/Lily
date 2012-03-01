@@ -1,10 +1,6 @@
 #ifndef TERMINAL_H
 #define TERMINAL_H
 
-#define TERMINAL_FOCUS 1
-#define TERMINAL_DISPLAY 2
-#define TERMINAL_VGA_OP 3
-
 #define NUL 0X00
 #define BS  0X08
 #define HT  0X09

@@ -12,7 +12,7 @@ description_init (description_t* d,
   if (bd == -1) {
     return -1;
   }
-  if (buffer_file_open (&d->bf, bd, false) == -1) {
+  if (buffer_file_initr (&d->bf, bd) == -1) {
     return -1;
   }
   return 0;
@@ -29,7 +29,10 @@ description_name_to_number (description_t* d,
 			    const char* action_name,
 			    size_t size)
 {
-  buffer_file_seek (&d->bf, 0, BUFFER_FILE_SET);
+  if (buffer_file_seek (&d->bf, 0) == -1) {
+    return NO_ACTION;
+  }
+
   const size_t* count = buffer_file_readp (&d->bf, sizeof (size_t));
   if (count == 0) {
     return NO_ACTION;
