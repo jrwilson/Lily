@@ -19,6 +19,7 @@
 #include "vm.hpp"
 #include "string.hpp"
 #include "kernel_alloc.hpp"
+#include "scheduler.hpp"
 
 extern "C" void exception0 ();
 extern "C" void exception1 ();
@@ -193,8 +194,6 @@ exception_dispatch (volatile registers regs)
       	// Map it in at the stub.
       	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Copy.
-	static size_t copy_count = 0;
-	kout << "copy_count = " << ++copy_count << endl;
       	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
       	// Unmap the source.
       	vm::unmap (address);
@@ -204,6 +203,9 @@ exception_dispatch (volatile registers regs)
       	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
       	// Remove the reference from allocation.
       	frame_manager::decref (dst_frame);
+
+	static size_t copy_count = 0;
+	kout << scheduler::current_action ().action->automaton->aid () << " " << hexformat (address) << " copy_count = " << ++copy_count << endl;
 
       	// Done.
       	return;
@@ -216,7 +218,7 @@ exception_dispatch (volatile registers regs)
       	// The kernel expanded since the current page directory was created.
       	// Consequently, we may encounter a page fault when trying to access something in the kernel.
       	// We only need to map the page table, however.
-      	const size_t idx = vm::get_page_directory_entry (address);
+      	const size_t idx = vm::get_page_directory_idx (address);
       	vm::get_page_directory ()->entry[idx] = vm::get_kernel_page_directory ()->entry[idx];
       	asm ("invlpg (%0)\n" : : "r"(address));
       	return;

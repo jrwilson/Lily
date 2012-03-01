@@ -42,7 +42,7 @@ buffer_file_write (buffer_file_t* bf,
   }
 
   /* Resize if necessary. */
-  if (bf->size < new_position) {
+  if (bf->capacity < new_position) {
     if (buffer_unmap (bf->bd) == -1) {
       return -1;
     }

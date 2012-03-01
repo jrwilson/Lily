@@ -72,13 +72,13 @@ namespace vm {
   };
 
   inline page_table_idx_t
-  get_page_table_entry (logical_address_t address)
+  get_page_table_idx (logical_address_t address)
   {
     return (address & 0x3FF000) >> 12;
   }
   
   inline page_table_idx_t
-  get_page_directory_entry (logical_address_t address)
+  get_page_directory_idx (logical_address_t address)
   {
     return (address & 0xFFC00000) >> 22;
   }
@@ -200,7 +200,7 @@ namespace vm {
       // The kernel page directory.
       const page_directory* src = reinterpret_cast<page_directory*> (reinterpret_cast<logical_address_t> (&kernel_page_directory) + KERNEL_VIRTUAL_BASE);
       // Avoid the last entry.
-      for (page_table_idx_t idx = get_page_directory_entry (KERNEL_VIRTUAL_BASE); idx != PAGE_ENTRY_COUNT - 1; ++idx) {
+      for (page_table_idx_t idx = get_page_directory_idx (KERNEL_VIRTUAL_BASE); idx != PAGE_ENTRY_COUNT - 1; ++idx) {
 	if (src->entry[idx].present_ == PRESENT) {
 	  entry[idx] = src->entry[idx];
 	  frame_manager::incref (entry[idx].frame_);
@@ -236,7 +236,7 @@ namespace vm {
   inline page_table*
   get_page_table (logical_address_t address)
   {
-    return reinterpret_cast<page_table*> (0xFFC00000 + get_page_directory_entry (address) * PAGE_SIZE);
+    return reinterpret_cast<page_table*> (0xFFC00000 + get_page_directory_idx (address) * PAGE_SIZE);
   }
   
   inline frame_t
@@ -271,8 +271,8 @@ namespace vm {
   {
     page_directory* pd = get_page_directory ();
     page_table* pt = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
 
     kassert (pd->entry[directory_entry].present_ == PRESENT);
     kassert (pt->entry[table_entry].present_ == PRESENT);
@@ -297,8 +297,8 @@ namespace vm {
 
     page_directory* page_directory = get_page_directory ();
     page_table* pt = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
 
     if (page_directory->entry[directory_entry].present_ == NOT_PRESENT) {
       frame_t frame = frame_manager::alloc ();
@@ -310,7 +310,7 @@ namespace vm {
       new (pt) vm::page_table ();
     }
 
-    // The entry shoud not be present.
+    // The entry should not be present.
     kassert (pt->entry[table_entry].present_ == NOT_PRESENT);
     // Map.
     switch (map_mode) {
@@ -340,8 +340,8 @@ namespace vm {
 
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     kassert (page_table->entry[table_entry].present_ == PRESENT);
@@ -368,8 +368,8 @@ namespace vm {
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
 
@@ -382,8 +382,8 @@ namespace vm {
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     
@@ -395,8 +395,8 @@ namespace vm {
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     
@@ -409,8 +409,8 @@ namespace vm {
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
-    const page_table_idx_t directory_entry = get_page_directory_entry (logical_addr);
-    const page_table_idx_t table_entry = get_page_table_entry (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
     kassert (page_table->entry[table_entry].present_ == PRESENT);
@@ -516,6 +516,19 @@ namespace vm {
   //   vm::unmap (vm::get_stub1 ());
   //   return flag;
   // }
+
+  inline page_table_entry
+  get_page_table_entry (logical_address_t logical_addr)
+  {
+    page_directory* page_directory = get_page_directory ();
+    page_table* page_table = get_page_table (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
+    
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+    
+    return page_table->entry[table_entry];
+  }
 
 };
 
