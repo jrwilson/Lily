@@ -20,8 +20,8 @@ typedef struct {
 
 int
 vga_op_list_initw (vga_op_list_t* vol,
-		   bd_t* bda,
-		   bd_t* bdb);
+		   bd_t bda,
+		   bd_t bdb);
 
 int
 vga_op_list_write_set_cursor_location (vga_op_list_t* vol,

@@ -214,7 +214,8 @@ exception_dispatch (volatile registers regs)
 	  frame_manager::decref (dst_frame);
 
 	  static size_t copy_count = 0;
-	  kout << scheduler::current_action ().action->automaton->aid () << " " << hexformat (address) << " copy_count = " << ++copy_count << endl;
+	  kout << scheduler::current_action ().action->automaton->aid () << " " <<
+	    hexformat (address) << " copy_count = " << ++copy_count << " " << dst_frame << " -> " << src_frame << endl;
 	}
 
       	// Done.

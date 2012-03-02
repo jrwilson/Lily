@@ -255,12 +255,6 @@ end_output_action (bool output_fired,
   scheduler_finish (output_fired, bda, bdb);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
-  end_input_action (bda, bdb);
-}
-
 /* scan_code
    ---------
    Convert scancodes into ASCII text.

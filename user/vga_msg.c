@@ -2,36 +2,23 @@
 
 int
 vga_op_list_initw (vga_op_list_t* vol,
-		   bd_t* bda,
-		   bd_t* bdb)
+		   bd_t bda,
+		   bd_t bdb)
 {
-  bd_t bd1 = buffer_create (1);
-  if (bd1 == -1) {
+  if (buffer_file_initc (&vol->bf, bda) == -1) {
     return -1;
   }
 
-  if (buffer_file_initc (&vol->bf, bd1) == -1) {
-    buffer_destroy (bd1);
-    return -1;
-  }
-
-  bd_t bd2 = buffer_create (0);
-  if (bd2 == -1) {
-    buffer_destroy (bd1);
+  if (buffer_resize (bdb, 0) == -1) {
     return -1;
   }
 
   vol->count = 0;
-  vol->bdb = bd2;
+  vol->bdb = bdb;
 
   if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
-    buffer_destroy (bd1);
-    buffer_destroy (bd2);
     return -1;
   }
-
-  *bda = bd1;
-  *bdb = bd2;
 
   return 0;
 }

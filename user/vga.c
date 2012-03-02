@@ -23,9 +23,6 @@
 #define FEATURE_CONTROL_PORT_READ 0x3CA
 /* Assuming color. */
 #define FEATURE_CONTROL_PORT_WRITE 0x3DA
-#define INPUT_STATUS0_PORT_READ 0x3C2
-/* Assuming color. */
-#define INPUT_STATUS1_PORT_READ 0x3DA
 
 /* Sequencer registers. */
 #define SEQUENCER_ADDRESS_PORT 0x3C4
@@ -86,8 +83,6 @@ typedef struct {
   /* General registers. */
   unsigned char miscellaneous_output;
   unsigned char feature_control;
-  unsigned char input_status0;
-  unsigned char input_status1;
 
   /* Sequencer registers. */
   unsigned char reset;
@@ -202,8 +197,6 @@ read_vga_registers (vga_registers_t* r)
 {
   r->miscellaneous_output = inb (MISCELLANEOUS_OUTPUT_PORT_READ);
   r->feature_control = inb (FEATURE_CONTROL_PORT_READ);
-  r->input_status0 = inb (INPUT_STATUS0_PORT_READ);
-  r->input_status1 = inb (INPUT_STATUS1_PORT_READ);
 
   outb (SEQUENCER_ADDRESS_PORT, RESET_REGISTER);
   r->reset = inb (SEQUENCER_DATA_PORT);
@@ -460,13 +453,24 @@ create_client_context (aid_t aid)
   context->aid = aid;
   copy_vga_registers (&context->registers, &default_registers);
   context->bd = buffer_copy (default_data);
+  if (context->bd == -1) {
+    syslog ("vga: Could not copy default data buffer");
+    exit ();
+  }
   context->buffer = buffer_map (context->bd);
+  if (context->buffer == 0) {
+    syslog ("vga: Could not map client buffer");
+    exit ();
+  }
   context->default_offset = TEXT_MEMORY_BEGIN - VIDEO_MEMORY_BEGIN;
   context->default_size = TEXT_MEMORY_SIZE;
   context->next = context_list_head;
   context_list_head = context;
 
-  subscribe_destroyed (aid, DESTROYED_NO);
+  if (subscribe_destroyed (aid, DESTROYED_NO) == -1) {
+    syslog ("vga: Could not subscribe to client automaton");
+    exit ();
+  }
 
   return context;
 }
@@ -523,24 +527,25 @@ initialize (void)
 {
   if (!initialized) {
     /* Reserve all of the VGA ports.*/
-    reserve_port (MISCELLANEOUS_OUTPUT_PORT_READ);
-    reserve_port (MISCELLANEOUS_OUTPUT_PORT_WRITE);
-    reserve_port (FEATURE_CONTROL_PORT_READ);
-    reserve_port (FEATURE_CONTROL_PORT_WRITE);
-    reserve_port (INPUT_STATUS0_PORT_READ);
-    reserve_port (INPUT_STATUS1_PORT_READ);
-
-    reserve_port (SEQUENCER_ADDRESS_PORT);
-    reserve_port (SEQUENCER_DATA_PORT);
-
-    reserve_port (CRT_ADDRESS_PORT);
-    reserve_port (CRT_DATA_PORT);
-
-    reserve_port (GRAPHICS_ADDRESS_PORT);
-    reserve_port (GRAPHICS_DATA_PORT);
+    if (reserve_port (MISCELLANEOUS_OUTPUT_PORT_READ) == -1 ||
+	reserve_port (MISCELLANEOUS_OUTPUT_PORT_WRITE) == -1 ||
+	reserve_port (FEATURE_CONTROL_PORT_READ) == -1 ||
+	reserve_port (FEATURE_CONTROL_PORT_WRITE) == -1 ||
+	reserve_port (SEQUENCER_ADDRESS_PORT) == -1 ||
+	reserve_port (SEQUENCER_DATA_PORT) == -1 ||
+	reserve_port (CRT_ADDRESS_PORT) == -1 ||
+	reserve_port (CRT_DATA_PORT) == -1 ||
+	reserve_port (GRAPHICS_ADDRESS_PORT) == -1 ||
+	reserve_port (GRAPHICS_DATA_PORT) == -1) {
+      syslog ("vga: Could not reserve vga ports");
+      exit ();
+    }
 
     /* Map in the video memory. */
-    map ((const void*)VIDEO_MEMORY_BEGIN, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE);
+    if (map ((const void*)VIDEO_MEMORY_BEGIN, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE) == -1) {
+      syslog ("vga: Could not map vga memory");
+      exit ();
+    }
     /* Clear the text region. */
     memset ((void*)TEXT_MEMORY_BEGIN, 0, TEXT_MEMORY_SIZE);
 
@@ -549,7 +554,15 @@ initialize (void)
 
     /* Copy the state into a buffer. */
     default_data = buffer_create (size_to_pages (VIDEO_MEMORY_SIZE));
+    if (default_data == -1) {
+      syslog ("vga: Could not create default buffer");
+      exit ();
+    }
     void* ptr = buffer_map (default_data);
+    if (ptr == 0) {
+      syslog ("vga: Could not map default buffer");
+      exit ();
+    }
     memcpy (ptr, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE);
     buffer_unmap (default_data);
 
@@ -557,12 +570,23 @@ initialize (void)
   }
 }
 
+static void
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  finish (NO_ACTION, 0, false, -1, -1);
+}
+
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  buffer_destroy (bda);
-  buffer_destroy (bdb);
-  finish (NO_ACTION, 0, false, -1, -1);
+  end_input_action (bda, bdb);
 }
 
 /* typedef struct { */
@@ -595,9 +619,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
   vga_op_list_t vol;
   size_t count;
   if (vga_op_list_initr (&vol, bda, bdb, &count) == -1) {
-    buffer_destroy (bda);
-    buffer_destroy (bdb);
-    finish (NO_ACTION, 0, false, -1, -1);
+    end_input_action (bda, bdb);
   }
 
   client_context_t* context = find_client_context (aid);
@@ -611,9 +633,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
   for (size_t i = 0; i != count; ++i) {
     vga_op_type_t type;
     if (vga_op_list_next_op_type (&vol, &type) == -1) {
-      buffer_destroy (bda);
-      buffer_destroy (bdb);
-      finish (NO_ACTION, 0, false, -1, -1);
+      end_input_action (bda, bdb);
     }
 
     switch (type) {
@@ -621,9 +641,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
       {
   	size_t address;
   	if (vga_op_list_read_set_start_address (&vol, &address) == -1) {
-  	  buffer_destroy (bda);
-  	  buffer_destroy (bdb);
-  	  finish (NO_ACTION, 0, false, -1, -1);
+	  end_input_action (bda, bdb);
   	}
   	set_start_address (&context->registers, address);
       }
@@ -632,9 +650,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
       {
   	size_t location;
   	if (vga_op_list_read_set_cursor_location (&vol, &location) == -1) {
-  	  buffer_destroy (bda);
-  	  buffer_destroy (bdb);
-  	  finish (NO_ACTION, 0, false, -1, -1);
+	  end_input_action (bda, bdb);
   	}
   	set_cursor_location (&context->registers, location);
       }
@@ -645,23 +661,17 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
   	const void* data;
   	size_t size;
   	if (vga_op_list_read_assign (&vol, &address, &data, &size) == -1) {
-  	  buffer_destroy (bda);
-  	  buffer_destroy (bdb);
-  	  finish (NO_ACTION, 0, false, -1, -1);
+	  end_input_action (bda, bdb);
   	}
   	//assign (context, address, data, size);
       }
       break;
     default:
-      buffer_destroy (bda);
-      buffer_destroy (bdb);
-      finish (NO_ACTION, 0, false, -1, -1);
+      end_input_action (bda, bdb);
     }
   }
-  
-  buffer_destroy (bda);
-  buffer_destroy (bdb);
-  finish (NO_ACTION, 0, false, -1, -1);
+
+  end_input_action (bda, bdb);
 }
 
 BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t bdb)
@@ -677,7 +687,5 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t b
     destroy_client_context (temp);
   }
 
-  buffer_destroy (bda);
-  buffer_destroy (bdb);
-  finish (NO_ACTION, 0, false, -1, -1);
+  end_input_action (bda, bdb);
 }

@@ -72,7 +72,6 @@ public:
   alloc ()
   {
     kassert (free_head_ != STACK_ALLOCATOR_EOL);
-    
     frame_entry_t idx = free_head_;
     free_head_ = entry_[idx];
     entry_[idx] = -1;

@@ -2,7 +2,6 @@
 #include <automaton.h>
 #include <dymem.h>
 #include <string.h>
-#include <buffer_queue.h>
 #include <fifo_scheduler.h>
 #include <buffer_file.h>
 #include "vga_msg.h"
@@ -277,6 +276,15 @@ static client_t* client_list_head = 0;
 /* The active client. */
 static client_t* active_client = 0;
 
+/* Initialization flag. */
+static bool initialized = false;
+
+/* Buffers for the output. */
+static bool output_buffer_initialized = false;
+static bd_t output_buffer_bda = -1;
+static bd_t output_buffer_bdb = -1;
+static vga_op_list_t output_buffer;
+
 static client_t*
 find_client (aid_t aid)
 {
@@ -290,8 +298,16 @@ create_client (aid_t aid)
 {
   client_t* client = malloc (sizeof (client_t));
   client->aid = aid;
-  client->bd = buffer_create (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE);
+  client->bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
+  if (client->bd == -1) {
+    syslog ("terminal: Could not create client buffer");
+    exit ();
+  }
   client->buffer = buffer_map (client->bd);
+  if (client->buffer == 0) {
+    syslog ("terminal: Could not map client buffer");
+    exit ();
+  }
   /* ECMA-48 states that the initial state of the characters must be "erased."
      We use spaces. */
   unsigned short* data = client->buffer;
@@ -358,11 +374,17 @@ scroll (client_t* client)
   client->cursor_refresh = true;
 }
 
-/* Initialization flag. */
-static bool initialized = false;
-
-/* Queue of buffers that need to be destroyed. */
-static buffer_queue_t destroy_queue;
+static void
+initialize_output_buffer (void)
+{
+  if (!output_buffer_initialized) {
+    output_buffer_initialized = true;
+    if (vga_op_list_initw (&output_buffer, output_buffer_bda, output_buffer_bdb) == -1) {
+      syslog ("terminal: Could not initialize vga op list");
+      exit ();
+    }
+  }
+}
 
 static void
 initialize (void)
@@ -370,14 +392,45 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    buffer_queue_init (&destroy_queue);
+    output_buffer_bda = buffer_create (1);
+    if (output_buffer_bda == -1) {
+      syslog ("terminal: Could not create output buffer");
+      exit ();
+    }
+
+    output_buffer_bdb = buffer_create (0);
+    if (output_buffer_bdb == -1) {
+      syslog ("terminal: Could not create output buffer");
+      exit ();
+    }
   }
 }
 
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb);
+schedule (void);
+
+static void
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  schedule ();
+  scheduler_finish (false, -1, -1);
+}
+
+static void
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
+}
 
 /* typedef struct { */
 /*   aid_t aid; */
@@ -689,19 +742,27 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd
 
   buffer_file_t input_buffer;
   if (buffer_file_initr (&input_buffer, bda) == -1) {
-    end_action (false, bda, bdb);
+    end_input_action (bda, bdb);
   }
 
   size_t size = buffer_file_size (&input_buffer);
   const char* begin = buffer_file_readp (&input_buffer, size);
   if (begin == 0) {
-    end_action (false, bda, bdb);
+    end_input_action (bda, bdb);
   }
 
   /* Find or create the client. */
   client_t* client = find_client (aid);
   if (client == 0) {
     client = create_client (aid);
+  }
+  else {
+    /* The client buffer is appended to the output buffer.
+       Thus, the reference count for the client buffer is at least 2 after an output.
+       If we write to the client buffer, it will be copied for copy-on-write.
+       By reinitializing the output buffer, we potentially drop the reference count to 1 an avoid copy-on-write.
+    */
+    initialize_output_buffer ();
   }
 
   /* Process the string. */
@@ -726,9 +787,16 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd
   /* TODO:  Remove this line. */
   switch_to_client (client);
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
+/* vga_op
+   ------
+   Send the screen for the active client.
+   
+   Pre:  there is an active client that needs to send an update
+   Post: the flags are send and output_buffer_initialized == false
+ */
 static bool
 vga_op_precondition (void)
 {
@@ -741,18 +809,12 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
   scheduler_remove (VGA_OP_NO, param);
 
   if (vga_op_precondition ()) {
-    bd_t bda;
-    bd_t bdb;
-    vga_op_list_t vol;
 
-    if (vga_op_list_initw (&vol, &bda, &bdb) == -1) {
-      syslog ("terminal: Could not initialize vga op list");
-      exit ();
-    }
+    initialize_output_buffer ();
 
     if (active_client->graphics_refresh) {
       /* Send the data. */
-      if (vga_op_list_write_assign (&vol, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) == -1) {
+      if (vga_op_list_write_assign (&output_buffer, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) == -1) {
       	syslog ("terminal: Could not write vga op list");
       	exit ();
       }
@@ -761,17 +823,19 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
 
     if (active_client->cursor_refresh) {
       /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&vol, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) == -1) {
+      if (vga_op_list_write_set_cursor_location (&output_buffer, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) == -1) {
       	syslog ("terminal: Could not write vga op list");
       	exit ();
       }
       active_client->cursor_refresh = false;
     }
 
-    end_action (true, bda, bdb);
+    output_buffer_initialized = false;
+
+    end_output_action (true, output_buffer_bda, output_buffer_bdb);
   }
   else {
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
 }
 
@@ -788,68 +852,13 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t b
     destroy_client (temp);
   }
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
-/* destroy_buffers
-   ---------------
-   Destroys all of the buffers in destroy_queue.
-   This is useful for output actions that need to destroy the buffer *after* the output has fired.
-   To schedule a buffer for destruction, just add it to destroy_queue.
-
-   Pre:  Destroy queue is not empty.
-   Post: Destroy queue is empty.
- */
-static bool
-destroy_buffers_precondition (void)
-{
-  return !buffer_queue_empty (&destroy_queue);
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
-{
-  initialize ();
-  scheduler_remove (DESTROY_BUFFERS_NO, param);
-
-  if (destroy_buffers_precondition ()) {
-    while (!buffer_queue_empty (&destroy_queue)) {
-      bd_t bd;
-      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
-      bd = buffer_queue_item_bda (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-      bd = buffer_queue_item_bdb (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-
-      buffer_queue_pop (&destroy_queue);
-    }
-  }
-
-  end_action (false, -1, -1);
-}
-
-/* end_action is a helper function for terminating actions.
-   If the buffer is not -1, it schedules it to be destroyed.
-   end_action schedules local actions and calls scheduler_finish to finish the action.
-*/
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb)
+schedule (void)
 {
-  if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
-  }
-
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
   if (vga_op_precondition ()) {
     scheduler_add (VGA_OP_NO, 0);
   }
-
-  scheduler_finish (output_fired, bda, bdb);
 }

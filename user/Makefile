@@ -45,7 +45,7 @@ kb_us_104 : kb_us_104.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 terminal : terminal.o vga_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -lbuffer_queue -ldymem -lstring
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 vga : vga.o vga_msg.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem -lstring
