@@ -71,6 +71,11 @@ namespace vm {
     COPY_ON_WRITE = 1,
   };
 
+  enum buffer_t {
+    NOT_BUFFER = 0,
+    BUFFER = 1,
+  };
+
   inline page_table_idx_t
   get_page_table_idx (logical_address_t address)
   {
@@ -101,7 +106,8 @@ namespace vm {
     unsigned int zero_ : 1;
     unsigned int global_ : 1;
     unsigned int copy_on_write_ : 1;
-    unsigned int available_ : 2;
+    unsigned int buffer_ : 1;
+    unsigned int available_ : 1;
     unsigned int frame_ : 20;
     
     page_table_entry () :
@@ -115,12 +121,14 @@ namespace vm {
       zero_ (0),
       global_ (NOT_GLOBAL),  
       copy_on_write_ (NOT_COPY_ON_WRITE),
+      buffer_ (NOT_BUFFER),
       available_ (0),
       frame_ (0)
     { }
 
     page_table_entry (frame_t frame,
 		      copy_on_write_t cow,
+		      buffer_t buf,
 		      page_privilege_t privilege,
 		      writable_t writable,
 		      present_t present) :
@@ -134,6 +142,7 @@ namespace vm {
       zero_ (0),
       global_ (NOT_GLOBAL),
       copy_on_write_ (cow),
+      buffer_ (buf),
       available_ (0),
       frame_ (frame)
     { }
@@ -153,8 +162,7 @@ namespace vm {
     unsigned int zero_ : 1;
     unsigned int page_size_ : 1;
     unsigned int ignored_ : 1;
-    unsigned int copy_on_write_ : 1;
-    unsigned int available_ : 2;
+    unsigned int available_ : 3;
     unsigned int frame_ : 20;
 
     page_directory_entry () :
@@ -167,7 +175,6 @@ namespace vm {
       zero_ (0),
       page_size_ (PAGE_SIZE_4K),
       ignored_ (0),
-      copy_on_write_ (NOT_COPY_ON_WRITE),
       available_ (0),
       frame_ (0)
     { }
@@ -184,7 +191,6 @@ namespace vm {
       zero_ (0),
       page_size_ (PAGE_SIZE_4K),
       ignored_ (0),
-      copy_on_write_ (NOT_COPY_ON_WRITE),
       available_ (0),
       frame_ (frame)
     { }
@@ -291,7 +297,8 @@ namespace vm {
        frame_t fr,
        page_privilege_t privilege,
        map_mode_t map_mode,
-       bool not_in_frame_manager)
+       bool incref = true,
+       buffer_t buf = NOT_BUFFER)
   {
     kassert (fr != vm::zero_frame () || map_mode == vm::MAP_COPY_ON_WRITE || map_mode == vm::MAP_READ_ONLY);
 
@@ -315,16 +322,16 @@ namespace vm {
     // Map.
     switch (map_mode) {
     case MAP_READ_WRITE:
-      pt->entry[table_entry] = page_table_entry (fr, vm::NOT_COPY_ON_WRITE, privilege, vm::WRITABLE, PRESENT);
+      pt->entry[table_entry] = page_table_entry (fr, vm::NOT_COPY_ON_WRITE, buf, privilege, vm::WRITABLE, PRESENT);
       break;
     case MAP_READ_ONLY:
-      pt->entry[table_entry] = page_table_entry (fr, vm::NOT_COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      pt->entry[table_entry] = page_table_entry (fr, vm::NOT_COPY_ON_WRITE, buf, privilege, vm::NOT_WRITABLE, PRESENT);
       break;
     case MAP_COPY_ON_WRITE:
-      pt->entry[table_entry] = page_table_entry (fr, vm::COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      pt->entry[table_entry] = page_table_entry (fr, vm::COPY_ON_WRITE, buf, privilege, vm::NOT_WRITABLE, PRESENT);
       break;
     }
-    if (!not_in_frame_manager) {
+    if (incref) {
       frame_manager::incref (fr);
     }
     // Flush the TLB.
@@ -334,7 +341,8 @@ namespace vm {
   inline void
   remap (logical_address_t logical_addr,
 	 page_privilege_t privilege,
-	 map_mode_t map_mode)
+	 map_mode_t map_mode,
+	 buffer_t buf = NOT_BUFFER)
   {
     kassert (logical_address_to_frame (logical_addr) != vm::zero_frame () || map_mode == vm::MAP_COPY_ON_WRITE || map_mode == vm::MAP_READ_ONLY);
 
@@ -348,16 +356,36 @@ namespace vm {
 
     switch (map_mode) {
     case MAP_READ_WRITE:
-      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::NOT_COPY_ON_WRITE, privilege, vm::WRITABLE, PRESENT);
+      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::NOT_COPY_ON_WRITE, buf, privilege, vm::WRITABLE, PRESENT);
       break;
     case MAP_READ_ONLY:
-      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::NOT_COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::NOT_COPY_ON_WRITE, buf, privilege, vm::NOT_WRITABLE, PRESENT);
       break;
     case MAP_COPY_ON_WRITE:
-      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::COPY_ON_WRITE, privilege, vm::NOT_WRITABLE, PRESENT);
+      page_table->entry[table_entry] = page_table_entry (page_table->entry[table_entry].frame_, vm::COPY_ON_WRITE, buf, privilege, vm::NOT_WRITABLE, PRESENT);
       break;
     }
 
+    /* Flush the TLB. */
+    asm ("invlpg (%0)\n" :: "r"(logical_addr));
+  }
+
+  inline void
+  unmap (logical_address_t logical_addr,
+	 bool decref = true)
+  {
+    page_directory* page_directory = get_page_directory ();
+    page_table* page_table = get_page_table (logical_addr);
+    const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
+    const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
+    
+    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
+    kassert (page_table->entry[table_entry].present_ == PRESENT);
+
+    if (decref) {
+      frame_manager::decref (page_table->entry[table_entry].frame_);
+    }
+    page_table->entry[table_entry] = page_table_entry ();
     /* Flush the TLB. */
     asm ("invlpg (%0)\n" :: "r"(logical_addr));
   }
@@ -403,9 +431,8 @@ namespace vm {
     return static_cast<copy_on_write_t> (page_table->entry[table_entry].copy_on_write_);
   }
 
-  inline void
-  unmap (logical_address_t logical_addr,
-	 bool decref = true)
+  inline buffer_t
+  get_buffer (logical_address_t logical_addr)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
@@ -413,14 +440,8 @@ namespace vm {
     const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
     kassert (page_directory->entry[directory_entry].present_ == PRESENT);
-    kassert (page_table->entry[table_entry].present_ == PRESENT);
-
-    if (decref) {
-      frame_manager::decref (page_table->entry[table_entry].frame_);
-    }
-    page_table->entry[table_entry] = page_table_entry ();
-    /* Flush the TLB. */
-    asm ("invlpg (%0)\n" :: "r"(logical_addr));
+    
+    return static_cast<buffer_t> (page_table->entry[table_entry].buffer_);
   }
 
   inline physical_address_t
@@ -502,7 +523,7 @@ namespace vm {
   // check_zero_frame (void)
   // {
   //   bool flag = true;
-  //   vm::map (vm::get_stub1 (), vm::zero_frame (), vm::USER, vm::MAP_READ_ONLY, false);
+  //   vm::map (vm::get_stub1 (), vm::zero_frame (), vm::USER, vm::MAP_READ_ONLY);
   //   const char* c = reinterpret_cast<const char*> (vm::get_stub1 ());
   //   for (size_t idx = 0; idx != PAGE_SIZE; ++idx) {
   //     flag = (flag && c[idx] == 0);

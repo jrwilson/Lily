@@ -23,7 +23,7 @@ kernel_alloc::sbrk (size_t size)
     for (size_t x = 0; x != size; x += PAGE_SIZE) {
       frame_t frame = frame_manager::alloc ();
       kassert (frame != vm::zero_frame ());
-      vm::map (retval + x, frame, vm::USER, vm::MAP_READ_WRITE, false);
+      vm::map (retval + x, frame, vm::USER, vm::MAP_READ_WRITE);
     }
     // Switch back.
     vm::switch_to_directory (old);

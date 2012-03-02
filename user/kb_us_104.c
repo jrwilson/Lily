@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <buffer_queue.h>
 #include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
@@ -192,36 +191,26 @@ static char upper_case[128] = {
   /* Num Lock, / * - + 1234567890. Enter*/
 };
 
-#define DESTROY_BUFFERS_NO 1
-#define SCAN_CODE_NO 2
-#define TEXT_NO 3
+#define SCAN_CODE_NO 1
+#define TEXT_NO 2
 
 /* Initialization flag. */
 static bool initialized = false;
 
-/* Queue of buffers that need to be destroyed. */
-static buffer_queue_t destroy_queue;
-
 /* Processed scan codes. */
-static buffer_file_t output_buffer;
+static bool output_buffer_initialized = false;
 static bd_t output_buffer_bd = -1;
-
-static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb);
+static buffer_file_t output_buffer;
 
 static void
 initialize_output_buffer (void)
 {
-  output_buffer_bd = buffer_create (1);
-  if (output_buffer_bd == -1) {
-    syslog ("kb_us_104: error: Could not create output buffer");
-    exit ();
-  }
-  if (buffer_file_initc (&output_buffer, output_buffer_bd) == -1) {
-    syslog ("kb_us_104: error: Could not initialize output buffer");
-    exit ();
+  if (!output_buffer_initialized) {
+    output_buffer_initialized = true;
+    if (buffer_file_initc (&output_buffer, output_buffer_bd) == -1) {
+      syslog ("kb_us_104: error: Could not initialize output buffer");
+      exit ();
+    }
   }
 }
 
@@ -231,31 +220,69 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    buffer_queue_init (&destroy_queue);
-    initialize_output_buffer ();
+    /* Allocate the output buffer. */
+    output_buffer_bd = buffer_create (1);
+    if (output_buffer_bd == -1) {
+      syslog ("kb_us_104: error: Could not create output buffer");
+      exit ();
+    }
   }
+}
+
+static void
+schedule (void);
+
+static void
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  schedule ();
+  scheduler_finish (false, -1, -1);
+}
+
+static void
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
 }
 
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
+/* scan_code
+   ---------
+   Convert scancodes into ASCII text.
+   
+   Post: if successful, then output_buffer_initialized == true && the output buffer is not empty
+ */
 BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
   buffer_file_t input_buffer;
   if (buffer_file_initr (&input_buffer, bda) == -1) {
-    end_action (false, bda, bdb);
+    end_input_action (bda, bdb);
   }
 
   size_t size = buffer_file_size (&input_buffer);
   const unsigned char* codes = buffer_file_readp (&input_buffer, size);
   if (codes == 0) {
-    end_action (false, bda, bdb);
+    end_input_action (bda, bdb);
   }
+
+  initialize_output_buffer ();
 
   for (size_t idx = 0; idx != size; ++idx) {
     unsigned char c = codes[idx];
@@ -294,7 +321,12 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, 
 	  }
 	  
 	  if (t != 0) {
-	    buffer_file_write (&output_buffer, &t, 1);
+	    if (buffer_file_put (&output_buffer, t) == -1) {
+	      if (output_buffer_bd == -1) {
+		syslog ("kb_us_104: error: Could not write to output buffer");
+		exit ();
+	      }
+	    }
 	  }
 	  /* else { */
 	  /*   /\* TODO *\/ */
@@ -328,13 +360,20 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, 
     }
   }
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
+/* text
+   ----
+   Output a string of ASCII text.
+   
+   Pre:  output_buffer_initialized == true && the output buffer is not empty
+   Post: output_buffer_initialized == false
+ */
 static bool
 text_precondition (void)
 {
-  return buffer_file_size (&output_buffer) != 0;
+  return output_buffer_initialized && buffer_file_size (&output_buffer) != 0;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, int param)
@@ -343,74 +382,18 @@ BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, int param)
   scheduler_remove (TEXT_NO, param);
 
   if (text_precondition ()) {
-    bd_t bd = output_buffer_bd;
-    initialize_output_buffer ();
-    end_action (true, bd, -1);
+    output_buffer_initialized = false;
+    end_output_action (true, output_buffer_bd, -1);
   }
   else {
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
 }
 
-/* destroy_buffers
-   ---------------
-   Destroys all of the buffers in destroy_queue.
-   This is useful for output actions that need to destroy the buffer *after* the output has fired.
-   To schedule a buffer for destruction, just add it to destroy_queue.
-
-   Pre:  Destroy queue is not empty.
-   Post: Destroy queue is empty.
- */
-static bool
-destroy_buffers_precondition (void)
-{
-  return !buffer_queue_empty (&destroy_queue);
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
-{
-  initialize ();
-  scheduler_remove (DESTROY_BUFFERS_NO, param);
-
-  if (destroy_buffers_precondition ()) {
-    while (!buffer_queue_empty (&destroy_queue)) {
-      bd_t bd;
-      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
-      bd = buffer_queue_item_bda (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-      bd = buffer_queue_item_bdb (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-
-      buffer_queue_pop (&destroy_queue);
-    }
-  }
-
-  end_action (false, -1, -1);
-}
-
-/* end_action is a helper function for terminating actions.
-   If the buffer is not -1, it schedules it to be destroyed.
-   end_action schedules local actions and calls scheduler_finish to finish the action.
-*/
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb)
+schedule (void)
 {
-  if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
-  }
-
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
   if (text_precondition ()) {
     scheduler_add (TEXT_NO, 0);
   }
-
-  scheduler_finish (output_fired, bda, bdb);
 }

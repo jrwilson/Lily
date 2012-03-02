@@ -649,7 +649,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
   	  buffer_destroy (bdb);
   	  finish (NO_ACTION, 0, false, -1, -1);
   	}
-  	assign (context, address, data, size);
+  	//assign (context, address, data, size);
       }
       break;
     default:

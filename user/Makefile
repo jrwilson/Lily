@@ -39,10 +39,10 @@ jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring
 
 keyboard : keyboard.o
-	$(CC) -o $@ $^ -lio -lbuffer_queue -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 kb_us_104 : kb_us_104.o
-	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 terminal : terminal.o vga_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -lbuffer_queue -ldymem -lstring

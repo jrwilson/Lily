@@ -68,6 +68,46 @@ buffer_file_write (buffer_file_t* bf,
 }
 
 int
+buffer_file_put (buffer_file_t* bf,
+		 char c)
+{
+  if (!bf->can_update) {
+    return -1;
+  }
+  
+  size_t new_position = bf->position + 1;
+  if (new_position < bf->position) {
+    /* Overflow. */
+    return -1;
+  }
+  
+  /* Resize if necessary. */
+  if (bf->capacity < new_position) {
+    if (buffer_unmap (bf->bd) == -1) {
+      return -1;
+    }
+    bf->capacity = ALIGN_UP (new_position, pagesize ());
+    bf->bd_size = bf->capacity / pagesize ();
+    if (buffer_resize (bf->bd, bf->bd_size) == -1) {
+      return -1;
+    }
+    bf->ptr = buffer_map (bf->bd);
+    if (bf->ptr == 0) {
+      return -1;
+    }
+  }
+  
+  *((char*)(bf->ptr + bf->position)) = c;
+  bf->position = new_position;
+  if (bf->position > bf->size) {
+    bf->size = bf->position;
+    *((size_t*)bf->ptr) = bf->size;
+  }
+
+  return 0;
+}
+
+int
 buffer_file_initr (buffer_file_t* bf,
 		   bd_t bd)
 {

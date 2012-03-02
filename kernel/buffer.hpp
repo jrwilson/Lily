@@ -88,7 +88,8 @@ public:
     end_ = begin_ + frame_list_.size () * PAGE_SIZE;
 
     for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
-      vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
+      /* Do not increment the reference count. */
+      vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false, vm::BUFFER);
     }
   }
 
@@ -100,7 +101,8 @@ public:
       begin_ = end_ - frame_list_.size () * PAGE_SIZE;
       
       for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
-	vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
+	/* Do not increment the reference count. */
+	vm::map (begin_ + idx * PAGE_SIZE, frame_list_[idx], vm::USER, vm::MAP_COPY_ON_WRITE, false, vm::BUFFER);
       }
     }
   }
@@ -112,7 +114,8 @@ public:
       sync (0, frame_list_.size ());
 
       for (size_t idx = 0; idx != frame_list_.size (); ++idx) {
-	vm::unmap (begin_ + idx * PAGE_SIZE);
+	/* Do not decrement the reference count. */
+	vm::unmap (begin_ + idx * PAGE_SIZE, false);
       }
 
       begin_ = 0;
@@ -182,14 +185,14 @@ public:
     for (size_t idx = 0; idx != (src_end - src_begin); ++idx) {
       if (begin_ != 0) {
 	// Unmap.
-	vm::unmap (begin_ + (dst_begin + idx) * PAGE_SIZE);
+	vm::unmap (begin_ + (dst_begin + idx) * PAGE_SIZE, false);
       }
       frame_manager::decref (frame_list_[dst_begin + idx]);
       frame_list_[dst_begin + idx] = src.frame_list_[src_begin + idx];
       frame_manager::incref (frame_list_[dst_begin + idx]);
       if (begin_ != 0) {
 	// Map.
-	vm::map (begin_ + (dst_begin + idx) * PAGE_SIZE, frame_list_[dst_begin + idx], vm::USER, vm::MAP_COPY_ON_WRITE, false);
+	vm::map (begin_ + (dst_begin + idx) * PAGE_SIZE, frame_list_[dst_begin + idx], vm::USER, vm::MAP_COPY_ON_WRITE, false, vm::BUFFER);
       }
     }
   }
@@ -213,10 +216,13 @@ public:
       for (; begin != end; ++begin) {
 	frame_t actual = vm::logical_address_to_frame (begin_ + begin * PAGE_SIZE);
 	if (frame_list_[begin] != actual) {
+	  // The frame changed.  Its reference count must be 1.
+	  kassert (frame_manager::ref_count (actual) == 1);
+	  // Decrement the reference for the old frame.
 	  frame_manager::decref (frame_list_[begin]);
 	  frame_list_[begin] = actual;
-	  frame_manager::incref (actual);
-	  vm::remap (begin_ + begin * PAGE_SIZE, vm::USER, vm::MAP_COPY_ON_WRITE);
+	  // We don't need to increment the reference count for the new frame as it should be 1.
+	  vm::remap (begin_ + begin * PAGE_SIZE, vm::USER, vm::MAP_COPY_ON_WRITE, vm::BUFFER);
 	}
       }
     }

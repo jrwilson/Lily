@@ -80,6 +80,18 @@ public:
     return (*pos)->decref (frame);
   }
 
+  /* Return the reference count for a frame. */
+  static inline size_t
+  ref_count (frame_t frame)
+  {
+    allocator_list_type::iterator pos = find_allocator (frame);
+    
+    /* No allocator for frame. */
+    kassert (pos != allocator_list_.end ());
+    
+    return (*pos)->ref_count (frame);
+  }
+
 private:
   typedef vector<stack_allocator*> allocator_list_type;
   static allocator_list_type allocator_list_;

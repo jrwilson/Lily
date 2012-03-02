@@ -34,6 +34,10 @@ buffer_file_write (buffer_file_t* bf,
 		   size_t size);
 
 int
+buffer_file_put (buffer_file_t* bf,
+		 char c);
+
+int
 buffer_file_initr (buffer_file_t* bf,
 		   bd_t bd);
 

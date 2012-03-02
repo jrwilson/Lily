@@ -188,24 +188,34 @@ exception_dispatch (volatile registers regs)
       	  vm::data_context (error) &&
       	  vm::get_copy_on_write (address) == vm::COPY_ON_WRITE) {
       	// Copy-on-write.
-      	// Allocate a frame.
-      	frame_t dst_frame = frame_manager::alloc ();
-	kassert (dst_frame != vm::zero_frame ());
-      	// Map it in at the stub.
-      	vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
-      	// Copy.
-      	memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
-      	// Unmap the source.
-      	vm::unmap (address);
-      	// Unmap the stub.
-      	vm::unmap (vm::get_stub1 ());
-      	// Map in the destination.
-      	vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE, false);
-      	// Remove the reference from allocation.
-      	frame_manager::decref (dst_frame);
+	// Is the frame part of a buffer?
+	vm::buffer_t buf = vm::get_buffer (address);
+	frame_t src_frame = vm::logical_address_to_frame (address);
+	if (src_frame != vm::zero_frame () && frame_manager::ref_count (src_frame) == 1) {
+	  // The frame is not shared so we can just remap it.
+	  vm::remap (address, vm::USER, vm::MAP_READ_WRITE, buf);
+	}
+	else {
+	  // The frame is shared so make a copy.
+	  // Allocate a frame.
+	  frame_t dst_frame = frame_manager::alloc ();
+	  kassert (dst_frame != vm::zero_frame ());
+	  // Map it in at the stub.
+	  vm::map (vm::get_stub1 (), dst_frame, vm::USER, vm::MAP_READ_WRITE);
+	  // Copy.
+	  memcpy (reinterpret_cast<void *> (vm::get_stub1 ()), reinterpret_cast<const void*> (align_down (address, PAGE_SIZE)), PAGE_SIZE);
+	  // Unmap the source.  Decrement if not a buffer.
+	  vm::unmap (address, buf != vm::BUFFER);
+	  // Unmap the stub.
+	  vm::unmap (vm::get_stub1 ());
+	  // Map in the destination with the same buffer status.
+	  vm::map (address, dst_frame, vm::USER, vm::MAP_READ_WRITE, true, buf);
+	  // Remove the reference from allocation.  The final reference count for dst_frame is 1.
+	  frame_manager::decref (dst_frame);
 
-	static size_t copy_count = 0;
-	kout << scheduler::current_action ().action->automaton->aid () << " " << hexformat (address) << " copy_count = " << ++copy_count << endl;
+	  static size_t copy_count = 0;
+	  kout << scheduler::current_action ().action->automaton->aid () << " " << hexformat (address) << " copy_count = " << ++copy_count << endl;
+	}
 
       	// Done.
       	return;

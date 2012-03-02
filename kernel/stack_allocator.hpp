@@ -108,6 +108,16 @@ public:
     return retval;
   }
 
+  inline size_t
+  ref_count (frame_t frame)
+  {
+    kassert (frame >= begin_ && frame < end_);
+    frame_entry_t idx = frame - begin_;
+    /* Frame is allocated. */
+    kassert (entry_[idx] < 0);
+    return -entry_[idx];
+  }
+
 private:
   typedef int16_t frame_entry_t;
   static const frame_entry_t STACK_ALLOCATOR_EOL = -32768;

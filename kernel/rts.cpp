@@ -74,7 +74,7 @@ namespace rts {
     frame_t frame = frame_manager::alloc ();
     kassert (frame != vm::zero_frame ());
     // Map the page directory.
-    vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE, false);
+    vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE);
     vm::page_directory* pd = reinterpret_cast<vm::page_directory*> (vm::get_stub1 ());
     // Initialize the page directory with a copy of the kernel.
     // Since the second argument is vm::SUPERVISOR, the automaton cannot access the paging area, i.e., manipulate virtual memory.
@@ -198,7 +198,7 @@ namespace rts {
     for (frame_map_type::const_iterator pos = frame_map_.begin ();
     	 pos != frame_map_.end ();
     	 ++pos) {
-      vm::map (pos->first, pos->second.first, vm::USER, pos->second.second, false);
+      vm::map (pos->first, pos->second.first, vm::USER, pos->second.second);
     }
 
     // Clear.
@@ -669,7 +669,7 @@ namespace rts {
     physical_address_t pa = source_begin;
     for (logical_address_t la = destination_begin; la != destination_end; la += PAGE_SIZE, pa += PAGE_SIZE) {
       mmapped_frames_[physical_address_to_frame (pa)] = true;
-      vm::map (la, physical_address_to_frame (pa), vm::USER, vm::MAP_READ_WRITE, true);
+      vm::map (la, physical_address_to_frame (pa), vm::USER, vm::MAP_READ_WRITE, false);
     }
 
     // Success.

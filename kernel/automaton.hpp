@@ -316,7 +316,7 @@ public:
     for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
       frame_t frame = frame_manager::alloc ();
       kassert (frame != vm::zero_frame ());
-      vm::map (address, frame, vm::USER, vm::MAP_READ_WRITE, false);
+      vm::map (address, frame, vm::USER, vm::MAP_READ_WRITE);
     }
   }
 
@@ -436,7 +436,7 @@ public:
 	  
 	  // Map the zero frame.
 	  for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
-	    vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE, false);
+	    vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
 	  }
 	  
 	  return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
