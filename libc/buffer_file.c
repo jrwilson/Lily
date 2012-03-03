@@ -11,6 +11,13 @@ buffer_file_initc (buffer_file_t* bf,
   if (bf->bd_size == -1) {
     return -1;
   }
+  if (bf->bd_size == 0) {
+    buffer_unmap (bd);
+    if (buffer_resize (bd, 1) == -1) {
+      return -1;
+    }
+    bf->bd_size = 1;
+  }
   bf->capacity = bf->bd_size * pagesize ();
   bf->ptr = buffer_map (bd);
   if (bf->ptr == 0) {

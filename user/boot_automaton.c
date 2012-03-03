@@ -1,9 +1,9 @@
 #include <automaton.h>
 #include <string.h>
 #include <fifo_scheduler.h>
-#include <buffer_queue.h>
 #include <callback_queue.h>
 #include <description.h>
+#include <dymem.h>
 #include "cpio.h"
 #include "vfs_msg.h"
 #include "argv.h"
@@ -43,19 +43,13 @@
 /* Initialization flag. */
 static bool initialized = false;
 
-/* Queue of buffers that need to be destroyed. */
-static buffer_queue_t destroy_queue;
-
-/* Messages to the vfs. */
-static buffer_queue_t vfs_request_queue;
+/* Queue contains requests for the vfs. */
+static bd_t vfs_request_bda = -1;
+static bd_t vfs_request_bdb = -1;
+static vfs_request_queue_t vfs_request_queue;
 
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
-
-static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb);
 
 static void
 initialize (void)
@@ -63,10 +57,46 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    buffer_queue_init (&destroy_queue);
-    buffer_queue_init (&vfs_request_queue);
+    vfs_request_bda = buffer_create (1);
+    if (vfs_request_bda == -1) {
+      syslog ("boot_automaton: error: Could not create vfs request buffer");
+      exit ();
+    }
+    vfs_request_bdb = buffer_create (0);
+    if (vfs_request_bdb == -1) {
+      syslog ("boot_automaton: error: Could not create vfs request buffer");
+      exit ();
+    }
+
+    vfs_request_queue_init (&vfs_request_queue, vfs_request_bda, vfs_request_bdb);
     callback_queue_init (&vfs_response_queue);
   }
+}
+
+static void
+schedule (void);
+
+static void
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  schedule ();
+  scheduler_finish (false, -1, -1);
+}
+
+static void
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
 }
 
 static void
@@ -128,16 +158,8 @@ mount_callback (void* data,
   }
 
   /* Request the shell. */
-  {
-    bd_t bda;
-    bd_t bdb;
-    if (write_vfs_readfile_request (SHELL_PATH, &bda, &bdb) == 1) {
-      syslog ("boot_automaton: error: Could not create readfile request");
-      exit ();
-    }
-    buffer_queue_push (&vfs_request_queue, 0, bda, 0, bdb, 0);
-    callback_queue_push (&vfs_response_queue, readfile_callback, 0);
-  }
+  vfs_request_queue_push_readfile (&vfs_request_queue, SHELL_PATH);
+  callback_queue_push (&vfs_response_queue, readfile_callback, 0);
 }
 
 /* init
@@ -226,18 +248,10 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   }
 
   /* Mount tmpfs on ROOT_PATH. */
-  {
-    bd_t bda2;
-    bd_t bdb2;
-    if (write_vfs_mount_request (tmpfs, ROOT_PATH, &bda2, &bdb2) == -1) {
-      syslog ("boot_automaton: error: Could not create mount request");
-      exit ();
-    }
-    buffer_queue_push (&vfs_request_queue, 0, bda2, 0, bdb2, 0);
-    callback_queue_push (&vfs_response_queue, mount_callback, 0);
-  }
+  vfs_request_queue_push_mount (&vfs_request_queue, tmpfs, ROOT_PATH);
+  callback_queue_push (&vfs_response_queue, mount_callback, 0);
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
 /* vfs_request
@@ -250,7 +264,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
 static bool
 vfs_request_precondition (void)
 {
-  return !buffer_queue_empty (&vfs_request_queue);
+  return !vfs_request_queue_empty (&vfs_request_queue);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
@@ -259,15 +273,14 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    const buffer_queue_item_t* item = buffer_queue_front (&vfs_request_queue);
-    bd_t bda = buffer_queue_item_bda (item);
-    bd_t bdb = buffer_queue_item_bdb (item);
-    buffer_queue_pop (&vfs_request_queue);
-
-    end_action (true, bda, bdb);
+    if (vfs_request_queue_pop (&vfs_request_queue) == -1) {
+      syslog ("boot_automaton: error: Could not write to output buffer");
+      exit ();
+    }
+    end_output_action (true, vfs_request_bda, vfs_request_bdb);
   }
   else {
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
 }
 
@@ -293,68 +306,13 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
 
   callback (data, bda, bdb);
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
-/* destroy_buffers
-   ---------------
-   Destroys all of the buffers in destroy_queue.
-   This is useful for output actions that need to destroy the buffer *after* the output has fired.
-   To schedule a buffer for destruction, just add it to destroy_queue.
-
-   Pre:  Destroy queue is not empty.
-   Post: Destroy queue is empty.
- */
-static bool
-destroy_buffers_precondition (void)
-{
-  return !buffer_queue_empty (&destroy_queue);
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
-{
-  initialize ();
-  scheduler_remove (DESTROY_BUFFERS_NO, param);
-
-  if (destroy_buffers_precondition ()) {
-    while (!buffer_queue_empty (&destroy_queue)) {
-      bd_t bd;
-      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
-      bd = buffer_queue_item_bda (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-      bd = buffer_queue_item_bdb (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-
-      buffer_queue_pop (&destroy_queue);
-    }
-  }
-
-  end_action (false, -1, -1);
-}
-
-/* end_action is a helper function for terminating actions.
-   If the buffer is not -1, it schedules it to be destroyed.
-   end_action schedules local actions and calls scheduler_finish to finish the action.
-*/
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb)
+schedule (void)
 {
-  if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
-  }
-
   if (vfs_request_precondition ()) {
     scheduler_add (VFS_REQUEST_NO, 0);
   }
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
-
-  scheduler_finish (output_fired, bda, bdb);
 }

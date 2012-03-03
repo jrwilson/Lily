@@ -260,6 +260,11 @@ path_lookup_resume (void)
       }
     }
 
+    if (*path_lookup_end == 0) {
+      path_lookup_done = true;
+      return;
+    }
+
     /* Advance to the next element in the path. */
     path_lookup_begin = path_lookup_end + 1;
 

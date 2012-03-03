@@ -377,6 +377,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
 	}
       }
 
+
       /* Didn't find it. */
       form_descend_response (VFS_FS_CHILD_DNE, &no_node);
       end_action (false, bda, bdb);

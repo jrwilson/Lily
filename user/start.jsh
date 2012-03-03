@@ -20,6 +20,6 @@
 # Bind everything together.
 bind @keyboard scan_code @kb_us_104 scan_code
 bind @kb_us_104 text @terminal text
-#bind @terminal vga_op @vga vga_op
+bind @terminal vga_op @vga vga_op
 
 # Must end in newline

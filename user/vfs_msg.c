@@ -2,6 +2,23 @@
 #include <automaton.h>
 #include <string.h>
 #include <buffer_file.h>
+#include <dymem.h>
+
+struct vfs_request_queue_item {
+  vfs_type_t type;
+  union {
+    struct {
+      aid_t aid;
+      char* path;
+      size_t path_size;
+    } mount;
+    struct {
+      char* path;
+      size_t path_size;
+    } readfile;
+  } u;
+  vfs_request_queue_item_t* next;
+};
 
 int
 read_vfs_request_type (bd_t bda,
@@ -50,37 +67,96 @@ write_vfs_unknown_response (vfs_error_t error,
   return 0;
 }
 
-int
-write_vfs_mount_request (aid_t aid,
-			 const char* path,
-			 bd_t* bda,
-			 bd_t* bdb)
+void
+vfs_request_queue_init (vfs_request_queue_t* vrq,
+			bd_t bda,
+			bd_t bdb)
 {
-  vfs_type_t type = VFS_MOUNT;
-  size_t path_size = strlen (path) + 1;
+  vrq->head = 0;
+  vrq->tail = &vrq->head;
+  vrq->bda = bda;
+  vrq->bdb = bdb;
+}
 
-  size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (aid_t) + sizeof (size_t) + path_size);
-  bd_t bd = buffer_create (bd_sz);
-  if (bd == -1) {
-    return -1;
-  }
+bool
+vfs_request_queue_empty (const vfs_request_queue_t* vrq)
+{
+  return vrq->head == 0;
+}
+
+void
+vfs_request_queue_push_mount (vfs_request_queue_t* vrq,
+			      aid_t aid,
+			      const char* path)
+{
+  vfs_request_queue_item_t* item = malloc (sizeof (vfs_request_queue_item_t));
+  memset (item, 0, sizeof (vfs_request_queue_item_t));
+  item->type = VFS_MOUNT;
+  item->u.mount.aid = aid;
+  size_t size = strlen (path) + 1;
+  item->u.mount.path = malloc (size);
+  memcpy (item->u.mount.path, path, size);
+  item->u.mount.path_size = size;
+  
+  *vrq->tail = item;
+  vrq->tail = &item->next;
+}
+
+void
+vfs_request_queue_push_readfile (vfs_request_queue_t* vrq,
+				 const char* path)
+{
+  vfs_request_queue_item_t* item = malloc (sizeof (vfs_request_queue_item_t));
+  memset (item, 0, sizeof (vfs_request_queue_item_t));
+  item->type = VFS_READFILE;
+  size_t size = strlen (path) + 1;
+  item->u.readfile.path = malloc (size);
+  memcpy (item->u.readfile.path, path, size);
+  item->u.readfile.path_size = size;
+  
+  *vrq->tail = item;
+  vrq->tail = &item->next;
+}
+
+int
+vfs_request_queue_pop (vfs_request_queue_t* vrq)
+{
+  vfs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initc (&file, bd) == -1) {
-    buffer_destroy (bd);
+  if (buffer_file_initc (&file, vrq->bda) == -1) {
     return -1;
   }
 
-  if (buffer_file_write (&file, &type, sizeof (vfs_type_t)) == -1 ||
-      buffer_file_write (&file, &aid, sizeof (aid_t)) == -1 ||
-      buffer_file_write (&file, &path_size, sizeof (size_t)) == -1 ||
-      buffer_file_write (&file, path, path_size) == -1) {
-    buffer_destroy (bd);
-    return -1;
+  switch (item->type) {
+  case VFS_UNKNOWN:
+    /* Do nothing. */
+    break;
+  case VFS_MOUNT:
+    if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) == -1 ||
+	buffer_file_write (&file, &item->u.mount.aid, sizeof (aid_t)) == -1 ||
+	buffer_file_write (&file, &item->u.mount.path_size, sizeof (size_t)) == -1 ||
+	buffer_file_write (&file, item->u.mount.path, item->u.mount.path_size) == -1) {
+      return -1;
+    }
+    free (item->u.mount.path);
+    break;
+  case VFS_READFILE:
+    if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) == -1 ||
+	buffer_file_write (&file, &item->u.readfile.path_size, sizeof (size_t)) == -1 ||
+	buffer_file_write (&file, item->u.readfile.path, item->u.readfile.path_size) == -1) {
+      return -1;
+    }
+    free (item->u.readfile.path);
+    break;
   }
 
-  *bda = bd;
-  *bdb = -1;
+  vrq->head = item->next;
+  if (vrq->head == 0) {
+    vrq->tail = &vrq->head;
+  }
+
+  free (item);
 
   return 0;
 }
@@ -161,39 +237,6 @@ read_vfs_mount_response (bd_t bda,
       buffer_file_read (&file, error, sizeof (vfs_error_t)) == -1) {
     return -1;
   }
-
-  return 0;
-}
-
-int
-write_vfs_readfile_request (const char* path,
-			    bd_t* bda,
-			    bd_t* bdb)
-{
-  vfs_type_t type = VFS_READFILE;
-  size_t path_size = strlen (path) + 1;
-
-  size_t bd_sz = size_to_pages (sizeof (vfs_type_t) + sizeof (size_t) + path_size);
-  bd_t bd = buffer_create (bd_sz);
-  if (bd == -1) {
-    return -1;
-  }
-
-  buffer_file_t file;
-  if (buffer_file_initc (&file, bd) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  if (buffer_file_write (&file, &type, sizeof (vfs_type_t)) == -1 ||
-      buffer_file_write (&file, &path_size, sizeof (size_t)) == -1 ||
-      buffer_file_write (&file, path, path_size) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  *bda = bd;
-  *bdb = -1;
 
   return 0;
 }

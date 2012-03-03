@@ -9,7 +9,7 @@ TARGETS=boot_automaton boot_data
 all : $(TARGETS)
 
 boot_automaton : boot_automaton.o cpio.o vfs_msg.o argv.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -lfifo_scheduler -ldymem -lstring
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 	mkdir -p init_fs/bin

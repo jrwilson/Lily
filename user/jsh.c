@@ -12,7 +12,9 @@
 static buffer_queue_t destroy_queue;
 
 /* Messages to the vfs. */
-static buffer_queue_t vfs_request_queue;
+static bd_t vfs_request_bda = -1;
+static bd_t vfs_request_bdb = -1;
+static vfs_request_queue_t vfs_request_queue;
 
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
@@ -270,13 +272,7 @@ create_ (token_list_item_t* var)
   }
   
   /* Request the text of the automaton. */
-  bd_t bda;
-  bd_t bdb;
-  if (write_vfs_readfile_request (filename->string, &bda, &bdb) == -1) {
-    syslog ("jsh: error: Couldn't create readfile request");
-    exit ();
-  }
-  buffer_queue_push (&vfs_request_queue, 0, bda, 0, bdb, 0);
+  vfs_request_queue_push_readfile (&vfs_request_queue, filename->string);
   callback_queue_push (&vfs_response_queue, create_callback, cc);
   /* Set the flag so we stop trying to evaluate. */
   evaluating = true;
@@ -675,7 +671,18 @@ initialize (void)
     initialized = true;
 
     buffer_queue_init (&destroy_queue);
-    buffer_queue_init (&vfs_request_queue);
+
+    vfs_request_bda = buffer_create (1);
+    if (vfs_request_bda == -1) {
+      syslog ("jsh: error: Could not create output buffer");
+      exit ();
+    }
+    vfs_request_bdb = buffer_create (0);
+    if (vfs_request_bdb == -1) {
+      syslog ("jsh: error: Could not create output buffer");
+      exit ();
+    }
+    vfs_request_queue_init (&vfs_request_queue, vfs_request_bda, vfs_request_bdb);
     callback_queue_init (&vfs_response_queue);
     buffer_queue_init (&interpret_queue);
     scan_string_init ();
@@ -686,6 +693,18 @@ static void
 end_action (bool output_fired,
 	    bd_t bda,
 	    bd_t bdb);
+
+static void
+schedule (void);
+
+static void
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
+}
 
 static void
 readscript_callback (void* data,
@@ -759,13 +778,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 	exit ();
       }
 
-      bd_t bda2;
-      bd_t bdb2;
-      if (write_vfs_readfile_request (filename, &bda2, &bdb2) == -1) {
-	syslog ("jsh: error: Couldn't create readfile request");
-	exit ();
-      }
-      buffer_queue_push (&vfs_request_queue, 0, bda2, 0, bdb2, 0);
+      vfs_request_queue_push_readfile (&vfs_request_queue, filename);
       callback_queue_push (&vfs_response_queue, readscript_callback, 0);
     }
   }
@@ -823,7 +836,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int p
 static bool
 vfs_request_precondition (void)
 {
-  return !buffer_queue_empty (&vfs_request_queue);
+  return !vfs_request_queue_empty (&vfs_request_queue);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
@@ -832,12 +845,11 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    const buffer_queue_item_t* item = buffer_queue_front (&vfs_request_queue);
-    bd_t bda = buffer_queue_item_bda (item);
-    bd_t bdb = buffer_queue_item_bdb (item);
-    buffer_queue_pop (&vfs_request_queue);
-
-    end_action (true, bda, bdb);
+    if (vfs_request_queue_pop (&vfs_request_queue) == -1) {
+      syslog ("jsh: error: Could not write to output buffer");
+      exit ();
+    }
+    end_output_action (true, vfs_request_bda, vfs_request_bdb);
   }
   else {
     end_action (false, -1, -1);
@@ -982,6 +994,23 @@ end_action (bool output_fired,
   }
 
   scheduler_finish (output_fired, bda, bdb);
+}
+
+static void
+schedule (void)
+{
+  if (destroy_buffers_precondition ()) {
+    scheduler_add (DESTROY_BUFFERS_NO, 0);
+  }
+  if (vfs_request_precondition ()) {
+    scheduler_add (VFS_REQUEST_NO, 0);
+  }
+  if (load_text_precondition ()) {
+    scheduler_add (LOAD_TEXT_NO, 0);
+  }
+  if (process_text_precondition ()) {
+    scheduler_add (PROCESS_TEXT_NO, 0);
+  }
 }
 
 /*

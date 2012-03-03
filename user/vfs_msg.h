@@ -2,6 +2,7 @@
 #define VFS_USER_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <lily/types.h>
 
 /*
@@ -35,6 +36,15 @@ typedef enum {
   VFS_NOT_AVAILABLE,
 } vfs_error_t;
 
+typedef struct vfs_request_queue_item vfs_request_queue_item_t;
+
+typedef struct {
+  vfs_request_queue_item_t* head;
+  vfs_request_queue_item_t** tail;
+  bd_t bda;
+  bd_t bdb;
+} vfs_request_queue_t;
+
 int
 read_vfs_request_type (bd_t bda,
 		       bd_t bdb,
@@ -45,11 +55,25 @@ write_vfs_unknown_response (vfs_error_t error,
 			    bd_t* bda,
 			    bd_t* bdb);
 
+void
+vfs_request_queue_init (vfs_request_queue_t* vrq,
+			bd_t bda,
+			bd_t bdb);
+
+bool
+vfs_request_queue_empty (const vfs_request_queue_t* vrq);
+
+void
+vfs_request_queue_push_mount (vfs_request_queue_t* vrq,
+			      aid_t aid,
+			      const char* path);
+
+void
+vfs_request_queue_push_readfile (vfs_request_queue_t* vrq,
+				 const char* path);
+
 int
-write_vfs_mount_request (aid_t aid,
-			 const char* path,
-			 bd_t* bda,
-			 bd_t* bdb);
+vfs_request_queue_pop (vfs_request_queue_t* vrq);
 
 int
 read_vfs_mount_request (bd_t bda,
@@ -67,11 +91,6 @@ int
 read_vfs_mount_response (bd_t bda,
 			 bd_t bdb,
 			 vfs_error_t* error);
-
-int
-write_vfs_readfile_request (const char* path,
-			    bd_t* bda,
-			    bd_t* bdb);
 
 int
 read_vfs_readfile_request (bd_t bda,
