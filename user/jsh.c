@@ -16,8 +16,6 @@ static vfs_request_queue_t vfs_request_queue;
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
 
-static buffer_queue_t destroy_queue;
-
 /*
   Begin Model Section
   ==========================
@@ -109,7 +107,12 @@ create_create_context (const char* var_name,
 static void
 destroy_create_context (create_context_t* cc)
 {
-  buffer_queue_push (&destroy_queue, 0, cc->bda, 0, cc->bdb, 0);  
+  if (cc->bda != -1) {
+    buffer_destroy (cc->bda);
+  }
+  if (cc->bdb != -1) {
+    buffer_destroy (cc->bdb);
+  }
   free (cc->var_name);
   free (cc);
 }
@@ -669,8 +672,6 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    buffer_queue_init (&destroy_queue);
-
     vfs_request_bda = buffer_create (1);
     if (vfs_request_bda == -1) {
       syslog ("jsh: error: Could not create output buffer");
@@ -689,12 +690,21 @@ initialize (void)
 }
 
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb);
+schedule (void);
 
 static void
-schedule (void);
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  schedule ();
+  scheduler_finish (false, -1, -1);
+}
 
 static void
 end_output_action (bool output_fired,
@@ -703,6 +713,13 @@ end_output_action (bool output_fired,
 {
   schedule ();
   scheduler_finish (output_fired, bda, bdb);
+}
+
+static void
+end_internal_action (void)
+{
+  schedule ();
+  scheduler_finish (false, -1, -1);
 }
 
 static void
@@ -782,47 +799,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
     }
   }
 
-  end_action (false, bda, bdb);
-}
-
-/* destroy_buffers
-   ---------------
-   Destroys all of the buffers in destroy_queue.
-   This is useful for output actions that need to destroy the buffer *after* the output has fired.
-   To schedule a buffer for destruction, just add it to destroy_queue.
-
-   Pre:  Destroy queue is not empty.
-   Post: Destroy queue is empty.
- */
-static bool
-destroy_buffers_precondition (void)
-{
-  return !buffer_queue_empty (&destroy_queue);
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
-{
-  initialize ();
-  scheduler_remove (DESTROY_BUFFERS_NO, param);
-
-  if (destroy_buffers_precondition ()) {
-    while (!buffer_queue_empty (&destroy_queue)) {
-      bd_t bd;
-      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
-      bd = buffer_queue_item_bda (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-      bd = buffer_queue_item_bdb (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-
-      buffer_queue_pop (&destroy_queue);
-    }
-  }
-
-  end_action (false, -1, -1);
+  end_input_action (bda, bdb);
 }
 
 /* vfs_request
@@ -851,7 +828,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
     end_output_action (true, vfs_request_bda, vfs_request_bdb);
   }
   else {
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
 }
 
@@ -877,7 +854,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_
 
   callback (data, bda, bdb);
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
 /* load_text
@@ -901,36 +878,44 @@ BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, int param)
   if (load_text_precondition ()) {
     const buffer_queue_item_t* item = buffer_queue_front (&interpret_queue);
     bd_t bda = buffer_queue_item_bda (item);
+    if (bda != -1) {
+      buffer_destroy (bda);
+    }
     bd_t bdb = buffer_queue_item_bdb (item);
     size_t sizeb = buffer_queue_item_sizeb (item);
     buffer_queue_pop (&interpret_queue);
 
     if (bdb == -1) {
-      end_action (false, bda, -1);
+      end_internal_action ();
     }
 
     size_t bdb_bd_size = buffer_size (bdb);
     if (bdb_bd_size == -1) {
-      end_action (false, bda, -1);
+      end_internal_action ();
     }
 
     if (sizeb > bdb_bd_size * pagesize ()) {
-      end_action (false, bda, bdb);
+      if (bdb != -1) {
+	buffer_destroy (bdb);
+      }
+      end_internal_action ();
     }
 
     const char* s = buffer_map (bdb);
     if (s == 0) {
-      end_action (false, bda, bdb);
+      if (bdb != -1) {
+	buffer_destroy (bdb);
+      }
+      end_internal_action ();
     }
 
     interpret_bd = bdb;
     interpret_string = s;
     interpret_string_size = sizeb;
     interpret_string_idx = 0;
-    end_action (false, bda, -1);
   }
 
-  end_action (false, -1, -1);
+  end_internal_action ();
 }
 
 /* process_text
@@ -963,44 +948,12 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, int param)
     }
   }
 
-  end_action (false, -1, -1);
-}
-
-/* end_action is a helper function for terminating actions.
-   If the buffer is not -1, it schedules it to be destroyed.
-   end_action schedules local actions and calls scheduler_finish to finish the action.
-*/
-static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb)
-{
-  if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
-  }
-
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
-  if (vfs_request_precondition ()) {
-    scheduler_add (VFS_REQUEST_NO, 0);
-  }
-  if (load_text_precondition ()) {
-    scheduler_add (LOAD_TEXT_NO, 0);
-  }
-  if (process_text_precondition ()) {
-    scheduler_add (PROCESS_TEXT_NO, 0);
-  }
-
-  scheduler_finish (output_fired, bda, bdb);
+  end_internal_action ();
 }
 
 static void
 schedule (void)
 {
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
   if (vfs_request_precondition ()) {
     scheduler_add (VFS_REQUEST_NO, 0);
   }

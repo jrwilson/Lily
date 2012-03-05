@@ -389,36 +389,6 @@ read_vfs_fs_request_type (bd_t bda,
 }
 
 int
-write_vfs_fs_unknown_response (vfs_fs_error_t error,
-			       bd_t* bda,
-			       bd_t* bdb)
-{
-  size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t));
-  bd_t bd = buffer_create (bd_sz);
-  if (bd == -1) {
-    return -1;
-  }
-
-  buffer_file_t file;
-  if (buffer_file_initc (&file, bd) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  const vfs_fs_type_t type = VFS_FS_UNKNOWN;
-  if (buffer_file_write (&file, &type, sizeof (vfs_type_t)) == -1 ||
-      buffer_file_write (&file, &error, sizeof (vfs_error_t)) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-  
-  *bda = bd;
-  *bdb = -1;
-
-  return 0;
-}
-
-int
 read_vfs_fs_descend_request (bd_t bda,
 			     bd_t bdb,
 			     size_t* id,
@@ -444,38 +414,6 @@ read_vfs_fs_descend_request (bd_t bda,
   }
 
   *name = p;
-
-  return 0;
-}
-
-int
-write_vfs_fs_descend_response (vfs_fs_error_t error,
-			       const vfs_fs_node_t* node,
-			       bd_t* bda,
-			       bd_t* bdb)
-{
-  size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t) + sizeof (vfs_fs_node_t));
-  bd_t bd = buffer_create (bd_sz);
-  if (bd == -1) {
-    return -1;
-  }
-
-  buffer_file_t file;
-  if (buffer_file_initc (&file, bd) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  const vfs_fs_type_t type = VFS_FS_DESCEND;
-  if (buffer_file_write (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
-      buffer_file_write (&file, &error, sizeof (vfs_fs_error_t)) == -1 ||
-      buffer_file_write (&file, node, sizeof (vfs_fs_node_t)) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  *bda = bd;
-  *bdb = -1;
 
   return 0;
 }
@@ -518,36 +456,6 @@ read_vfs_fs_readfile_request (bd_t bda,
       buffer_file_read (&file, id, sizeof (size_t)) == -1) {
     return -1;
   }
-
-  return 0;
-}
-
-int
-write_vfs_fs_readfile_response (vfs_fs_error_t error,
-				size_t size,
-				bd_t* bda)
-{
-  size_t bd_sz = size_to_pages (sizeof (vfs_fs_type_t) + sizeof (vfs_fs_error_t) + sizeof (size_t));
-  bd_t bd = buffer_create (bd_sz);
-  if (bd == -1) {
-    return -1;
-  }
-
-  buffer_file_t file;
-  if (buffer_file_initc (&file, bd) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  const vfs_fs_type_t type = VFS_FS_READFILE;
-  if (buffer_file_write (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
-      buffer_file_write (&file, &error, sizeof (vfs_fs_error_t)) == -1 ||
-      buffer_file_write (&file, &size, sizeof (size_t)) == -1) {
-    buffer_destroy (bd);
-    return -1;
-  }
-
-  *bda = bd;
 
   return 0;
 }

@@ -111,48 +111,6 @@ readfile_callback (void* data,
     exit ();
   }
 
-  switch (error) {
-  case VFS_SUCCESS:
-    syslog ("success");
-    break;
-  case VFS_BAD_REQUEST:
-    syslog ("bad request");
-    break;
-
-  case VFS_BAD_PATH:
-    syslog ("bad path");
-    break;
-
-  case VFS_PATH_DNE:
-    syslog ("path dne");
-    break;
-
-  case VFS_NOT_DIRECTORY:
-    syslog ("not directory");
-    break;
-
-  case VFS_NOT_FILE:
-    syslog ("not file");
-    break;
-
-  case VFS_AID_DNE:
-    syslog ("aid dne");
-    break;
-
-  case VFS_NOT_FS:
-    syslog ("not fs");
-    break;
-
-  case VFS_ALREADY_MOUNTED:
-    syslog ("already mounted");
-    break;
-
-  case VFS_NOT_AVAILABLE:
-    syslog ("success");
-    break;
-
-  }
-
   if (error != VFS_SUCCESS) {
     syslog ("boot_automaton: error: Could not read " SHELL_PATH);
     exit ();
@@ -181,6 +139,8 @@ readfile_callback (void* data,
     syslog ("boot_automaton: error: Could not create " SHELL_PATH);
     exit ();
   }
+
+  /* The bdb buffer will be destroyed by the input action that calls this callback. */
 }
 
 static void

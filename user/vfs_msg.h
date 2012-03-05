@@ -247,17 +247,10 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
 void
 vfs_fs_response_queue_pop (vfs_fs_response_queue_t* vrq);
 
-/* TODO:  Consider removing these. */
-
 int
 read_vfs_fs_request_type (bd_t bda,
 			  bd_t bdb,
 			  vfs_fs_type_t* type);
-
-int
-write_vfs_fs_unknown_response (vfs_fs_error_t error,
-			       bd_t* bda,
-			       bd_t* bdb);
 
 int
 read_vfs_fs_descend_request (bd_t bda,
@@ -265,12 +258,6 @@ read_vfs_fs_descend_request (bd_t bda,
 			     size_t* id,
 			     const char** name,
 			     size_t* name_size);
-
-int
-write_vfs_fs_descend_response (vfs_fs_error_t error,
-			       const vfs_fs_node_t* node,
-			       bd_t* bda,
-			       bd_t* bdb);
 
 int
 read_vfs_fs_descend_response (bd_t bda,
@@ -282,11 +269,6 @@ int
 read_vfs_fs_readfile_request (bd_t bda,
 			      bd_t bdb,
 			      size_t* id);
-
-int
-write_vfs_fs_readfile_response (vfs_fs_error_t error,
-				size_t size,
-				bd_t* bda);
 
 int
 read_vfs_fs_readfile_response (bd_t bda,
