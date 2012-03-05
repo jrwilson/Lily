@@ -3,7 +3,6 @@
 #include <fifo_scheduler.h>
 #include <dymem.h>
 #include <buffer_file.h>
-#include <buffer_queue.h>
 #include "cpio.h"
 #include "vfs_msg.h"
 
@@ -69,7 +68,6 @@
 
 #define TMPFS_REQUEST_NO 1
 #define TMPFS_RESPONSE_NO 2
-#define DESTROY_BUFFERS_NO 3
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -95,11 +93,10 @@ static inode_t* free_list = 0;
 /* Initialization flag. */
 static bool initialized = false;
 
-/* Queue for responses. */
-static buffer_queue_t response_queue;
-
-/* Queue of buffers to destroy. */
-static buffer_queue_t destroy_queue;
+/* Queue of response. */
+static bd_t response_bda = -1;
+static bd_t response_bdb = -1;
+static vfs_fs_response_queue_t response_queue;
 
 static inode_t*
 inode_create (vfs_fs_node_type_t type,
@@ -226,56 +223,45 @@ initialize (void)
     
     /* TODO:  Do we need to make the root its own parent? */
 
-    buffer_queue_init (&response_queue);
-    buffer_queue_init (&destroy_queue);
+    response_bda = buffer_create (0);
+    if (response_bda == -1) {
+      syslog ("tmpfs: error: Could not create output buffer");
+      exit ();
+    }
+    response_bdb = buffer_create (0);
+    if (response_bdb == -1) {
+      syslog ("tmpfs: error: Could not create output buffer");
+      exit ();
+    }
+    vfs_fs_response_queue_init (&response_queue);
   }
 }
 
 static void
-form_unknown_response (vfs_fs_error_t error)
+schedule (void);
+
+static void
+end_input_action (bd_t bda,
+		  bd_t bdb)
 {
-  /* Create a response. */
-  bd_t bda;
-  bd_t bdb;
-  if (write_vfs_fs_unknown_response (error, &bda, &bdb) == -1) {
-    syslog ("tmpfs: error: Could not prepare response");
-    exit ();
+  if (bda != -1) {
+    buffer_destroy (bda);
   }
-  buffer_queue_push (&response_queue, 0, bda, 0, bdb, 0);
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  schedule ();
+  scheduler_finish (false, -1, -1);
 }
 
 static void
-form_descend_response (vfs_fs_error_t error,
-		       const vfs_fs_node_t* node)
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
 {
-  /* Create a response. */
-  bd_t bda;
-  bd_t bdb;
-  if (write_vfs_fs_descend_response (error, node, &bda, &bdb) == -1) {
-    syslog ("tmpfs: error: Could not prepare descend response");
-    exit ();
-  }
-  buffer_queue_push (&response_queue, 0, bda, 0, bdb, 0);
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
 }
-
-static void
-form_readfile_response (vfs_fs_error_t error,
-			size_t size,
-			bd_t content)
-{
-  /* Create a response. */
-  bd_t bda;
-  if (write_vfs_fs_readfile_response (error, size, &bda) == -1) {
-    syslog ("tmpfs: error: Could not prepare readfile response");
-    exit ();
-  }
-  buffer_queue_push (&response_queue, 0, bda, 0, content, 0);
-}
-
-static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb);
 
 BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 {
@@ -325,7 +311,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
     }
   }
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
 BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bda, bd_t bdb)
@@ -334,8 +320,8 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
 
   vfs_fs_type_t type;
   if (read_vfs_fs_request_type (bda, bdb, &type) == -1) {
-    form_unknown_response (VFS_FS_BAD_REQUEST);
-    end_action (false, bda, bdb);
+    vfs_fs_response_queue_push_bad_request (&response_queue, type);
+    end_input_action (bda, bdb);
   }
   
   switch (type) {
@@ -346,83 +332,87 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
       size_t name_size;
       vfs_fs_node_t no_node;
       if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) == -1) {
-	form_descend_response (VFS_FS_BAD_REQUEST, &no_node);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node);
+  	end_input_action (bda, bdb);
       }
 
       if (id >= nodes_size) {
-	form_descend_response (VFS_FS_BAD_NODE, &no_node);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node);
+  	end_input_action (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-	form_descend_response (VFS_FS_BAD_NODE, &no_node);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node);
+  	end_input_action (bda, bdb);
       }
 
       if (inode->node.type != DIRECTORY) {
-	form_descend_response (VFS_FS_NOT_DIRECTORY, &no_node);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_NOT_DIRECTORY, &no_node);
+  	end_input_action (bda, bdb);
       }
 
       inode_t* child;
       for (child = inode->first_child; child != 0; child = child->next_sibling) {
-	if (child->name_size == name_size &&
-	    memcmp (child->name, name, name_size) == 0) {
-	  /* Found the child with the correct name. */
-	  form_descend_response (VFS_FS_SUCCESS, &child->node);
-	  end_action (false, bda, bdb);
-	}
+  	if (child->name_size == name_size &&
+  	    memcmp (child->name, name, name_size) == 0) {
+  	  /* Found the child with the correct name. */
+  	  vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_SUCCESS, &child->node);
+  	  end_input_action (bda, bdb);
+  	}
       }
 
-
       /* Didn't find it. */
-      form_descend_response (VFS_FS_CHILD_DNE, &no_node);
-      end_action (false, bda, bdb);
+      vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_CHILD_DNE, &no_node);
+      end_input_action (bda, bdb);
     }
     break;
   case VFS_FS_READFILE:
     {
       size_t id;
       if (read_vfs_fs_readfile_request (bda, bdb, &id) == -1) {
-	form_readfile_response (VFS_FS_BAD_REQUEST, 0, -1);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1);
+  	end_input_action (bda, bdb);
       }
 
       if (id >= nodes_size) {
-	form_readfile_response (VFS_FS_BAD_NODE, 0, -1);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1);
+  	end_input_action (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-	form_readfile_response (VFS_FS_BAD_NODE, 0, -1);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1);
+  	end_input_action (bda, bdb);
       }
 
       if (inode->node.type != FILE) {
-	form_readfile_response (VFS_FS_NOT_FILE, 0, -1);
-	end_action (false, bda, bdb);
+  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_NOT_FILE, 0, -1);
+  	end_input_action (bda, bdb);
       }
 
-      form_readfile_response (VFS_FS_SUCCESS, inode->size, buffer_copy (inode->bd));
+      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) == -1) {
+	syslog ("tmpfs: error: Could not enqueue readfile response");
+	exit ();
+      }
+      end_input_action (bda, bdb);
     }
     break;
   default:
-    form_unknown_response (VFS_FS_BAD_REQUEST_TYPE);
-    end_action (false, bda, bdb);
+    vfs_fs_response_queue_push_bad_request (&response_queue, VFS_UNKNOWN);
+    end_input_action (bda, bdb);
+    break;
   }
 
-  end_action (false, bda, bdb);
+  end_input_action (bda, bdb);
 }
 
 static bool
 response_precondition (void)
 {
-  return !buffer_queue_empty (&response_queue);
+  return !vfs_fs_response_queue_empty (&response_queue);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, int param)
@@ -431,64 +421,21 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
   scheduler_remove (TMPFS_RESPONSE_NO, 0);
 
   if (response_precondition ()) {
-    const buffer_queue_item_t* item = buffer_queue_front (&response_queue);
-    bd_t bda = buffer_queue_item_bda (item);
-    bd_t bdb = buffer_queue_item_bdb (item);
-    buffer_queue_pop (&response_queue);
-    
-    end_action (true, bda, bdb);
+    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) == -1) {
+      syslog ("tmpfs: error: Could not write output buffer");
+      exit ();
+    }
+    end_output_action (true, response_bda, response_bdb);
   }
   else {
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
-}
-
-static bool
-destroy_buffers_precondition (void)
-{
-  return !buffer_queue_empty (&destroy_queue);
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
-{
-  initialize ();
-  scheduler_remove (DESTROY_BUFFERS_NO, param);
-  if (destroy_buffers_precondition ()) {
-    /* Drain the queue. */
-    while (!buffer_queue_empty (&destroy_queue)) {
-      bd_t bd;
-      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
-      bd = buffer_queue_item_bda (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-      bd = buffer_queue_item_bdb (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-
-      buffer_queue_pop (&destroy_queue);
-    }
-  }
-
-  end_action (false, -1, -1);
 }
 
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb)
+schedule (void)
 {
-  if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
+  if (response_precondition ()) {
+    scheduler_add (TMPFS_RESPONSE_NO, 0);
   }
-
-  if (!buffer_queue_empty (&response_queue)) {
-    scheduler_add (TMPFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&response_queue)));
-  }
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
-
-  scheduler_finish (output_fired, bda, bdb);
 }

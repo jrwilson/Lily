@@ -8,9 +8,6 @@
 #include "vfs_msg.h"
 #include "argv.h"
 
-/* Queue of buffers that need to be destroyed. */
-static buffer_queue_t destroy_queue;
-
 /* Messages to the vfs. */
 static bd_t vfs_request_bda = -1;
 static bd_t vfs_request_bdb = -1;
@@ -18,6 +15,8 @@ static vfs_request_queue_t vfs_request_queue;
 
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
+
+static buffer_queue_t destroy_queue;
 
 /*
   Begin Model Section
@@ -682,7 +681,7 @@ initialize (void)
       syslog ("jsh: error: Could not create output buffer");
       exit ();
     }
-    vfs_request_queue_init (&vfs_request_queue, vfs_request_bda, vfs_request_bdb);
+    vfs_request_queue_init (&vfs_request_queue);
     callback_queue_init (&vfs_response_queue);
     buffer_queue_init (&interpret_queue);
     scan_string_init ();
@@ -845,7 +844,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop (&vfs_request_queue) == -1) {
+    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) == -1) {
       syslog ("jsh: error: Could not write to output buffer");
       exit ();
     }

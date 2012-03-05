@@ -31,6 +31,13 @@ bind:
 	mov %ecx, automatonerrno
 	ret
 
+	.global unbind
+unbind:
+	mov $LILY_SYSCALL_UNBIND, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
 	.global subscribe_destroyed
 subscribe_destroyed:
 	mov $LILY_SYSCALL_SUBSCRIBE_DESTROYED, %eax
@@ -139,6 +146,13 @@ lookup:
 	.global describe
 describe:
 	mov $LILY_SYSCALL_DESCRIBE, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
+	.global getaid
+getaid:
+	mov $LILY_SYSCALL_GETAID, %eax
 	int $0x80
 	mov %ecx, automatonerrno
 	ret

@@ -88,6 +88,12 @@ struct buffer_resize_args {
   size_t size;
 };
 
+struct buffer_assign_args {
+  uint32_t eip;
+  bd_t dst;
+  bd_t src;
+};
+
 struct buffer_append_args {
   uint32_t eip;
   bd_t dst;
@@ -365,8 +371,15 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_ASSIGN:
     {
-      // BUG
-      kassert (0);
+      automaton* a = scheduler::current_action ().action->automaton;
+      buffer_assign_args* ptr = reinterpret_cast<buffer_assign_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (buffer_assign_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = a->buffer_assign (ptr->dst, ptr->src);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -474,6 +487,14 @@ trap_dispatch (volatile registers regs)
       pair<int, int> r = rts::describe (a, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_GETAID:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      regs.eax = a->aid ();
+      regs.ecx = LILY_SYSCALL_ESUCCESS;
       return;
     }
     break;

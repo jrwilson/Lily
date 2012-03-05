@@ -30,10 +30,10 @@ to_buffer_file : to_buffer_file.c
 # 	$(CC) -o $@ $^ -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
 
 vfs : vfs.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 tmpfs : tmpfs.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
 
 jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring

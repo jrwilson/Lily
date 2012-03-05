@@ -804,41 +804,64 @@ public:
   //   return make_pair (d->append (*s, begin, end), LILY_SYSCALL_ESUCCESS);
   // }
 
-  int
+  pair<int, int>
   buffer_assign (bd_t dest,
-		 size_t dest_begin,
-		 bd_t src,
-		 size_t src_begin,
-		 size_t src_end)
+		 bd_t src)
   {
-    if (src_begin > src_end) {
-      // Bad range.
-      return -1;
-    }
-
     bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
     bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
     if (dest_pos == bd_to_buffer_map_.end () ||
 	src_pos == bd_to_buffer_map_.end ()) {
       // One of the buffers does not exist.
-      return -1;
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
     buffer* dest_b = dest_pos->second;
     buffer* src_b = src_pos->second;
 
-    if (src_end > src_b->size ()) {
-      return -1;
-    }
+    // Truncate and append.
+    dest_b->resize (0);
+    dest_b->append (*src_b, 0, src_b->size ());
 
-    if (dest_begin + (src_end - src_begin) > dest_b->size ()) {
-      return -1;
-    }
-
-    // Assign.
-    dest_b->assign (dest_begin, *src_b, src_begin, src_end);
-    return 0;
+    // Append.
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
+
+  // int
+  // buffer_assign (bd_t dest,
+  // 		 size_t dest_begin,
+  // 		 bd_t src,
+  // 		 size_t src_begin,
+  // 		 size_t src_end)
+  // {
+  //   if (src_begin > src_end) {
+  //     // Bad range.
+  //     return -1;
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
+  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+  //   if (dest_pos == bd_to_buffer_map_.end () ||
+  // 	src_pos == bd_to_buffer_map_.end ()) {
+  //     // One of the buffers does not exist.
+  //     return -1;
+  //   }
+
+  //   buffer* dest_b = dest_pos->second;
+  //   buffer* src_b = src_pos->second;
+
+  //   if (src_end > src_b->size ()) {
+  //     return -1;
+  //   }
+
+  //   if (dest_begin + (src_end - src_begin) > dest_b->size ()) {
+  //     return -1;
+  //   }
+
+  //   // Assign.
+  //   dest_b->assign (dest_begin, *src_b, src_begin, src_end);
+  //   return 0;
+  // }
 
   pair<void*, int>
   buffer_map (bd_t bd)

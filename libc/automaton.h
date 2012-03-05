@@ -84,6 +84,9 @@ bind (aid_t output_automaton,
       int input_parameter);
 
 int
+unbind (bid_t bid);
+
+int
 subscribe_unbound (bid_t bid,
 		   ano_t action_number);
 
@@ -117,12 +120,9 @@ size_t
 buffer_resize (bd_t bd,
 	       size_t size);
 
-/* int */
-/* buffer_assign (bd_t dest, */
-/* 	       size_t dest_begin, */
-/* 	       bd_t src, */
-/* 	       size_t src_begin, */
-/* 	       size_t src_end); */
+int
+buffer_assign (bd_t dest,
+	       bd_t src);
 
 size_t
 buffer_append (bd_t dest,
@@ -165,5 +165,8 @@ lookup (const char* name,
 
 bd_t
 describe (aid_t aid);
+
+aid_t
+getaid (void);
 
 #endif /* AUTOMATON_H */

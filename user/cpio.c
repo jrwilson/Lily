@@ -119,8 +119,7 @@ cpio_archive_next_file (cpio_archive_t* ar)
   f->name_size = namesize;
   f->mode = from_hex (h->mode);
   /* Create a buffer and copy the file content. */
-  size_t bd_size = ALIGN_UP (filesize, pagesize ()) / pagesize ();
-  f->bd = buffer_create (bd_size);
+  f->bd = buffer_create (size_to_pages (filesize));
   memcpy (buffer_map (f->bd), data, filesize);
   buffer_unmap (f->bd);
   f->size = filesize;

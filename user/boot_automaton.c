@@ -68,7 +68,7 @@ initialize (void)
       exit ();
     }
 
-    vfs_request_queue_init (&vfs_request_queue, vfs_request_bda, vfs_request_bdb);
+    vfs_request_queue_init (&vfs_request_queue);
     callback_queue_init (&vfs_response_queue);
   }
 }
@@ -109,6 +109,48 @@ readfile_callback (void* data,
   if (read_vfs_readfile_response (bda, &error, &size) == -1) {
     syslog ("boot_automaton: error: vfs provided bad readfile response");
     exit ();
+  }
+
+  switch (error) {
+  case VFS_SUCCESS:
+    syslog ("success");
+    break;
+  case VFS_BAD_REQUEST:
+    syslog ("bad request");
+    break;
+
+  case VFS_BAD_PATH:
+    syslog ("bad path");
+    break;
+
+  case VFS_PATH_DNE:
+    syslog ("path dne");
+    break;
+
+  case VFS_NOT_DIRECTORY:
+    syslog ("not directory");
+    break;
+
+  case VFS_NOT_FILE:
+    syslog ("not file");
+    break;
+
+  case VFS_AID_DNE:
+    syslog ("aid dne");
+    break;
+
+  case VFS_NOT_FS:
+    syslog ("not fs");
+    break;
+
+  case VFS_ALREADY_MOUNTED:
+    syslog ("already mounted");
+    break;
+
+  case VFS_NOT_AVAILABLE:
+    syslog ("success");
+    break;
+
   }
 
   if (error != VFS_SUCCESS) {
@@ -273,7 +315,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop (&vfs_request_queue) == -1) {
+    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) == -1) {
       syslog ("boot_automaton: error: Could not write to output buffer");
       exit ();
     }

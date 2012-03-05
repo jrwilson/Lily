@@ -3,9 +3,9 @@
 #include <string.h>
 #include <fifo_scheduler.h>
 #include <buffer_file.h>
-#include <buffer_queue.h>
 #include <description.h>
 #include <dymem.h>
+#include <callback_queue.h>
 
 /*
   VFS
@@ -31,176 +31,25 @@
   Similar optimizations apply for the file systems.
 
   TODO:  Subscribe to the file systems when mounting to purge if they fail.
+  TODO:  We are vunerable to circular mounts.
+  TODO:  Subscribe to the client.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define VFS_REQUEST_NO 3
-#define VFS_RESPONSE_NO 4
-#define VFS_FS_REQUEST_NO 5
-#define VFS_FS_RESPONSE_NO 6
-#define DESTROY_BUFFERS_NO 7
-#define DECODE_NO 8
-#define MOUNT_NO 9
-#define READFILE_REQUEST_NO 10
-
-/* A virtual node associates an node with a file system. */
-typedef struct {
-  vfs_fs_node_t node;
-  aid_t aid;	/* The automaton (file system) that contains this node. */
-} vnode_t;
-
-typedef struct mount_item mount_item_t;
-struct mount_item {
-  vnode_t a;
-  vnode_t b;
-  mount_item_t* next;
-};
-
-/* The virtual root. */
-static vnode_t root;
-
 /* Our aid. */
 static aid_t vfs_aid = -1;
 
-/* Initialization flag. */
-static bool initialized = false;
+#define VFS_REQUEST_NO 1
+#define VFS_RESPONSE_NO 2
+#define VFS_FS_REQUEST_NO 3
+#define VFS_FS_RESPONSE_NO 4
 
-/* Queue for client requests. */
-static buffer_queue_t client_request_queue;
-
-/* Queue for client responses. */
-static buffer_queue_t client_response_queue;
-
-/* Variables for a message going to a file system. */
-static aid_t fs_aid = -1;
-static bd_t fs_bda = -1;
-static bd_t fs_bdb = -1;
-static vfs_fs_type_t fs_type;
-
-/* Queue of buffers to destroy. */
-static buffer_queue_t destroy_queue;
-
-/* Table to translate vnodes based on mounting. */
-static mount_item_t* mount_head = 0;
-
-/* State machine for client requests. */
-static aid_t client_request_aid = -1;
-static bd_t client_request_bda = -1;
-static bd_t client_request_bdb = -1;
-static vfs_type_t client_request_type;
-
-/* State machine for looking up paths. */
-static const char* path_lookup_path;
-static size_t path_lookup_path_size;
-static vnode_t path_lookup_current;
-static bool path_lookup_done;
-static bool path_lookup_error;
-static const char* path_lookup_begin;
-static const char* path_lookup_end;
-
-/* State for mounts. */
-static aid_t mount_aid;
-
-/* State for readfile. */
-static bool readfile_sent = false;
-
-static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb);
-
-static void
-initialize (void)
-{
-  if (!initialized) {
-    initialized = true;
-
-    root.node.type = DIRECTORY;
-    root.node.id = 0;
-    root.aid = -1;
-
-    buffer_queue_init (&client_request_queue);
-    buffer_queue_init (&client_response_queue);
-    buffer_queue_init (&destroy_queue);
-  }
-}
-
-static bool
-vnode_equal (const vnode_t* x,
-	     const vnode_t* y)
-{
-  return x->aid == y->aid && x->node.id == y->node.id;
-}
-
-static mount_item_t*
-mount_item_create (const vnode_t* a,
-		   const vnode_t* b)
-{
-  mount_item_t* item = malloc (sizeof (mount_item_t));
-  memset (item, 0, sizeof (mount_item_t));
-  item->a = *a;
-  item->b = *b;
-  return item;
-}
-
-static void
-reset_client_state (void)
-{
-  client_request_aid = -1;
-  if (client_request_bda != -1) {
-    buffer_destroy (client_request_bda);
-    client_request_bda = -1;
-  }
-  if (client_request_bdb != -1) {
-    buffer_destroy (client_request_bdb);
-    client_request_bdb = -1;
-  }
-}
-
-static void
-form_unknown_response (vfs_error_t error)
-{
-  /* Create a response. */
-  bd_t bda;
-  bd_t bdb;
-  if (write_vfs_unknown_response (error, &bda, &bdb) == -1) {
-    syslog ("vfs: error: Could not prepare vfs response");
-    exit ();
-  }
-  buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, bdb, 0);
-  reset_client_state ();
-}
-
-static void
-form_mount_response (vfs_error_t error)
-{
-  /* Create a response. */
-  bd_t bda;
-  bd_t bdb;
-  if (write_vfs_mount_response (error, &bda, &bdb) == -1) {
-    syslog ("vfs: error: Could not prepare vfs response");
-    exit ();
-  }
-  buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, bdb, 0);
-  reset_client_state ();
-}
-
-static void
-form_readfile_response (vfs_error_t error,
-			size_t size,
-			bd_t content)
-{
-  /* Create a response. */
-  bd_t bda;
-  if (write_vfs_readfile_response (error, size, &bda) == -1) {
-    syslog ("vfs: error: Could not prepare vfs response");
-    exit ();
-  }
-  buffer_queue_push (&client_response_queue, client_request_aid, bda, 0, content, 0);
-  reset_client_state ();
-}
+/*
+  Begin Path Section
+  ==================
+*/
 
 static bool
 check_absolute_path (const char* path,
@@ -231,127 +80,694 @@ check_absolute_path (const char* path,
   return true;
 }
 
-static void
-path_lookup_init (void)
+/*
+  End Path Section
+  ================
+*/
+
+/*
+  Begin File System Section
+  ========================
+*/
+
+typedef struct file_system file_system_t;
+struct file_system {
+  aid_t aid;
+  vfs_fs_request_queue_t request_queue;
+  callback_queue_t callback_queue;
+  bd_t request_bda;
+  bd_t request_bdb;
+  file_system_t* global_next;
+  bool on_request_queue;
+  file_system_t* request_next;
+};
+
+/* List of file systems. */
+static file_system_t* file_system_head = 0;
+/* File system request queue. */
+static file_system_t* request_head = 0;
+static file_system_t** request_tail = &request_head;
+
+static file_system_t*
+file_system_create (aid_t aid)
 {
-  /* Start at the virtual root. */
-  path_lookup_current = root;
-  path_lookup_done = false;
-  path_lookup_error = false;
-  path_lookup_end = path_lookup_path;
+  file_system_t* fs = malloc (sizeof (file_system_t));
+  memset (fs, 0, sizeof (file_system_t));
+  fs->aid = aid;
+  vfs_fs_request_queue_init (&fs->request_queue);
+  callback_queue_init (&fs->callback_queue);
+  fs->request_bda = buffer_create (0);
+  if (fs->request_bda == -1) {
+    syslog ("vfs: error: Could not create file system output buffer");
+    exit ();
+  }
+  fs->request_bdb = buffer_create (0);
+  if (fs->request_bdb == -1) {
+    syslog ("vfs: error: Could not create file system output buffer");
+    exit ();
+  }
+  fs->global_next = file_system_head;
+  file_system_head = fs;
+
+  syslog ("vfs: TODO:  Subscribe to file system");
+
+  return fs;
 }
 
 static void
-path_lookup_resume (void)
+file_system_put_on_request_queue (file_system_t* fs)
 {
-  if (!path_lookup_done) {
-    /* TODO:  We are vunerable to circular mounts. */
+  if (!fs->on_request_queue && !vfs_fs_request_queue_empty (&fs->request_queue)) {
+    fs->on_request_queue = true;
+    fs->request_next = 0;
+    *request_tail = fs;
+    request_tail = &fs->request_next;
+  }
+}
 
-    /* First, look for an entry in the mount table. */
-    mount_item_t* item = mount_head;
-    while (item != 0) {
-      if (vnode_equal (&item->a, &path_lookup_current)) {
-	/* Found an entry. Translate and start over. */
-	path_lookup_current = item->b;
-	item = mount_head;
-      }
-      else {
-	item = item->next;
-      }
+static file_system_t*
+find_file_system (aid_t aid)
+{
+  file_system_t* fs;
+  for (fs = file_system_head; fs != 0; fs = fs->global_next) {
+    if (fs->aid == aid) {
+      break;
     }
+  }
+  return fs;
+}
 
-    if (*path_lookup_end == 0) {
-      path_lookup_done = true;
+static file_system_t**
+find_file_system_request (aid_t aid)
+{
+  file_system_t** fs;
+  for (fs = &request_head; *fs != 0; fs = &(*fs)->request_next) {
+    if ((*fs)->aid == aid) {
+      break;
+    }
+  }
+  return fs;
+}
+
+static void
+file_system_pop_request (file_system_t** f)
+{
+  file_system_t* fs = *f;
+  /* Pop the response. */
+  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) == -1) {
+    syslog ("vfs: error: Could not write to file system request buffer");
+    exit ();
+  }
+
+  /* Remove the file system from the request queue. */
+  *f = fs->request_next;
+  if (request_head == 0) {
+    request_tail = &request_head;
+  }
+  fs->on_request_queue = false;
+
+  /* Add the file system to the request queue. */
+  file_system_put_on_request_queue (fs);
+}
+
+/*
+  End File System Section
+  =======================
+*/
+
+/*
+  Begin Vnode Section
+  ===================
+*/
+
+/* A virtual node associates an node with a file system. */
+typedef struct {
+  file_system_t* fs;	/* The filesystem that contains the node. */
+  vfs_fs_node_t node;
+} vnode_t;
+
+static bool
+vnode_equal (const vnode_t* x,
+	     const vnode_t* y)
+{
+  return x->fs == y->fs && x->node.id == y->node.id;
+}
+
+/*
+  End Vnode Section
+  =================
+*/
+
+/*
+  Begin Mount Section
+  ===================
+*/
+
+typedef struct mount_item mount_item_t;
+struct mount_item {
+  vnode_t a;
+  vnode_t b;
+  mount_item_t* next;
+};
+
+/* The virtual root. */
+static vnode_t root;
+
+/* Table to translate vnodes based on mounting. */
+static mount_item_t* mount_head = 0;
+
+static mount_item_t*
+mount_item_create (const vnode_t* a,
+		   const vnode_t* b)
+{
+  mount_item_t* item = malloc (sizeof (mount_item_t));
+  memset (item, 0, sizeof (mount_item_t));
+  item->a = *a;
+  item->b = *b;
+  return item;
+}
+
+/*
+  End Mount Section
+  =================
+*/
+
+/*
+  Begin Client Section
+  ====================
+*/
+
+typedef struct client client_t;
+struct client {
+  aid_t aid;
+  vfs_request_queue_t request_queue;
+  vfs_response_queue_t response_queue;
+  bd_t response_bda;
+  bd_t response_bdb;
+  client_t* global_next;
+  bool on_response_queue;
+  client_t* response_next;
+
+  /* Variables for looking up paths. */
+  const char* path_lookup_path;
+  size_t path_lookup_path_size;
+  vnode_t path_lookup_current;
+  const char* path_lookup_begin;
+  const char* path_lookup_end;
+};
+
+static client_t* client_head = 0;
+static client_t* response_head = 0;
+static client_t** response_tail = &response_head;
+
+static client_t*
+find_client (aid_t aid)
+{
+  client_t* client;
+  for (client = client_head; client != 0; client = client->global_next) {
+    if (client->aid == aid) {
+      break;
+    }
+  }
+
+  return client;
+}
+
+static client_t**
+find_client_response (aid_t aid)
+{
+  client_t** client;
+  for (client = &response_head; *client != 0; client = &(*client)->response_next) {
+    if ((*client)->aid == aid) {
+      break;
+    }
+  }
+
+  return client;
+}
+
+static client_t*
+find_or_create_client (aid_t aid)
+{
+  client_t* client = find_client (aid);
+
+  if (client == 0) {
+    client = malloc (sizeof (client_t));
+    memset (client, 0, sizeof (client_t));
+    client->aid = aid;
+    vfs_request_queue_init (&client->request_queue);
+    vfs_response_queue_init (&client->response_queue);
+    client->response_bda = buffer_create (0);
+    if (client->response_bda == -1) {
+      syslog ("vfs: error: Could not create client response buffer");
+      exit ();
+    }
+    client->response_bdb = buffer_create (0);
+    if (client->response_bdb == -1) {
+      syslog ("vfs: error: Could not create client response buffer");
+      exit ();
+    }
+    client->global_next = client_head;
+    client_head = client;
+    client->on_response_queue = false;
+
+  syslog ("vfs: TODO:  Subscribe to client");
+  }
+
+  return client;
+}
+
+static void
+client_put_on_response_queue (client_t* client)
+{
+  if (!client->on_response_queue && !vfs_response_queue_empty (&client->response_queue)) {
+    client->on_response_queue = true;
+    client->response_next = 0;
+    *response_tail = client;
+    response_tail = &client->response_next;
+  }
+}
+
+static void
+client_initialize_path_lookup (client_t* client,
+			       const char* path,
+			       size_t path_size)
+{
+  client->path_lookup_path = path;
+  client->path_lookup_path_size = path_size;
+  client->path_lookup_end = client->path_lookup_path;
+}
+
+static void
+client_start (client_t* client);
+
+static void
+client_answer (client_t* client)
+{
+  client_put_on_response_queue (client);
+  vfs_request_queue_pop (&client->request_queue);
+  client_start (client);
+}
+
+static void
+readfile_callback (void* data,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  client_t* client = data;
+
+  vfs_fs_error_t error;
+  size_t size;
+  if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) == -1) {
+    /* TODO:  This is a protocol violation. */
+    exit ();
+  }
+
+  if (error != VFS_FS_SUCCESS) {
+    /* TODO:  We just looked up a file but could not read it.  Something is wrong. */
+    exit ();
+  }
+      
+  if (size > buffer_size (bdb) * pagesize ()) {
+    /* TODO:  The size does not match the number of pages in the buffer. */
+    exit ();
+  }
+
+  /* Answer. */
+  if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) == -1) {
+    syslog ("vfs: error: Could not copy file buffer");
+    exit ();
+  }
+  client_answer (client);
+}
+
+static void
+client_path_lookup_done (client_t* client,
+			 bool fail)
+{
+  const vfs_request_queue_item_t* req = vfs_request_queue_front (&client->request_queue);
+  switch (req->type) {
+  case VFS_UNKNOWN:
+    syslog ("vfs: error: Unknown request in client request queue");
+    exit ();
+    break;
+  case VFS_MOUNT:
+    /* The path could not be translated. */
+    if (fail) {
+      /* Answer. */
+      vfs_response_queue_push_mount (&client->response_queue, VFS_PATH_DNE);
+      client_answer (client);
       return;
     }
 
-    /* Advance to the next element in the path. */
-    path_lookup_begin = path_lookup_end + 1;
-
-    if (*path_lookup_begin == 0) {
-      /* We are at the end of the path. */
-      path_lookup_done = true;
+    /* The final destination was not a directory. */
+    if (client->path_lookup_current.node.type != DIRECTORY) {
+      /* Answer. */
+      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_DIRECTORY);
+      client_answer (client);
       return;
     }
-    
-    /* Find the terminator (0) or next path separator (/). */
-    path_lookup_end = path_lookup_begin + 1;
-    while (*path_lookup_end != 0 && *path_lookup_end != '/') {
-      ++path_lookup_end;
+
+    /* Bind to the file system. */
+    description_t desc;
+    if (description_init (&desc, req->u.mount.aid) == -1) {
+      /* Answer. */
+      vfs_response_queue_push_mount (&client->response_queue, VFS_AID_DNE);
+      client_answer (client);
+      return;
     }
 
-    /* Ensure that the path search can continue. */
-    if (path_lookup_current.aid == -1 || path_lookup_current.node.type != DIRECTORY) {
-      /* No file system or not a directory. */
-      path_lookup_done = true;
-      path_lookup_error = true;
+    const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME, strlen (VFS_FS_REQUEST_NAME) + 1);
+    const ano_t response = description_name_to_number (&desc, VFS_FS_RESPONSE_NAME, strlen (VFS_FS_RESPONSE_NAME) + 1);
+
+    description_fini (&desc);
+
+    if (request == NO_ACTION ||
+    	response == NO_ACTION) {
+      /* Answer. */
+      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
+      client_answer (client);
+      return;
+    }
+
+    /* Bind to the response first so they don't get lost. */
+    bid_t bid = bind (req->u.mount.aid, response, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
+    if (bid == -1) {
+      /* Answer. */
+      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
+      client_answer (client);
+      return;
+    }
+
+    if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request, 0) == -1) {
+      unbind (bid);
+      /* Answer. */
+      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
+      client_answer (client);
+      return;
+    }
+
+    /* The mount succeeded.  Insert an entry into the list. */
+    file_system_t* fs = file_system_create (req->u.mount.aid);
+
+    vnode_t b;
+    b.fs = fs;
+    b.node.type = DIRECTORY;
+    b.node.id = 0;
+    mount_item_t* item = mount_item_create (&client->path_lookup_current, &b);
+    item->next = mount_head;
+    mount_head = item;
+
+    /* Answer. */
+    vfs_response_queue_push_mount (&client->response_queue, VFS_SUCCESS);
+    client_answer (client);
+    return;
+
+    break;
+  case VFS_READFILE:
+    /* The path could not be translated. */
+    if (fail) {
+      /* Answer. */
+      vfs_response_queue_push_readfile (&client->response_queue, VFS_PATH_DNE, 0, -1);
+      client_answer (client);
+      return;
+    }
+
+    /* The final destination was not a file. */
+    if (client->path_lookup_current.node.type != FILE) {
+      /* Answer. */
+      vfs_response_queue_push_readfile (&client->response_queue, VFS_NOT_FILE, 0, -1);
+      client_answer (client);
       return;
     }
 
     /* Form a message to a file system. */
-    fs_aid = path_lookup_current.aid;
-    if (write_vfs_fs_descend_request (path_lookup_current.node.id, path_lookup_begin, path_lookup_end - path_lookup_begin, &fs_bda, &fs_bdb) == -1) {
-      syslog ("vfs: error: Could not prepare descend request");
-      exit ();
-    }
-    fs_type = VFS_FS_DESCEND;
+    vfs_fs_request_queue_push_readfile (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id);
+    callback_queue_push (&client->path_lookup_current.fs->callback_queue, readfile_callback, client);
+    file_system_put_on_request_queue (client->path_lookup_current.fs);
+    return;
+
+    break;
   }
 }
 
-/* init
-   ----
-   
-   Post: ???
- */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+static void
+client_resume_path_lookup (client_t* client,
+			   vnode_t node);
+
+static void
+descend_callback (void* data,
+		  bd_t bda,
+		  bd_t bdb)
 {
-  vfs_aid = aid;
+  client_t* client = data;
 
-  initialize ();
+  vfs_fs_error_t error;
+  vfs_fs_node_t node;
+  if (read_vfs_fs_descend_response (bda, bdb, &error, &node) == -1) {
+    /* TODO:  This is a protocol violation. */
+    exit ();
+  }
 
-  end_action (false, bda, bdb);
+  if (error != VFS_FS_SUCCESS) {
+    client_path_lookup_done (client, true);
+    return;
+  }
+
+  client->path_lookup_current.node = node;
+  client_resume_path_lookup (client, client->path_lookup_current);
+}
+
+static void
+client_resume_path_lookup (client_t* client,
+			   vnode_t node)
+{
+  client->path_lookup_current = node;
+
+  /* First, look for an entry in the mount table. */
+  mount_item_t* item = mount_head;
+  while (item != 0) {
+    if (vnode_equal (&item->a, &client->path_lookup_current)) {
+      /* Found an entry. Translate and start over. */
+      client->path_lookup_current = item->b;
+      item = mount_head;
+    }
+    else {
+      item = item->next;
+    }
+  }
+  
+  if (*(client->path_lookup_end) == 0) {
+    /* We are at the end of the path. */
+    client_path_lookup_done (client, false);
+    return;
+  }
+  
+  /* Advance to the next element in the path. */
+  client->path_lookup_begin = client->path_lookup_end + 1;
+  
+  if (*(client->path_lookup_begin) == 0) {
+    /* We are at the end of the path. */
+    client_path_lookup_done (client, false);
+    return;
+  }
+  
+  /* Find the terminator (0) or next path separator (/). */
+  client->path_lookup_end = client->path_lookup_begin + 1;
+  while (*(client->path_lookup_end) != 0 && *(client->path_lookup_end) != '/') {
+    ++client->path_lookup_end;
+  }
+  
+  /* Ensure that the path search can continue. */
+  if (client->path_lookup_current.fs == 0 || client->path_lookup_current.node.type != DIRECTORY) {
+    /* No file system or not a directory. */
+    client_path_lookup_done (client, true);
+    return;
+  }
+  
+  /* Form a message to a file system. */
+  vfs_fs_request_queue_push_descend (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id, client->path_lookup_begin, client->path_lookup_end - client->path_lookup_begin);
+  callback_queue_push (&client->path_lookup_current.fs->callback_queue, descend_callback, client);
+  file_system_put_on_request_queue (client->path_lookup_current.fs);
+}
+
+static void
+client_start (client_t* client)
+{
+  if (!vfs_request_queue_empty (&client->request_queue)) {
+    /* The request queue was empty but now is not.  Start processing the request. */
+    const vfs_request_queue_item_t* req = vfs_request_queue_front (&client->request_queue);
+    switch (req->type) {
+    case VFS_UNKNOWN:
+      /* An unknown request type got on the queue.  This is a logic error. */
+      syslog ("vfs: error: unknown request on client request queue");
+      exit ();
+      break;
+    case VFS_MOUNT:
+      if (!check_absolute_path (req->u.mount.path, req->u.mount.path_size)) {
+	/* Answer. */
+	vfs_response_queue_push_mount (&client->response_queue, VFS_BAD_PATH);
+	client_answer (client);
+	return;
+      }
+    
+      /* See if the file system is already mounted.
+	 If it is, its an error.
+      */
+      mount_item_t* mnt;
+      for (mnt = mount_head; mnt != 0; mnt = mnt->next) {
+	if (mnt->b.fs->aid == req->u.mount.aid) {
+	  /* Answer. */
+	  vfs_response_queue_push_mount (&client->response_queue, VFS_ALREADY_MOUNTED);
+	  client_answer (client);
+	  return;
+	}
+      }
+    
+      /* Start the process of converting the path to a vnode starting at the root. */
+      client_initialize_path_lookup (client, req->u.mount.path, req->u.mount.path_size);
+      client_resume_path_lookup (client, root);
+      break;
+    case VFS_READFILE:
+      if (!check_absolute_path (req->u.readfile.path, req->u.readfile.path_size)) {
+	/* Answer. */
+	vfs_response_queue_push_readfile (&client->response_queue, VFS_BAD_PATH, 0, -1);
+	client_answer (client);
+	return;
+      }
+
+      /* Start the process of converting the path to a vnode starting at the root. */
+      client_initialize_path_lookup (client, req->u.readfile.path, req->u.readfile.path_size);
+      client_resume_path_lookup (client, root);
+      break;
+    }
+  }
+}
+
+static void
+client_push_request (client_t* client,
+		     bd_t bda,
+		     bd_t bdb)
+{
+  vfs_type_t type;
+  bool empty = vfs_request_queue_empty (&client->request_queue);
+  if (vfs_request_queue_push_from_buffer (&client->request_queue, bda, bdb, &type) == 0) {
+    if (empty) {
+      client_start (client);
+    }
+  }
+  else {
+    /* Bad request. */
+    vfs_response_queue_push_bad_request (&client->response_queue, type);
+    /* Add to the response queue if not already there. */
+    client_put_on_response_queue (client);
+  }
+}
+
+static void
+client_pop_response (client_t** c)
+{
+  client_t* client = *c;
+  /* Pop the response. */
+  if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) == -1) {
+    syslog ("vfs: error: Could not write to client response buffer");
+    exit ();
+  }
+
+  /* Remove the client from the response queue. */
+  *c = client->response_next;
+  if (response_head == 0) {
+    response_tail = &response_head;
+  }
+  client->on_response_queue = false;
+
+  /* Add the client to the response queue. */
+  client_put_on_response_queue (client);
+}
+
+/*
+  End Client Section
+  ==================
+*/
+
+/* Initialization flag. */
+static bool initialized = false;
+
+static void
+initialize (void)
+{
+  if (!initialized) {
+    initialized = true;
+
+    root.fs = 0;
+    root.node.type = DIRECTORY;
+    root.node.id = 0;
+
+    vfs_aid = getaid ();
+  }
+}
+
+static void
+schedule (void);
+
+static void
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+
+  schedule ();
+  scheduler_finish (false, -1, -1);
+}
+
+static void
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
 }
 
 /* client_request
    --------------
    Receive a request from a client.
 
-   Post: the request is at the end of the client_request_queue
+   Post: the request is added to the request queue of the client or a response is added to the response queue of the client
  */
 BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  buffer_queue_push (&client_request_queue, aid, bda, 0, bdb, 0);
-  end_action (false, -1, -1);
+  client_push_request (find_or_create_client (aid), bda, bdb);
+  end_input_action (bda, bdb);
 }
 
 /* client_response
    ---------------
    Send a response to a client.
 
-   Pre:  The client indicated by aid has a response in the queue
-   Post: The first response for the client indicated by aid is removed from the queue
+   Pre:  The client exists and has a response.
+   Post: The first response for the client is removed.
  */
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_RESPONSE_NO, aid);
 
-  /* Find in the queue. */
-  buffer_queue_item_t* item = buffer_queue_find (&client_response_queue, aid);
-
-  if (item != 0) {
-    /* Found a response.  Execute. */
-    bd_t bda = buffer_queue_item_bda (item);
-    bd_t bdb = buffer_queue_item_bdb (item);
-
-    buffer_queue_erase (&client_response_queue, item);
-
-    end_action (true, bda, bdb);
+  /* Find the client on the response queue. */
+  client_t** c = find_client_response (aid);
+  client_t* client = *c;
+  if (client != 0) {
+    client_pop_response (c);
+    end_output_action (true, client->response_bda, client->response_bdb);
   }
   else {
-    /* Did not find a response. */
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
 }
 
@@ -362,30 +778,20 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
    Pre:  fs_aid != -1 && fs_bd != -1 && fs_bd_size != 0
    Post: fs_aid == -1 && fs_bd == -1 && fs_bd_size == 0
  */
-static bool
-file_system_request_precondition (aid_t aid)
-{
-  return fs_aid == aid && fs_aid != -1 && fs_bda != -1;
-}
-
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
 
-  if (file_system_request_precondition (aid)) {
-    bd_t bda = fs_bda;
-    bd_t bdb = fs_bdb;
-
-    fs_aid = -1;
-    fs_bda = -1;
-    fs_bdb = -1;
-
-    end_action (true, bda, bdb);
+  /* Find the file system on the request queue. */
+  file_system_t** f = find_file_system_request (aid);
+  file_system_t* fs = *f;
+  if (fs != 0) {
+    file_system_pop_request (f);
+    end_output_action (true, fs->request_bda, fs->request_bdb);
   }
   else {
-    /* Did not find a request. */
-    end_action (false, -1, -1);
+    end_output_action (false, -1, -1);
   }
 }
 
@@ -393,350 +799,36 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
    --------------------
    Process a response from a file system.
 
-   Post: 
+   Post:
  */
 BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  switch (fs_type) {
-  case VFS_FS_UNKNOWN:
-    /* Do nothing. */
-    break;
-  case VFS_FS_DESCEND:
-    {
-      vfs_fs_error_t error;
-      vfs_fs_node_t node;
-      if (read_vfs_fs_descend_response (bda, bdb, &error, &node) == -1) {
-	/* TODO:  This is a protocol violation. */
-	exit ();
-      }
+  file_system_t* fs = find_file_system (aid);
 
-      if (error != VFS_FS_SUCCESS) {
-	/* A less serious error. */
-	path_lookup_done = true;
-	path_lookup_error = true;
-	end_action (false, bda, bdb);
-      }	
-
-      /* Update the current location. */
-      path_lookup_current.node = node;
-
-      path_lookup_resume ();
-    }
-    break;
-  case VFS_FS_READFILE:
-    {
-      vfs_fs_error_t error;
-      size_t size;
-      if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) == -1) {
-	/* TODO:  This is a protocol violation. */
-	exit ();
-      }
-
-      if (error != VFS_FS_SUCCESS) {
-	/* TODO:  We just looked up a file but could not read it.  Something is wrong. */
-	exit ();
-      }	
-      
-      if (size > buffer_size (bdb) * pagesize ()) {
-	/* TODO:  The size does not match the number of pages in the buffer. */
-	exit ();
-      }
-
-      form_readfile_response (VFS_SUCCESS, size, bdb);
-      /* Destroy bda, but keep bdb. */
-      end_action (false, bda, -1);
-    }
-    break;
-  }
-  end_action (false, bda, bdb);
-}
-
-/* destroy_buffers
-   ---------------
-   Destroy buffers that have accumulated.  Useful for destroying a buffer after an output has produced it.
-
-   Pre:  destroy_queue is not empty
-   Post: destroy_queue is empty
- */
-static bool
-destroy_buffers_precondition (void)
-{
-  return !buffer_queue_empty (&destroy_queue);
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DESTROY_BUFFERS_NO, "", "", destroy_buffers, int param)
-{
-  initialize ();
-  scheduler_remove (DESTROY_BUFFERS_NO, param);
-  if (destroy_buffers_precondition ()) {
-    /* Drain the queue. */
-    while (!buffer_queue_empty (&destroy_queue)) {
-      bd_t bd;
-      const buffer_queue_item_t* item = buffer_queue_front (&destroy_queue);
-      bd = buffer_queue_item_bda (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-      bd = buffer_queue_item_bdb (item);
-      if (bd != -1) {
-	buffer_destroy (bd);
-      }
-
-      buffer_queue_pop (&destroy_queue);
-    }
+  if (callback_queue_empty (&fs->callback_queue)) {
+    /* The file system produced a response when one was not requested. */
+    end_input_action (bda, bdb);
   }
 
-  end_action (false, -1, -1);
-}
+  const callback_queue_item_t* item = callback_queue_front (&fs->callback_queue);
+  callback_t callback = callback_queue_item_callback (item);
+  void* data = callback_queue_item_data (item);
+  callback_queue_pop (&fs->callback_queue);
 
-/* decode
-   ------
-   Load the internal state machine with a client request.
+  callback (data, bda, bdb);
 
-   Pre:  the internal state machine is not loaded (client_request_bd == -1) and there is a request on the queue
-   Post: the internal state machine is loaded (client_request_bd != -1) and the request is removed from the queue
- */
-static bool
-decode_precondition (void)
-{
-  return !buffer_queue_empty (&client_request_queue) && client_request_bda == -1;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, DECODE_NO, "", "", decode, int param)
-{
-  initialize ();
-  scheduler_remove (DECODE_NO, param);
-  if (decode_precondition ()) {
-    /* Get the request from the queue. */
-    const buffer_queue_item_t* front = buffer_queue_front (&client_request_queue);
-    client_request_aid = buffer_queue_item_parameter (front);
-    client_request_bda = buffer_queue_item_bda (front);
-    client_request_bdb = buffer_queue_item_bdb (front);
-    buffer_queue_pop (&client_request_queue);
-
-    if (read_vfs_request_type (client_request_bda, client_request_bdb, &client_request_type) == -1) {
-      form_unknown_response (VFS_BAD_REQUEST);
-      end_action (false, -1, -1);
-    }
-
-    switch (client_request_type) {
-    case VFS_MOUNT:
-      {
-	if (read_vfs_mount_request (client_request_bda, client_request_bdb, &mount_aid, &path_lookup_path, &path_lookup_path_size) == -1) {
-	  form_mount_response (VFS_BAD_REQUEST);
-	  end_action (false, -1, -1);
-	}
-
-	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
-	  form_mount_response (VFS_BAD_PATH);
-	  end_action (false, -1, -1);
-	}
-
-	/* See if the file system is already mounted.
-	   If it is, its an error.
-	*/
-	mount_item_t* item;
-	for (item = mount_head; item != 0; item = item->next) {
-	  if (item->b.aid == mount_aid) {
-	    form_mount_response (VFS_ALREADY_MOUNTED);
-	    end_action (false, -1, -1);
-	    break;
-	  }
-	}
-
-	/* Start the process of converting the path to a vnode. */
-	path_lookup_init ();
-	path_lookup_resume ();
-      }
-      break;
-    case VFS_READFILE:
-      {
-	if (read_vfs_readfile_request (client_request_bda, client_request_bdb, &path_lookup_path, &path_lookup_path_size) == -1) {
-	  form_readfile_response (VFS_BAD_REQUEST, 0, -1);
-	  end_action (false, -1, -1);
-	}
-
-	if (!check_absolute_path (path_lookup_path, path_lookup_path_size)) {
-	  form_readfile_response (VFS_BAD_PATH, 0, -1);
-	  end_action (false, -1, -1);
-	}
-
-	/* We have not send the readfile request yet. */
-	readfile_sent = false;
-
-	/* Start the process of converting the path to a vnode. */
-	path_lookup_init ();
-	path_lookup_resume ();
-      }
-      break;
-    default:
-      form_unknown_response (VFS_BAD_REQUEST_TYPE);
-      end_action (false, -1, -1);
-    }
-  }
-
-  end_action (false, -1, -1);
-}
-
-/* mount
-   -----
-   To mount, we must:
-   (1)  Convert the path to a vnode A.
-   (2)  Bind to the file system.  Let B be the vnode representing the root of its file system.
-   (3)  Insert an entry in the mount table that causes future path traversals to substitute A -> B.
-   Step (1) is started in the decode action.
-   Steps (2) and (3) are completed in this action.
-
-   Pre:  the internal state machine is loaded (client_request_bd != -1) with a mount request (client_request_type == MOUNT) and the path name lookup has finished (path_lookup_done == true)
-   Post: The internal state machine will be empty (client_request_bd == -1)
- */
-static bool
-mount_precondition (void)
-{
-  return client_request_bda != -1 && client_request_type == VFS_MOUNT && path_lookup_done && vfs_aid != -1;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, MOUNT_NO, "", "", mount, int param)
-{
-  initialize ();
-  scheduler_remove (MOUNT_NO, param);
-  if (mount_precondition ()) {
-
-    /* The path could not be translated. */
-    if (path_lookup_error) {
-      form_mount_response (VFS_PATH_DNE);
-      end_action (false, -1, -1);
-    }
-
-    /* The final destination was not a directory. */
-    if (path_lookup_current.node.type != DIRECTORY) {
-      form_mount_response (VFS_NOT_DIRECTORY);
-      end_action (false, -1, -1);
-    }
-
-    /* Bind to the file system. */
-    description_t desc;
-    if (description_init (&desc, mount_aid) == -1) {
-      form_mount_response (VFS_AID_DNE);
-      end_action (false, -1, -1);
-    }
-
-    const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME, strlen (VFS_FS_REQUEST_NAME) + 1);
-    const ano_t response = description_name_to_number (&desc, VFS_FS_RESPONSE_NAME, strlen (VFS_FS_RESPONSE_NAME) + 1);
-
-    description_fini (&desc);
-
-    if (request == NO_ACTION ||
-	response == NO_ACTION) {
-      form_mount_response (VFS_NOT_FS);
-      end_action (false, -1, -1);
-    }
-
-    /* Bind to the response first so they don't get lost. */
-    if (bind (mount_aid, response, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0) == -1 ||
-	bind (vfs_aid, VFS_FS_REQUEST_NO, 0, mount_aid, request, 0) == -1) {
-      /* If binding fails, it is because the file system's actions are available. */
-      /* TODO:  Unbind. */
-      form_mount_response (VFS_NOT_AVAILABLE);
-      end_action (false, -1, -1);
-    }
-
-    /* The mount succeeded.  Insert an entry into the list. */
-    vnode_t b;
-    b.node.type = DIRECTORY;
-    b.node.id = 0;
-    b.aid = mount_aid;
-    mount_item_t* item = mount_item_create (&path_lookup_current, &b);
-    item->next = mount_head;
-    mount_head = item;
-
-    form_mount_response (VFS_SUCCESS);
-  }
-
-  end_action (false, -1, -1);
-}
-
-/* readfile
-   -----
-   To readfile, we must:
-   (1)  Convert the path to a vnode.
-   (2)  Request the file.
-   (3)  Forward the response.
-   Step (1) is started in the decode action.
-   The request is prepared in this action.
-   The response is forwared when a response is received.
-
-   Pre:  The client has made a request and the request is to read a file and the path lookup is done and the buffer to send a message to a file system is available and we have not sent the request
-   Post: fs_bd != -1 && readfile_sent == true
- */
-static bool
-readfile_request_precondition (void)
-{
-  return client_request_bda != -1 && client_request_type == VFS_READFILE && path_lookup_done && fs_bda == -1 && readfile_sent == false;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, READFILE_REQUEST_NO, "", "", readfile_request, int param)
-{
-  initialize ();
-  scheduler_remove (READFILE_REQUEST_NO, param);
-
-  if (readfile_request_precondition ()) {
-    /* The path could not be translated. */
-    if (path_lookup_error) {
-      form_readfile_response (VFS_PATH_DNE, 0, -1);
-      end_action (false, -1, -1);
-    }
-
-    /* The final destination was not a file. */
-    if (path_lookup_current.node.type != FILE) {
-      form_readfile_response (VFS_NOT_FILE, 0, -1);
-      end_action (false, -1, -1);
-    }
-
-    /* Form a message to a file system. */
-    fs_aid = path_lookup_current.aid;
-    if (write_vfs_fs_readfile_request (path_lookup_current.node.id, &fs_bda, &fs_bdb) == -1) {
-      syslog ("vfs: error: Could not prepare readfile request");
-      exit ();
-    }
-    fs_type = VFS_FS_READFILE;
-
-    readfile_sent = true;
-  }
-
-  end_action (false, -1, -1);
+  end_input_action (bda, bdb);
 }
 
 static void
-end_action (bool output_fired,
-	    bd_t bda,
-	    bd_t bdb)
+schedule (void)
 {
-  if (bda != -1 || bdb != -1) {
-    buffer_queue_push (&destroy_queue, 0, bda, 0, bdb, 0);
+  if (response_head != 0) {
+    scheduler_add (VFS_RESPONSE_NO, response_head->aid);
   }
-
-  if (!buffer_queue_empty (&client_response_queue)) {
-    scheduler_add (VFS_RESPONSE_NO, buffer_queue_item_parameter (buffer_queue_front (&client_response_queue)));
+  if (request_head != 0) {
+    scheduler_add (VFS_FS_REQUEST_NO, request_head->aid);
   }
-  if (file_system_request_precondition (fs_aid)) {
-    scheduler_add (VFS_FS_REQUEST_NO, fs_aid);
-  }
-  if (destroy_buffers_precondition ()) {
-    scheduler_add (DESTROY_BUFFERS_NO, 0);
-  }
-  if (decode_precondition ()) {
-    scheduler_add (DECODE_NO, 0);
-  }
-  if (mount_precondition ()) {
-    scheduler_add (MOUNT_NO, 0);
-  }
-  if (readfile_request_precondition ()) {
-    scheduler_add (READFILE_REQUEST_NO, 0);
-  }
-
-
-  scheduler_finish (output_fired, bda, bdb);
 }
