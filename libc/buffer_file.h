@@ -38,6 +38,10 @@ buffer_file_put (buffer_file_t* bf,
 		 char c);
 
 int
+buffer_file_puts (buffer_file_t* bf,
+		  const char* s);
+
+int
 buffer_file_initr (buffer_file_t* bf,
 		   bd_t bd);
 
@@ -62,5 +66,10 @@ buffer_file_position (const buffer_file_t* bf);
 int
 buffer_file_seek (buffer_file_t* bf,
 		  size_t position);
+
+int
+bfprintf (buffer_file_t* bf,
+	  const char* format,
+	  ...);
 
 #endif /* BUFFER_FILE_H */

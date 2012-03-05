@@ -366,7 +366,9 @@ scroll (client_t* client)
   /* Move the data up one line. */
   memmove (client->buffer, &client->buffer[LINE_LIMIT_POSITION], (PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION * CELL_SIZE);
   /* Clear the last line. */
-  memset (&client->buffer[(PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION], 0, LINE_LIMIT_POSITION * CELL_SIZE);
+  for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
+    client->buffer[(PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+  }
   /* Change the active y. */
   --client->active_position_y;
 

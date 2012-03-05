@@ -663,7 +663,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
   	if (vga_op_list_read_assign (&vol, &address, &data, &size) == -1) {
 	  end_input_action (bda, bdb);
   	}
-  	//assign (context, address, data, size);
+  	assign (context, address, data, size);
       }
       break;
     default:
