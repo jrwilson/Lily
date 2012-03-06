@@ -496,7 +496,9 @@ process_normal (client_t* client,
     client->mode = ESCAPED;
     break;
   case DEL:
-    /* Ignore the ASCII delete character. */
+    /* Rub-out the character under the cursor. */
+    client->buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x] = ATTRIBUTE | ' ';
+    client->graphics_refresh = true;
     break;
   default:
     /* ASCII character that can be displayed. */
