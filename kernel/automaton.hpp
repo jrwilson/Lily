@@ -333,8 +333,8 @@ public:
     port_set_.insert (port);
   }
 
-  pair<unsigned char, int>
-  inb (unsigned short port)
+  pair<uint8_t, int>
+  inb (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
       return make_pair (io::inb (port), LILY_SYSCALL_ESUCCESS);
@@ -345,11 +345,59 @@ public:
   }
 
   pair<int, int>
-  outb (unsigned short port,
-	unsigned char value)
+  outb (uint16_t port,
+	uint8_t value)
   {
     if (port_set_.find (port) != port_set_.end ()) {
       io::outb (port, value);
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<uint16_t, int>
+  inw (uint16_t port)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      return make_pair (io::inw (port), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  outw (uint16_t port,
+	uint16_t value)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      io::outw (port, value);
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<uint32_t, int>
+  inl (uint16_t port)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      return make_pair (io::inl (port), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  outl (uint16_t port,
+	uint32_t value)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      io::outl (port, value);
       return make_pair (0, LILY_SYSCALL_ESUCCESS);
     }
     else {

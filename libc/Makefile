@@ -6,14 +6,12 @@ CFLAGS=-MD -O2 -g -Wall -fno-builtin -std=c99
 HEADERS=automaton.h io.h string.h dymem.h fifo_scheduler.h buffer_queue.h buffer_file.h description.h callback_queue.h
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=crt0.o libc.a libstring.a libio.a libdymem.a libfifo_scheduler.a libbuffer_queue.a libbuffer_file.a libdescription.a libcallback_queue.a
+OBJECTS=crt0.o libc.a libio.a libdymem.a libfifo_scheduler.a libbuffer_queue.a libbuffer_file.a libdescription.a libcallback_queue.a
 
 .PHONY : all
 all : $(OBJECTS)
 
-libc.a : automaton.o pagesize.o syslog.o
-
-libstring.a : string.o
+libc.a : automaton.o pagesize.o syslog.o string.o
 
 libio.a : io.o
 

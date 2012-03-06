@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=vfs tmpfs jsh keyboard kb_us_104 terminal vga
+PROGRAMS=vfs tmpfs jsh keyboard kb_us_104 terminal vga pci
 # shell
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -9,7 +9,7 @@ TARGETS=boot_automaton boot_data
 all : $(TARGETS)
 
 boot_automaton : boot_automaton.o cpio.o vfs_msg.o argv.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -lfifo_scheduler -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 	mkdir -p init_fs/bin
@@ -24,31 +24,34 @@ to_buffer_file : to_buffer_file.c
 	gcc -o $@ $^
 
 # registry : registry.o registry_msg.o
-# 	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem -lstring
+# 	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue -lfifo_scheduler -ldymem
 
 # shell : shell.o
-# 	$(CC) -o $@ $^ -lstring_buffer -lbuffer_heap -lfifo_scheduler -ldymem -lstring
+# 	$(CC) -o $@ $^_buffer -lbuffer_heap -lfifo_scheduler -ldymem
 
 vfs : vfs.o vfs_msg.o
-	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
 tmpfs : tmpfs.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 jsh : jsh.o argv.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem
 
 keyboard : keyboard.o
-	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
 
 kb_us_104 : kb_us_104.o
-	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 terminal : terminal.o vga_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem -lstring
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 vga : vga.o vga_msg.o
-	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem -lstring
+	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
+
+pci : pci.o 
+	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

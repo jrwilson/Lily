@@ -17,6 +17,9 @@
 # Load the VGA driver.
 @vga = create -p /bin/vga
 
+# Load the PCI driver.
+@pci = create -p /bin/pci
+
 # Bind everything together.
 bind @keyboard scan_code @kb_us_104 scan_code
 bind @kb_us_104 text @terminal text

@@ -43,6 +43,10 @@
 #define LILY_SYSCALL_UNRESERVE_PORT        0x111
 #define LILY_SYSCALL_INB                   0x112
 #define LILY_SYSCALL_OUTB                  0x113
+#define LILY_SYSCALL_INW                   0x114
+#define LILY_SYSCALL_OUTW                  0x115
+#define LILY_SYSCALL_INL                   0x116
+#define LILY_SYSCALL_OUTL                  0x117
 
 #define LILY_SYSCALL_SUBSCRIBE_IRQ         0x120
 #define LILY_SYSCALL_UNSUBSCRIBE_IRQ       0x121

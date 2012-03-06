@@ -132,12 +132,12 @@ struct reserve_port_args {
   uint32_t port;
 };
 
-struct inb_args {
+struct in_args {
   uint32_t eip;
   uint32_t port;
 };
 
-struct outb_args {
+struct out_args {
   uint32_t eip;
   uint32_t port;
   uint32_t value;
@@ -543,12 +543,12 @@ trap_dispatch (volatile registers regs)
   case LILY_SYSCALL_INB:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      inb_args* ptr = reinterpret_cast<inb_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (inb_args))) {
+      in_args* ptr = reinterpret_cast<in_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (in_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<unsigned char, int> r = a->inb (ptr->port);
+      pair<uint8_t, int> r = a->inb (ptr->port);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -557,12 +557,68 @@ trap_dispatch (volatile registers regs)
   case LILY_SYSCALL_OUTB:
     {
       automaton* a = scheduler::current_action ().action->automaton;
-      outb_args* ptr = reinterpret_cast<outb_args*> (regs.useresp);
-      if (!a->verify_span (ptr, sizeof (outb_args))) {
+      out_args* ptr = reinterpret_cast<out_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (out_args))) {
 	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
 	kassert (0);
       }
-      pair<unsigned char, int> r = a->outb (ptr->port, ptr->value);
+      pair<int, int> r = a->outb (ptr->port, ptr->value);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_INW:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      in_args* ptr = reinterpret_cast<in_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (in_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<uint16_t, int> r = a->inw (ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_OUTW:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      out_args* ptr = reinterpret_cast<out_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (out_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = a->outw (ptr->port, ptr->value);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_INL:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      in_args* ptr = reinterpret_cast<in_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (in_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<uint32_t, int> r = a->inl (ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_OUTL:
+    {
+      automaton* a = scheduler::current_action ().action->automaton;
+      out_args* ptr = reinterpret_cast<out_args*> (regs.useresp);
+      if (!a->verify_span (ptr, sizeof (out_args))) {
+	// BUG:  Can't get the arguments from the stack.  Don't use verify_span!  Use verify_stack!
+	kassert (0);
+      }
+      pair<int, int> r = a->outl (ptr->port, ptr->value);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
