@@ -597,6 +597,8 @@ namespace rts {
       frame_t frame = frame_manager::alloc ();
       kassert (frame != vm::zero_frame ());
       b->append_frame (frame);
+      /* Drop the reference count. */
+      frame_manager::decref (frame);
     }
 
     pair<void*, int> s = a->buffer_map (r.first);
