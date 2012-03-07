@@ -21,6 +21,9 @@
 
 namespace rts {
 
+  automaton*
+  lookup_automaton (aid_t aid);
+
   void
   create_init_automaton (frame_t automaton_frame,
 			 size_t automaton_size,
@@ -28,13 +31,16 @@ namespace rts {
 			 size_t data_size);
 
   void
-  finish (const caction& current,
+  finish (automaton* a,
 	  ano_t action_number,
 	  int parameter,
 	  bool output_fired,
 	  bd_t bda,
 	  bd_t bdb);
   
+  void
+  exit (automaton* a);
+
   pair<aid_t, int>
   create (automaton* a,
 	  bd_t text_bd,
@@ -51,9 +57,6 @@ namespace rts {
 	aid_t input_automaton,
 	ano_t input_action,
 	int input_parameter);
-
-  void
-  loose (void);
 
   void
   destroy (void);

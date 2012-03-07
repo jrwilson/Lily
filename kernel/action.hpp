@@ -47,40 +47,55 @@ private:
 
 // Complete action.
 struct caction {
-  const paction* action;
+  aid_t aid;
+  action_type_t type;
+  parameter_mode_t parameter_mode;
+  const void* action_entry_point;
+  ano_t action_number;
   int parameter;
-  buffer* system_input_buffer_a;
-  buffer* system_input_buffer_b;
+  // For system inputs.
+  buffer* buffer_a;
+  buffer* buffer_b;
 
   caction () :
-    action (0),
-    parameter (0),
-    system_input_buffer_a (0),
-    system_input_buffer_b (0)
+    aid (-1),
+    action_number (LILY_ACTION_NO_ACTION),
+    buffer_a (0),
+    buffer_b (0)
   { }
 
-  caction (const paction* act,
+  caction (aid_t aid,
+	   const paction* act,
 	   int p) :
-    action (act),
+    aid (aid),
+    type (act->type),
+    parameter_mode (act->parameter_mode),
+    action_entry_point (act->action_entry_point),
+    action_number (act->action_number),
     parameter (p),
-    system_input_buffer_a (0),
-    system_input_buffer_b (0)
+    buffer_a (0),
+    buffer_b (0)
   { }
 
-  caction (const paction* act,
+  caction (aid_t aid,
+	   const paction* act,
 	   int p,
 	   buffer* a,
 	   buffer* b) :
-    action (act),
+    aid (aid),
+    type (act->type),
+    parameter_mode (act->parameter_mode),
+    action_entry_point (act->action_entry_point),
+    action_number (act->action_number),
     parameter (p),
-    system_input_buffer_a (a),
-    system_input_buffer_b (b)
+    buffer_a (a),
+    buffer_b (b)
   { }
   
   inline bool
   operator== (const caction& other) const
   {
-    return action == other.action && parameter == other.parameter;
+    return aid == other.aid && action_number == other.action_number && parameter == other.parameter;
   }
 };
 
@@ -89,7 +104,7 @@ struct caction_hash {
   size_t
   operator() (const caction& c) const
   {
-    return reinterpret_cast<uintptr_t> (c.action) ^ c.parameter;
+    return c.aid ^ c.action_number ^ c.parameter;
   }
 };
 

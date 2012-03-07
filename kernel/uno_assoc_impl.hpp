@@ -73,6 +73,12 @@ public:
     {
       return &bucket_->value;
     }
+
+    const_reference
+    operator* () const
+    {
+      return bucket_->value;
+    }
   };
 
   struct const_iterator {
@@ -111,6 +117,12 @@ public:
     operator-> () const
     {
       return &bucket_->value;
+    }
+
+    const_reference
+    operator* () const
+    {
+      return bucket_->value;
     }
 
     const_iterator&
