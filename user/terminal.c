@@ -280,7 +280,6 @@ static client_t* active_client = 0;
 static bool initialized = false;
 
 /* Buffers for the output. */
-static bool output_buffer_initialized = false;
 static bd_t output_buffer_bda = -1;
 static bd_t output_buffer_bdb = -1;
 static vga_op_list_t output_buffer;
@@ -377,24 +376,12 @@ scroll (client_t* client)
 }
 
 static void
-initialize_output_buffer (void)
-{
-  if (!output_buffer_initialized) {
-    output_buffer_initialized = true;
-    if (vga_op_list_initw (&output_buffer, output_buffer_bda, output_buffer_bdb) == -1) {
-      syslog ("terminal: Could not initialize vga op list");
-      exit ();
-    }
-  }
-}
-
-static void
 initialize (void)
 {
   if (!initialized) {
     initialized = true;
 
-    output_buffer_bda = buffer_create (1);
+    output_buffer_bda = buffer_create (0);
     if (output_buffer_bda == -1) {
       syslog ("terminal: Could not create output buffer");
       exit ();
@@ -405,6 +392,12 @@ initialize (void)
       syslog ("terminal: Could not create output buffer");
       exit ();
     }
+
+    if (vga_op_list_initw (&output_buffer, output_buffer_bda, output_buffer_bdb) == -1) {
+      syslog ("terminal: Could not initialize vga op list");
+      exit ();
+    }
+
   }
 }
 
@@ -764,9 +757,12 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd
     /* The client buffer is appended to the output buffer.
        Thus, the reference count for the client buffer is at least 2 after an output.
        If we write to the client buffer, it will be copied for copy-on-write.
-       By reinitializing the output buffer, we potentially drop the reference count to 1 an avoid copy-on-write.
+       By reinitializing the output buffer, we potentially drop the reference count to 1 and avoid copy-on-write.
     */
-    initialize_output_buffer ();
+    if (vga_op_list_reset (&output_buffer) == -1) {
+      syslog ("terminal: error: Could not reset vga_op_list");
+      exit ();
+    }
   }
 
   /* Process the string. */
@@ -814,7 +810,10 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
 
   if (vga_op_precondition ()) {
 
-    initialize_output_buffer ();
+    if (vga_op_list_reset (&output_buffer) == -1) {
+      syslog ("terminal: error: Could not reset vga_op_list");
+      exit ();
+    }
 
     if (active_client->graphics_refresh) {
       /* Send the data. */
@@ -833,8 +832,6 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
       }
       active_client->cursor_refresh = false;
     }
-
-    output_buffer_initialized = false;
 
     end_output_action (true, output_buffer_bda, output_buffer_bdb);
   }

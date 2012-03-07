@@ -24,6 +24,9 @@ vga_op_list_initw (vga_op_list_t* vol,
 		   bd_t bdb);
 
 int
+vga_op_list_reset (vga_op_list_t* vol);
+
+int
 vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
 				       size_t location);
 

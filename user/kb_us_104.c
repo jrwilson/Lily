@@ -686,21 +686,8 @@ lookup_symbol (unsigned char key)
 static bool initialized = false;
 
 /* Processed scan codes. */
-static bool output_buffer_initialized = false;
 static bd_t output_buffer_bd = -1;
 static buffer_file_t output_buffer;
-
-static void
-initialize_output_buffer (void)
-{
-  if (!output_buffer_initialized) {
-    output_buffer_initialized = true;
-    if (buffer_file_initc (&output_buffer, output_buffer_bd) == -1) {
-      syslog ("kb_us_104: error: Could not initialize output buffer");
-      exit ();
-    }
-  }
-}
 
 static void
 process_key_code (unsigned char key_code,
@@ -847,9 +834,13 @@ initialize (void)
     initialized = true;
 
     /* Allocate the output buffer. */
-    output_buffer_bd = buffer_create (1);
+    output_buffer_bd = buffer_create (0);
     if (output_buffer_bd == -1) {
       syslog ("kb_us_104: error: Could not create output buffer");
+      exit ();
+    }
+    if (buffer_file_initw (&output_buffer, output_buffer_bd) == -1) {
+      syslog ("kb_us_104: error: Could not initialize output buffer");
       exit ();
     }
 
@@ -1092,8 +1083,6 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, 
     end_input_action (bda, bdb);
   }
 
-  initialize_output_buffer ();
-
   for (size_t idx = 0; idx != size; ++idx) {
     if (consume != 0) {
       --consume;
@@ -1150,7 +1139,7 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, 
 static bool
 text_precondition (void)
 {
-  return output_buffer_initialized && buffer_file_size (&output_buffer) != 0;
+  return buffer_file_size (&output_buffer) != 0;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, int param)
@@ -1159,7 +1148,7 @@ BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, int param)
   scheduler_remove (TEXT_NO, param);
 
   if (text_precondition ()) {
-    output_buffer_initialized = false;
+    buffer_file_truncate (&output_buffer);
     end_output_action (true, output_buffer_bd, -1);
   }
   else {

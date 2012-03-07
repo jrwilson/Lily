@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=vfs tmpfs jsh keyboard kb_us_104 terminal vga pci
+PROGRAMS=vfs tmpfs jsh keyboard kb_us_104 terminal vga pci hello_world
 # shell
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -29,15 +29,14 @@ to_buffer_file : to_buffer_file.c
 # shell : shell.o
 # 	$(CC) -o $@ $^_buffer -lbuffer_heap -lfifo_scheduler -ldymem
 
+# File systems
 vfs : vfs.o vfs_msg.o
 	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
 tmpfs : tmpfs.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
-jsh : jsh.o argv.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem
-
+# Device drivers
 keyboard : keyboard.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
 
@@ -52,6 +51,13 @@ vga : vga.o vga_msg.o
 
 pci : pci.o 
 	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
+
+# Programs
+jsh : jsh.o argv.o vfs_msg.o
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem
+
+hello_world : hello_world.o
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

@@ -4,7 +4,7 @@
 #include <stdarg.h>
 
 int
-buffer_file_initc (buffer_file_t* bf,
+buffer_file_initw (buffer_file_t* bf,
 		   bd_t bd)
 {
   bf->bd = bd;
@@ -12,24 +12,19 @@ buffer_file_initc (buffer_file_t* bf,
   if (bf->bd_size == -1) {
     return -1;
   }
-  if (bf->bd_size == 0) {
-    buffer_unmap (bd);
-    if (buffer_resize (bd, 1) == -1) {
+  bf->capacity = bf->bd_size * pagesize ();
+  if (bf->bd_size != 0) {
+    bf->ptr = buffer_map (bd);
+    if (bf->ptr == 0) {
       return -1;
     }
-    bf->bd_size = 1;
   }
-  bf->capacity = bf->bd_size * pagesize ();
-  bf->ptr = buffer_map (bd);
-  if (bf->ptr == 0) {
-    return -1;
+  else {
+    bf->ptr = 0;
   }
   bf->size = sizeof (size_t);
   bf->position = sizeof (size_t);
   bf->can_update = true;
-
-  /* Write the size. */
-  *((size_t*)bf->ptr) = bf->size;
 
   return 0;
 }
@@ -51,9 +46,7 @@ buffer_file_write (buffer_file_t* bf,
 
   /* Resize if necessary. */
   if (bf->capacity < new_position) {
-    if (buffer_unmap (bf->bd) == -1) {
-      return -1;
-    }
+    buffer_unmap (bf->bd);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
     if (buffer_resize (bf->bd, bf->bd_size) == -1) {
@@ -91,9 +84,7 @@ buffer_file_put (buffer_file_t* bf,
   
   /* Resize if necessary. */
   if (bf->capacity < new_position) {
-    if (buffer_unmap (bf->bd) == -1) {
-      return -1;
-    }
+    buffer_unmap (bf->bd);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
     if (buffer_resize (bf->bd, bf->bd_size) == -1) {
@@ -129,6 +120,13 @@ buffer_file_puts (buffer_file_t* bf,
   }
 
   return 0;
+}
+
+void
+buffer_file_truncate (buffer_file_t* bf)
+{
+  bf->position = sizeof (size_t);
+  bf->size = sizeof (size_t);
 }
 
 int

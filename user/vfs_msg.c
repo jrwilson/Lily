@@ -65,7 +65,7 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
   vfs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initc (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) == -1) {
     return -1;
   }
 
@@ -280,7 +280,7 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
   vfs_response_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initc (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) == -1) {
     return -1;
   }
 
@@ -535,7 +535,7 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
   vfs_fs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initc (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) == -1) {
     return -1;
   }
 
@@ -684,7 +684,7 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
   vfs_fs_response_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initc (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) == -1) {
     return -1;
   }
 

@@ -5,11 +5,7 @@ vga_op_list_initw (vga_op_list_t* vol,
 		   bd_t bda,
 		   bd_t bdb)
 {
-  if (buffer_file_initc (&vol->bf, bda) == -1) {
-    return -1;
-  }
-
-  if (buffer_resize (bdb, 0) == -1) {
+  if (buffer_file_initw (&vol->bf, bda) == -1) {
     return -1;
   }
 
@@ -17,6 +13,28 @@ vga_op_list_initw (vga_op_list_t* vol,
   vol->bdb = bdb;
 
   if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+    return -1;
+  }
+
+  return 0;
+}
+
+int
+vga_op_list_reset (vga_op_list_t* vol)
+{
+  if (vol->count == 0) {
+    return 0;
+  }
+
+  vol->count = 0;
+
+  buffer_file_truncate (&vol->bf);
+
+  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+    return -1;
+  }
+
+  if (buffer_resize (vol->bdb, 0) == -1) {
     return -1;
   }
 

@@ -25,7 +25,7 @@ typedef struct {
 } buffer_file_t;
 
 int
-buffer_file_initc (buffer_file_t* bf,
+buffer_file_initw (buffer_file_t* bf,
 		   bd_t bd);
 
 int
@@ -40,6 +40,9 @@ buffer_file_put (buffer_file_t* bf,
 int
 buffer_file_puts (buffer_file_t* bf,
 		  const char* s);
+
+void
+buffer_file_truncate (buffer_file_t* bf);
 
 int
 buffer_file_initr (buffer_file_t* bf,

@@ -18,7 +18,7 @@ static callback_queue_t vfs_response_queue;
 
 /*
   Begin Model Section
-  ==========================
+  ===================
 */
 
 typedef struct automaton_var automaton_var_t;
@@ -59,6 +59,63 @@ find_automaton_var (const char* name,
   }
   
   return var;
+}
+
+typedef struct start_queue_item start_queue_item_t;
+struct start_queue_item {
+  aid_t aid;
+  start_queue_item_t* next;
+};
+
+static start_queue_item_t* start_queue_head;
+static start_queue_item_t** start_queue_tail = &start_queue_head;
+
+static void
+start_queue_push (aid_t aid)
+{
+  start_queue_item_t* item = malloc (sizeof (start_queue_item_t));
+  memset (item, 0, sizeof (start_queue_item_t));
+  item->aid = aid;
+  *start_queue_tail = item;
+  start_queue_tail = &item->next;
+}
+
+static start_queue_item_t**
+start_queue_find (aid_t aid)
+{
+  start_queue_item_t** item;
+  for (item = &start_queue_head; *item != 0; item = &(*item)->next) {
+    if ((*item)->aid == aid) {
+      break;
+    }
+  }
+
+  return item;
+}
+
+static void
+start_queue_erase (start_queue_item_t** item)
+{
+  start_queue_item_t* i = *item;
+
+  *item = i->next;
+  if (start_queue_head == 0) {
+    start_queue_tail = &start_queue_head;
+  }
+
+  free (item);
+}
+
+static bool
+start_queue_empty (void)
+{
+  return start_queue_head == 0;
+}
+
+static aid_t
+start_queue_front (void)
+{
+  return start_queue_head->aid;
 }
 
 /*
@@ -167,8 +224,6 @@ create_callback (void* data,
 
 typedef enum {
   AUTOMATON_VAR,
-  CREATE,
-  BIND,
   STRING,
   ASSIGN,
 } token_type_t;
@@ -190,16 +245,6 @@ push_token (token_type_t type,
 	    char* string,
 	    size_t size)
 {
-  /* Override the type if a keyword. */
-  if (type == STRING) {
-    if (strncmp ("create", string, size) == 0) {
-      type = CREATE;
-    }
-    else if (strncmp ("bind", string, size) == 0) {
-      type = BIND;
-    }
-  }
-
   token_list_item_t* item = malloc (sizeof (token_list_item_t));
   memset (item, 0, sizeof (token_list_item_t));
   item->type = type;
@@ -240,6 +285,11 @@ create_ (token_list_item_t* var)
 {
   bool retain_privilege = false;
   token_list_item_t* filename;
+
+  if (find_automaton_var (var->string, var->size) != 0) {
+    syslog ("TODO:  Automaton variable already assigned");
+    return;
+  }
 
   if ((filename = accept (STRING)) == 0) {
     syslog ("TODO:  Expected a filename or argument");
@@ -363,6 +413,33 @@ bind_ (void)
 }
 
 static void
+start_ (void)
+{
+  /* Get the argument token. */
+  token_list_item_t* automaton_token;
+  if ((automaton_token = accept (AUTOMATON_VAR)) == 0) {
+    syslog ("TODO:  Expected an automaton variable");
+    return;
+  }
+
+  if (current_token != 0) {
+    syslog ("TODO:  Expected no more tokens");
+    return;
+  }
+
+  /* Look up the variables for the automaton. */
+  automaton_var_t* automaton = find_automaton_var (automaton_token->string, automaton_token->size);
+  if (automaton == 0) {
+    syslog ("TODO:  Automaton is not defined");
+    return;
+  }
+
+  /* TODO:  If we are not bound to it, then we should probably warn them. */
+
+  start_queue_push (automaton->aid);
+}
+
+static void
 automaton_assignment (token_list_item_t* var)
 {
   if (accept (ASSIGN) == 0) {
@@ -371,7 +448,7 @@ automaton_assignment (token_list_item_t* var)
   }
   
   token_list_item_t* t;
-  if ((t = accept (CREATE)) != 0) {
+  if ((t = accept (STRING)) != 0 && strncmp ("create", t->string, t->size) == 0) {
     create_ (var);
   }
   else {
@@ -386,13 +463,20 @@ statement (void)
 
   if ((t = accept (AUTOMATON_VAR)) != 0) {
     automaton_assignment (t);
+    return;
   }
-  else if ((t = accept (BIND)) != 0) {
-    bind_ ();
+  else if ((t = accept (STRING)) != 0) {
+    if (strncmp ("bind", t->string, t->size) == 0) {
+      bind_ ();
+      return;
+    }
+    else if (strncmp ("start", t->string, t->size) == 0) {
+      start_ ();
+      return;
+    }
   }
-  else {
-    syslog ("TODO:  syntax error");
-  }
+
+  syslog ("TODO:  syntax error");
 }
 
 static void
@@ -648,6 +732,10 @@ put (char c)
 #define VFS_REQUEST_NO 3
 #define LOAD_TEXT_NO 4
 #define PROCESS_TEXT_NO 5
+#define STDIN_NO 6
+#define STDOUT_NO 7
+#define START_NO 8
+#define STDIN_COL_NO 9
 
 #define VFS_NAME "vfs"
 
@@ -666,26 +754,44 @@ static const char* interpret_string;
 static size_t interpret_string_size;
 static size_t interpret_string_idx;
 
+/* Text to output. */
+static bd_t stdout_bd;
+static buffer_file_t stdout_bf;
+
 static void
 initialize (void)
 {
   if (!initialized) {
     initialized = true;
 
-    vfs_request_bda = buffer_create (1);
+    /* Create an automaton to represent the shell. */
+    automaton_var_t* this = create_automaton_var ("@this", 6);
+    this->aid = getaid ();
+
+    vfs_request_bda = buffer_create (0);
     if (vfs_request_bda == -1) {
-      syslog ("jsh: error: Could not create output buffer");
+      syslog ("jsh: error: Could not create vfs output buffer");
       exit ();
     }
     vfs_request_bdb = buffer_create (0);
     if (vfs_request_bdb == -1) {
-      syslog ("jsh: error: Could not create output buffer");
+      syslog ("jsh: error: Could not create vfs output buffer");
       exit ();
     }
     vfs_request_queue_init (&vfs_request_queue);
     callback_queue_init (&vfs_response_queue);
     buffer_queue_init (&interpret_queue);
     scan_string_init ();
+
+    stdout_bd = buffer_create (0);
+    if (stdout_bd == -1) {
+      syslog ("jsh: error: Could not create stdout buffer");
+      exit ();
+    }
+    if (buffer_file_initw (&stdout_bf, stdout_bd) == -1) {
+      syslog ("jsh: error: Could not initialize stdout buffer");
+      exit ();
+    }
   }
 }
 
@@ -951,6 +1057,96 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, int param)
   end_internal_action ();
 }
 
+/* stdin
+   -----
+   Incoming text (to interpret).
+
+   Post: ???
+ */
+BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file", stdin, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  /* TODO */
+
+  end_input_action (bda, bdb);
+}
+
+/* stdout
+   ------
+   Outgoing text.
+   
+   Pre:  the output buffer is not empty
+   Post: the output buffer appears empty
+ */
+static bool
+stdout_precondition (void)
+{
+  return buffer_file_size (&stdout_bf) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, int param)
+{
+  initialize ();
+  scheduler_remove (STDOUT_NO, param);
+
+  if (stdout_precondition ()) {
+    buffer_file_truncate (&stdout_bf);
+    end_output_action (true, stdout_bd, -1);
+  }
+  else {
+    end_output_action (false, -1, -1);
+  }
+}
+
+/* start
+   -----
+   Action for starting automata.
+   
+   Pre:  ???
+   Post: ???
+ */
+BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, aid_t aid)
+{
+  initialize ();
+  scheduler_remove (START_NO, aid);
+
+  start_queue_item_t** item = start_queue_find (aid);
+  if (*item != 0) {
+    start_queue_erase (item);
+    end_output_action (true, -1, -1);
+  }
+  else {
+    end_output_action (false, -1, -1);
+  }
+}
+
+/* stdout_col
+   ----------
+   Standard output collector.
+
+   Post: ???
+ */
+BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file", stdin_col, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  buffer_file_t bf;
+  if (buffer_file_initr (&bf, bda) == -1) {
+    end_input_action (bda, bdb);
+  }
+
+  size_t size = buffer_file_size (&bf);
+  const char* data = buffer_file_readp (&bf, size);
+  if (data == 0) {
+    end_input_action (bda, bdb);
+  }
+
+  buffer_file_write (&stdout_bf, data, size);
+
+  end_input_action (bda, bdb);
+}
+
 static void
 schedule (void)
 {
@@ -962,6 +1158,12 @@ schedule (void)
   }
   if (process_text_precondition ()) {
     scheduler_add (PROCESS_TEXT_NO, 0);
+  }
+  if (stdout_precondition ()) {
+    scheduler_add (STDOUT_NO, 0);
+  }
+  if (!start_queue_empty ()) {
+    scheduler_add (START_NO, start_queue_front ());
   }
 }
 

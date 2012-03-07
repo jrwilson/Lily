@@ -13,7 +13,7 @@ argv_initw (argv_t* a,
     return -1;
   }
   
-  if (buffer_file_initc (&a->argv_bf, *bda) == -1) {
+  if (buffer_file_initw (&a->argv_bf, *bda) == -1) {
     buffer_destroy (*bda);
     return -1;
   }
@@ -32,7 +32,7 @@ argv_initw (argv_t* a,
     return -1;
   }
 
-  if (buffer_file_initc (&a->string_bf, *bdb) == -1) {
+  if (buffer_file_initw (&a->string_bf, *bdb) == -1) {
     buffer_destroy (*bda);
     buffer_destroy (*bdb);
     return -1;

@@ -323,7 +323,7 @@ initialize (void)
     bd_t bd = buffer_create (0);
     buffer_file_t bf;
     
-    buffer_file_initc (&bf, bd);
+    buffer_file_initw (&bf, bd);
 
     for (dev_t* dev = dev_head; dev != 0; dev = dev->next) {
       bfprintf (&bf, "%x:%x.%x vendor = %x device = %x command = %x status = %x revision = %x prog = %x subclass = %x class = %x\n", dev->bus, dev->slot, dev->function, dev->vendor, dev->device, dev->command, dev->status, dev->revision, dev->programming_interface, dev->subclass, dev->class);

@@ -31,7 +31,6 @@
 static bool initialized = false;
 
 /* Output buffer containing scan codes. */
-static bool output_buffer_initialized = false;
 static bd_t output_buffer_bd = -1;
 static buffer_file_t output_buffer;
 
@@ -59,20 +58,12 @@ initialize (void)
     }
 
     /* Create the output buffer. */
-    output_buffer_bd = buffer_create (1);
+    output_buffer_bd = buffer_create (0);
     if (output_buffer_bd == -1) {
       syslog ("keyboard: error:  Could not create output buffer");
       exit ();
-    }      
-  }
-}
-
-static void
-initialize_output_buffer (void)
-{
-  if (!output_buffer_initialized) {
-    output_buffer_initialized = true;
-    if (buffer_file_initc (&output_buffer, output_buffer_bd) == -1) {
+    }
+    if (buffer_file_initw (&output_buffer, output_buffer_bd) == -1) {
       syslog ("keyboard: error:  Could not initialize output buffer");
       exit ();
     }
@@ -120,7 +111,6 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
 BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  initialize_output_buffer ();
   if (buffer_file_put (&output_buffer, inb (KEYBOARD_DATA_PORT)) == -1) {
     syslog ("keyboard: error:  Could not write to output buffer");
     exit ();
@@ -138,7 +128,7 @@ BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, aid_t aid
 static bool
 scan_code_precondition (void)
 {
-  return output_buffer_initialized && buffer_file_size (&output_buffer) != 0;
+  return buffer_file_size (&output_buffer) != 0;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param)
@@ -147,7 +137,7 @@ BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code,
   scheduler_remove (SCAN_CODE_NO, param);
 
   if (scan_code_precondition ()) {
-    output_buffer_initialized = false;
+    buffer_file_truncate (&output_buffer);
     end_output_action (true, output_buffer_bd, -1);
   }
   else {
