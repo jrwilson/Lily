@@ -25,21 +25,21 @@ reserve_port (unsigned short port);
 unsigned char
 inb (unsigned short port);
 
-void
+int
 outb (unsigned short port,
       unsigned char value);
 
 unsigned short
 inw (unsigned short port);
 
-void
+int
 outw (unsigned short port,
       unsigned short value);
 
 unsigned long
 inl (unsigned short port);
 
-void
+int
 outl (unsigned short port,
       unsigned long value);
 
