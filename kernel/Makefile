@@ -27,6 +27,7 @@ irq_handler.o \
 irq.o \
 trap_handler.o \
 trap.o \
+binding.o \
 rts.o \
 global_fifo_scheduler.o
 

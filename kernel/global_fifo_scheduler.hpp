@@ -352,12 +352,12 @@ public:
 	    {
 	      // Lookup the input actions.
 	      input_action_list_.clear ();
-	      const automaton::input_action_set_type* input_actions = a->get_bound_inputs (action_);
+	      const automaton::binding_set_type* input_actions = a->get_bound_inputs (action_);
 	      if (input_actions != 0) {
-		for (automaton::input_action_set_type::const_iterator pos = input_actions->begin ();
+		for (automaton::binding_set_type::const_iterator pos = input_actions->begin ();
 		     pos != input_actions->end ();
 		     ++pos) {
-		  input_action_list_.push_back (pos->input);
+		  input_action_list_.push_back ((*pos)->input_action ());
 		}
 	      }
 	      input_action_pos_ = input_action_list_.begin ();

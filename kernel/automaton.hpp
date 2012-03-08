@@ -26,6 +26,7 @@
 #include "io.hpp"
 #include "irq_handler.hpp"
 #include "kstring.hpp"
+#include "binding.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -33,67 +34,67 @@ static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
 
 class automaton {
 private:
-  struct input_act {
-    caction const input;
-    automaton* const owner;
+  // struct input_act {
+  //   caction const input;
+  //   automaton* const owner;
 
-    input_act (const caction& i,
-	       automaton* own) :
-      input (i),
-      owner (own)
-    { }
+  //   input_act (const caction& i,
+  // 	       automaton* own) :
+  //     input (i),
+  //     owner (own)
+  //   { }
 
-    inline bool
-    operator== (const input_act& other) const
-    {
-      // Owner doesn't matter.
-      return input == other.input;
-    }
-  };
+  //   inline bool
+  //   operator== (const input_act& other) const
+  //   {
+  //     // Owner doesn't matter.
+  //     return input == other.input;
+  //   }
+  // };
 
-  struct input_act_hash {
-    size_t
-    operator() (const input_act& act) const
-    {
-      return caction_hash () (act.input);
-    }
-  };
+  // struct input_act_hash {
+  //   size_t
+  //   operator() (const input_act& act) const
+  //   {
+  //     return caction_hash () (act.input);
+  //   }
+  // };
 
-  struct output_act {
-    caction const output;
-    automaton* const owner;
+  // struct output_act {
+  //   caction const output;
+  //   automaton* const owner;
 
-    output_act (const caction& o,
-		automaton* own) :
-      output (o),
-      owner (own)
-    { }
-  };
+  //   output_act (const caction& o,
+  // 		automaton* own) :
+  //     output (o),
+  //     owner (own)
+  //   { }
+  // };
 
-  struct binding {
-    caction const output;
-    caction const input;
+  // struct binding {
+  //   caction const output;
+  //   caction const input;
 
-    binding (const caction& o,
-	     const caction& i) :
-      output (o),
-      input (i)
-    { }
+  //   binding (const caction& o,
+  // 	     const caction& i) :
+  //     output (o),
+  //     input (i)
+  //   { }
 
-    inline bool
-    operator== (const binding& other) const
-    {
-      return output == other.output && input == other.input;
-    }
-  };
+  //   inline bool
+  //   operator== (const binding& other) const
+  //   {
+  //     return output == other.output && input == other.input;
+  //   }
+  // };
 
-  struct binding_hash {
-    size_t
-    operator() (const binding& b) const
-    {
-      return caction_hash () (b.output) ^ caction_hash () (b.input);
-    }
-  };
+  // struct binding_hash {
+  //   size_t
+  //   operator() (const binding& b) const
+  //   {
+  //     return caction_hash () (b.output) ^ caction_hash () (b.input);
+  //   }
+  // };
 
   aid_t aid_;
   bool privileged_;
@@ -125,23 +126,20 @@ private:
   // Automata that receive notification when this automaton is destroyed.
   typedef unordered_set<automaton*> subscribers_set_type;
   subscribers_set_type subscribers_;
+
   // Bound outputs.
 public:
-  typedef unordered_set <input_act, input_act_hash> input_action_set_type;
+  typedef unordered_set <binding*> binding_set_type;
 private:
-  typedef unordered_map <caction, input_action_set_type, caction_hash> bound_outputs_map_type;
+  typedef unordered_map <caction, binding_set_type, caction_hash> bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
 
   // Bound inputs.
-  typedef unordered_map<caction, output_act, caction_hash> bound_inputs_map_type;
+  typedef unordered_map<caction, binding_set_type, caction_hash> bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
 
-  // Next binding id to allocate.
-  bid_t current_bid_;
-  typedef unordered_map<bid_t, binding> bid_to_binding_map_type;
-  bid_to_binding_map_type bid_to_binding_map_;
-  typedef unordered_set<binding, binding_hash> bindings_set_type;
-  bindings_set_type bindings_set_;
+  // Owned bindings.
+  binding_set_type owned_bindings_;
 
   // Next buffer descriptor to allocate.
   bd_t current_bd_;
@@ -202,7 +200,6 @@ public:
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
     stack_area_ (0),
-    current_bid_ (0),
     current_bd_ (0)
   { }
 
@@ -606,8 +603,8 @@ public:
     bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.find (output_action);
     if (pos1 != bound_outputs_map_.end ()) {
       // TODO:  Replace this iteration with look-up in a data structure.
-      for (input_action_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if (pos2->input.action->automaton == input_automaton) {
+      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	if ((*pos2)->input_action ().action->automaton == input_automaton) {
 	  return true;
 	}
       }
@@ -617,14 +614,12 @@ public:
   }
 
   void
-  bind_output (const caction& output_action,
-	       const caction& input_action,
-	       automaton* owner)
+  bind_output (binding* b)
   {
-    kassert (output_action.action->automaton == this);
+    kassert (b->output_action ().action->automaton == this);
 
-    pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (output_action, input_action_set_type ()));
-    r.first->second.insert (input_act (input_action, owner));
+    pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (b->output_action (), binding_set_type ()));
+    r.first->second.insert (b);
   }
   
   bool
@@ -636,31 +631,21 @@ public:
   }
 
   void
-  bind_input (const caction& output_action,
-	      const caction& input_action,
-	      automaton* owner)
+  bind_input (binding* b)
   {
-    kassert (input_action.action->automaton == this);
+    kassert (b->input_action ().action->automaton == this);
 
-    bound_inputs_map_.insert (make_pair (input_action, output_act (output_action, owner)));
+    pair<bound_inputs_map_type::iterator, bool> r = bound_inputs_map_.insert (make_pair (b->input_action (), binding_set_type ()));
+    r.first->second.insert (b);
   }
 
-  bid_t
-  bind (const caction& output_action,
-	const caction& input_action)
+  void
+  bind (binding* b)
   {
-    const binding b (output_action, input_action);
-
-    // Generate an id.
-    bid_t bid = generate_bid ();
-    bid_to_binding_map_.insert (make_pair (bid, b));
-
-    bindings_set_.insert (b);
-
-    return bid;
+    owned_bindings_.insert (b);
   }
 
-  const input_action_set_type*
+  const binding_set_type*
   get_bound_inputs (const caction& output_action) const
   {
     bound_outputs_map_type::const_iterator pos = bound_outputs_map_.find (output_action);
@@ -695,18 +680,6 @@ private:
     }
     current_bd_ = max (bd + 1, 0);
     return bd;
-  }
-
-  bid_t
-  generate_bid ()
-  {
-    // Generate an id.
-    bid_t bid = current_bid_;
-    while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
-      bid = max (bid + 1, 0); // Handles overflow.
-    }
-    current_bid_ = max (bid + 1, 0);
-    return bid;
   }
 
 public:

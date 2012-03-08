@@ -7,6 +7,7 @@
 #include "bitset.hpp"
 #include "mapped_area.hpp"
 #include "lily/syscall.h"
+#include "binding.hpp"
 
 namespace rts {
 
@@ -492,14 +493,15 @@ namespace rts {
     }
 
     // Bind.
-    output_automaton->bind_output (oa, ia, a);
-    input_automaton->bind_input (oa, ia, a);
-    bid_t bid = a->bind (oa, ia);
+    binding* b = new binding (oa, ia, a);
+    output_automaton->bind_output (b);
+    input_automaton->bind_input (b);
+    a->bind (b);
 
     // Schedule the output action.
     scheduler::schedule (caction (output_action, output_parameter));
 
-    return make_pair (bid, LILY_SYSCALL_ESUCCESS);
+    return make_pair (b->bid (), LILY_SYSCALL_ESUCCESS);
   }
 
   // The automaton wants to receive a notification via action_number when the automaton corresponding to aid is destroyed.
