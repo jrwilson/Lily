@@ -115,11 +115,22 @@ private:
   // Owned bindings.
   binding_set_type owned_bindings_;
 
+  binding_set_type empty_set_;
+
   // Next buffer descriptor to allocate.
   bd_t current_bd_;
   // Map from bd_t to buffer*.
   typedef unordered_map<bd_t, buffer*> bd_to_buffer_map_type;
   bd_to_buffer_map_type bd_to_buffer_map_;
+
+  // Reference count.
+  size_t refcount_;
+  // Mutual exlusion lock for executing actions.
+  int exec_lock_;
+  // Mutual exclusion lock for manipulating the bindings associated with this automaton.
+  int binding_lock_;
+  // Flag indicating if this automaton can execute actions.
+  bool enabled_;
 
   struct compare_vm_area {
     bool
@@ -164,6 +175,12 @@ private:
     return memory_map_.end ();
   }
 
+  ~automaton ()
+  {
+    // BUG:  Destroy vm_areas, buffers, etc.
+    kassert (0);
+  }
+
 public:
 
   automaton (bool privileged,
@@ -173,20 +190,44 @@ public:
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),
     stack_area_ (0),
-    current_bd_ (0)
+    current_bd_ (0),
+    refcount_ (1),
+    exec_lock_ (0),
+    binding_lock_ (0),
+    enabled_ (true)
   { }
 
-  ~automaton ()
+  void
+  incref ()
   {
-    // BUG:  Destroy vm_areas, buffers, etc.
-    kassert (0);
+    ++refcount_;
+  }
+
+  void
+  decref ()
+  {
+    --refcount_;
+    if (refcount_ == 0) {
+      delete this;
+    }
+  }
+
+  void
+  lock_bindings ()
+  {
+    // TODO
+  }
+
+  void
+  unlock_bindings ()
+  {
+    // TODO
   }
 
   bool
   enabled () const
   {
-    // TODO
-    return true;
+    return enabled_;
   }
 
   aid_t
@@ -618,15 +659,15 @@ public:
     owned_bindings_.insert (b);
   }
 
-  const binding_set_type*
+  const binding_set_type&
   get_bound_inputs (const caction& output_action) const
   {
     bound_outputs_map_type::const_iterator pos = bound_outputs_map_.find (output_action);
     if (pos != bound_outputs_map_.end ()) {
-      return &pos->second;
+      return pos->second;
     }
     else {
-      return 0;
+      return empty_set_;
     }
   }
 

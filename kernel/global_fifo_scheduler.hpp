@@ -21,7 +21,6 @@ n  Declarations for scheduling.
 #include "automaton.hpp"
 #include "string.hpp"
 #include "linear_set.hpp"
-#include "deque.hpp"
 
 class global_fifo_scheduler {
 private:
@@ -29,82 +28,27 @@ private:
   // Align the stack when executing.
   static const size_t STACK_ALIGN = 16;
 
-  // An automaton is either on the run queue (scheduled) or not.
-  enum status_t {
-    SCHEDULED,
-    NOT_SCHEDULED
-  };
-
-  class automaton_context {
-  private:
-    // Flag indicating of the automaton is schedule or not.
-    status_t status_;
-    // Set of actions that will be executed for this automaton.
-    typedef linear_set<caction, caction_hash> set_type;
-    set_type set_;
-
-  public:    
-    automaton_context () :
-      status_ (NOT_SCHEDULED)
-    { }
-
-    inline status_t
-    status () const
-    {
-      return status_;
-    }
-
-    inline void
-    status (status_t s)
-    {
-      status_ = s;
-    }
-
-    inline void
-    push (const caction& ap)
-    {
-      set_.push_back (ap);
-    }
-
-    inline void
-    pop ()
-    {
-      set_.pop_front ();
-    }
-
-    inline const caction&
-    front () const
-    {
-      return set_.front ();
-    }
-
-    inline bool
-    empty () const
-    {
-      return set_.empty ();
-    }
-  };
+  typedef linear_set<caction, caction_hash> automaton_context;
 
   // Map an automaton to its scheduling context.
   typedef unordered_map<automaton*, automaton_context*> context_map_type;
   static context_map_type context_map_;
 
   // Queue of automaton with actions to execute.
-  typedef deque<automaton_context*> queue_type;
+  typedef linear_set<automaton_context*> queue_type;
   static queue_type ready_queue_;
 
   // The action that is currently executing.
   static caction action_;
 
   // List of input actions to be used when executing bound output actions.
-  typedef vector<caction> input_action_list_type;
+  typedef vector<binding*> input_action_list_type;
   static input_action_list_type input_action_list_;
 
   // Iterator that marks our progress when executing input actions.
   static input_action_list_type::const_iterator input_action_pos_;
 
   // Buffers produced by an output action that will be copied to the input action.
-  // TODO
   static buffer* output_buffer_a_;
   static buffer* output_buffer_b_;
 
@@ -115,21 +59,21 @@ private:
     
     automaton* a = action_.action->automaton;
 
-    // switch (action_.action->type) {
-    // case INPUT:
-    // 	kout << "?";
-    // 	break;
-    // case OUTPUT:
-    // 	kout << "!";
-    // 	break;
-    // case INTERNAL:
-    // 	kout << "#";
-    // 	break;
-    // case SYSTEM_INPUT:
-    // 	kout << "*";
-    // 	break;
-    // }
-    // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+    switch (action_.action->type) {
+    case INPUT:
+    	kout << "?";
+    	break;
+    case OUTPUT:
+    	kout << "!";
+    	break;
+    case INTERNAL:
+    	kout << "#";
+    	break;
+    case SYSTEM_INPUT:
+    	kout << "*";
+    	break;
+    }
+    kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
     
     // Switch page directories.
     vm::switch_to_directory (a->page_directory_physical_address ());
@@ -218,11 +162,25 @@ public:
   static inline void
   add_automaton (automaton* a)
   {
+    a->incref ();
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
     automaton_context* c = new automaton_context ();
     pair<context_map_type::iterator, bool> r = context_map_.insert (make_pair (a, c));
     kassert (r.second);
+  }
+
+  static inline void
+  remove_automaton (automaton* a)
+  {
+    context_map_type::iterator pos = context_map_.find (a);
+    kassert (pos != context_map_.end ());
+    context_map_.erase (pos);
+    automaton_context* c = pos->second;
+    ready_queue_.erase (c);
+    delete c;
+
+    a->decref ();
   }
 
   static inline automaton*
@@ -240,19 +198,16 @@ public:
     
     automaton_context* c = pos->second;
     
-    c->push (ad);
+    c->push_back (ad);
     
-    if (c->status () == NOT_SCHEDULED) {
-      c->status (SCHEDULED);
-      ready_queue_.push_back (c);
-    }
+    ready_queue_.push_back (c);
   }
   
   static void
   proceed_to_input (void)
   {
     while (input_action_pos_ != input_action_list_.end ()) {
-      action_ = *input_action_pos_;
+      action_ = (*input_action_pos_)->input_action ();
       if (action_.action->automaton->enabled ()) {
 	// This does not return.
 	execute ();
@@ -261,6 +216,7 @@ public:
 	++input_action_pos_;
       }
     }
+    input_action_list_.clear ();
   }
 
   static inline void
@@ -291,16 +247,16 @@ public:
 	  if (output_buffer_b_ != 0) {
 	    output_buffer_b_->sync (0, output_buffer_b_->size ());
 	  }
-	  if (!input_action_list_.empty ()) {
-	    // Proceed to execute the inputs.
-	    input_action_pos_ = input_action_list_.begin ();
-	    proceed_to_input ();
-	    // This does not return.
-	    execute ();
-	  }
+	  // Proceed to execute the inputs.
+	  input_action_pos_ = input_action_list_.begin ();
+	  // This does not return if there are inputs.
+	  proceed_to_input ();
 	  // There were no inputs.
 	  output_buffer_a_ = 0;
 	  output_buffer_b_ = 0;
+	}
+	else {
+	  input_action_list_.clear ();
 	}
 	break;
       case INTERNAL:
@@ -337,7 +293,7 @@ public:
 	
 	// Load the action.
 	action_ = c->front ();
-	c->pop ();
+	c->pop_front ();
 
 	automaton* a = action_.action->automaton;
 
@@ -349,16 +305,19 @@ public:
 	    break;
 	  case OUTPUT:
 	    {
+	      kassert (input_action_list_.empty ());
+	      // Lock the bindings.
+	      a->lock_bindings ();
 	      // Lookup the input actions.
-	      input_action_list_.clear ();
-	      const automaton::binding_set_type* input_actions = a->get_bound_inputs (action_);
-	      if (input_actions != 0) {
-		for (automaton::binding_set_type::const_iterator pos = input_actions->begin ();
-		     pos != input_actions->end ();
-		     ++pos) {
-		  input_action_list_.push_back ((*pos)->input_action ());
-		}
+	      const automaton::binding_set_type& input_actions = a->get_bound_inputs (action_);
+	      for (automaton::binding_set_type::const_iterator pos = input_actions.begin ();
+		   pos != input_actions.end ();
+		   ++pos) {
+		input_action_list_.push_back (*pos);
+		(*pos)->incref ();
 	      }
+	      // Unlock the bindings.
+	      a->unlock_bindings ();
 	      input_action_pos_ = input_action_list_.begin ();
 	    }
 	    break;
@@ -375,10 +334,6 @@ public:
 	  if (!c->empty ()) {
 	    // Automaton has more actions, return to ready queue.
 	    ready_queue_.push_back (c);
-	  }
-	  else {
-	    // Leave out.
-	    c->status (NOT_SCHEDULED);
 	  }
 	  
 	  // This call does not return.

@@ -77,6 +77,11 @@ public:
     return input_action_;
   }
 
+  void
+  incref ()
+  {
+    // TODO
+  }
 };
 
 #endif /* __binding_hpp__ */

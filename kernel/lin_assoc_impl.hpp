@@ -300,25 +300,37 @@ public:
 	 *bucket != 0;
 	 bucket = &((*bucket)->hash_next)) {
       if (*bucket == front_) {
-	// Found it.
-	*bucket = front_->hash_next;
-	break;
+	// Remove it from the hash.
+	bucket_type* tmp = *bucket;
+	*bucket = tmp->hash_next;
+
+	// Remove it from the linked list.
+	bucket_type* prev = tmp->list_prev;
+	bucket_type* next = tmp->list_next;
+
+	if (prev != 0) {
+	  prev->list_next = next;
+	}
+	else {
+	  // We were the front.
+	  front_ = next;
+	}
+
+	if (next != 0) {
+	  next->list_prev = prev;
+	}
+	else {
+	  // We were the back.
+	  back_ = prev;
+	}
+	
+	Allocator::destroy (&tmp->value);
+	bucket_allocator::deallocate (tmp, 1);
+	--size_;
+	return;
       }
     }
 
-    // Second, take it out of the linked list.
-    bucket_type* tmp = front_;
-    front_ = front_->list_next;
-    if (front_ != 0) {
-      front_->list_prev = 0;
-    }
-    else {
-      back_ = 0;
-    }
-
-    Allocator::destroy (&tmp->value);
-    bucket_allocator::deallocate (tmp, 1);
-    --size_;
   }
 
   void
@@ -467,30 +479,52 @@ public:
 //     }
 //   }
 
-//   size_type
-//   erase (const key_type& key)
-//   {
-//     // Compute the hash.
-//     size_t hash = Hash::operator() (key);
-//     // Compute the key into the lookup table.
-//     size_type lookup_key = hash % lookup_size_;
-//     // Begin a search.
-//     for (bucket_type** bucket = &lookup_[lookup_key];
-// 	 *bucket != 0;
-// 	 bucket = &((*bucket)->next)) {
-//       if ((*bucket)->hash == hash && Equal::operator() (Selector::operator () ((*bucket)->value), key)) {
-// 	// Found it.
-// 	bucket_type* tmp = *bucket;
-// 	*bucket = tmp->next;
-// 	Allocator::destroy (&tmp->value);
-// 	bucket_allocator::deallocate (tmp, 1);
-// 	--size_;
-// 	return 1;
-//       }
-//     }
+  size_type
+  erase (const key_type& key)
+  {
+    // Compute the hash.
+    size_t hash = Hash::operator() (key);
+    // Compute the key into the lookup table.
+    size_type lookup_key = hash % lookup_size_;
+    // Begin a search.
+    for (bucket_type** bucket = &lookup_[lookup_key];
+	 *bucket != 0;
+	 bucket = &((*bucket)->hash_next)) {
+      if ((*bucket)->hash == hash && Equal::operator() (Selector::operator () ((*bucket)->value), key)) {
+	// Found it.
+	// Remove it from the hash.
+	bucket_type* tmp = *bucket;
+	*bucket = tmp->hash_next;
 
-//     return 0;
-//   }
+	// Remove it from the linked list.
+	bucket_type* prev = tmp->list_prev;
+	bucket_type* next = tmp->list_next;
+
+	if (prev != 0) {
+	  prev->list_next = next;
+	}
+	else {
+	  // We were the front.
+	  front_ = next;
+	}
+
+	if (next != 0) {
+	  next->list_prev = prev;
+	}
+	else {
+	  // We were the back.
+	  back_ = prev;
+	}
+
+	Allocator::destroy (&tmp->value);
+	bucket_allocator::deallocate (tmp, 1);
+	--size_;
+	return 1;
+      }
+    }
+    
+    return 0;
+  }
 
 };
 
