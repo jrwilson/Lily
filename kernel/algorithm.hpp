@@ -116,6 +116,19 @@ max (const T& x,
   return (x < y) ? y : x;
 }
 
+template <typename RandomAccessIterator,
+	  typename Predicate>
+void sort (RandomAccessIterator begin,
+	   RandomAccessIterator end,
+	   Predicate pred)
+{
+  for (RandomAccessIterator marker = begin; marker != end; ++marker) {
+    for (RandomAccessIterator cur = marker; cur != begin && !pred (* (cur - 1), *cur); --cur) {
+      swap (*(cur - 1), *cur);
+    }
+  }
+}
+
 template <typename T>
 void
 swap (T& x,

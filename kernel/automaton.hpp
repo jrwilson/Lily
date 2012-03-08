@@ -213,6 +213,18 @@ public:
   }
 
   void
+  lock_execution ()
+  {
+    // TODO
+  }
+
+  void
+  unlock_execution ()
+  {
+    // TODO
+  }
+
+  void
   lock_bindings ()
   {
     // TODO

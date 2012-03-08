@@ -82,6 +82,19 @@ public:
   {
     // TODO
   }
+
+  void
+  decref ()
+  {
+    // TODO
+  }
+
+  bool
+  enabled () const
+  {
+    // TODO
+    return true;
+  }
 };
 
 #endif /* __binding_hpp__ */

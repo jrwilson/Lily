@@ -52,6 +52,15 @@ private:
   static buffer* output_buffer_a_;
   static buffer* output_buffer_b_;
 
+  struct sort_bindings_by_input {
+    bool
+    operator () (const binding* x,
+		 const binding* y) const
+    {
+      return x->input_action ().action->automaton < y->input_action ().action->automaton;
+    }
+  };
+
   static inline void
   execute ()
   {
@@ -59,97 +68,132 @@ private:
     
     automaton* a = action_.action->automaton;
 
-    // switch (action_.action->type) {
-    // case INPUT:
-    // 	kout << "?";
-    // 	break;
-    // case OUTPUT:
-    // 	kout << "!";
-    // 	break;
-    // case INTERNAL:
-    // 	kout << "#";
-    // 	break;
-    // case SYSTEM_INPUT:
-    // 	kout << "*";
-    // 	break;
-    // }
-    // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
-    
-    // Switch page directories.
-    vm::switch_to_directory (a->page_directory_physical_address ());
-    
-    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (a->stack_pointer ());
-    
-    // These instructions serve a dual purpose.
-    // First, they set up the cdecl calling convention for actions.
-    // Second, they force the stack to be created if it is not.
-    
-    switch (action_.action->type) {
-    case INPUT:
-    case SYSTEM_INPUT:
-      {
-	bd_t bda = -1;
-	bd_t bdb = -1;
-	
-	if (output_buffer_a_ != 0) {
-	  // Copy the buffer to the input automaton.
-	  bda = a->buffer_create (*output_buffer_a_);
+    if (a->enabled ()) {
+      // switch (action_.action->type) {
+      // case INPUT:
+      // 	kout << "?";
+      // 	break;
+      // case OUTPUT:
+      // 	kout << "!";
+      // 	break;
+      // case INTERNAL:
+      // 	kout << "#";
+      // 	break;
+      // case SYSTEM_INPUT:
+      // 	kout << "*";
+      // 	break;
+      // }
+      // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+      
+      // Switch page directories.
+      vm::switch_to_directory (a->page_directory_physical_address ());
+      
+      uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (a->stack_pointer ());
+      
+      // These instructions serve a dual purpose.
+      // First, they set up the cdecl calling convention for actions.
+      // Second, they force the stack to be created if it is not.
+      
+      switch (action_.action->type) {
+      case INPUT:
+      case SYSTEM_INPUT:
+	{
+	  bd_t bda = -1;
+	  bd_t bdb = -1;
+	  
+	  if (output_buffer_a_ != 0) {
+	    // Copy the buffer to the input automaton.
+	    bda = a->buffer_create (*output_buffer_a_);
+	  }
+	  
+	  if (output_buffer_b_ != 0) {
+	    // Copy the buffer to the input automaton.
+	    bdb = a->buffer_create (*output_buffer_b_);
+	  }
+	  
+	  // Push the buffers.
+	  *--stack_pointer = bdb;
+	  *--stack_pointer = bda;
 	}
-	
-	if (output_buffer_b_ != 0) {
-	  // Copy the buffer to the input automaton.
-	  bdb = a->buffer_create (*output_buffer_b_);
-	}
-	
-	// Push the buffers.
-	*--stack_pointer = bdb;
-	*--stack_pointer = bda;
+	break;
+      case OUTPUT:
+      case INTERNAL:
+	// Do nothing.
+	break;
       }
-      break;
-    case OUTPUT:
-    case INTERNAL:
-      // Do nothing.
-      break;
+      
+      // Push the parameter.
+      *--stack_pointer = action_.parameter;
+      
+      // Push a bogus instruction pointer so we can use the cdecl calling convention.
+      *--stack_pointer = 0;
+      uint32_t* sp = stack_pointer;
+      
+      // Push the stack segment.
+      *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
+      
+      // Push the stack pointer.
+      *--stack_pointer = reinterpret_cast<uint32_t> (sp);
+      
+      // Push the flags.
+      uint32_t eflags;
+      asm ("pushf\n"
+	   "pop %0\n" : "=g"(eflags) : :);
+      *--stack_pointer = eflags;
+      
+      // Push the code segment.
+      *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
+      
+      // Push the instruction pointer.
+      *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
+      
+      asm ("mov %0, %%ds\n"	// Load the data segments.
+	   "mov %0, %%es\n"	// Load the data segments.
+	   "mov %0, %%fs\n"	// Load the data segments.
+	   "mov %0, %%gs\n"	// Load the data segments.
+	   "mov %1, %%esp\n"	// Load the new stack pointer.
+	   "xor %%eax, %%eax\n"	// Clear the registers.
+	   "xor %%ebx, %%ebx\n"
+	   "xor %%ecx, %%ecx\n"
+	   "xor %%edx, %%edx\n"
+	   "xor %%edi, %%edi\n"
+	   "xor %%esi, %%esi\n"
+	   "xor %%ebp, %%ebp\n"
+	   "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
     }
-    
-    // Push the parameter.
-    *--stack_pointer = action_.parameter;
-    
-    // Push a bogus instruction pointer so we can use the cdecl calling convention.
-    *--stack_pointer = 0;
-    uint32_t* sp = stack_pointer;
-    
-    // Push the stack segment.
-    *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
-    
-    // Push the stack pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (sp);
-    
-    // Push the flags.
-    uint32_t eflags;
-    asm ("pushf\n"
-	 "pop %0\n" : "=g"(eflags) : :);
-    *--stack_pointer = eflags;
-    
-    // Push the code segment.
-    *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
-    
-    // Push the instruction pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
-    
-    asm ("mov %0, %%ds\n"	// Load the data segments.
-	 "mov %0, %%es\n"	// Load the data segments.
-	 "mov %0, %%fs\n"	// Load the data segments.
-	 "mov %0, %%gs\n"	// Load the data segments.
-	 "mov %1, %%esp\n"	// Load the new stack pointer.
-	 "xor %%eax, %%eax\n"	// Clear the registers.
-	 "xor %%ebx, %%ebx\n"
-	 "xor %%ecx, %%ecx\n"
-	 "xor %%edx, %%edx\n"
-	 "xor %%edi, %%edi\n"
-	 "xor %%esi, %%esi\n"
-	 "xor %%ebp, %%ebp\n"
-	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
+    else {
+      finish (false, -1, -1);
+    }
+  }
+
+  static inline void
+  proceed_to_input (void)
+  {
+    while (input_action_pos_ != input_action_list_.end ()) {
+      binding* b = *input_action_pos_;
+      if (b->enabled ()) {
+	action_ = b->input_action ();
+	// This does not return.
+	execute ();
+      }
+      else {
+	++input_action_pos_;
+      }
+    }
+  }
+
+  static inline void
+  finish_output (void)
+  {
+    // Unlock and drop the reference count on the bindings.
+    for (input_action_list_type::const_iterator pos = input_action_list_.begin ();
+	 pos != input_action_list_.end ();
+	 ++pos) {
+      binding* b = (*pos);
+      b->input_action ().action->automaton->unlock_execution ();
+      b->decref ();
+    }
+    input_action_list_.clear ();
   }
   
 public:
@@ -203,36 +247,24 @@ public:
     ready_queue_.push_back (c);
   }
   
-  static void
-  proceed_to_input (void)
-  {
-    while (input_action_pos_ != input_action_list_.end ()) {
-      action_ = (*input_action_pos_)->input_action ();
-      if (action_.action->automaton->enabled ()) {
-	// This does not return.
-	execute ();
-      }
-      else {
-	++input_action_pos_;
-      }
-    }
-    input_action_list_.clear ();
-  }
-
   static inline void
   finish (bool output_fired,
 	  bd_t bda,
 	  bd_t bdb)
   {
     if (action_.action != 0) {
+      // We were executing an action of this automaton.
       automaton* a = action_.action->automaton;
 
-      // We were executing an action.
       switch (action_.action->type) {
       case INPUT:
 	// We were executing an input.  Move to the next input.
 	++input_action_pos_;
 	proceed_to_input ();
+	// Unlock the output automaton.
+	input_action_list_.front ()->output_action ().action->automaton->unlock_execution ();
+	// Unlock the input automaton.
+	finish_output ();
 	break;
       case OUTPUT:
 	// We were executing an output ...
@@ -251,18 +283,20 @@ public:
 	  input_action_pos_ = input_action_list_.begin ();
 	  // This does not return if there are inputs.
 	  proceed_to_input ();
-	  // There were no inputs.
-	  output_buffer_a_ = 0;
-	  output_buffer_b_ = 0;
 	}
-	else {
-	  input_action_list_.clear ();
-	}
+	// No input actions to execute.
+	// Unlock the output automaton.
+	a->unlock_execution ();
+	// Unlock the input atuoamton.
+	finish_output ();
 	break;
       case INTERNAL:
-	// Do nothing.
+	// Unlock.
+	a->unlock_execution ();
 	break;
       case SYSTEM_INPUT:
+	// Unlock.
+	a->unlock_execution ();
 	// Destroy the buffers.
 	if (output_buffer_a_ != 0) {
 	  delete output_buffer_a_;
@@ -297,48 +331,68 @@ public:
 
 	automaton* a = action_.action->automaton;
 
-	if (a->enabled ()) {
-	  // The automaton exists.  Continue loading and execute.
-	  switch (action_.action->type) {
-	  case INPUT:
-	    // Do nothing.
-	    break;
-	  case OUTPUT:
-	    {
-	      kassert (input_action_list_.empty ());
-	      // Lock the bindings.
-	      a->lock_bindings ();
-	      // Lookup the input actions.
-	      const automaton::binding_set_type& input_actions = a->get_bound_inputs (action_);
-	      for (automaton::binding_set_type::const_iterator pos = input_actions.begin ();
-		   pos != input_actions.end ();
-		   ++pos) {
-		input_action_list_.push_back (*pos);
-		(*pos)->incref ();
-	      }
-	      // Unlock the bindings.
-	      a->unlock_bindings ();
-	      input_action_pos_ = input_action_list_.begin ();
+	// The automaton exists.  Continue loading and execute.
+	switch (action_.action->type) {
+	case INPUT:
+	  // Error.  Not a local action.
+	  kassert (0);
+	  break;
+	case OUTPUT:
+	  {
+	    kassert (input_action_list_.empty ());
+	    // Lock the bindings.
+	    a->lock_bindings ();
+	    // Copy the bindings.
+	    const automaton::binding_set_type& input_actions = a->get_bound_inputs (action_);
+	    for (automaton::binding_set_type::const_iterator pos = input_actions.begin ();
+		 pos != input_actions.end ();
+		 ++pos) {
+	      input_action_list_.push_back (*pos);
+	      // So they don't disappear.
+	      (*pos)->incref ();
 	    }
-	    break;
-	  case INTERNAL:
-	    // Do nothing.
-	    break;
-	  case SYSTEM_INPUT:
-	    // Load the buffer.
-	    output_buffer_a_ = action_.buffer_a;
-	    output_buffer_b_ = action_.buffer_b;
-	    break;
+	    // Unlock the bindings.
+	    a->unlock_bindings ();
+	    
+	    // Sort the bindings by input automaton.
+	    sort (input_action_list_.begin (), input_action_list_.end (), sort_bindings_by_input ());
+	    
+	    // Lock the automata in order.
+	    bool output_locked = false;
+	    for (input_action_list_type::const_iterator pos = input_action_list_.begin ();
+		 pos != input_action_list_.end ();
+		 ++pos) {
+	      automaton* input_automaton = (*pos)->input_action ().action->automaton;
+	      if (!output_locked && a < input_automaton) {
+		a->lock_execution ();
+		output_locked = true;
+	      }
+	      input_automaton->lock_execution ();
+	    }
+	    
+	    input_action_pos_ = input_action_list_.begin ();
 	  }
-	  
-	  if (!c->empty ()) {
-	    // Automaton has more actions, return to ready queue.
-	    ready_queue_.push_back (c);
-	  }
-	  
-	  // This call does not return.
-	  execute ();
+	  break;
+	case INTERNAL:
+	  // Lock the automaton.
+	  a->lock_execution ();
+	  break;
+	case SYSTEM_INPUT:
+	  // Load the buffer.
+	  output_buffer_a_ = action_.buffer_a;
+	  output_buffer_b_ = action_.buffer_b;
+	  // Lock the automaton.
+	  a->lock_execution ();
+	  break;
 	}
+	
+	if (!c->empty ()) {
+	  // Automaton has more actions, return to ready queue.
+	  ready_queue_.push_back (c);
+	}
+	
+	// This call does not return.
+	execute ();
       }
 
       /* Out of actions.  Halt. */
