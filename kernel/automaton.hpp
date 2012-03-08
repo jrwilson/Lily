@@ -34,68 +34,42 @@ static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
 
 class automaton {
 private:
-  // struct input_act {
-  //   caction const input;
-  //   automaton* const owner;
+  // Next binding id to allocate.
+  static aid_t current_aid_;
 
-  //   input_act (const caction& i,
-  // 	       automaton* own) :
-  //     input (i),
-  //     owner (own)
-  //   { }
+  // Map from aid to automaton.
+  typedef unordered_map<aid_t, automaton*> aid_to_automaton_map_type;
+  static aid_to_automaton_map_type aid_to_automaton_map_;
 
-  //   inline bool
-  //   operator== (const input_act& other) const
-  //   {
-  //     // Owner doesn't matter.
-  //     return input == other.input;
-  //   }
-  // };
+  static aid_t
+  generate_aid (automaton* a)
+  {
+    // Generate an id.
+    aid_t aid = current_aid_;
+    while (aid_to_automaton_map_.find (aid) != aid_to_automaton_map_.end ()) {
+      aid = max (aid + 1, 0); // Handles overflow.
+    }
+    current_aid_ = max (aid + 1, 0);
 
-  // struct input_act_hash {
-  //   size_t
-  //   operator() (const input_act& act) const
-  //   {
-  //     return caction_hash () (act.input);
-  //   }
-  // };
+    aid_to_automaton_map_.insert (make_pair (aid, a));
 
-  // struct output_act {
-  //   caction const output;
-  //   automaton* const owner;
+    return aid;
+  }
+public:
 
-  //   output_act (const caction& o,
-  // 		automaton* own) :
-  //     output (o),
-  //     owner (own)
-  //   { }
-  // };
+  static inline automaton*
+  lookup (aid_t aid)
+  {
+    aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
+    if (pos != aid_to_automaton_map_.end ()) {
+      return pos->second;
+    }
+    else {
+      return 0;
+    }
+  }
 
-  // struct binding {
-  //   caction const output;
-  //   caction const input;
-
-  //   binding (const caction& o,
-  // 	     const caction& i) :
-  //     output (o),
-  //     input (i)
-  //   { }
-
-  //   inline bool
-  //   operator== (const binding& other) const
-  //   {
-  //     return output == other.output && input == other.input;
-  //   }
-  // };
-
-  // struct binding_hash {
-  //   size_t
-  //   operator() (const binding& b) const
-  //   {
-  //     return caction_hash () (b.output) ^ caction_hash () (b.input);
-  //   }
-  // };
-
+private:
   aid_t aid_;
   bool privileged_;
   // Physical address that contains the automaton's page directory.
@@ -192,10 +166,9 @@ private:
 
 public:
 
-  automaton (aid_t aid,
-	     bool privileged,
+  automaton (bool privileged,
 	     frame_t page_directory_frame) :
-    aid_ (aid),
+    aid_ (generate_aid (this)),
     privileged_ (privileged),
     page_directory_ (frame_to_physical_address (page_directory_frame)),
     heap_area_ (0),

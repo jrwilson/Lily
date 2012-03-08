@@ -21,9 +21,6 @@
 
 namespace rts {
 
-  automaton*
-  lookup_automaton (aid_t aid);
-
   void
   create_init_automaton (frame_t automaton_frame,
 			 size_t automaton_size,

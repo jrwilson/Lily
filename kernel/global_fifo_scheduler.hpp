@@ -22,7 +22,6 @@ n  Declarations for scheduling.
 #include "string.hpp"
 #include "linear_set.hpp"
 #include "deque.hpp"
-#include "rts.hpp"
 
 class global_fifo_scheduler {
 private:

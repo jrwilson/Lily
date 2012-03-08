@@ -23,11 +23,6 @@ namespace rts {
   // Bitset marking which I/O ports are reserved.
   static bitset<65536> reserved_ports_;
 
-  // For creating automata and allocating them an aid.
-  static aid_t current_aid_;
-  typedef unordered_map<aid_t, automaton*> aid_map_type;
-  static aid_map_type aid_map_;
-
   struct map_op {
     logical_address_t logical_address;
     frame_t frame;
@@ -88,16 +83,8 @@ namespace rts {
     size_t count = frame_manager::decref (frame);
     kassert (count == 1);
 
-    // Generate an id.
-    aid_t aid = current_aid_;
-    while (aid_map_.find (aid) != aid_map_.end ()) {
-      aid = max (aid + 1, 0); // Handles overflow.
-    }
-    current_aid_ = max (aid + 1, 0);
-    
     // Create the automaton and insert it into the map.
-    automaton* a = new automaton (aid, privileged, frame);
-    aid_map_.insert (make_pair (aid, a));
+    automaton* a = new automaton (privileged, frame);
     
     // Add to the scheduler.
     scheduler::add_automaton (a);
@@ -219,18 +206,6 @@ namespace rts {
     text->unmap ();
 
     return a;
-  }
-
-  automaton*
-  lookup_automaton (aid_t aid)
-  {
-    aid_map_type::const_iterator pos = aid_map_.find (aid);
-    if (pos != aid_map_.end ()) {
-      return pos->second;
-    }
-    else {
-      return 0;
-    }
   }
 
   void
@@ -419,20 +394,18 @@ namespace rts {
 	ano_t input_ano,
 	int input_parameter)
   {
-    aid_map_type::const_iterator output_pos = aid_map_.find (output_aid);
-    if (output_pos == aid_map_.end ()) {
+    automaton* output_automaton = automaton::lookup (output_aid);
+    if (output_automaton == 0) {
       // Output automaton DNE.
       return make_pair (-1, LILY_SYSCALL_EOAIDDNE);
     }
-    automaton* output_automaton = output_pos->second;
 
-    aid_map_type::const_iterator input_pos = aid_map_.find (input_aid);
-    if (input_pos == aid_map_.end ()) {
+    automaton* input_automaton = automaton::lookup (input_aid);
+    if (input_automaton == 0) {
       // Input automaton DNE.
       return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
     }
-    automaton* input_automaton = input_pos->second;
-
+    
     if (output_automaton == input_automaton) {
       // The output and input automata must be different.
       return make_pair (-1, LILY_SYSCALL_EINVAL);
@@ -518,13 +491,13 @@ namespace rts {
       return make_pair (-1, LILY_SYSCALL_EBADANO);
     }
 
-    aid_map_type::iterator pos = aid_map_.find (aid);
-    if (pos == aid_map_.end ()) {
+    automaton* subject = automaton::lookup (aid);
+    if (subject == 0) {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
 
-    a->add_subscription (pos->second);
-    pos->second->add_subscriber (a);
+    a->add_subscription (subject);
+    subject->add_subscriber (a);
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
@@ -541,8 +514,8 @@ namespace rts {
     }
     
     // Check the automaton.
-    aid_map_type::iterator pos = aid_map_.find (aid);
-    if (pos == aid_map_.end ()) {
+    automaton* subject = automaton::lookup (aid);
+    if (subject == 0) {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
 
@@ -554,7 +527,7 @@ namespace rts {
       return make_pair (-1, LILY_SYSCALL_EALREADY);
     }
 
-    registry_map_.insert (make_pair (n, pos->second));
+    registry_map_.insert (make_pair (n, subject));
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
@@ -585,12 +558,12 @@ namespace rts {
   describe (automaton* a,
 	    aid_t aid)
   {
-    aid_map_type::iterator pos = aid_map_.find (aid);
-    if (pos == aid_map_.end ()) {
+    automaton* subject = automaton::lookup (aid);
+    if (subject == 0) {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
 
-    const kstring& desc = pos->second->get_description ();
+    const kstring& desc = subject->get_description ();
     const size_t total_size = sizeof (size_t) + desc.size ();
 
     // Create a buffer for the description.
