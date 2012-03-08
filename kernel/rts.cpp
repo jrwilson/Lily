@@ -99,7 +99,7 @@ namespace rts {
     aid_map_.insert (make_pair (aid, a));
     
     // Add to the scheduler.
-    scheduler::add_automaton (aid);
+    scheduler::add_automaton (a);
 
     // Add the actions to the automaton.
     for (elf::parser::action_list_type::iterator pos = hp.action_list.begin (); pos != hp.action_list.end (); ++pos) {
@@ -273,7 +273,7 @@ namespace rts {
       halt ();
     }
 
-    scheduler::schedule (caction (child->aid (), action, child->aid (), data_buffer, 0));
+    scheduler::schedule (caction (action, child->aid (), data_buffer, 0));
 
     // Start the scheduler.  Doesn't return.
     scheduler::finish (false, -1, -1);
@@ -312,7 +312,7 @@ namespace rts {
 	switch (action->type) {
 	case OUTPUT:
 	case INTERNAL:
-	  scheduler::schedule (caction (a->aid (), action, parameter));
+	  scheduler::schedule (caction (action, parameter));
 	  break;
 	case INPUT:
 	case SYSTEM_INPUT:
@@ -403,7 +403,7 @@ namespace rts {
 	buffer_b = new buffer (*buffer_b);
       }
 
-      scheduler::schedule (caction (child->aid (), action, child->aid (), buffer_a, buffer_b));
+      scheduler::schedule (caction (action, child->aid (), buffer_a, buffer_b));
     }
     
     return make_pair (child->aid (), LILY_SYSCALL_ESUCCESS);
@@ -477,8 +477,8 @@ namespace rts {
     }
 
     // Form complete actions.
-    caction oa (output_automaton->aid (), output_action, output_parameter);
-    caction ia (input_automaton->aid (), input_action, input_parameter);
+    caction oa (output_action, output_parameter);
+    caction ia (input_action, input_parameter);
 
     // Check that the input action is not bound.
     // (Also checks that the binding does not exist.)
@@ -497,7 +497,7 @@ namespace rts {
     bid_t bid = a->bind (oa, ia);
 
     // Schedule the output action.
-    scheduler::schedule (caction (output_automaton->aid (), output_action, output_parameter));
+    scheduler::schedule (caction (output_action, output_parameter));
 
     return make_pair (bid, LILY_SYSCALL_ESUCCESS);
   }

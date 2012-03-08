@@ -212,6 +212,13 @@ public:
     kassert (0);
   }
 
+  bool
+  enabled () const
+  {
+    // TODO
+    return true;
+  }
+
   aid_t
   aid () const
   {
@@ -435,7 +442,7 @@ public:
       return make_pair (0, LILY_SYSCALL_ESUCCESS);
     }
 
-    caction c (action->automaton->aid (), action, parameter);
+    caction c (action, parameter);
 
     irq_map_.insert (make_pair (irq, c));
     irq_handler::subscribe (irq, c);
@@ -594,13 +601,13 @@ public:
   is_output_bound_to_automaton (const caction& output_action,
 				const automaton* input_automaton) const
   {
-    kassert (output_action.aid == aid_);
+    kassert (output_action.action->automaton == this);
 
     bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.find (output_action);
     if (pos1 != bound_outputs_map_.end ()) {
       // TODO:  Replace this iteration with look-up in a data structure.
       for (input_action_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if (pos2->input.aid == input_automaton->aid ()) {
+	if (pos2->input.action->automaton == input_automaton) {
 	  return true;
 	}
       }
@@ -614,7 +621,7 @@ public:
 	       const caction& input_action,
 	       automaton* owner)
   {
-    kassert (output_action.aid == aid_);
+    kassert (output_action.action->automaton == this);
 
     pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (output_action, input_action_set_type ()));
     r.first->second.insert (input_act (input_action, owner));
@@ -623,7 +630,7 @@ public:
   bool
   is_input_bound (const caction& input_action) const
   {
-    kassert (input_action.aid == aid_);
+    kassert (input_action.action->automaton == this);
 
     return bound_inputs_map_.find (input_action) != bound_inputs_map_.end ();
   }
@@ -633,7 +640,7 @@ public:
 	      const caction& input_action,
 	      automaton* owner)
   {
-    kassert (input_action.aid == aid_);
+    kassert (input_action.action->automaton == this);
 
     bound_inputs_map_.insert (make_pair (input_action, output_act (output_action, owner)));
   }

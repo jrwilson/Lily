@@ -87,15 +87,12 @@ private:
   };
 
   // Map an automaton to its scheduling context.
-  typedef unordered_map<aid_t, automaton_context*> context_map_type;
+  typedef unordered_map<automaton*, automaton_context*> context_map_type;
   static context_map_type context_map_;
 
   // Queue of automaton with actions to execute.
   typedef deque<automaton_context*> queue_type;
   static queue_type ready_queue_;
-
-  // The automaton that is currently executing.
-  static automaton* current_automaton_;
 
   // The action that is currently executing.
   static caction action_;
@@ -115,7 +112,9 @@ private:
   static inline void
   execute ()
   {
-    kassert (current_automaton_ != 0);
+    kassert (action_.action != 0);
+    
+    automaton* a = action_.action->automaton;
 
     // switch (action_.action->type) {
     // case INPUT:
@@ -134,15 +133,15 @@ private:
     // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
     
     // Switch page directories.
-    vm::switch_to_directory (current_automaton_->page_directory_physical_address ());
+    vm::switch_to_directory (a->page_directory_physical_address ());
     
-    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (current_automaton_->stack_pointer ());
+    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (a->stack_pointer ());
     
     // These instructions serve a dual purpose.
     // First, they set up the cdecl calling convention for actions.
     // Second, they force the stack to be created if it is not.
     
-    switch (action_.type) {
+    switch (action_.action->type) {
     case INPUT:
     case SYSTEM_INPUT:
       {
@@ -151,12 +150,12 @@ private:
 	
 	if (output_buffer_a_ != 0) {
 	  // Copy the buffer to the input automaton.
-	  bda = current_automaton_->buffer_create (*output_buffer_a_);
+	  bda = a->buffer_create (*output_buffer_a_);
 	}
 	
 	if (output_buffer_b_ != 0) {
 	  // Copy the buffer to the input automaton.
-	  bdb = current_automaton_->buffer_create (*output_buffer_b_);
+	  bdb = a->buffer_create (*output_buffer_b_);
 	}
 	
 	// Push the buffers.
@@ -193,7 +192,7 @@ private:
     *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
     
     // Push the instruction pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (action_.action_entry_point);
+    *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
     
     asm ("mov %0, %%ds\n"	// Load the data segments.
 	 "mov %0, %%es\n"	// Load the data segments.
@@ -214,30 +213,30 @@ public:
   static void
   initialize ()
   {
-    current_automaton_ = 0;
+    action_.action = 0;
   }
 
   static inline void
-  add_automaton (aid_t aid)
+  add_automaton (automaton* a)
   {
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
     automaton_context* c = new automaton_context ();
-    pair<context_map_type::iterator, bool> r = context_map_.insert (make_pair (aid, c));
+    pair<context_map_type::iterator, bool> r = context_map_.insert (make_pair (a, c));
     kassert (r.second);
   }
 
   static inline automaton*
   current_automaton ()
   {
-    kassert (current_automaton_ != 0);
-    return current_automaton_;
+    kassert (action_.action != 0);
+    return action_.action->automaton;
   }
 
   static inline void
   schedule (const caction& ad)
   {
-    context_map_type::iterator pos = context_map_.find (ad.aid);
+    context_map_type::iterator pos = context_map_.find (ad.action->automaton);
     kassert (pos != context_map_.end ());
     
     automaton_context* c = pos->second;
@@ -255,8 +254,7 @@ public:
   {
     while (input_action_pos_ != input_action_list_.end ()) {
       action_ = *input_action_pos_;
-      current_automaton_ = rts::lookup_automaton (action_.aid);
-      if (current_automaton_ != 0) {
+      if (action_.action->automaton->enabled ()) {
 	// This does not return.
 	execute ();
       }
@@ -271,9 +269,11 @@ public:
 	  bd_t bda,
 	  bd_t bdb)
   {
-    if (current_automaton_ != 0) {
+    if (action_.action != 0) {
+      automaton* a = action_.action->automaton;
+
       // We were executing an action.
-      switch (action_.type) {
+      switch (action_.action->type) {
       case INPUT:
 	// We were executing an input.  Move to the next input.
 	++input_action_pos_;
@@ -283,12 +283,12 @@ public:
 	// We were executing an output ...
 	if (output_fired) {
 	  // ... and the output output did something.
-	  output_buffer_a_ = current_automaton_->lookup_buffer (bda);
+	  output_buffer_a_ = a->lookup_buffer (bda);
 	  // Synchronize the buffers.
 	  if (output_buffer_a_ != 0) {
 	    output_buffer_a_->sync (0, output_buffer_a_->size ());
 	  }
-	  output_buffer_b_ = current_automaton_->lookup_buffer (bdb);
+	  output_buffer_b_ = a->lookup_buffer (bdb);
 	  if (output_buffer_b_ != 0) {
 	    output_buffer_b_->sync (0, output_buffer_b_->size ());
 	  }
@@ -321,8 +321,8 @@ public:
       }
     }
 
-    // We are done with the current automaton.
-    current_automaton_ = 0;
+    // We are done with the current action.
+    action_.action = 0;
 
     // Check for interrupts.
     asm volatile ("sti\n"
@@ -339,11 +339,12 @@ public:
 	// Load the action.
 	action_ = c->front ();
 	c->pop ();
-	current_automaton_ = rts::lookup_automaton (action_.aid);
 
-	if (current_automaton_ != 0) {
+	automaton* a = action_.action->automaton;
+
+	if (a->enabled ()) {
 	  // The automaton exists.  Continue loading and execute.
-	  switch (action_.type) {
+	  switch (action_.action->type) {
 	  case INPUT:
 	    // Do nothing.
 	    break;
@@ -351,7 +352,7 @@ public:
 	    {
 	      // Lookup the input actions.
 	      input_action_list_.clear ();
-	      const automaton::input_action_set_type* input_actions = current_automaton_->get_bound_inputs (action_);
+	      const automaton::input_action_set_type* input_actions = a->get_bound_inputs (action_);
 	      if (input_actions != 0) {
 		for (automaton::input_action_set_type::const_iterator pos = input_actions->begin ();
 		     pos != input_actions->end ();
@@ -387,7 +388,7 @@ public:
       }
 
       /* Out of actions.  Halt. */
-      kassert (current_automaton_ == 0);
+      action_.action = 0;
       asm volatile ("sti\n"
 		    "hlt\n"
 		    "cli\n");
