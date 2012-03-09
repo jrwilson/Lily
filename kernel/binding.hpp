@@ -22,11 +22,6 @@
 
 class binding {
 private:
-  bid_t bid_;
-  caction const output_action_;
-  caction const input_action_;
-  automaton* const owner_;
-
   // Next binding id to allocate.
   static bid_t current_bid_;
 
@@ -37,6 +32,8 @@ private:
   static bid_t
   generate_bid (binding* b)
   {
+    // TODO:  This needs to be atomic.
+
     // Generate an id.
     bid_t bid = current_bid_;
     while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
@@ -49,6 +46,18 @@ private:
     return bid;
   }
 
+  bid_t bid_;
+  caction const output_action_;
+  caction const input_action_;
+  automaton* const owner_;
+  size_t refcount_;
+  bool enabled_;
+
+  ~binding () {
+    // TODO:  Return the bid.  This also needs to be atomic.
+    kassert (0);
+  }
+
 public:
   binding (const caction& oa,
 	   const caction& ia,
@@ -56,7 +65,9 @@ public:
     bid_ (generate_bid (this)),
     output_action_ (oa),
     input_action_ (ia),
-    owner_ (o)
+    owner_ (o),
+    refcount_ (1),
+    enabled_ (true)
   { }
 
   bid_t
@@ -78,22 +89,21 @@ public:
   }
 
   void
-  incref ()
-  {
-    // TODO
-  }
+  incref ();
 
   void
-  decref ()
-  {
-    // TODO
-  }
+  decref ();
 
   bool
   enabled () const
   {
-    // TODO
-    return true;
+    return enabled_;
+  }
+
+  void
+  disable ()
+  {
+    enabled_ = false;
   }
 };
 

@@ -44,6 +44,8 @@ private:
   static aid_t
   generate_aid (automaton* a)
   {
+    // TODO:  This needs to be atomic.
+
     // Generate an id.
     aid_t aid = current_aid_;
     while (aid_to_automaton_map_.find (aid) != aid_to_automaton_map_.end ()) {
@@ -60,6 +62,7 @@ public:
   static inline automaton*
   lookup (aid_t aid)
   {
+    // TODO:  This should lookup and increment the reference count atomically.
     aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
     if (pos != aid_to_automaton_map_.end ()) {
       return pos->second;
@@ -175,6 +178,18 @@ private:
     return memory_map_.end ();
   }
 
+  bd_t
+  generate_bd ()
+  {
+    // Generate an id.
+    bd_t bd = current_bd_;
+    while (bd_to_buffer_map_.find (bd) != bd_to_buffer_map_.end ()) {
+      bd = max (bd + 1, 0); // Handles overflow.
+    }
+    current_bd_ = max (bd + 1, 0);
+    return bd;
+  }
+
   ~automaton ()
   {
     // BUG:  Destroy vm_areas, buffers, etc.
@@ -197,49 +212,93 @@ public:
     enabled_ (true)
   { }
 
-  void
-  incref ()
+  /* These methods are used when construction the automaton.
+     Some of them should probably be changed to constructor arguments. */
+  bool
+  add_action (paction* action)
   {
-    ++refcount_;
-  }
+    kassert (action != 0);
+    kassert (action->automaton == this);
 
-  void
-  decref ()
-  {
-    --refcount_;
-    if (refcount_ == 0) {
-      delete this;
+    if (ano_to_action_map_.find (action->action_number) == ano_to_action_map_.end ()) {
+      ano_to_action_map_.insert (make_pair (action->action_number, action));
+      return true;
+    }
+    else {
+      return false;
     }
   }
 
   void
-  lock_execution ()
+  set_description (const kstring& desc)
   {
-    // TODO
-  }
-
-  void
-  unlock_execution ()
-  {
-    // TODO
-  }
-
-  void
-  lock_bindings ()
-  {
-    // TODO
-  }
-
-  void
-  unlock_bindings ()
-  {
-    // TODO
+    description_ = desc;
   }
 
   bool
-  enabled () const
+  insert_heap_and_stack ()
   {
-    return enabled_;
+    kassert (heap_area_ == 0);
+    kassert (stack_area_ == 0);
+
+    if (memory_map_.empty ()) {
+      // No virtual memory areas.
+      return false;
+    }
+
+    if (!vm_area_is_free (STACK_BEGIN, STACK_END)) {
+      // No space for a stack.
+      return false;
+    }
+
+    heap_area_ = new vm_area_base (memory_map_.back ()->end (), memory_map_.back ()->end ());
+    insert_vm_area (heap_area_);
+
+    stack_area_ = new vm_area_base (STACK_BEGIN, STACK_END);
+    insert_vm_area (stack_area_);
+
+    return true;
+  }
+  
+  void
+  map_heap_and_stack ()
+  {
+    kassert (heap_area_ != 0);
+    kassert (stack_area_ != 0);
+    kassert (page_directory_ == vm::get_directory ());
+
+    if (!is_aligned (heap_area_->begin (), PAGE_SIZE)) {
+      // The heap is not page aligned.
+      // We are going to remap it copy-on-write.
+      vm::remap (heap_area_->begin (), vm::USER, vm::MAP_COPY_ON_WRITE);
+    }
+
+    // Map the stack.
+    // We do not try to copy-on-write the zero page because copy-on-write only works in user mode and we write to the stack in supervisor mode.
+    for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
+      frame_t frame = frame_manager::alloc ();
+      kassert (frame != vm::zero_frame ());
+      vm::map (address, frame, vm::USER, vm::MAP_READ_WRITE);
+    }
+  }
+
+  /* These methods are for querying static information about the automaton. */
+  const kstring&
+  get_description (void) const
+  {
+    return description_;
+  }
+
+  const paction*
+  find_action (ano_t ano) const
+  {
+    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (ano);
+    if (pos != ano_to_action_map_.end ()) {
+      return pos->second;
+    }
+    else {
+      return 0;
+    }
   }
 
   aid_t
@@ -252,6 +311,36 @@ public:
   privileged () const
   {
     return privileged_;
+  }
+
+  /* Reference counting. */
+  void
+  incref ()
+  {
+    // TODO:  This needs to be atomic.
+    ++refcount_;
+  }
+
+  void
+  decref ()
+  {
+    // TODO:  This needs to be atomic.
+    --refcount_;
+    if (refcount_ == 0) {
+      delete this;
+    }
+  }
+
+  bool
+  enabled () const
+  {
+    return enabled_;
+  }
+
+  void
+  disable ()
+  {
+    enabled_ = false;
   }
 
   physical_address_t
@@ -302,322 +391,25 @@ public:
     memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
     memory_map_.insert (pos, area);
   }
-
-  bool
-  insert_heap_and_stack ()
-  {
-    kassert (heap_area_ == 0);
-    kassert (stack_area_ == 0);
-
-    if (memory_map_.empty ()) {
-      // No virtual memory areas.
-      return false;
-    }
-
-    if (!vm_area_is_free (STACK_BEGIN, STACK_END)) {
-      // No space for a stack.
-      return false;
-    }
-
-    heap_area_ = new vm_area_base (memory_map_.back ()->end (), memory_map_.back ()->end ());
-    insert_vm_area (heap_area_);
-
-    stack_area_ = new vm_area_base (STACK_BEGIN, STACK_END);
-    insert_vm_area (stack_area_);
-
-    return true;
-  }
   
   void
-  map_heap_and_stack ()
+  add_subscriber (automaton* a)
   {
-    kassert (heap_area_ != 0);
-    kassert (stack_area_ != 0);
-    kassert (page_directory_ == vm::get_directory ());
-
-    if (!is_aligned (heap_area_->begin (), PAGE_SIZE)) {
-      // The heap is not page aligned.
-      // We are going to remap it copy-on-write.
-      vm::remap (heap_area_->begin (), vm::USER, vm::MAP_COPY_ON_WRITE);
+    // TODO:  This needs to be atomic.
+    pair<subscribers_set_type::iterator, bool> r = subscribers_.insert (a);
+    if (r.second) {
+      a->incref ();
     }
-
-    // Map the stack.
-    // We do not try to copy-on-write the zero page because copy-on-write only works in user mode and we write to the stack in supervisor mode.
-    for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
-      frame_t frame = frame_manager::alloc ();
-      kassert (frame != vm::zero_frame ());
-      vm::map (address, frame, vm::USER, vm::MAP_READ_WRITE);
-    }
-  }
-
-  void
-  insert_mapped_area (mapped_area* area)
-  {
-    insert_vm_area (area);
-    mapped_areas_.push_back (area);
-  }
-
-  void
-  reserve_port (unsigned short port)
-  {
-    port_set_.insert (port);
-  }
-
-  pair<uint8_t, int>
-  inb (uint16_t port)
-  {
-    if (port_set_.find (port) != port_set_.end ()) {
-      return make_pair (io::inb (port), LILY_SYSCALL_ESUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-  }
-
-  pair<int, int>
-  outb (uint16_t port,
-	uint8_t value)
-  {
-    if (port_set_.find (port) != port_set_.end ()) {
-      io::outb (port, value);
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-  }
-
-  pair<uint16_t, int>
-  inw (uint16_t port)
-  {
-    if (port_set_.find (port) != port_set_.end ()) {
-      return make_pair (io::inw (port), LILY_SYSCALL_ESUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-  }
-
-  pair<int, int>
-  outw (uint16_t port,
-	uint16_t value)
-  {
-    if (port_set_.find (port) != port_set_.end ()) {
-      io::outw (port, value);
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-  }
-
-  pair<uint32_t, int>
-  inl (uint16_t port)
-  {
-    if (port_set_.find (port) != port_set_.end ()) {
-      return make_pair (io::inl (port), LILY_SYSCALL_ESUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-  }
-
-  pair<int, int>
-  outl (uint16_t port,
-	uint32_t value)
-  {
-    if (port_set_.find (port) != port_set_.end ()) {
-      io::outl (port, value);
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-  }
-
-  pair<int, int>
-  subscribe_irq (int irq,
-		 ano_t action_number,
-		 int parameter)
-  {
-    if (!privileged ()) {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
-    }
-
-    if (irq < irq_handler::MIN_IRQ ||
-	irq > irq_handler::MAX_IRQ) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
-
-    // Find the action.
-    const paction* action = find_action (action_number);
-    if (action == 0 || action->type != SYSTEM_INPUT) {
-      return make_pair (-1, LILY_SYSCALL_EBADANO);
-    }
-
-    // Correct the parameter.
-    if (action->parameter_mode == NO_PARAMETER) {
-      parameter = 0;
-    }
-
-    if (irq_map_.find (irq) != irq_map_.end ()) {
-      /* Already subscribed.  Not that we don't check the action. */
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
-    }
-
-    caction c (action, parameter);
-
-    irq_map_.insert (make_pair (irq, c));
-    irq_handler::subscribe (irq, c);
-
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
-  }
-
-  pair<int, int>
-  syslog (const char* string,
-	  size_t size)
-  {
-    if (!verify_span (string, size)) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
-
-    kout << aid_ << ": ";
-    while (size != 0) {
-      kout.put (*string);
-      ++string;
-      --size;
-    }
-    kout << endl;
-
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
-  }
-
-  pair<void*, int>
-  adjust_break (ptrdiff_t size)
-  {
-    kassert (heap_area_ != 0);
-
-    if (size != 0) {
-      logical_address_t const old_end = heap_area_->end ();
-      logical_address_t new_end = old_end + size;
-      
-      if (size > 0) {
-	// Find the heap.
-	memory_map_type::const_iterator pos = find (memory_map_.begin (), memory_map_.end (), heap_area_);
-	kassert (pos != memory_map_.end ());
-	// Move to the next.
-	++pos;
-	kassert (pos != memory_map_.end ());
-	if (new_end <= (*pos)->begin ()) {
-	  // The allocation does not interfere with next area.  Success.
-	  heap_area_->set_end (new_end);
-	  
-	  // Map the zero frame.
-	  for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
-	    vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
-	  }
-	  
-	  return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
-	}
-	else {
-	  // Failure.
-	  return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
-	}
-      }
-      else {
-	if (new_end < heap_area_->begin ()) {
-	  // Can't shrink beyond the beginning of the heap.
-	  new_end = heap_area_->begin ();
-	}
-	heap_area_->set_end (new_end);
-
-	// Unmap.
-	for (logical_address_t address = align_up (new_end, PAGE_SIZE); address < old_end; address += PAGE_SIZE) {
-	  vm::unmap (address);
-	}
-
-	return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
-      }
-    }
-    else {
-      return make_pair (reinterpret_cast<void*> (heap_area_->end ()), LILY_SYSCALL_ESUCCESS);
-    }
-  }
-
-  bool
-  verify_span (const void* ptr,
-	       size_t size) const
-  {
-    const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
-    memory_map_type::const_iterator pos = find_address (address);
-    return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();
-  }
-
-  bool
-  verify_stack (const void* ptr,
-		size_t size) const
-  {
-    kassert (stack_area_ != 0);
-    const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
-    return stack_area_->begin () <= address && (address + size) <= stack_area_->end ();
   }
   
-  // void
-  // page_fault (logical_address_t address,
-  // 	      vm::page_fault_error_t error,
-  // 	      volatile registers* regs)
-  // {
-  //   kassert (stub_area_ != 0);
-  //   memory_map_type::const_iterator pos = find_address (address);
-  //   if (pos != memory_map_.end ()) {
-  //     (*pos)->page_fault (address, error, regs, stub_area_->begin ());
-  //   }
-  //   else {
-  //     kout << "Page Fault" << endl;
-  //     kout << "address = " << hexformat (address) << " error = " << hexformat (error) << endl;
-  //     kout << *regs << endl;
-  //     // BUG:  Handle page fault for address not in memory map.
-  //     kassert (0);
-  //   }
-  // }
-
-  bool
-  add_action (paction* action)
-  {
-    kassert (action != 0);
-    kassert (action->automaton == this);
-
-    if (ano_to_action_map_.find (action->action_number) == ano_to_action_map_.end ()) {
-      ano_to_action_map_.insert (make_pair (action->action_number, action));
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
+  /******************************************************************************************
+   * The functions between lock_bindings and unlock_bindings all require the bindings lock. *
+   ******************************************************************************************/
 
   void
-  set_description (const kstring& desc)
+  lock_bindings ()
   {
-    description_ = desc;
-  }
-
-  const kstring&
-  get_description (void) const
-  {
-    return description_;
-  }
-
-  const paction*
-  find_action (ano_t ano) const
-  {
-    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (ano);
-    if (pos != ano_to_action_map_.end ()) {
-      return pos->second;
-    }
-    else {
-      return 0;
-    }
+    // TODO
   }
 
   bool
@@ -684,32 +476,50 @@ public:
   }
 
   void
-  add_subscriber (automaton* a)
+  unlock_bindings ()
   {
-    subscribers_.insert (a);
+    // TODO
+  }
+
+  /*********************************************************************************************
+   * The functions between lock_execution and unlock_execution all require the execution lock. *
+   *********************************************************************************************/
+
+  void
+  lock_execution ()
+  {
+    // TODO
+  }
+
+  bool
+  verify_span (const void* ptr,
+  	       size_t size) const
+  {
+    const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
+    memory_map_type::const_iterator pos = find_address (address);
+    return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();
+  }
+
+  bool
+  verify_stack (const void* ptr,
+		size_t size) const
+  {
+    kassert (stack_area_ != 0);
+    const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
+    return stack_area_->begin () <= address && (address + size) <= stack_area_->end ();
   }
 
   void
   add_subscription (automaton* a)
   {
-    subscriptions_.insert (a);
-  }
-
-private:
-  bd_t
-  generate_bd ()
-  {
-    // Generate an id.
-    bd_t bd = current_bd_;
-    while (bd_to_buffer_map_.find (bd) != bd_to_buffer_map_.end ()) {
-      bd = max (bd + 1, 0); // Handles overflow.
+    // TODO:  Assert that there is an execution lock.
+    pair<subscribers_set_type::iterator, bool> r = subscriptions_.insert (a);
+    if (r.second) {
+      a->incref ();
     }
-    current_bd_ = max (bd + 1, 0);
-    return bd;
   }
 
-public:
-  // BUG:  Limit the number of buffers.
+  // BUG:  Limit the number and size of buffers.
 
   pair<bd_t, int>
   buffer_create (size_t size)
@@ -788,7 +598,7 @@ public:
     
     return bd;
   }
-  
+
   pair<size_t, int>
   buffer_resize (bd_t bd,
 		 size_t size)
@@ -1001,28 +811,6 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  buffer*
-  buffer_output_destroy (bd_t bd)
-  {
-    bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
-    kassert (bpos != bd_to_buffer_map_.end ());
-
-    buffer* b = bpos->second;
-
-    if (b->begin () != 0) {
-      // Remove from the memory map.
-      memory_map_.erase (find_address (b->begin ()));
-      
-      // Unmap the buffer.
-      b->unmap ();
-    }
-    
-    // Remove from the bd map.
-    bd_to_buffer_map_.erase (bpos);
-
-    return b;
-  }
-
   pair<int, int>
   buffer_destroy (bd_t bd)
   {
@@ -1065,12 +853,6 @@ public:
     }
   }
 
-  bool
-  buffer_exists (bd_t bd)
-  {
-    return bd_to_buffer_map_.find (bd) != bd_to_buffer_map_.end ();
-  }
-
   buffer*
   lookup_buffer (bd_t bd)
   {
@@ -1081,6 +863,206 @@ public:
     else {
       return 0;
     }
+  }
+
+  void
+  insert_mapped_area (mapped_area* area)
+  {
+    insert_vm_area (area);
+    mapped_areas_.push_back (area);
+  }
+
+  void
+  reserve_port (unsigned short port)
+  {
+    port_set_.insert (port);
+  }
+
+  pair<uint8_t, int>
+  inb (uint16_t port)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      return make_pair (io::inb (port), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  outb (uint16_t port,
+	uint8_t value)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      io::outb (port, value);
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<uint16_t, int>
+  inw (uint16_t port)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      return make_pair (io::inw (port), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  outw (uint16_t port,
+	uint16_t value)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      io::outw (port, value);
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<uint32_t, int>
+  inl (uint16_t port)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      return make_pair (io::inl (port), LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  outl (uint16_t port,
+	uint32_t value)
+  {
+    if (port_set_.find (port) != port_set_.end ()) {
+      io::outl (port, value);
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+    else {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+  }
+
+  pair<int, int>
+  subscribe_irq (int irq,
+		 ano_t action_number,
+		 int parameter)
+  {
+    if (!privileged ()) {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+
+    if (irq < irq_handler::MIN_IRQ ||
+	irq > irq_handler::MAX_IRQ) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    // Find the action.
+    const paction* action = find_action (action_number);
+    if (action == 0 || action->type != SYSTEM_INPUT) {
+      return make_pair (-1, LILY_SYSCALL_EBADANO);
+    }
+
+    // Correct the parameter.
+    if (action->parameter_mode == NO_PARAMETER) {
+      parameter = 0;
+    }
+
+    if (irq_map_.find (irq) != irq_map_.end ()) {
+      /* Already subscribed.  Not that we don't check the action. */
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    }
+
+    caction c (action, parameter);
+
+    irq_map_.insert (make_pair (irq, c));
+    irq_handler::subscribe (irq, c);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  pair<int, int>
+  syslog (const char* string,
+	  size_t size)
+  {
+    if (!verify_span (string, size)) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    kout << aid_ << ": ";
+    while (size != 0) {
+      kout.put (*string);
+      ++string;
+      --size;
+    }
+    kout << endl;
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  pair<void*, int>
+  adjust_break (ptrdiff_t size)
+  {
+    kassert (heap_area_ != 0);
+
+    if (size != 0) {
+      logical_address_t const old_end = heap_area_->end ();
+      logical_address_t new_end = old_end + size;
+      
+      if (size > 0) {
+	// Find the heap.
+	memory_map_type::const_iterator pos = find (memory_map_.begin (), memory_map_.end (), heap_area_);
+	kassert (pos != memory_map_.end ());
+	// Move to the next.
+	++pos;
+	kassert (pos != memory_map_.end ());
+	if (new_end <= (*pos)->begin ()) {
+	  // The allocation does not interfere with next area.  Success.
+	  heap_area_->set_end (new_end);
+	  
+	  // Map the zero frame.
+	  for (logical_address_t address = align_up (old_end, PAGE_SIZE); address < new_end; address += PAGE_SIZE) {
+	    vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
+	  }
+	  
+	  return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
+	}
+	else {
+	  // Failure.
+	  return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
+	}
+      }
+      else {
+	if (new_end < heap_area_->begin ()) {
+	  // Can't shrink beyond the beginning of the heap.
+	  new_end = heap_area_->begin ();
+	}
+	heap_area_->set_end (new_end);
+
+	// Unmap.
+	for (logical_address_t address = align_up (new_end, PAGE_SIZE); address < old_end; address += PAGE_SIZE) {
+	  vm::unmap (address);
+	}
+
+	return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
+      }
+    }
+    else {
+      return make_pair (reinterpret_cast<void*> (heap_area_->end ()), LILY_SYSCALL_ESUCCESS);
+    }
+  }
+
+  void
+  unlock_execution ()
+  {
+    // TODO
   }
 
 };
