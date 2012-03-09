@@ -37,13 +37,21 @@
 /* Command to handshake with mouse data port before sending */
 #define CONTROLLER_WRITE_TO_MOUSE 0xD4
 
+/* Command to get mouse id  */
+#define MOUSE_GET_ID 0xF2
+/* Command to get mouse id  */
+#define MOUSE_SET_SAMPLE_RATE 0xF3
 /* Command to enable transmission of mouse packets */
 #define MOUSE_ENABLE_MOVEMENT_PACKETS 0xF4
 /* Command to set mouse defaults */
 #define MOUSE_SET_DEFAULTS_AND_DISABLE 0xF6
 
-/* Acknowledgement byte from controller */
+/* Acknowledgement byte from mouse */
 #define MOUSE_COMMAND_ACK 0xFA
+/* Error response byte from mouse */
+#define MOUSE_COMMAND_ERROR 0xFC
+/* Negative acknowledgement byte from mouse */
+#define MOUSE_COMMAND_NACK 0xFE
 
 /* Compaq status bits */
 #define ENABLE_IRQ12_BIT 0x2 /* Bit to set to enable aux to generate IRQ12 */
@@ -67,6 +75,11 @@ static buffer_file_t keyboard_output_buffer;
 /* Output buffer for (three byte) mouse packets */
 static bd_t mouse_output_buffer_bd = -1;
 static buffer_file_t mouse_output_buffer;
+typedef enum {BASIC_MOUSE = 0, SCROLL_WHEEL_MOUSE = 3, FIVE_BUTTON_SCROLL_WHEEL_MOUSE = 4} mouse_id_t;
+static mouse_id_t mouse_id = BASIC_MOUSE;
+typedef enum {STATUS_BYTE = 0, DELTA_X_BYTE = 1, DELTA_Y_BYTE = 2, BONUS_BYTE = 3, MAX_MOUSE_PACKET_SIZE} mouse_byte_t;
+static mouse_byte_t mouse_byte = STATUS_BYTE;
+static unsigned char mouse_packet_data [MAX_MOUSE_PACKET_SIZE];
 
 #define KEYBOARD_INTERRUPT_NO 1
 #define SCAN_CODE_NO 2
@@ -83,8 +96,6 @@ syslog_print_byte (unsigned char c)
   char syslog_byte_string [5] = {'0','x',0,0,0};
   syslog_byte_string [2] = (upper_nibble < 10) ? '0' + upper_nibble : 'a' - 10 + upper_nibble;
   syslog_byte_string [3] = (lower_nibble < 10) ? '0' + lower_nibble : 'a' - 10 + lower_nibble;
-  
-  syslog ("byte received:");
   syslog (syslog_byte_string);
 }
 
@@ -98,7 +109,7 @@ wait_to_send ()
 }
 
 static unsigned char
-read_a_byte ()
+read_byte ()
 {
   unsigned char c;
   do {
@@ -117,7 +128,7 @@ controller_write_command (unsigned char c)
 {
   wait_to_send ();
   if (outb (CONTROLLER_PORT, c) == -1) { 
-    syslog ("mouse: error:  could not send byte to mouse");
+    syslog ("mouse: error:  could not send byte to mouse:");
     syslog_print_byte (c);
     exit ();
   }
@@ -128,17 +139,155 @@ controller_write_data (unsigned char c)
 {
   wait_to_send ();
   if (outb (DATA_PORT, c) == -1) { 
-    syslog ("mouse: error:  could not send byte to mouse");
+    syslog ("controller: error:  could not send byte to controller:");
     syslog_print_byte (c);
     exit ();
   }
 }
 
 static void
-mouse_write_command (unsigned char c)
+mouse_write (unsigned char c)
 {
   controller_write_command (CONTROLLER_WRITE_TO_MOUSE);
   controller_write_data (c);
+}
+
+static void
+mouse_send_scroll_wheel_sequence () {
+  if (mouse_id == BASIC_MOUSE) {
+    syslog("setting sample rate to 200");
+    mouse_write (MOUSE_SET_SAMPLE_RATE);
+    unsigned char c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    mouse_write (200);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    syslog("setting sample rate to 100");
+    mouse_write (MOUSE_SET_SAMPLE_RATE);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    mouse_write (100);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    syslog("setting sample rate to 80");
+    mouse_write (MOUSE_SET_SAMPLE_RATE);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    mouse_write (80);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+
+    syslog("getting mouse id");
+    mouse_write (MOUSE_GET_ID);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    c = read_byte ();
+    if (c == BASIC_MOUSE) {
+       syslog("mouse id is unchanged");
+    }
+    else if (c == SCROLL_WHEEL_MOUSE) {
+       syslog("new mouse id is");
+       syslog_print_byte (c);
+       mouse_id = SCROLL_WHEEL_MOUSE;
+    }
+  }
+}
+
+static void
+mouse_send_five_button_sequence () {
+  if (mouse_id == SCROLL_WHEEL_MOUSE) {
+    syslog("setting sample rate to 200");
+    mouse_write (MOUSE_SET_SAMPLE_RATE);
+    unsigned char c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    mouse_write (200);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    syslog("setting sample rate to 200 again");
+    mouse_write (MOUSE_SET_SAMPLE_RATE);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    mouse_write (200);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    syslog("setting sample rate to 80");
+    mouse_write (MOUSE_SET_SAMPLE_RATE);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    mouse_write (80);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+
+    syslog("getting mouse id");
+    mouse_write (MOUSE_GET_ID);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
+    c = read_byte ();
+    if (c == SCROLL_WHEEL_MOUSE) {
+       syslog("mouse id is unchanged");
+    }
+    else if (c == FIVE_BUTTON_SCROLL_WHEEL_MOUSE) {
+       syslog("new mouse id is");
+       syslog_print_byte (c);
+       mouse_id = FIVE_BUTTON_SCROLL_WHEEL_MOUSE;
+    }
+  }
 }
 
 static void
@@ -196,36 +345,50 @@ initialize (void)
     /* Enable aux port, have it generate mouse IRQ 12 */
     controller_write_command (CONTROLLER_ENABLE_AUX_DEVICE);
     controller_write_command (CONTROLLER_GET_COMPAQ_STATUS_BYTE);
-    unsigned char c = read_a_byte ();
+    unsigned char c = read_byte ();
     c |= ENABLE_IRQ12_BIT;
     c &= ~DISABLE_MOUSE_CLOCK_BIT;
     controller_write_command (CONTROLLER_SET_COMPAQ_STATUS_BYTE);
     controller_write_data (c);
 
-    mouse_write_command (MOUSE_SET_DEFAULTS_AND_DISABLE);
-    c = read_a_byte ();
+    mouse_write (MOUSE_SET_DEFAULTS_AND_DISABLE);
+    c = read_byte ();
     if (c != MOUSE_COMMAND_ACK) {
       syslog ("mouse: error:  did not get ack, instead got");
       syslog_print_byte (c);
       exit ();
     }
-
-    mouse_write_command (MOUSE_ENABLE_MOVEMENT_PACKETS);
-    c = read_a_byte ();
-    if (c != MOUSE_COMMAND_ACK) {
-      syslog ("mouse: error:  did not get ack, instead got");
-      syslog_print_byte (c);
-      exit ();
-    }
-    syslog("success!");
 
     /* TODO - is this a 3 byte mouse or a 4 byte mouse? 
        save state about that in a global variable, and adjust
        behavior accordingly (initially get 3 byte mouse to work) */
 
+    mouse_send_scroll_wheel_sequence ();
+    mouse_send_five_button_sequence ();
+
+    switch (mouse_id) {
+    case BASIC_MOUSE:
+    case SCROLL_WHEEL_MOUSE:
+    case FIVE_BUTTON_SCROLL_WHEEL_MOUSE:
+      break;
+    default:
+      syslog ("mouse: error: mouse in unsupported bonus byte packet state");
+      exit ();
+    }
+
+    syslog("success!");
+
     /* TODO - get basic 3 byte mouse working with keyboard at same time */
 
     /* TODO - look through list of PS2 mouse commands and see what we would like to issue here or elsewhere */
+
+    mouse_write (MOUSE_ENABLE_MOVEMENT_PACKETS);
+    c = read_byte ();
+    if (c != MOUSE_COMMAND_ACK) {
+      syslog ("mouse: error:  did not get ack, instead got");
+      syslog_print_byte (c);
+      exit ();
+    }
   }
 }
 
@@ -316,7 +479,43 @@ BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code,
 BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  syslog("got a mouse packet");
+
+  /* syslog("got a mouse packet byte"); */
+  mouse_packet_data [mouse_byte] = read_byte ();
+  /* syslog_print_byte (c); */
+
+  switch (mouse_byte) {
+  case STATUS_BYTE:
+    mouse_byte = DELTA_X_BYTE;
+    break;
+  case DELTA_X_BYTE:
+    mouse_byte = DELTA_Y_BYTE;
+    break;
+  case DELTA_Y_BYTE:
+    if (mouse_id == BASIC_MOUSE) {
+      mouse_byte = STATUS_BYTE;
+    syslog ("got a complete 3 byte mouse packet");
+    syslog_print_byte (mouse_packet_data [STATUS_BYTE]);
+    syslog_print_byte (mouse_packet_data [DELTA_X_BYTE]);
+    syslog_print_byte (mouse_packet_data [DELTA_Y_BYTE]);
+    }
+    else {
+      mouse_byte = BONUS_BYTE;
+    }
+    break;
+  case BONUS_BYTE:
+    mouse_byte = STATUS_BYTE;
+    syslog ("got a complete 4 byte mouse packet");
+    syslog_print_byte (mouse_packet_data [STATUS_BYTE]);
+    syslog_print_byte (mouse_packet_data [DELTA_X_BYTE]);
+    syslog_print_byte (mouse_packet_data [DELTA_Y_BYTE]);
+    syslog_print_byte (mouse_packet_data [BONUS_BYTE]);
+    break;
+  default:
+    syslog ("mouse: error: unrecognized packet byte state");
+    exit ();
+  }
+
   end_input_action (bda, bdb);
 }
 
