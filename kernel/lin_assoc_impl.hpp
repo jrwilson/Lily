@@ -333,7 +333,7 @@ public:
 
   }
 
-  void
+  bool
   push_back (const value_type& value)
   {
     // First, insert into the hash.
@@ -348,8 +348,7 @@ public:
 	 bucket = bucket->hash_next) {
       if (bucket->hash == hash && Equal::operator() (Selector::operator () (bucket->value), Selector::operator () (value))) {
 	// Found it.  Do nothing.
-	// TODO:  We might want to return like conventional set insert.
-	return;
+	return false;
       }
     }
     
@@ -401,6 +400,8 @@ public:
       lookup_ = new_lookup;
       lookup_size_ = new_lookup_size;
     }
+
+    return true;
   }
 
 //   pair<iterator, bool>

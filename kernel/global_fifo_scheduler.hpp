@@ -8,9 +8,17 @@
   
   Description
   -----------
-n  Declarations for scheduling.
+  A round-robin scheduler.
 
-  TODO:  Convert this back to using iterators.
+  Below, you will see comments like +AAA and -AAA.
+  These are reference counting and locking markup where -AAA reverses the effect of +AAA.
+
+  AAA - Reference counting for automata added to the scheduler.
+  BBB - Reference counting for automata that add an action.
+  CCC - Increment the reference count of bindings when executing an output action.
+  DDD - Locking an automaton's bindings to copy.
+  EEE - Lock the automaton containing the local action.
+  FFF - Lock the automaton containing input actions.
 
   Authors:
   Justin R. Wilson
@@ -185,12 +193,13 @@ private:
   static inline void
   finish_output (void)
   {
-    // Unlock and drop the reference count on the bindings.
     for (input_action_list_type::const_iterator pos = input_action_list_.begin ();
 	 pos != input_action_list_.end ();
 	 ++pos) {
       binding* b = (*pos);
+      // -FFF
       b->input_action ().action->automaton->unlock_execution ();
+      // -CCC
       b->decref ();
     }
     input_action_list_.clear ();
@@ -206,6 +215,7 @@ public:
   static inline void
   add_automaton (automaton* a)
   {
+    // +AAA
     a->incref ();
     // Allocate a new context and insert it into the map.
     // Inserting should succeed.
@@ -222,8 +232,15 @@ public:
     context_map_.erase (pos);
     automaton_context* c = pos->second;
     ready_queue_.erase (c);
+    for (automaton_context::const_iterator pos = c->begin ();
+	 pos != c->end ();
+	 ++pos) {
+      // -BBB
+      pos->action->automaton->decref ();
+    }
     delete c;
 
+    // -AAA
     a->decref ();
   }
 
@@ -242,7 +259,10 @@ public:
     
     automaton_context* c = pos->second;
     
-    c->push_back (ad);
+    if (c->push_back (ad)) {
+      // +BBB
+      ad.action->automaton->incref ();
+    }
     
     ready_queue_.push_back (c);
   }
@@ -261,9 +281,10 @@ public:
 	// We were executing an input.  Move to the next input.
 	++input_action_pos_;
 	proceed_to_input ();
-	// Unlock the output automaton.
+	// -EEE
 	input_action_list_.front ()->output_action ().action->automaton->unlock_execution ();
-	// Unlock the input automaton.
+	// -BBB
+	input_action_list_.front ()->output_action ().action->automaton->decref ();
 	finish_output ();
 	break;
       case OUTPUT:
@@ -285,18 +306,23 @@ public:
 	  proceed_to_input ();
 	}
 	// No input actions to execute.
-	// Unlock the output automaton.
+	// -EEE
 	a->unlock_execution ();
-	// Unlock the input atuoamton.
+	// -BBB
+	a->decref ();
 	finish_output ();
 	break;
       case INTERNAL:
-	// Unlock.
+	// -EEE
 	a->unlock_execution ();
+	// -BBB
+	a->decref ();
 	break;
       case SYSTEM_INPUT:
-	// Unlock.
+	// -EEE
 	a->unlock_execution ();
+	// -BBB
+	a->decref ();
 	// Destroy the buffers.
 	if (output_buffer_a_ != 0) {
 	  delete output_buffer_a_;
@@ -340,7 +366,7 @@ public:
 	case OUTPUT:
 	  {
 	    kassert (input_action_list_.empty ());
-	    // Lock the bindings.
+	    // +DDD
 	    a->lock_bindings ();
 	    // Copy the bindings.
 	    const automaton::binding_set_type& input_actions = a->get_bound_inputs (action_);
@@ -349,24 +375,27 @@ public:
 		 ++pos) {
 	      input_action_list_.push_back (*pos);
 	      // So they don't disappear.
+	      // +CCC
 	      (*pos)->incref ();
 	    }
-	    // Unlock the bindings.
+	    // -DDD
 	    a->unlock_bindings ();
 	    
 	    // Sort the bindings by input automaton.
 	    sort (input_action_list_.begin (), input_action_list_.end (), sort_bindings_by_input ());
 	    
-	    // Lock the automata in order.
+	    // We lock the automata in order.  This is called Havender's Principle.
 	    bool output_locked = false;
 	    for (input_action_list_type::const_iterator pos = input_action_list_.begin ();
 		 pos != input_action_list_.end ();
 		 ++pos) {
 	      automaton* input_automaton = (*pos)->input_action ().action->automaton;
 	      if (!output_locked && a < input_automaton) {
+		// +EEE
 		a->lock_execution ();
 		output_locked = true;
 	      }
+	      // +FFF
 	      input_automaton->lock_execution ();
 	    }
 	    
@@ -374,14 +403,14 @@ public:
 	  }
 	  break;
 	case INTERNAL:
-	  // Lock the automaton.
+	  // +EEE
 	  a->lock_execution ();
 	  break;
 	case SYSTEM_INPUT:
 	  // Load the buffer.
 	  output_buffer_a_ = action_.buffer_a;
 	  output_buffer_b_ = action_.buffer_b;
-	  // Lock the automaton.
+	  // +EEE
 	  a->lock_execution ();
 	  break;
 	}
