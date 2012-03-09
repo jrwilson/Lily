@@ -282,6 +282,50 @@ public:
     }
   }
 
+  bool
+  vm_area_is_free (logical_address_t begin,
+  		   logical_address_t end)
+  {
+    vm_area_base area (begin, end);
+    
+    // Find the location to insert.
+    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), &area, compare_vm_area ());
+    // We know that area->begin () < (*pos)->begin ().
+
+    // Ensure that the areas don't conflict.
+    if (pos != memory_map_.begin ()) {
+      memory_map_type::const_iterator prev = pos - 1;
+      if (area.begin () < (*prev)->end ()) {
+  	return false;
+      }
+    }
+
+    if (pos != memory_map_.end ()) {
+      if ((*pos)->begin () < area.end ()) {
+  	return false;
+      }
+    }
+    
+    return true;
+  }
+
+  void
+  insert_vm_area (vm_area_base* area)
+  {
+    kassert (area != 0);
+    
+    // Find the location to insert.
+    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
+    memory_map_.insert (pos, area);
+  }
+
+  /* This is used during creation and execution. */
+  physical_address_t
+  page_directory_physical_address () const
+  {
+    return page_directory_;
+  }
+
   /* These methods are for querying static information about the automaton. */
   const kstring&
   get_description (void) const
@@ -340,56 +384,8 @@ public:
   void
   disable ()
   {
+    // TODO:  Recur.
     enabled_ = false;
-  }
-
-  physical_address_t
-  page_directory_physical_address () const
-  {
-    return page_directory_;
-  }
-
-  logical_address_t
-  stack_pointer () const
-  {
-    return stack_area_->end ();
-  }
-
-  bool
-  vm_area_is_free (logical_address_t begin,
-		   logical_address_t end)
-  {
-    vm_area_base area (begin, end);
-    
-    // Find the location to insert.
-    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), &area, compare_vm_area ());
-    // We know that area->begin () < (*pos)->begin ().
-
-    // Ensure that the areas don't conflict.
-    if (pos != memory_map_.begin ()) {
-      memory_map_type::const_iterator prev = pos - 1;
-      if (area.begin () < (*prev)->end ()) {
-	return false;
-      }
-    }
-
-    if (pos != memory_map_.end ()) {
-      if ((*pos)->begin () < area.end ()) {
-	return false;
-      }
-    }
-    
-    return true;
-  }
-
-  void
-  insert_vm_area (vm_area_base* area)
-  {
-    kassert (area != 0);
-    
-    // Find the location to insert.
-    memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
-    memory_map_.insert (pos, area);
   }
   
   void
@@ -438,6 +434,7 @@ public:
 
     pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (b->output_action (), binding_set_type ()));
     r.first->second.insert (b);
+    b->incref ();
   }
   
   bool
@@ -455,12 +452,14 @@ public:
 
     pair<bound_inputs_map_type::iterator, bool> r = bound_inputs_map_.insert (make_pair (b->input_action (), binding_set_type ()));
     r.first->second.insert (b);
+    b->incref ();
   }
 
   void
   bind (binding* b)
   {
     owned_bindings_.insert (b);
+    b->incref ();
   }
 
   const binding_set_type&
@@ -491,6 +490,12 @@ public:
     // TODO
   }
 
+  logical_address_t
+  stack_pointer () const
+  {
+    return stack_area_->end ();
+  }
+
   bool
   verify_span (const void* ptr,
   	       size_t size) const
@@ -512,7 +517,6 @@ public:
   void
   add_subscription (automaton* a)
   {
-    // TODO:  Assert that there is an execution lock.
     pair<subscribers_set_type::iterator, bool> r = subscriptions_.insert (a);
     if (r.second) {
       a->incref ();
