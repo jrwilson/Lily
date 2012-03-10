@@ -45,7 +45,8 @@ namespace rts {
   static clear_list_type clear_list_;
 
   static automaton*
-  create_automaton (buffer* text,
+  create_automaton (automaton* parent,
+		    buffer* text,
 		    size_t text_size,
 		    bool privileged)
   {
@@ -84,7 +85,12 @@ namespace rts {
     kassert (count == 1);
 
     // Create the automaton and insert it into the map.
-    automaton* a = new automaton (privileged, frame);
+    automaton* a = new automaton (parent, privileged, frame);
+    if (parent != 0) {
+      parent->add_child (a);
+      // Remove the reference count from creation.
+      a->decref ();
+    }
     
     // Add to the scheduler.
     scheduler::add_automaton (a);
@@ -228,7 +234,7 @@ namespace rts {
     }
 
     // Create the automaton.
-    automaton* child = create_automaton (&text, automaton_size, true);
+    automaton* child = create_automaton (0, &text, automaton_size, true);
 
     // Create a buffer to contain the initial data.
     buffer* data_buffer = new buffer (0);
@@ -306,10 +312,42 @@ namespace rts {
     scheduler::finish (output_fired, bda, bdb);
   }
 
+  void
+  remove_from_scheduler (automaton* a)
+  {
+    scheduler::remove_automaton (a);
+
+    // for (automaton::children_set_type::const_iterator pos = a->children_begin ();
+    // 	 pos != a->children_end ();
+    // 	 ++pos) {
+    //   remove_from_scheduler (*pos);
+    // }
+  }
+
   // The automaton would like to no longer exist.
   void
   exit (automaton* a)
   {
+    // Disable the automaton.
+    a->disable ();
+
+    // Tell the automaton and its children to forget their parents.
+    automaton* parent = a->forget_parent ();
+
+    // Remove all of the bindings.
+    a->purge_bindings ();
+
+    // Remove from the scheduler.
+    remove_from_scheduler (a);
+
+    // Forget all of the children.
+    a->forget_children ();
+
+    // Tell the parent to forget its child.
+    parent->forget_child (a);
+
+    kout << a->refcount_ << endl;
+
     // BUG
     kassert (0);
   }
@@ -349,7 +387,7 @@ namespace rts {
     physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
 
     // Create the automaton.
-    const automaton* child = create_automaton (text_buffer, text_buffer->size () * PAGE_SIZE, retain_privilege && a->privileged ());
+    automaton* child = create_automaton (a, text_buffer, text_buffer->size () * PAGE_SIZE, retain_privilege && a->privileged ());
 
     // Switch back.
     vm::switch_to_directory (old);

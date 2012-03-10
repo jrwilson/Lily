@@ -87,6 +87,12 @@ public:
   {
     return input_action_;
   }
+  
+  automaton*
+  owner () const
+  {
+    return owner_;
+  }
 
   void
   incref ();

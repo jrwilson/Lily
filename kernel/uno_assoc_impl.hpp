@@ -206,6 +206,12 @@ public:
     return size_;
   }
 
+  bool
+  empty () const
+  {
+    return size_ == 0;
+  }
+
   const_iterator
   begin () const
   {

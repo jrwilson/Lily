@@ -73,6 +73,11 @@ public:
   }
 
 private:
+  automaton* parent_;
+public:
+  typedef unordered_set<automaton*> children_set_type;
+private:
+  children_set_type children_;
   aid_t aid_;
   bool privileged_;
   // Physical address that contains the automaton's page directory.
@@ -126,8 +131,10 @@ private:
   typedef unordered_map<bd_t, buffer*> bd_to_buffer_map_type;
   bd_to_buffer_map_type bd_to_buffer_map_;
 
+public:
   // Reference count.
   size_t refcount_;
+private:
   // Mutual exlusion lock for executing actions.
   int exec_lock_;
   // Mutual exclusion lock for manipulating the bindings associated with this automaton.
@@ -190,6 +197,22 @@ private:
     return bd;
   }
 
+  static void
+  lock_bindings_in_order (automaton* a,
+			  automaton* b,
+			  automaton* c)
+  {
+    // TODO
+  }
+
+  static void
+  unlock_bindings_in_order (automaton* a,
+			    automaton* b,
+			    automaton* c)
+  {
+    // TODO
+  }
+
   ~automaton ()
   {
     // BUG:  Destroy vm_areas, buffers, etc.
@@ -198,8 +221,10 @@ private:
 
 public:
 
-  automaton (bool privileged,
+  automaton (automaton* parent,
+	     bool privileged,
 	     frame_t page_directory_frame) :
+    parent_ (parent),
     aid_ (generate_aid (this)),
     privileged_ (privileged),
     page_directory_ (frame_to_physical_address (page_directory_frame)),
@@ -210,7 +235,11 @@ public:
     exec_lock_ (0),
     binding_lock_ (0),
     enabled_ (true)
-  { }
+  {
+    if (parent_ != 0) {
+      parent_->incref ();
+    }
+  }
 
   /* These methods are used when construction the automaton.
      Some of them should probably be changed to constructor arguments. */
@@ -384,10 +413,149 @@ public:
   void
   disable ()
   {
-    // TODO:  Recur.
+    // TODO:  This should be atomic.
+    // Disable ourselves.
     enabled_ = false;
+
+    // Disable our bindings.
+    for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
+  	 pos != bound_outputs_map_.end ();
+  	 ++pos) {
+      for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+  	   pos1 != pos->second.end ();
+  	   ++pos1) {
+  	(*pos1)->disable ();
+      }
+    }
+    for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
+  	 pos != bound_inputs_map_.end ();
+  	 ++pos) {
+      for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+  	   pos1 != pos->second.end ();
+  	   ++pos1) {
+  	(*pos1)->disable ();
+      }
+    }
+    for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
+  	 pos1 != owned_bindings_.end ();
+  	 ++pos1) {
+      (*pos1)->disable ();
+    }
+
+    // Disable our children.
+    for (children_set_type::const_iterator pos = children_.begin ();
+  	 pos != children_.end ();
+  	 ++pos) {
+      (*pos)->disable ();
+    }
+  }
+
+  automaton*
+  forget_parent (void)
+  {
+    // TODO:  This should be atomic (?)
+    for (children_set_type::const_iterator pos = children_.begin ();
+  	 pos != children_.end ();
+  	 ++pos) {
+      (*pos)->forget_parent ();
+    }
+
+    if (parent_ != 0) {
+      parent_->decref ();
+    }
+    automaton* retval = parent_;
+    parent_ = 0;
+    return retval;
   }
   
+  children_set_type::const_iterator
+  children_begin () const
+  {
+    return children_.begin ();
+  }
+
+  children_set_type::const_iterator
+  children_end () const
+  {
+    return children_.end ();
+  }
+
+  void
+  forget_child (automaton* child)
+  {
+    // TODO:  This should be atomic.
+    size_t count = children_.erase (child);
+    kassert (count == 1);
+    child->decref ();
+  }
+
+  void
+  purge_bindings (void)
+  {
+    // Copy the bindings.
+    binding_set_type all_bindings;
+    for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
+    	 pos != bound_outputs_map_.end ();
+    	 ++pos) {
+      for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+    	   pos1 != pos->second.end ();
+    	   ++pos1) {
+  	all_bindings.insert (*pos1);
+      }
+    }
+    for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
+    	 pos != bound_inputs_map_.end ();
+    	 ++pos) {
+      for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+    	   pos1 != pos->second.end ();
+    	   ++pos1) {
+    	all_bindings.insert (*pos1);
+      }
+    }
+    for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
+    	 pos1 != owned_bindings_.end ();
+    	 ++pos1) {
+      all_bindings.insert (*pos1);
+    }
+
+    for (binding_set_type::const_iterator pos = all_bindings.begin ();
+  	 pos != all_bindings.end ();
+  	 ++pos) {
+      binding* b = *pos;
+      automaton* output_automaton = b->output_action ().action->automaton;
+      automaton* input_automaton = b->input_action ().action->automaton;
+      automaton* owner = b->owner ();
+      lock_bindings_in_order (output_automaton, input_automaton, owner);
+      output_automaton->unbind_output (b);
+      input_automaton->unbind_input (b);
+      owner->unbind (b);
+      unlock_bindings_in_order (output_automaton, input_automaton, owner);
+    }
+
+    kassert (bound_outputs_map_.empty ());
+    kassert (bound_inputs_map_.empty ());
+    kassert (owned_bindings_.empty ());
+
+    for (children_set_type::const_iterator pos = children_.begin ();
+  	 pos != children_.end ();
+  	 ++pos) {
+      (*pos)->purge_bindings ();
+    }
+  }
+
+  void
+  forget_children (void)
+  {
+    for (children_set_type::const_iterator pos = children_.begin ();
+  	 pos != children_.end ();
+  	 ++pos) {
+      (*pos)->forget_children ();
+      (*pos)->decref ();
+    }
+
+    children_.clear ();
+  }
+
   void
   add_subscriber (automaton* a)
   {
@@ -430,11 +598,27 @@ public:
   void
   bind_output (binding* b)
   {
+    
     kassert (b->output_action ().action->automaton == this);
 
     pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (b->output_action (), binding_set_type ()));
     r.first->second.insert (b);
     b->incref ();
+  }
+
+  void
+  unbind_output (binding* b)
+  {
+    kassert (b->output_action ().action->automaton == this);
+
+    bound_outputs_map_type::iterator pos = bound_outputs_map_.find (b->output_action ());
+    kassert (pos != bound_outputs_map_.end ());
+    size_t count = pos->second.erase (b);
+    b->decref ();
+    kassert (count == 1);
+    if (pos->second.empty ()) {
+      bound_outputs_map_.erase (pos);
+    }
   }
   
   bool
@@ -448,6 +632,7 @@ public:
   void
   bind_input (binding* b)
   {
+    
     kassert (b->input_action ().action->automaton == this);
 
     pair<bound_inputs_map_type::iterator, bool> r = bound_inputs_map_.insert (make_pair (b->input_action (), binding_set_type ()));
@@ -456,10 +641,35 @@ public:
   }
 
   void
+  unbind_input (binding* b)
+  {
+    kassert (b->input_action ().action->automaton == this);
+
+    bound_inputs_map_type::iterator pos = bound_inputs_map_.find (b->input_action ());
+    kassert (pos != bound_inputs_map_.end ());
+    size_t count = pos->second.erase (b);
+    b->decref ();
+    kassert (count == 1);
+    if (pos->second.empty ()) {
+      bound_inputs_map_.erase (pos);
+    }
+  }
+
+  void
   bind (binding* b)
   {
-    owned_bindings_.insert (b);
+    
+    pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
+    kassert (r.second);
     b->incref ();
+  }
+
+  void
+  unbind (binding* b)
+  {
+    size_t count = owned_bindings_.erase (b);
+    kassert (count == 1);
+    b->decref ();
   }
 
   const binding_set_type&
@@ -490,6 +700,15 @@ public:
     // TODO
   }
 
+  void
+  add_child (automaton* child)
+  {
+    // TODO:  This should be atomic.
+    pair<children_set_type::iterator, bool> r = children_.insert (child);
+    kassert (r.second);
+    child->incref ();
+  }
+
   logical_address_t
   stack_pointer () const
   {
@@ -509,6 +728,7 @@ public:
   verify_stack (const void* ptr,
 		size_t size) const
   {
+    
     kassert (stack_area_ != 0);
     const logical_address_t address = reinterpret_cast<logical_address_t> (ptr);
     return stack_area_->begin () <= address && (address + size) <= stack_area_->end ();
@@ -517,6 +737,7 @@ public:
   void
   add_subscription (automaton* a)
   {
+    
     pair<subscribers_set_type::iterator, bool> r = subscriptions_.insert (a);
     if (r.second) {
       a->incref ();
@@ -528,6 +749,7 @@ public:
   pair<bd_t, int>
   buffer_create (size_t size)
   {
+    
     // Generate an id.
     bd_t bd = generate_bd ();
     
@@ -541,6 +763,7 @@ public:
   pair<bd_t, int>
   buffer_copy (bd_t other)
   {
+    
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
     if (bpos == bd_to_buffer_map_.end ()) {
       // Buffer does not exist.

@@ -233,11 +233,13 @@ public:
     automaton_context* c = pos->second;
     ready_queue_.erase (c);
     for (automaton_context::const_iterator pos = c->begin ();
-	 pos != c->end ();
-	 ++pos) {
+    	 pos != c->end ();
+    	 ++pos) {
       // -BBB
-      pos->action->automaton->decref ();
+      kassert (pos->action->automaton == a);
+      a->decref ();
     }
+    kout << "Deleting c" << endl;
     delete c;
 
     // -AAA

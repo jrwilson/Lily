@@ -136,10 +136,12 @@ private:
   bucket_type* front_;
   bucket_type* back_;
 
-  lin_assoc_cont (const lin_assoc_cont& other) :
-    bucket_allocator (other),
-    Allocator::template rebind<lin_assoc_bucket<Value*> >::other (other)
-  {
+  lin_assoc_cont (const lin_assoc_cont& other);
+
+  // lin_assoc_cont (const lin_assoc_cont& other) :
+  //   bucket_allocator (other),
+  //   Allocator::template rebind<lin_assoc_bucket<Value*> >::other (other)
+  // {
 //     lookup_ = lookup_allocator::allocate (other.lookup_size_);
 //     lookup_size_ = other.lookup_size_;
 //     size_ = other.size_;
@@ -154,7 +156,7 @@ private:
 // 	lookup_[idx] = bucket;
 //       }
 //     }
-  }
+  // }
 
 public:
   lin_assoc_cont ()
@@ -296,7 +298,7 @@ public:
     // Compute the key into the lookup table.
     size_type lookup_key = front_->hash % lookup_size_;
     // Begin a search.
-    for (bucket_type** bucket = &lookup_[lookup_key];
+    for (bucket_type** bucket = &(lookup_[lookup_key]);
 	 *bucket != 0;
 	 bucket = &((*bucket)->hash_next)) {
       if (*bucket == front_) {
@@ -330,7 +332,6 @@ public:
 	return;
       }
     }
-
   }
 
   bool
@@ -488,7 +489,7 @@ public:
     // Compute the key into the lookup table.
     size_type lookup_key = hash % lookup_size_;
     // Begin a search.
-    for (bucket_type** bucket = &lookup_[lookup_key];
+    for (bucket_type** bucket = &(lookup_[lookup_key]);
 	 *bucket != 0;
 	 bucket = &((*bucket)->hash_next)) {
       if ((*bucket)->hash == hash && Equal::operator() (Selector::operator () ((*bucket)->value), key)) {

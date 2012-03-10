@@ -396,8 +396,7 @@ public:
     
     // Mark as used and return.
     header_set_available (ptr, false);
-    
-    /* Success. */
+
     return header_data (ptr);
   }
   
@@ -466,6 +465,18 @@ public:
   static void
   check ()
   {
+    kassert (heap_begin_ < heap_end_);
+    kassert (heap_end_ <= heap_limit_);
+
+    kassert (first_header_ <= last_header_);
+    kassert (first_header_ == reinterpret_cast<header_t*> (heap_begin_));
+    kassert (last_header_ < reinterpret_cast<header_t*> (heap_end_));
+
+    footer_t* first_footer = header_get_footer (first_header_);
+    footer_t* last_footer = header_get_footer (last_header_);
+    kassert (footer_get_header (first_footer) == first_header_);
+    kassert (footer_get_header (last_footer) == last_header_);
+
     // Scan the free list.
     size_t free = 0;
     for (size_t idx = 0; idx < BIN_COUNT; ++idx) {
@@ -474,34 +485,94 @@ public:
   	kassert (first_header_ <= h);
   	kassert (h < last_header_);
 	kassert (header_get_available (h));
-  	++free;
   	kassert (header_size (h) >= ALLOC_MIN);
+
   	footer_t* f = header_get_footer (h);
+	kassert (first_footer <= f);
+	kassert (f < last_footer);
   	kassert (header_size (h) == footer_size (f));
   	kassert (footer_get_header (f) == h);
 
-  	header_t* t;
-  	t = h->next;
-  	kassert (t == 0 || (first_header_ <= t && t < last_header_));
-  	t = h->prev;
-  	kassert (t == 0 || (first_header_ <= t && t < last_header_));
+  	header_t* next = h->next;
+  	kassert (next == 0 || (first_header_ <= next && next < last_header_));
+  	header_t* prev = h->prev;
+  	kassert (prev == 0 || (first_header_ <= prev && prev < last_header_));
+
+	if (next != 0) {
+	  kassert (next->prev == h);
+	}
+	if (prev != 0) {
+	  kassert (prev->next == h);
+	}
+
+  	++free;
 
   	h = h->next;
       }
     }
 
-    // Scan all of the chunks.
-    size_t chunks = 0;
+    // Scan the heap.
+    size_t total = 0;
     size_t available = 0;
-    for (header_t* p = first_header_; p <= last_header_; p = header_next (p)) {
-      ++chunks;
-      if (header_get_available (p)) {
-  	++available;
+    header_t* h;
+    bool last_header_on_free_list = false;
+    for (h = first_header_; h <= last_header_; h = header_next (h)) {
+      kassert (h >= first_header_);
+      kassert (h <= last_header_);
+      kassert (header_size (h) >= ALLOC_MIN);
+
+      footer_t* f = header_get_footer (h);
+      kassert (first_footer <= f);
+      kassert (f <= last_footer);
+      kassert (header_size (h) == footer_size (f));
+      kassert (footer_get_header (f) == h);
+
+      ++total;
+
+      if (header_get_available (h)) {
+	++available;
+
+	// This should appear exactly once in the correct bin.
+	size_t count = 0;
+	for (size_t idx = 0; idx < BIN_COUNT; ++idx) {
+	  header_t* f = bin_[idx];
+	  while (f != 0) {
+	    if (f == h) {
+	      ++count;
+	      kassert (idx == size_to_bin (header_size (h)));
+	    }
+	    f = f->next;
+	  }
+	}
+
+	if (h != last_header_) {
+	  kassert (count == 1);
+	}
+	else {
+	  kassert (count == 1 || count == 0);
+	  if (count == 1) {
+	    last_header_on_free_list = true;
+	  }
+	}
+
       }
     }
-    kassert (free <= available);
-    kassert (available <= chunks);
-    kout << "free = " << free << " available = " << available << " chunks = " << chunks << endl;
+
+    kassert (h == reinterpret_cast<header_t*> (heap_end_));
+    if (last_header_on_free_list) {
+      kassert (free == available);
+    }
+    else {
+      if (header_get_available (last_header_)) {
+	kassert (free == available - 1);
+      }
+      else {
+	kassert (free == available);
+      }
+    }
+
+    kassert (available <= total);
+    kout << "free = " << free << " available = " << available << " total = " << total << endl;
   }
   
 };
