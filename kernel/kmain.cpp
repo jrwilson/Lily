@@ -23,8 +23,8 @@
 #include "trap_handler.hpp"
 #include "frame_manager.hpp"
 #include "vm.hpp"
-#include "rts.hpp"
 #include "halt.hpp"
+#include "scheduler.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -272,6 +272,43 @@ kmain (uint32_t multiboot_magic,
   // Tell the system allocator that it must allocate frames and map them.
   kernel_alloc::engage_vm (PAGING_AREA);
 
-  // Create the initial automaton.  (Doesn't return.)
-  rts::create_init_automaton (boot_automaton_frame, boot_automaton_size, boot_data_frame, boot_data_size);
+  // Initialize the scheduler.
+  scheduler::initialize ();
+
+  // Create a buffer containing the text of the initial automaton.
+  const size_t automaton_frame_end = boot_automaton_frame + align_up (boot_automaton_size, PAGE_SIZE) / PAGE_SIZE;
+  buffer text (0);
+  for (size_t frame = boot_automaton_frame; frame != automaton_frame_end; ++frame) {
+    text.append_frame (frame);
+    // Drop the reference count.
+    size_t count = frame_manager::decref (frame);
+    kassert (count == 1);
+  }
+  
+  // Create the automaton.
+  automaton* child = automaton::create_automaton (0, &text, boot_automaton_size, true);
+  
+  // Create a buffer to contain the initial data.
+  buffer* data_buffer = new buffer (0);
+  kassert (data_buffer != 0);
+  const size_t data_frame_end = boot_data_frame + align_up (boot_data_size, PAGE_SIZE) / PAGE_SIZE;
+  for (frame_t frame = boot_data_frame; frame != data_frame_end; ++frame) {
+    data_buffer->append_frame (frame);
+    // Drop the reference count.
+    size_t count = frame_manager::decref (frame);
+    kassert (count == 1);
+  }
+  
+  // Schedule the init action.
+  const paction* action = child->find_action (LILY_ACTION_INIT);
+  
+  if (action == 0) {
+    kout << "The initial automaton does not contain an init action.  Halting." << endl;
+    halt ();
+  }
+  
+  scheduler::schedule (caction (action, child->aid (), data_buffer, 0));
+  
+  // Start the scheduler.  Doesn't return.
+  scheduler::finish (false, -1, -1);
 }

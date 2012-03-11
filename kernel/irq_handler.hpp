@@ -16,6 +16,7 @@
 
 #include "integer_types.hpp"
 #include "action.hpp"
+#include "utility.hpp"
 
 namespace irq_handler {
 
@@ -25,6 +26,10 @@ namespace irq_handler {
   void
   subscribe (int irq,
 	     const caction& action);
+
+  void
+  unsubscribe (int irq,
+	       const caction& action);
 
   static const int MIN_IRQ = 0;
   static const int MAX_IRQ = 15;

@@ -29,7 +29,6 @@ trap_handler.o \
 trap.o \
 automaton.o \
 binding.o \
-rts.o \
 global_fifo_scheduler.o
 
 # Headers that will be installed.

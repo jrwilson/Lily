@@ -158,6 +158,28 @@ irq_handler::subscribe (int irq,
   subscribers_[irq].push_back (action);
 }
 
+void
+irq_handler::unsubscribe (int irq,
+			  const caction& action)
+{
+  subscriber_list_type::iterator pos = find (subscribers_[irq].begin (), subscribers_[irq].end (), action);
+  kassert (pos != subscribers_[irq].end ());
+  subscribers_[irq].erase (pos);
+
+  if (subscribers_[irq].empty ()) {
+    unsigned int isr = irq + PIC_MASTER_BASE;
+    // Change the masks on the interrupt controllers.
+    if (PIC_MASTER_BASE <= isr && isr < PIC_MASTER_LIMIT) {
+      pic_master_mask_ |= (1 << (isr - PIC_MASTER_BASE));
+      io::outb (PIC_MASTER_HIGH, PIC_OCW1_HIGH | pic_master_mask_); 
+    }
+    else if (PIC_SLAVE_BASE <= isr && isr < PIC_SLAVE_LIMIT) {
+      pic_slave_mask_ |= (1 << (isr - PIC_SLAVE_BASE));
+      io::outb (PIC_SLAVE_HIGH, PIC_OCW1_HIGH | pic_slave_mask_);
+    }
+  }
+}
+
 extern "C" void
 irq_dispatch (volatile registers regs)
 {

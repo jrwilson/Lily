@@ -19,7 +19,6 @@
 #include "kassert.hpp"
 #include "action.hpp"
 #include "scheduler.hpp"
-#include "rts.hpp"
 #include <lily/syscall.h>
 
 // Operating system traps use interrupt 0x80.
@@ -198,13 +197,13 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      rts::finish (a, ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bda, ptr->bdb);
+      a->finish (ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bda, ptr->bdb);
       return;
     }
     break;
   case LILY_SYSCALL_EXIT:
     {
-      rts::exit (a);
+      a->exit ();
       return;
     }
     break;
@@ -215,7 +214,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<aid_t, int> r = rts::create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->retain_privilege);
+      pair<aid_t, int> r = a->create (ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->retain_privilege);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -228,7 +227,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = rts::bind (a, ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
+      pair<bid_t, int> r = a->bind (ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -269,7 +268,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = rts::subscribe_destroyed (a, ptr->action_number, ptr->aid);
+      pair<bid_t, int> r = a->subscribe_destroyed (ptr->action_number, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -441,7 +440,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<int, int> r = rts::enter (a, ptr->name, ptr->size, ptr->aid);
+      pair<int, int> r = a->enter (ptr->name, ptr->size, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -454,7 +453,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<int, int> r = rts::lookup (a, ptr->name, ptr->size);
+      pair<int, int> r = a->lookup (ptr->name, ptr->size);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -467,7 +466,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<int, int> r = rts::describe (a, ptr->aid);
+      pair<int, int> r = a->describe (ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -487,7 +486,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<int, int> r = rts::map (a, ptr->destination, ptr->source, ptr->size);
+      pair<int, int> r = a->map (ptr->destination, ptr->source, ptr->size);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -507,7 +506,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<int, int> r = rts::reserve_port (a, ptr->port);
+      pair<int, int> r = a->reserve_port (ptr->port);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

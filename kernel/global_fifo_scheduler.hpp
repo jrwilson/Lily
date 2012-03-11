@@ -204,7 +204,7 @@ private:
     }
     input_action_list_.clear ();
   }
-  
+
 public:
   static void
   initialize ()
@@ -229,8 +229,8 @@ public:
   {
     context_map_type::iterator pos = context_map_.find (a);
     kassert (pos != context_map_.end ());
-    context_map_.erase (pos);
     automaton_context* c = pos->second;
+    context_map_.erase (pos);
     ready_queue_.erase (c);
     for (automaton_context::const_iterator pos = c->begin ();
     	 pos != c->end ();
@@ -239,7 +239,6 @@ public:
       kassert (pos->action->automaton == a);
       a->decref ();
     }
-    kout << "Deleting c" << endl;
     delete c;
 
     // -AAA
