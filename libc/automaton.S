@@ -129,13 +129,6 @@ syslogn:
 	mov %ecx, automatonerrno
 	ret
 
-	.global enter
-enter:
-	mov $LILY_SYSCALL_ENTER, %eax
-	int $0x80
-	mov %ecx, automatonerrno
-	ret
-
 	.global lookup
 lookup:
 	mov $LILY_SYSCALL_LOOKUP, %eax

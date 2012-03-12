@@ -28,7 +28,6 @@
 #include "kstring.hpp"
 #include "binding.hpp"
 #include "bitset.hpp"
-#include "elf.hpp"
 #include "mutex.hpp"
 #include "lock.hpp"
 
@@ -137,12 +136,12 @@ public:
    * AUTOMATA HIERARCHY
    */
 
-  static automaton*
-  create_automaton (automaton* parent,
+  static pair<automaton*, int>
+  create_automaton (const kstring& name,
+		    automaton* parent,
+		    bool privileged,
 		    buffer* text,
 		    size_t text_size,
-		    const kstring& name,
-		    bool privileged,
 		    buffer* buffer_a,
 		    buffer* buffer_b);
 
@@ -196,8 +195,8 @@ private:
    */
 
 private:
-  aid_t const aid_;
-  kstring const name_;
+  aid_t aid_;
+  kstring name_;
 
   /*
    * DESCRIPTION
@@ -208,6 +207,8 @@ private:
   ano_to_action_map_type ano_to_action_map_;
   // Description of the actions.
   kstring description_;
+  // Flag indicating the description should be regenerated from the list of actions.
+  bool regenerate_description_;
 
   /*
    * AUTOMATA HIERARCHY
@@ -233,8 +234,10 @@ private:
    * MEMORY MAP AND BUFFERS
    */
 
+public:
   // Physical address that contains the automaton's page directory.
-  physical_address_t const page_directory_;
+  physical_address_t const page_directory;
+private:
   // Memory map. Consider using a set/map if insert/remove becomes too expensive.
   typedef vector<vm_area_base*> memory_map_type;
   memory_map_type memory_map_;
@@ -294,6 +297,7 @@ private:
    */
 
   size_t reference_count_;
+  mutex mod_mutex_;
 
   /**********************************************************************
    * INSTANCE METHODS                                                   *
@@ -308,35 +312,6 @@ public:
   aid () const
   {
     return aid_;
-  }
-
-  pair<int, int>
-  enter (const char* name,
-	 size_t size,
-	 aid_t aid)
-  {
-    // Check the name.
-    if (!verify_span (name, size) || name[size - 1] != 0) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
-    
-    // Check the automaton.
-    automaton* subject = automaton::lookup (aid);
-    if (subject == 0) {
-      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
-    }
-
-    // Check the name in the map.
-    const kstring n (name, size);
-    
-    registry_map_type::const_iterator pos2 = registry_map_.find (n);
-    if (pos2 != registry_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EALREADY);
-    }
-
-    registry_map_.insert (make_pair (n, subject));
-
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   pair<aid_t, int>
@@ -366,13 +341,18 @@ public:
 
 public:
   bool
-  add_action (paction* action)
+  add_action (action_type_t t,
+	      parameter_mode_t pm,
+	      const void* aep,
+	      ano_t an,
+	      const kstring& name,
+	      const kstring& description)
   {
-    kassert (action != 0);
-    kassert (action->automaton == this);
-
-    if (ano_to_action_map_.find (action->action_number) == ano_to_action_map_.end ()) {
-      ano_to_action_map_.insert (make_pair (action->action_number, action));
+    // TODO:  What if the actions have the same name?
+    if (ano_to_action_map_.find (an) == ano_to_action_map_.end ()) {
+      paction* action = new paction (this, t, pm, aep, an, name, description);
+      ano_to_action_map_.insert (make_pair (an, action));
+      regenerate_description_ = true;
       return true;
     }
     else {
@@ -392,19 +372,7 @@ public:
       return 0;
     }
   }
-
-  void
-  set_description (const kstring& desc)
-  {
-    description_ = desc;
-  }
-
-  const kstring&
-  get_description (void) const
-  {
-    return description_;
-  }
-
+  
   pair<bd_t, int>
   describe (aid_t aid)
   {
@@ -413,7 +381,29 @@ public:
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
 
-    const kstring& desc = subject->get_description ();
+    if (subject->regenerate_description_) {
+      // Form a description of the actions.
+      subject->description_.clear ();
+
+      size_t action_count = subject->ano_to_action_map_.size ();
+      subject->description_.append (&action_count, sizeof (action_count));
+  
+      for (ano_to_action_map_type::const_iterator pos = subject->ano_to_action_map_.begin ();
+	   pos != subject->ano_to_action_map_.end ();
+	   ++pos) {
+	subject->description_.append (&pos->second->type, sizeof (action_type_t));
+	subject->description_.append (&pos->second->parameter_mode, sizeof (parameter_mode_t));
+	subject->description_.append (&pos->second->action_number, sizeof (ano_t));
+	size_t size = pos->second->name.size ();
+	subject->description_.append (&size, sizeof (size_t));
+	size = pos->second->description.size ();
+	subject->description_.append (&size, sizeof (size_t));
+	subject->description_.append (pos->second->name.c_str (), pos->second->name.size ());
+	subject->description_.append (pos->second->description.c_str (), pos->second->description.size ());
+      }
+    }
+
+    const kstring& desc = subject->description_;
     const size_t total_size = sizeof (size_t) + desc.size ();
 
     // Create a buffer for the description.
@@ -450,16 +440,6 @@ public:
   /*
    * AUTOMATA HIERARCHY
    */
-
-  void
-  add_child (automaton* child)
-  {
-    // TODO:  This should be atomic.
-    pair<children_set_type::iterator, bool> r = children_.insert (child);
-    kassert (r.second);
-    child->incref ();
-  }
-
   
   children_set_type::const_iterator
   children_begin () const
@@ -729,7 +709,7 @@ public:
   {
     kassert (heap_area_ != 0);
     kassert (stack_area_ != 0);
-    kassert (page_directory_ == vm::get_directory ());
+    kassert (page_directory == vm::get_directory ());
 
     if (!is_aligned (heap_area_->begin (), PAGE_SIZE)) {
       // The heap is not page aligned.
@@ -1687,28 +1667,21 @@ public:
     }
   }
 
-  automaton (aid_t aid,
-	     const kstring& name,
-	     automaton* parent,
-	     bool privileged) :
-    aid_ (aid),
-    name_ (name),
-    parent_ (parent),
+  automaton () :
+    aid_ (-1),
+    regenerate_description_ (false),
+    parent_ (0),
     enabled_ (true),
     execution_lock_ (0),
-    page_directory_ (frame_to_physical_address (frame_manager::alloc ())),
+    page_directory (frame_to_physical_address (frame_manager::alloc ())),
     heap_area_ (0),
     stack_area_ (0),
     current_bd_ (0),
     binding_lock_ (0),
-    privileged_ (privileged),
+    privileged_ (false),
     reference_count_ (1)
   {
-    if (parent_ != 0) {
-      parent_->incref ();
-    }
-
-    frame_t frame = physical_address_to_frame (page_directory_);
+    frame_t frame = physical_address_to_frame (page_directory);
     kassert (frame != vm::zero_frame ());
     // Map the page directory.
     vm::map (vm::get_stub1 (), frame, vm::USER, vm::MAP_READ_WRITE);
@@ -1728,6 +1701,9 @@ public:
   }
 
 private:
+  // No copy.
+  automaton (const automaton&);
+
   ~automaton ()
   {
     /*
@@ -1765,9 +1741,9 @@ private:
      * MEMORY MAP AND BUFFERS
      */
     
-    count = frame_manager::decref (physical_address_to_frame (page_directory_));
+    count = frame_manager::decref (physical_address_to_frame (page_directory));
     kassert (count == 1);
-    count = frame_manager::decref (physical_address_to_frame (page_directory_));
+    count = frame_manager::decref (physical_address_to_frame (page_directory));
     kassert (count == 0);
 
     /*

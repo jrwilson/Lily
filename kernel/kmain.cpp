@@ -298,14 +298,19 @@ kmain (uint32_t multiboot_magic,
   }
 
   // Create the automaton.
-  automaton* child = automaton::create_automaton (0, text, boot_automaton_size, kstring (), true, data_buffer, 0);
+  pair<automaton*, int> r = automaton::create_automaton (kstring (), 0, true, text, boot_automaton_size, data_buffer, 0);
+
+  if (r.first == 0) {
+    kout << "Could not create the boot automaton.  Halting." << endl;
+    halt ();
+  }
 
   delete text;
   delete data_buffer;
   
   // Check the init action.
-  if (child->find_action (LILY_ACTION_INIT) == 0) {
-    kout << "The initial automaton does not contain an init action.  Halting." << endl;
+  if (r.first->find_action (LILY_ACTION_INIT) == 0) {
+    kout << "The boot automaton does not contain an init action.  Halting." << endl;
     halt ();
   }
   

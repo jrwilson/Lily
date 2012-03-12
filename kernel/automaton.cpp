@@ -1,5 +1,6 @@
 #include "automaton.hpp"
 #include "scheduler.hpp"
+#include "elf.hpp"
 
 aid_t automaton::current_aid_ = 0;
 automaton::aid_to_automaton_map_type automaton::aid_to_automaton_map_;
@@ -50,6 +51,193 @@ automaton::finish (ano_t action_number,
   }
   
   scheduler::finish (output_fired, bda, bdb);
+}
+
+/*
+  This function is called in two contexts:
+  (1)  In kmain to create the initial automaton.
+  (2)  In create to create automata.  (create is a wrapper around this function that checks some arguments)
+
+  This function uses an optimistic strategy where we first create an empty automaton and then flesh it out as we parse the text.
+  The dynamic resources are associated with a scoped object so that all dynamic resources are freed when an error is encountered.
+  This is similiar to an auto pointer in the STL or scroped locking.
+
+  The basic procedure implemented by the function is to map the text of the automaton, parse it, unmap it, and then install it if successful.
+  Installing is the process where global data structures are updated.
+  Context (2) acquires the id_lock_ before invoking this function for thread safety.
+*/
+ 
+template <typename T>
+class auto_decref {
+private:
+  T& obj_;
+public:
+  auto_decref (T& obj) :
+    obj_ (obj)
+  { }
+
+  ~auto_decref ()
+  {
+    obj_.decref ();
+  }
+};
+
+pair<automaton*, int>
+automaton::create_automaton (const kstring& name,
+			     automaton* parent,
+			     bool privileged,
+			     buffer* text,
+			     size_t text_size,
+			     buffer* buffer_a,
+			     buffer* buffer_b)
+{
+  // Create the automaton.
+  automaton* child = new automaton ();
+
+  // We want to drop its reference count when we return.
+  // To succeed we must increment its reference count.
+  auto_decref<automaton> child_cleanup (*child);
+
+  // First, we want to map the text of the automaton in the kernel's address space.
+
+  // Synchronize the buffer so the frames listed in the buffer are correct.
+  // We must do this before switching to the kernel.
+  text->sync (0, text->size ());
+
+  // If the text buffer is not mapped in the current page directory, there are no problems.
+  // If the text buffer is mapped, we have three options:
+  // 1.  Copy the buffer.
+  // 2.  Unmap the buffer and then map it back at its original location.
+  // 3.  Save the location of the buffer and temporarily override it.
+  // Option 3 has the least overhead so that's what we'll do.
+  logical_address_t const begin = text->begin ();
+  logical_address_t const end = text->end ();
+  text->override (0, 0);
+
+  // Switch to the kernel page directory.
+  physical_address_t original_directory = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
+
+  // Map the text of the initial automaton just after low memory.
+  const logical_address_t text_begin = INITIAL_LOGICAL_LIMIT - KERNEL_VIRTUAL_BASE;
+  const logical_address_t text_end = text_begin + text_size;
+  text->map_begin (text_begin);
+
+  // Parse the file.
+  if (elf::parse (child, text_begin, text_end) == -1) {
+    return make_pair ((automaton*)0, LILY_SYSCALL_EBADTEXT);
+  }
+
+  // Unmap the text.
+  text->unmap ();
+
+  // Generate an id and insert into the aid to automaton map.
+  aid_t child_aid = current_aid_;
+  while (aid_to_automaton_map_.find (child_aid) != aid_to_automaton_map_.end ()) {
+    child_aid = max (child_aid + 1, 0); // Handles overflow.
+  }
+  current_aid_ = max (child_aid + 1, 0);
+
+  aid_to_automaton_map_.insert (make_pair (child_aid, child));
+
+  // Insert into the name map if necessary.
+  if (name.size () != 0) {
+    pair<registry_map_type::iterator, bool> r = registry_map_.insert (make_pair (name, child));
+    kassert (r.second);
+  }
+
+  if (parent != 0) {
+    // Acquire the modification mutex for the parent.
+    lock plock (parent->mod_mutex_);
+    parent->children_.insert (child);
+    // TODO:  Is the locking correct?
+    child->incref ();
+  }
+
+  // Add to the scheduler.
+  scheduler::add_automaton (child);
+
+  // Schedule the init action.
+  const paction* action = child->find_action (LILY_ACTION_INIT);
+  if (action != 0) {
+    // Replace the buffers with copies.
+    if (buffer_a != 0) {
+      buffer_a = new buffer (*buffer_a);
+    }
+    if (buffer_b != 0) {
+      buffer_b = new buffer (*buffer_b);
+    }
+    
+    scheduler::schedule (caction (action, child_aid, buffer_a, buffer_b));
+  }
+
+  // Switch back.
+  vm::switch_to_directory (original_directory);
+  
+  text->override (begin, end);
+
+  child->aid_ = child_aid;
+  child->name_ = name;
+  child->parent_ = parent;
+  if (parent != 0) {
+    // TODO:  Is the locking correct?
+    parent->incref ();
+  }
+  child->privileged_ = privileged;
+
+  // Increment the reference count for success.
+  child->incref ();
+
+  return make_pair (child, LILY_SYSCALL_ESUCCESS);    
+}
+
+pair<aid_t, int>
+automaton::create (bd_t text_bd,
+		   size_t /*text_size*/,
+		   bd_t bda,
+		   bd_t bdb,
+		   const char* name,
+		   size_t name_size,
+		   bool retain_privilege)
+{
+  lock id_lock (id_mutex_);
+
+  // Check the name data.
+  if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
+    return make_pair (-1, LILY_SYSCALL_EINVAL);
+  }
+
+  // Check that the name does not exist.
+  kstring name_str (name, name_size);
+  if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
+    return make_pair (-1, LILY_SYSCALL_EEXISTS);
+  }
+  
+  // Find the text buffer.
+  buffer* text_buffer = lookup_buffer (text_bd);
+  if (text_buffer == 0) {
+    // Buffer does not exist.
+    return make_pair (-1, LILY_SYSCALL_EBDDNE);
+  }
+
+  // Find and synchronize the data buffers so the frames listed in the buffers are correct.
+  buffer* buffer_a = lookup_buffer (bda);
+  if (buffer_a != 0) {
+    buffer_a->sync (0, buffer_a->size ());
+  }
+  buffer* buffer_b = lookup_buffer (bdb);
+  if (buffer_b != 0) {
+    buffer_b->sync (0, buffer_b->size ());
+  }
+  
+  // Create the automaton.
+  pair<automaton*, int> r = create_automaton (name_str, this, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+
+  if (r.first != 0) {
+    return make_pair (r.first->aid (), r.second);
+  }
+  else {
+    return make_pair (-1, r.second);
+  }
 }
 
 pair<bid_t, int>
@@ -144,266 +332,6 @@ automaton::bind (aid_t output_aid,
   return make_pair (b->bid (), LILY_SYSCALL_ESUCCESS);
 }
 
-pair<aid_t, int>
-automaton::create (bd_t text_bd,
-		   size_t /*text_size*/,
-		   bd_t bda,
-		   bd_t bdb,
-		   const char* name,
-		   size_t name_size,
-		   bool retain_privilege)
-{
-  lock id_lock (id_mutex_);
-
-  // Check the name.
-  if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
-    return make_pair (-1, LILY_SYSCALL_EINVAL);
-  }
-  
-  kstring name_str (name, name_size);
-  if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
-    return make_pair (-1, LILY_SYSCALL_EEXISTS);
-  }
-
-  // Find the text buffer.
-  buffer* text_buffer = lookup_buffer (text_bd);
-  
-  if (text_buffer == 0) {
-    // Buffer does not exist.
-    return make_pair (-1, LILY_SYSCALL_EBDDNE);
-  }
-
-  // Synchronize the buffer so the frames listed in the buffer are correct.
-  text_buffer->sync (0, text_buffer->size ());
-
-  // Find and synchronize the data buffers so the frames listed in the buffers are correct.
-  buffer* buffer_a = lookup_buffer (bda);
-  if (buffer_a != 0) {
-    buffer_a->sync (0, buffer_a->size ());
-  }
-  buffer* buffer_b = lookup_buffer (bdb);
-  if (buffer_b != 0) {
-    buffer_b->sync (0, buffer_b->size ());
-  }
-  
-  // Create the automaton.
-  automaton* child = create_automaton (this, text_buffer, text_buffer->size () * PAGE_SIZE, name_str, retain_privilege && privileged_, buffer_a, buffer_b);
-      
-  return make_pair (child->aid (), LILY_SYSCALL_ESUCCESS);
-}
-
-// TODO:  Make this reentrant.
-// A list of frames used when creating automata.
-typedef unordered_map<logical_address_t, pair<frame_t, vm::map_mode_t> > frame_map_type;
-static frame_map_type frame_map_;
-
-typedef vector<pair<logical_address_t, logical_address_t> > clear_list_type;
-static clear_list_type clear_list_;
-
-automaton*
-automaton::create_automaton (automaton* parent,
-			     buffer* text,
-			     size_t text_size,
-			     const kstring& name,
-			     bool privileged,
-			     buffer* buffer_a,
-			     buffer* buffer_b)
-{
-  // TODO:  Refactor this function.  It is really nasty.
-
-  // If the text buffer is not mapped, there are no problems.
-  // If the text buffer is mapped, we have three options:
-  // 1.  Copy the buffer.
-  // 2.  Unmap the buffer and then map it back at it original location.
-  // 3.  Save the location of the buffer and temporarily override it.
-  // Option 3 has the least overhead so that's what we'll do.
-  
-  logical_address_t const begin = text->begin ();
-  logical_address_t const end = text->end ();
-  
-  text->override (0, 0);
-  
-  // Switch to the kernel page directory.  So we can map the text of the automaton.
-  physical_address_t original_directory = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
-
-
-
-
-  // Map the text of the initial automaton just after low memory.
-  const logical_address_t text_begin = INITIAL_LOGICAL_LIMIT - KERNEL_VIRTUAL_BASE;
-  const logical_address_t text_end = text_begin + text_size;
-  text->map_begin (text_begin);
-  
-  // Parse the file.
-  elf::parser hp;
-  if (!hp.parse (text_begin, text_end)) {
-    // BUG:  Couldn't parse the program.
-    kassert (0);
-  }
-  
-  // BUG:  Check the memory map from the parse.
-  // BUG:  Check the set of actions from the parse.
-  
-  // Generate an id.
-  aid_t child_aid = current_aid_;
-  while (aid_to_automaton_map_.find (child_aid) != aid_to_automaton_map_.end ()) {
-    child_aid = max (child_aid + 1, 0); // Handles overflow.
-  }
-  current_aid_ = max (child_aid + 1, 0);
-
-  // Create the automaton.
-  
-  // Create the automaton and insert it into the map.
-  automaton* a = new automaton (child_aid, name, parent, privileged);
-  if (parent != 0) {
-    parent->add_child (a);
-    // Remove the reference count from creation.
-    a->decref ();
-  }
-
-  aid_to_automaton_map_.insert (make_pair (child_aid, a));
-  
-  // Add to the scheduler.
-  scheduler::add_automaton (a);
-  
-  // Add the actions to the automaton.
-  for (elf::parser::action_list_type::iterator pos = hp.action_list.begin (); pos != hp.action_list.end (); ++pos) {
-    switch (pos->action_number) {
-    case LILY_ACTION_NO_ACTION:
-      // BUG:  The action number LILY_ACTION_NO_ACTION is reserved.
-      kassert (0);
-      break;
-    case LILY_ACTION_INIT:
-      if (pos->type != LILY_ACTION_SYSTEM_INPUT || pos->parameter_mode != PARAMETER) {
-	// BUG:  These must have the correct type.
-	kassert (0);
-      }
-      // Fall through.
-    default:
-      if (!a->add_action (new paction (a, pos->type, pos->parameter_mode, pos->action_entry_point, pos->action_number))) {
-	// BUG:  The action conflicts with an existing action.  Be sure to delete the rest of the pointers.
-	kassert (0);
-      }
-      break;
-    }
-  }
-  
-  // Form a description of the actions.
-  kstring description;
-  {
-    size_t action_count = hp.action_list.size ();
-    description.append (&action_count, sizeof (action_count));
-  }
-  
-  for (elf::parser::action_list_type::iterator pos = hp.action_list.begin (); pos != hp.action_list.end (); ++pos) {
-    description.append (&pos->type, sizeof (pos->type));
-    description.append (&pos->parameter_mode, sizeof (pos->parameter_mode));
-    description.append (&pos->action_number, sizeof (pos->action_number));
-    size_t size = pos->action_name.size ();
-    description.append (&size, sizeof (size));
-    size = pos->action_description.size ();
-    description.append (&size, sizeof (size));
-    description.append (pos->action_name.c_str (), pos->action_name.size ());
-    description.append (pos->action_description.c_str (), pos->action_description.size ());
-  }
-  
-  a->set_description (description);
-  
-  // Create the memory map for the automaton.
-  frame_map_.clear ();
-  clear_list_.clear ();
-  for (elf::parser::program_header_iterator e = hp.program_header_begin (); e != hp.program_header_end (); ++e) {
-    vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
-    
-    size_t s;
-    // Initialized data.
-    for (s = 0; s < e->file_size; s += PAGE_SIZE) {
-      pair<frame_map_type::iterator, bool> r = frame_map_.insert (make_pair (align_down (e->virtual_address + s, PAGE_SIZE), make_pair (vm::logical_address_to_frame (text_begin + e->offset + s), map_mode)));
-      if (!r.second && map_mode == vm::MAP_COPY_ON_WRITE) {
-	// Already existed and needs to be copy-on-write.
-	r.first->second.second = vm::MAP_COPY_ON_WRITE;
-      }
-    }
-    
-    // Clear the tiny region between the end of initialized data and the first unitialized page.
-    if (e->file_size < e->memory_size) {
-      logical_address_t begin = e->virtual_address + e->file_size;
-      logical_address_t end = e->virtual_address + e->memory_size;
-      clear_list_.push_back (make_pair (begin, end));
-    }
-    
-    // Uninitialized data.
-    for (; s < e->memory_size; s += PAGE_SIZE) {
-      pair<frame_map_type::iterator, bool> r = frame_map_.insert (make_pair (align_down (e->virtual_address + s, PAGE_SIZE), make_pair (vm::zero_frame (), map_mode)));
-      if (!r.second && map_mode == vm::MAP_COPY_ON_WRITE) {
-	// Already existed and needs to be copy-on-write.
-	r.first->second.second = vm::MAP_COPY_ON_WRITE;
-      }
-    }
-    
-    if (!a->vm_area_is_free (e->virtual_address, e->virtual_address + e->memory_size)) {
-      // BUG:  The area conflicts with the existing memory map.
-      kassert (0);
-    }
-    
-    a->insert_vm_area (new vm_area_base (e->virtual_address, e->virtual_address + e->memory_size));
-  }
-  
-  if (!a->insert_heap_and_stack ()) {
-    // BUG
-    kassert (0);
-  }
-
-  // Switch to the automaton.
-  physical_address_t old = vm::switch_to_directory (a->page_directory_);
-  
-  // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
-  
-  // Map all the frames.
-  for (frame_map_type::const_iterator pos = frame_map_.begin ();
-       pos != frame_map_.end ();
-       ++pos) {
-    vm::map (pos->first, pos->second.first, vm::USER, pos->second.second);
-  }
-  
-  // Clear.
-  for (clear_list_type::const_iterator pos = clear_list_.begin ();
-       pos != clear_list_.end ();
-       ++pos) {
-    memset (reinterpret_cast<void*> (pos->first), 0, pos->second - pos->first);
-  }
-  
-  // Map the heap and stack while using the automaton's page directory.
-  a->map_heap_and_stack ();
-  
-  // Switch back.
-  vm::switch_to_directory (old);
-  
-  // Unmap the text.
-  text->unmap ();
-  
-  // Schedule the init action.
-  const paction* action = a->find_action (LILY_ACTION_INIT);
-  if (action != 0) {
-    // Replace the buffers with copies.
-    if (buffer_a != 0) {
-      buffer_a = new buffer (*buffer_a);
-    }
-    if (buffer_b != 0) {
-      buffer_b = new buffer (*buffer_b);
-    }
-    
-    scheduler::schedule (caction (action, a->aid (), buffer_a, buffer_b));
-  }
-
-  // Switch back.
-  vm::switch_to_directory (original_directory);
-  
-  text->override (begin, end);
-
-  return a;
-}
-
   // void
   // remove_from_scheduler (automaton* a)
   // {
@@ -442,7 +370,7 @@ automaton::execute (const caction& action_,
     // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
     
     // Switch page directories.
-    vm::switch_to_directory (page_directory_);
+    vm::switch_to_directory (page_directory);
     
     uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (stack_area_->end ());
     

@@ -30,10 +30,9 @@
 
 #define LILY_SYSCALL_SYSCONF               0x50
 #define LILY_SYSCALL_SYSLOG                0x51
-#define LILY_SYSCALL_ENTER                 0x52
-#define LILY_SYSCALL_LOOKUP                0x53
-#define LILY_SYSCALL_DESCRIBE              0x54
-#define LILY_SYSCALL_GETAID                0x55
+#define LILY_SYSCALL_LOOKUP                0x52
+#define LILY_SYSCALL_DESCRIBE              0x53
+#define LILY_SYSCALL_GETAID                0x54
 
 /* Privileged system calls. */
 #define LILY_SYSCALL_MAP                   0x100
@@ -79,5 +78,6 @@
 #define LILY_SYSCALL_EIBADANO 20
 #define LILY_SYSCALL_EALREADY 21
 #define LILY_SYSCALL_EEXISTS 22
+#define LILY_SYSCALL_EBADTEXT 23
 
 #endif /* LILY_SYSCALL_H */

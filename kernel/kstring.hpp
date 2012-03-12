@@ -49,6 +49,14 @@ public:
     return *this;
   }
 
+  void
+  clear ()
+  {
+    delete[] string_;
+    string_ = 0;
+    size_ = 0;
+  }
+
   ~kstring ()
   {
     delete[] string_;

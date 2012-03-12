@@ -156,11 +156,6 @@ int
 syslogn (const char* msg,
 	 size_t size);
 
-int
-enter (const char* name,
-       size_t size,
-       aid_t aid);
-
 aid_t
 lookup (const char* name,
 	size_t size);

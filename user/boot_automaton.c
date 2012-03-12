@@ -203,16 +203,10 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     syslog ("boot_automaton: error: No vfs file");
     exit ();
   }
-  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, 0, 0, false);
+  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false);
   cpio_file_destroy (vfs_file);
   if (vfs == -1) {
     syslog ("boot_automaton: error: Could not create vfs");
-    exit ();
-  }
-
-  /* Register the vfs. */
-  if (enter (VFS_NAME, strlen (VFS_NAME) + 1, vfs) == -1) {
-    syslog ("boot_automaton: error: Could not register vfs");
     exit ();
   }
 

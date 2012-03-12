@@ -156,13 +156,6 @@ struct sysconf_args {
   int name;
 };
 
-struct enter_args {
-  uint32_t eip;
-  const char* name;
-  size_t size;
-  aid_t aid;
-};
-
 struct lookup_args {
   uint32_t eip;
   const char* name;
@@ -432,19 +425,6 @@ trap_dispatch (volatile registers regs)
 	return;
 	break;
       }
-      return;
-    }
-    break;
-  case LILY_SYSCALL_ENTER:
-    {
-      enter_args* ptr = reinterpret_cast<enter_args*> (regs.useresp);
-      if (!a->verify_stack (ptr, sizeof (enter_args))) {
-	// BUG:  Can't get the arguments from the stack.
-	kassert (0);
-      }
-      pair<int, int> r = a->enter (ptr->name, ptr->size, ptr->aid);
-      regs.eax = r.first;
-      regs.ecx = r.second;
       return;
     }
     break;

@@ -2,6 +2,7 @@
 #define __unordered_map_hpp__
 
 #include "uno_assoc_impl.hpp"
+#include "memory.hpp"
 
 template <typename Key,
 	  typename T>

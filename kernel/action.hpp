@@ -3,9 +3,10 @@
 
 #include <lily/types.h>
 #include <lily/action.h>
-#include "buffer.hpp"
+#include "kstring.hpp"
 
 class automaton;
+class buffer;
 
 enum action_type_t {
   INPUT = LILY_ACTION_INPUT,
@@ -27,17 +28,23 @@ struct paction {
   parameter_mode_t const parameter_mode;
   const void* const action_entry_point;
   ano_t const action_number;
+  kstring const name;
+  kstring const description;
 
   paction (::automaton* a,
 	   action_type_t t,
 	   parameter_mode_t pm,
 	   const void* aep,
-	   ano_t an) :
+	   ano_t an,
+	   const kstring& n,
+	   const kstring& d) :
     automaton (a),
     type (t),
     parameter_mode (pm),
     action_entry_point (aep),
-    action_number (an)
+    action_number (an),
+    name (n),
+    description (d)
   { }
 
 private:
