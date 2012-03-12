@@ -12,7 +12,7 @@ vga_op_list_initw (vga_op_list_t* vol,
   vol->count = 0;
   vol->bdb = bdb;
 
-  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+  if (buffer_file_seek (&vol->bf, sizeof (size_t)) == -1) {
     return -1;
   }
 
@@ -30,7 +30,7 @@ vga_op_list_reset (vga_op_list_t* vol)
 
   buffer_file_truncate (&vol->bf);
 
-  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+  if (buffer_file_seek (&vol->bf, sizeof (size_t)) == -1) {
     return -1;
   }
 

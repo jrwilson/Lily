@@ -325,6 +325,8 @@ public:
       asm volatile ("sti\n"
 		    "hlt\n"
 		    "cli\n");
+
+      kout << "Woke up" << endl;
     }
   }
 };

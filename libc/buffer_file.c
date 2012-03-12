@@ -159,6 +159,10 @@ buffer_file_readp (buffer_file_t* bf,
     return 0;
   }
 
+  if (bf->position > bf->size) {
+    return 0;
+  }
+
   if (size > (bf->size - bf->position)) {
     /* Error: Not enough data. */
     return 0;
@@ -177,9 +181,13 @@ buffer_file_read (buffer_file_t* bf,
 		  void* ptr,
 		  size_t size)
 {
+  if (bf->position > bf->size) {
+    return -1;
+  }
+
   if (size > (bf->size - bf->position)) {
     /* Error: Not enough data. */
-    return 0;
+    return -1;
   }
 
   memcpy (ptr, bf->ptr + bf->position, size);
@@ -213,10 +221,6 @@ buffer_file_seek (buffer_file_t* bf,
   position += sizeof (size_t);
 
   if (position < sizeof (size_t)) {
-    return -1;
-  }
-
-  if (position > bf->size) {
     return -1;
   }
 

@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=vfs tmpfs jsh keyboard kb_us_104 terminal vga pci hello_world
+PROGRAMS=vfs tmpfs jsh keyboard kb_us_104 terminal vga pci hello_world ps2_mouse_test
 # shell
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -37,10 +37,13 @@ tmpfs : tmpfs.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 # Device drivers
-keyboard : keyboard.o
+keyboard : keyboard.o ps2_mouse_msg.o 
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
 
 kb_us_104 : kb_us_104.o
+	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
+
+ps2_mouse_test : ps2_mouse_test.o ps2_mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 terminal : terminal.o vga_msg.o
