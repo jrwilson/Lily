@@ -67,7 +67,7 @@ private:
     operator () (const binding* x,
 		 const binding* y) const
     {
-      return x->input_action ().action->automaton < y->input_action ().action->automaton;
+      return x->input_action ().automaton < y->input_action ().automaton;
     }
   };
 
@@ -79,7 +79,7 @@ private:
       if (b->enabled ()) {
 	action_ = b->input_action ();
 	// This does not return.
-	action_.action->automaton->execute (action_, output_buffer_a_, output_buffer_b_);
+	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
       else {
 	++input_action_pos_;
@@ -95,7 +95,7 @@ private:
 	 ++pos) {
       binding* b = (*pos);
       // -FFF
-      b->input_action ().action->automaton->unlock_execution ();
+      b->input_action ().automaton->unlock_execution ();
       // -CCC
       b->decref ();
     }
@@ -134,7 +134,7 @@ public:
     	 pos != c->end ();
     	 ++pos) {
       // -BBB
-      kassert (pos->action->automaton == a);
+      kassert (pos->automaton == a);
       a->decref ();
     }
     delete c;
@@ -147,20 +147,20 @@ public:
   current_automaton ()
   {
     kassert (action_.action != 0);
-    return action_.action->automaton;
+    return action_.automaton;
   }
 
   static inline void
   schedule (const caction& ad)
   {
-    context_map_type::iterator pos = context_map_.find (ad.action->automaton);
+    context_map_type::iterator pos = context_map_.find (ad.automaton);
     kassert (pos != context_map_.end ());
     
     automaton_context* c = pos->second;
     
     if (c->push_back (ad)) {
       // +BBB
-      ad.action->automaton->incref ();
+      ad.automaton->incref ();
     }
     
     ready_queue_.push_back (c);
@@ -174,7 +174,7 @@ public:
   {
     if (action_.action != 0) {
       // We were executing an action of this automaton.
-      automaton* a = action_.action->automaton;
+      automaton* a = action_.automaton;
 
       switch (action_.action->type) {
       case INPUT:
@@ -182,9 +182,9 @@ public:
 	++input_action_pos_;
 	proceed_to_input ();
 	// -EEE
-	input_action_list_.front ()->output_action ().action->automaton->unlock_execution ();
+	input_action_list_.front ()->output_action ().automaton->unlock_execution ();
 	// -BBB
-	input_action_list_.front ()->output_action ().action->automaton->decref ();
+	input_action_list_.front ()->output_action ().automaton->decref ();
 	finish_output ();
 	break;
       case OUTPUT:
@@ -256,7 +256,7 @@ public:
 	action_ = c->front ();
 	c->pop_front ();
 
-	automaton* a = action_.action->automaton;
+	automaton* a = action_.automaton;
 
 	// The automaton exists.  Continue loading and execute.
 	switch (action_.action->type) {
@@ -290,7 +290,7 @@ public:
 	    for (input_action_list_type::const_iterator pos = input_action_list_.begin ();
 		 pos != input_action_list_.end ();
 		 ++pos) {
-	      automaton* input_automaton = (*pos)->input_action ().action->automaton;
+	      automaton* input_automaton = (*pos)->input_action ().automaton;
 	      if (!output_locked && a < input_automaton) {
 		// +EEE
 		a->lock_execution ();
@@ -323,7 +323,7 @@ public:
 	}
 	
 	// This call does not return.
-	action_.action->automaton->execute (action_, output_buffer_a_, output_buffer_b_);
+	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
 
       /* Out of actions.  Halt. */

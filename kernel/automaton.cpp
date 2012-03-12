@@ -19,35 +19,42 @@ automaton::finish (ano_t action_number,
 		   bd_t bda,
 		   bd_t bdb)
 {
-  if (action_number > LILY_ACTION_NO_ACTION) {
-    const paction* action = find_action (action_number);
-    if (action != 0) {
-      /* Correct the parameter. */
-      switch (action->parameter_mode) {
-      case NO_PARAMETER:
-	parameter = 0;
-	break;
-      case PARAMETER:
-      case AUTO_PARAMETER:
-	/* No correction necessary. */
-	break;
+  if (enabled_ && action_number > LILY_ACTION_NO_ACTION) {
+
+    // Acquire the modification mutex.
+    lock mod_lock (mod_mutex_);
+    
+    // Only schedule if we are enabled.
+    if (enabled_) {
+      const paction* action = find_action (action_number);
+      if (action != 0) {
+	/* Correct the parameter. */
+	switch (action->parameter_mode) {
+	case NO_PARAMETER:
+	  parameter = 0;
+	  break;
+	case PARAMETER:
+	case AUTO_PARAMETER:
+	  /* No correction necessary. */
+	  break;
+	}
+	
+	switch (action->type) {
+	case OUTPUT:
+	case INTERNAL:
+	  scheduler::schedule (caction (this, action, parameter));
+	  break;
+	case INPUT:
+	case SYSTEM_INPUT:
+	  // BUG:  Can't schedule non-local actions.
+	  kassert (0);
+	  break;
+	}
       }
-      
-      switch (action->type) {
-      case OUTPUT:
-      case INTERNAL:
-	scheduler::schedule (caction (action, parameter));
-	break;
-      case INPUT:
-      case SYSTEM_INPUT:
-	// BUG:  Can't schedule non-local actions.
+      else {
+	// BUG:  Scheduled an action that doesn't exist.
 	kassert (0);
-	break;
       }
-    }
-    else {
-      // BUG:  Scheduled an action that doesn't exist.
-      kassert (0);
     }
   }
   
@@ -92,6 +99,8 @@ automaton::create_automaton (const kstring& name,
 			     buffer* buffer_a,
 			     buffer* buffer_b)
 {
+  // If the parent exists, we enter with the id_mutex_ locked and the parent's mod_mutex_ locked.
+
   // Create the automaton.
   automaton* child = new automaton ();
 
@@ -131,6 +140,9 @@ automaton::create_automaton (const kstring& name,
   // Unmap the text.
   text->unmap ();
 
+  // Success.
+  lock mod_lock (child->mod_mutex_);
+
   // Generate an id and insert into the aid to automaton map.
   aid_t child_aid = current_aid_;
   while (aid_to_automaton_map_.find (child_aid) != aid_to_automaton_map_.end ()) {
@@ -146,13 +158,27 @@ automaton::create_automaton (const kstring& name,
     kassert (r.second);
   }
 
+  // Add the child to the parent.
   if (parent != 0) {
-    // Acquire the modification mutex for the parent.
-    lock plock (parent->mod_mutex_);
     parent->children_.insert (child);
-    // TODO:  Is the locking correct?
-    child->incref ();
+    ++child->reference_count_;
   }
+
+  // Switch back.
+  vm::switch_to_directory (original_directory);
+  
+  text->override (begin, end);
+
+  child->aid_ = child_aid;
+  child->name_ = name;
+  child->parent_ = parent;
+  if (parent != 0) {
+    ++parent->reference_count_;
+  }
+  child->privileged_ = privileged;
+
+  // Increment the reference count for success.
+  ++child->reference_count_;
 
   // Add to the scheduler.
   scheduler::add_automaton (child);
@@ -168,25 +194,8 @@ automaton::create_automaton (const kstring& name,
       buffer_b = new buffer (*buffer_b);
     }
     
-    scheduler::schedule (caction (action, child_aid, buffer_a, buffer_b));
+    scheduler::schedule (caction (child, action, child_aid, buffer_a, buffer_b));
   }
-
-  // Switch back.
-  vm::switch_to_directory (original_directory);
-  
-  text->override (begin, end);
-
-  child->aid_ = child_aid;
-  child->name_ = name;
-  child->parent_ = parent;
-  if (parent != 0) {
-    // TODO:  Is the locking correct?
-    parent->incref ();
-  }
-  child->privileged_ = privileged;
-
-  // Increment the reference count for success.
-  child->incref ();
 
   return make_pair (child, LILY_SYSCALL_ESUCCESS);    
 }
@@ -201,6 +210,7 @@ automaton::create (bd_t text_bd,
 		   bool retain_privilege)
 {
   lock id_lock (id_mutex_);
+  lock mod_lock (mod_mutex_);
 
   // Check the name data.
   if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
@@ -249,17 +259,23 @@ automaton::bind (aid_t output_aid,
 		 ano_t input_ano,
 		 int input_parameter)
 {
-  automaton* output_automaton = automaton::lookup (output_aid);
-  if (output_automaton == 0) {
+  lock id_lock (id_mutex_);
+
+  aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
+  if (output_pos == aid_to_automaton_map_.end ()) {
     // Output automaton DNE.
     return make_pair (-1, LILY_SYSCALL_EOAIDDNE);
   }
-  
-  automaton* input_automaton = automaton::lookup (input_aid);
-  if (input_automaton == 0) {
+
+  aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
+  if (input_pos == aid_to_automaton_map_.end ()) {
     // Input automaton DNE.
     return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
   }
+
+  automaton* output_automaton = output_pos->second;
+  
+  automaton* input_automaton = input_pos->second;
   
   if (output_automaton == input_automaton) {
     // The output and input automata must be different.
@@ -306,8 +322,8 @@ automaton::bind (aid_t output_aid,
   }
   
   // Form complete actions.
-  caction oa (output_action, output_parameter);
-  caction ia (input_action, input_parameter);
+  caction oa (output_automaton, output_action, output_parameter);
+  caction ia (input_automaton, input_action, input_parameter);
   
   // Check that the input action is not bound.
   // (Also checks that the binding does not exist.)
@@ -328,7 +344,7 @@ automaton::bind (aid_t output_aid,
   
   // TODO:  Remove this.
   // Schedule the output action.
-  scheduler::schedule (caction (output_action, output_parameter));
+  scheduler::schedule (caction (output_automaton, output_action, output_parameter));
   
   return make_pair (b->bid (), LILY_SYSCALL_ESUCCESS);
 }
@@ -344,109 +360,3 @@ automaton::bind (aid_t output_aid,
   //     remove_from_scheduler (*pos);
   //   }
   // }
-
-void
-automaton::execute (const caction& action_,
-		    buffer* output_buffer_a_,
-		    buffer* output_buffer_b_)
-{
-  kassert (action_.action != 0);
-  kassert (action_.action->automaton == this);
-  
-  if (enabled_) {
-    // switch (action_.action->type) {
-    // case INPUT:
-    // 	kout << "?";
-    // 	break;
-    // case OUTPUT:
-    // 	kout << "!";
-    // 	break;
-    // case INTERNAL:
-    // 	kout << "#";
-    // 	break;
-    // case SYSTEM_INPUT:
-    // 	kout << "*";
-    // 	break;
-    // }
-    // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
-    
-    // Switch page directories.
-    vm::switch_to_directory (page_directory);
-    
-    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (stack_area_->end ());
-    
-    // These instructions serve a dual purpose.
-    // First, they set up the cdecl calling convention for actions.
-    // Second, they force the stack to be created if it is not.
-    
-    switch (action_.action->type) {
-    case INPUT:
-    case SYSTEM_INPUT:
-      {
-	bd_t bda = -1;
-	bd_t bdb = -1;
-	
-	if (output_buffer_a_ != 0) {
-	  // Copy the buffer to the input automaton.
-	  bda = buffer_create (*output_buffer_a_);
-	}
-	
-	if (output_buffer_b_ != 0) {
-	  // Copy the buffer to the input automaton.
-	  bdb = buffer_create (*output_buffer_b_);
-	}
-	
-	// Push the buffers.
-	*--stack_pointer = bdb;
-	*--stack_pointer = bda;
-      }
-      break;
-    case OUTPUT:
-    case INTERNAL:
-      // Do nothing.
-      break;
-    }
-    
-    // Push the parameter.
-    *--stack_pointer = action_.parameter;
-    
-    // Push a bogus instruction pointer so we can use the cdecl calling convention.
-    *--stack_pointer = 0;
-    uint32_t* sp = stack_pointer;
-    
-    // Push the stack segment.
-    *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
-    
-    // Push the stack pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (sp);
-    
-    // Push the flags.
-    uint32_t eflags;
-    asm ("pushf\n"
-	 "pop %0\n" : "=g"(eflags) : :);
-    *--stack_pointer = eflags;
-    
-    // Push the code segment.
-    *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
-    
-    // Push the instruction pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
-    
-    asm ("mov %0, %%ds\n"	// Load the data segments.
-	 "mov %0, %%es\n"	// Load the data segments.
-	 "mov %0, %%fs\n"	// Load the data segments.
-	 "mov %0, %%gs\n"	// Load the data segments.
-	 "mov %1, %%esp\n"	// Load the new stack pointer.
-	 "xor %%eax, %%eax\n"	// Clear the registers.
-	 "xor %%ebx, %%ebx\n"
-	 "xor %%ecx, %%ecx\n"
-	 "xor %%edx, %%edx\n"
-	 "xor %%edi, %%edi\n"
-	 "xor %%esi, %%esi\n"
-	 "xor %%ebp, %%ebp\n"
-	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
-  }
-  else {
-    scheduler::finish (false, -1, -1);
-  }
-}

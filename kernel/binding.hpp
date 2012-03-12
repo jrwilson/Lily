@@ -20,6 +20,8 @@
 #include "action.hpp"
 #include "unordered_map.hpp"
 
+class automaton;
+
 class binding {
 private:
   // Next binding id to allocate.

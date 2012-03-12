@@ -31,6 +31,24 @@
 #include "mutex.hpp"
 #include "lock.hpp"
 
+/*
+  Thread Safety
+  =============
+  Protected by id_mutex_:
+  * current_aid_
+  * aid_to_automaton_map_
+  * registry_map_
+
+  Protected by mod_mutex_:
+  * enabled_ (can read to optimize check as it only transitions from true to false)
+  * ano_to_action_map_
+  * parent_
+  * children_
+
+  In the create functions, the locking order is id_mutex_, parent->mod_mutex_, and then child->mod_mutex_.
+
+ */
+
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
 static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
@@ -115,18 +133,18 @@ private:
    */
 
 public:
-  static automaton*
-  lookup (aid_t aid)
-  {
-    // TODO:  This should lookup and increment the reference count atomically.
-    aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
-    if (pos != aid_to_automaton_map_.end ()) {
-      return pos->second;
-    }
-    else {
-      return 0;
-    }
-  }
+  // static automaton*
+  // lookup (aid_t aid)
+  // {
+  //   // TODO:  This should lookup and increment the reference count atomically.
+  //   aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
+  //   if (pos != aid_to_automaton_map_.end ()) {
+  //     return pos->second;
+  //   }
+  //   else {
+  //     return 0;
+  //   }
+  // }
 
   /*
    * DESCRIPTION
@@ -350,7 +368,7 @@ public:
   {
     // TODO:  What if the actions have the same name?
     if (ano_to_action_map_.find (an) == ano_to_action_map_.end ()) {
-      paction* action = new paction (this, t, pm, aep, an, name, description);
+      paction* action = new paction (t, pm, aep, an, name, description);
       ano_to_action_map_.insert (make_pair (an, action));
       regenerate_description_ = true;
       return true;
@@ -376,10 +394,12 @@ public:
   pair<bd_t, int>
   describe (aid_t aid)
   {
-    automaton* subject = automaton::lookup (aid);
-    if (subject == 0) {
+    aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
+    if (pos == aid_to_automaton_map_.end ()) {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
+
+    automaton* subject = pos->second;
 
     if (subject->regenerate_description_) {
       // Form a description of the actions.
@@ -507,12 +527,6 @@ public:
    */
 
 public:
-  bool
-  enabled () const
-  {
-    return enabled_;
-  }
-
   void
   disable ()
   {
@@ -560,13 +574,106 @@ public:
   {
     // TODO
   }
-
+  
   // Does not return.
-  // Either executes an action or calls scheduler::finish (false, -1, -1).
-  void
-  execute (const caction& action_,
+  inline void
+  execute (const paction& action,
+	   int parameter,
 	   buffer* output_buffer_a_,
-	   buffer* output_buffer_b_);
+	   buffer* output_buffer_b_)
+  {
+    // switch (action_.action->type) {
+    // case INPUT:
+    // 	kout << "?";
+    // 	break;
+    // case OUTPUT:
+    // 	kout << "!";
+    // 	break;
+    // case INTERNAL:
+    // 	kout << "#";
+    // 	break;
+    // case SYSTEM_INPUT:
+    // 	kout << "*";
+    // 	break;
+    // }
+    // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+    
+    // Switch page directories.
+    vm::switch_to_directory (page_directory);
+    
+    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (stack_area_->end ());
+    
+    // These instructions serve a dual purpose.
+    // First, they set up the cdecl calling convention for actions.
+    // Second, they force the stack to be created if it is not.
+    
+    switch (action.type) {
+    case INPUT:
+    case SYSTEM_INPUT:
+      {
+	bd_t bda = -1;
+	bd_t bdb = -1;
+	
+	if (output_buffer_a_ != 0) {
+	  // Copy the buffer to the input automaton.
+	  bda = buffer_create (*output_buffer_a_);
+	}
+	
+	if (output_buffer_b_ != 0) {
+	  // Copy the buffer to the input automaton.
+	  bdb = buffer_create (*output_buffer_b_);
+	}
+	
+	// Push the buffers.
+	*--stack_pointer = bdb;
+	*--stack_pointer = bda;
+      }
+      break;
+    case OUTPUT:
+    case INTERNAL:
+      // Do nothing.
+      break;
+    }
+    
+    // Push the parameter.
+    *--stack_pointer = parameter;
+    
+    // Push a bogus instruction pointer so we can use the cdecl calling convention.
+    *--stack_pointer = 0;
+    uint32_t* sp = stack_pointer;
+    
+    // Push the stack segment.
+    *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
+    
+    // Push the stack pointer.
+    *--stack_pointer = reinterpret_cast<uint32_t> (sp);
+    
+    // Push the flags.
+    uint32_t eflags;
+    asm ("pushf\n"
+	 "pop %0\n" : "=g"(eflags) : :);
+    *--stack_pointer = eflags;
+    
+    // Push the code segment.
+    *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
+    
+    // Push the instruction pointer.
+    *--stack_pointer = reinterpret_cast<uint32_t> (action.action_entry_point);
+    
+    asm ("mov %0, %%ds\n"	// Load the data segments.
+	 "mov %0, %%es\n"	// Load the data segments.
+	 "mov %0, %%fs\n"	// Load the data segments.
+	 "mov %0, %%gs\n"	// Load the data segments.
+	 "mov %1, %%esp\n"	// Load the new stack pointer.
+	 "xor %%eax, %%eax\n"	// Clear the registers.
+	 "xor %%ebx, %%ebx\n"
+	 "xor %%ecx, %%ecx\n"
+	 "xor %%edx, %%edx\n"
+	 "xor %%edi, %%edi\n"
+	 "xor %%esi, %%esi\n"
+	 "xor %%ebp, %%ebp\n"
+	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
+  }
 
   // The automaton has finished the current action.
   //
@@ -1203,13 +1310,13 @@ public:
   is_output_bound_to_automaton (const caction& output_action,
 				const automaton* input_automaton) const
   {
-    kassert (output_action.action->automaton == this);
+    kassert (output_action.automaton == this);
 
     bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.find (output_action);
     if (pos1 != bound_outputs_map_.end ()) {
       // TODO:  Replace this iteration with look-up in a data structure.
       for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if ((*pos2)->input_action ().action->automaton == input_automaton) {
+	if ((*pos2)->input_action ().automaton == input_automaton) {
 	  return true;
 	}
       }
@@ -1222,7 +1329,7 @@ public:
   bind_output (binding* b)
   {
     
-    kassert (b->output_action ().action->automaton == this);
+    kassert (b->output_action ().automaton == this);
 
     pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (b->output_action (), binding_set_type ()));
     r.first->second.insert (b);
@@ -1232,7 +1339,7 @@ public:
   void
   unbind_output (binding* b)
   {
-    kassert (b->output_action ().action->automaton == this);
+    kassert (b->output_action ().automaton == this);
 
     bound_outputs_map_type::iterator pos = bound_outputs_map_.find (b->output_action ());
     kassert (pos != bound_outputs_map_.end ());
@@ -1247,7 +1354,7 @@ public:
   bool
   is_input_bound (const caction& input_action) const
   {
-    kassert (input_action.action->automaton == this);
+    kassert (input_action.automaton == this);
 
     return bound_inputs_map_.find (input_action) != bound_inputs_map_.end ();
   }
@@ -1256,7 +1363,7 @@ public:
   bind_input (binding* b)
   {
     
-    kassert (b->input_action ().action->automaton == this);
+    kassert (b->input_action ().automaton == this);
 
     pair<bound_inputs_map_type::iterator, bool> r = bound_inputs_map_.insert (make_pair (b->input_action (), binding_set_type ()));
     r.first->second.insert (b);
@@ -1266,7 +1373,7 @@ public:
   void
   unbind_input (binding* b)
   {
-    kassert (b->input_action ().action->automaton == this);
+    kassert (b->input_action ().automaton == this);
 
     bound_inputs_map_type::iterator pos = bound_inputs_map_.find (b->input_action ());
     kassert (pos != bound_inputs_map_.end ());
@@ -1354,8 +1461,8 @@ public:
   	 pos != all_bindings.end ();
   	 ++pos) {
       binding* b = *pos;
-      automaton* output_automaton = b->output_action ().action->automaton;
-      automaton* input_automaton = b->input_action ().action->automaton;
+      automaton* output_automaton = b->output_action ().automaton;
+      automaton* input_automaton = b->input_action ().automaton;
       automaton* owner = b->owner ();
       lock_bindings_in_order (output_automaton, input_automaton, owner);
       output_automaton->unbind_output (b);
@@ -1572,7 +1679,7 @@ public:
       return make_pair (-1, LILY_SYSCALL_EALREADY);
     }
 
-    caction c (action, parameter);
+    caction c (this, action, parameter);
 
     irq_map_.insert (make_pair (irq, c));
     irq_handler::subscribe (irq, c);
@@ -1635,10 +1742,12 @@ public:
       return make_pair (-1, LILY_SYSCALL_EBADANO);
     }
 
-    automaton* subject = automaton::lookup (aid);
-    if (subject == 0) {
+    aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
+    if (pos == aid_to_automaton_map_.end ()) {
       return make_pair (-1, LILY_SYSCALL_EAIDDNE);
     }
+
+    automaton* subject = pos->second;
 
     add_subscription (subject);
     subject->add_subscriber (this);

@@ -7,8 +7,8 @@ binding::bid_to_binding_map_type binding::bid_to_binding_map_;
 void
 binding::incref ()
 {
-  output_action_.action->automaton->incref ();
-  input_action_.action->automaton->incref ();
+  output_action_.automaton->incref ();
+  input_action_.automaton->incref ();
   owner_->incref ();
   // TODO:  This needs to be atomic.
   ++refcount_;
@@ -17,8 +17,8 @@ binding::incref ()
 void
 binding::decref ()
 {
-  output_action_.action->automaton->decref ();
-  input_action_.action->automaton->decref ();
+  output_action_.automaton->decref ();
+  input_action_.automaton->decref ();
   owner_->decref ();
   // TODO:  This needs to be atomic.
   --refcount_;

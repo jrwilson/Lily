@@ -23,7 +23,6 @@ enum parameter_mode_t {
 
 // Partial action.
 struct paction {
-  ::automaton* const automaton;
   action_type_t const type;
   parameter_mode_t const parameter_mode;
   const void* const action_entry_point;
@@ -31,14 +30,12 @@ struct paction {
   kstring const name;
   kstring const description;
 
-  paction (::automaton* a,
-	   action_type_t t,
+  paction (action_type_t t,
 	   parameter_mode_t pm,
 	   const void* aep,
 	   ano_t an,
 	   const kstring& n,
 	   const kstring& d) :
-    automaton (a),
     type (t),
     parameter_mode (pm),
     action_entry_point (aep),
@@ -54,6 +51,7 @@ private:
 
 // Complete action.
 struct caction {
+  ::automaton* automaton;
   const paction* action;
   int parameter;
   // For system inputs.
@@ -61,24 +59,29 @@ struct caction {
   buffer* buffer_b;
 
   caction () :
+    automaton (0),
     action (0),
     parameter (0),
     buffer_a (0),
     buffer_b (0)
   { }
 
-  caction (const paction* act,
+  caction (::automaton* a,
+	   const paction* act,
 	   int p) :
+    automaton (a),
     action (act),
     parameter (p),
     buffer_a (0),
     buffer_b (0)
   { }
 
-  caction (const paction* act,
+  caction (::automaton* au,
+	   const paction* act,
 	   int p,
 	   buffer* a,
 	   buffer* b) :
+    automaton (au),
     action (act),
     parameter (p),
     buffer_a (a),
@@ -88,7 +91,7 @@ struct caction {
   inline bool
   operator== (const caction& other) const
   {
-    return action == other.action && parameter == other.parameter;
+    return automaton == other.automaton && action == other.action && parameter == other.parameter;
   }
 };
 
@@ -97,7 +100,7 @@ struct caction_hash {
   size_t
   operator() (const caction& c) const
   {
-    return reinterpret_cast<size_t> (c.action) ^ c.parameter;
+    return reinterpret_cast<size_t> (c.automaton) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter;
   }
 };
 
