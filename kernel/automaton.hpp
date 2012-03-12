@@ -29,6 +29,8 @@
 #include "binding.hpp"
 #include "bitset.hpp"
 #include "elf.hpp"
+#include "mutex.hpp"
+#include "lock.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -55,6 +57,9 @@ private:
   // A registry that maps a string (name) to an aid.
   typedef unordered_map<kstring, automaton*, kstring_hash> registry_map_type;
   static registry_map_type registry_map_;
+
+  // Mutex to protect the identification data structures.
+  static mutex id_mutex_;
 
   /*
    * DESCRIPTION
@@ -110,24 +115,6 @@ private:
    * IDENTIFICATION
    */
 
-private:
-  static aid_t
-  generate_aid (automaton* a)
-  {
-    // TODO:  This needs to be atomic.
-
-    // Generate an id.
-    aid_t aid = current_aid_;
-    while (aid_to_automaton_map_.find (aid) != aid_to_automaton_map_.end ()) {
-      aid = max (aid + 1, 0); // Handles overflow.
-    }
-    current_aid_ = max (aid + 1, 0);
-
-    aid_to_automaton_map_.insert (make_pair (aid, a));
-
-    return aid;
-  }
-
 public:
   static inline automaton*
   lookup (aid_t aid)
@@ -155,7 +142,9 @@ public:
 		    buffer* text,
 		    size_t text_size,
 		    const kstring& name,
-		    bool privileged);
+		    bool privileged,
+		    buffer* buffer_a,
+		    buffer* buffer_b);
 
   /*
    * EXECUTION
@@ -1698,10 +1687,11 @@ public:
     }
   }
 
-  automaton (automaton* parent,
+  automaton (aid_t aid,
 	     const kstring& name,
+	     automaton* parent,
 	     bool privileged) :
-    aid_ (generate_aid (this)),
+    aid_ (aid),
     name_ (name),
     parent_ (parent),
     enabled_ (true),
