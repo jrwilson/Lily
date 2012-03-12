@@ -73,6 +73,8 @@ create (bd_t text_bd,
 	size_t text_size,
 	bd_t bda,
 	bd_t bdb,
+	const char* name,
+	size_t name_size,
 	bool retain_privilege);
 
 bid_t

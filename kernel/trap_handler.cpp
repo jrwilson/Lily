@@ -47,6 +47,8 @@ struct create_args {
   size_t text_size;
   bd_t bda;
   bd_t bdb;
+  const char* name;
+  size_t name_size;
   bool retain_privilege;
 };
 
@@ -214,7 +216,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<aid_t, int> r = a->create (ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->retain_privilege);
+      pair<aid_t, int> r = a->create (ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->name, ptr->name_size, ptr->retain_privilege);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

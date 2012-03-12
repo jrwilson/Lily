@@ -154,6 +154,7 @@ public:
   create_automaton (automaton* parent,
 		    buffer* text,
 		    size_t text_size,
+		    const kstring& name,
 		    bool privileged);
 
   /*
@@ -207,6 +208,7 @@ private:
 
 private:
   aid_t const aid_;
+  kstring const name_;
 
   /*
    * DESCRIPTION
@@ -527,6 +529,8 @@ public:
 	  size_t /*text_size*/,
 	  bd_t bda,
 	  bd_t bdb,
+	  const char* name,
+	  size_t name_size,
 	  bool retain_privilege);
 
   /*
@@ -587,6 +591,13 @@ public:
   {
     // TODO
   }
+
+  // Does not return.
+  // Either executes an action or calls scheduler::finish (false, -1, -1).
+  void
+  execute (const caction& action_,
+	   buffer* output_buffer_a_,
+	   buffer* output_buffer_b_);
 
   // The automaton has finished the current action.
   //
@@ -784,18 +795,7 @@ public:
     memory_map_.insert (pos, area);
   }
 
-  physical_address_t
-  page_directory_physical_address () const
-  {
-    return page_directory_;
-  }
-
-  logical_address_t
-  stack_pointer () const
-  {
-    return stack_area_->end ();
-  }
-
+private:
   bool
   verify_span (const void* ptr,
   	       size_t size) const
@@ -805,6 +805,7 @@ public:
     return pos != memory_map_.end () && (*pos)->begin () <= address && (address + size) <= (*pos)->end ();
   }
 
+public:
   bool
   verify_stack (const void* ptr,
 		size_t size) const
@@ -1698,8 +1699,10 @@ public:
   }
 
   automaton (automaton* parent,
+	     const kstring& name,
 	     bool privileged) :
     aid_ (generate_aid (this)),
+    name_ (name),
     parent_ (parent),
     enabled_ (true),
     execution_lock_ (0),

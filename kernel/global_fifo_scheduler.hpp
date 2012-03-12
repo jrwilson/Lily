@@ -70,111 +70,6 @@ private:
   };
 
   static inline void
-  execute ()
-  {
-    kassert (action_.action != 0);
-    
-    automaton* a = action_.action->automaton;
-
-    if (a->enabled ()) {
-      // switch (action_.action->type) {
-      // case INPUT:
-      // 	kout << "?";
-      // 	break;
-      // case OUTPUT:
-      // 	kout << "!";
-      // 	break;
-      // case INTERNAL:
-      // 	kout << "#";
-      // 	break;
-      // case SYSTEM_INPUT:
-      // 	kout << "*";
-      // 	break;
-      // }
-      // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
-      
-      // Switch page directories.
-      vm::switch_to_directory (a->page_directory_physical_address ());
-      
-      uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (a->stack_pointer ());
-      
-      // These instructions serve a dual purpose.
-      // First, they set up the cdecl calling convention for actions.
-      // Second, they force the stack to be created if it is not.
-      
-      switch (action_.action->type) {
-      case INPUT:
-      case SYSTEM_INPUT:
-	{
-	  bd_t bda = -1;
-	  bd_t bdb = -1;
-	  
-	  if (output_buffer_a_ != 0) {
-	    // Copy the buffer to the input automaton.
-	    bda = a->buffer_create (*output_buffer_a_);
-	  }
-	  
-	  if (output_buffer_b_ != 0) {
-	    // Copy the buffer to the input automaton.
-	    bdb = a->buffer_create (*output_buffer_b_);
-	  }
-	  
-	  // Push the buffers.
-	  *--stack_pointer = bdb;
-	  *--stack_pointer = bda;
-	}
-	break;
-      case OUTPUT:
-      case INTERNAL:
-	// Do nothing.
-	break;
-      }
-      
-      // Push the parameter.
-      *--stack_pointer = action_.parameter;
-      
-      // Push a bogus instruction pointer so we can use the cdecl calling convention.
-      *--stack_pointer = 0;
-      uint32_t* sp = stack_pointer;
-      
-      // Push the stack segment.
-      *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
-      
-      // Push the stack pointer.
-      *--stack_pointer = reinterpret_cast<uint32_t> (sp);
-      
-      // Push the flags.
-      uint32_t eflags;
-      asm ("pushf\n"
-	   "pop %0\n" : "=g"(eflags) : :);
-      *--stack_pointer = eflags;
-      
-      // Push the code segment.
-      *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
-      
-      // Push the instruction pointer.
-      *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
-      
-      asm ("mov %0, %%ds\n"	// Load the data segments.
-	   "mov %0, %%es\n"	// Load the data segments.
-	   "mov %0, %%fs\n"	// Load the data segments.
-	   "mov %0, %%gs\n"	// Load the data segments.
-	   "mov %1, %%esp\n"	// Load the new stack pointer.
-	   "xor %%eax, %%eax\n"	// Clear the registers.
-	   "xor %%ebx, %%ebx\n"
-	   "xor %%ecx, %%ecx\n"
-	   "xor %%edx, %%edx\n"
-	   "xor %%edi, %%edi\n"
-	   "xor %%esi, %%esi\n"
-	   "xor %%ebp, %%ebp\n"
-	   "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
-    }
-    else {
-      finish (false, -1, -1);
-    }
-  }
-
-  static inline void
   proceed_to_input (void)
   {
     while (input_action_pos_ != input_action_list_.end ()) {
@@ -182,7 +77,7 @@ private:
       if (b->enabled ()) {
 	action_ = b->input_action ();
 	// This does not return.
-	execute ();
+	action_.action->automaton->execute (action_, output_buffer_a_, output_buffer_b_);
       }
       else {
 	++input_action_pos_;
@@ -422,7 +317,7 @@ public:
 	}
 	
 	// This call does not return.
-	execute ();
+	action_.action->automaton->execute (action_, output_buffer_a_, output_buffer_b_);
       }
 
       /* Out of actions.  Halt. */

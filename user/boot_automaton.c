@@ -135,7 +135,7 @@ readfile_callback (void* data,
     exit ();
   }
 
-  if (create (bdb, size, bd1, bd2, true) == -1) {
+  if (create (bdb, size, bd1, bd2, 0, 0, true) == -1) {
     syslog ("boot_automaton: error: Could not create " SHELL_PATH);
     exit ();
   }
@@ -203,7 +203,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     syslog ("boot_automaton: error: No vfs file");
     exit ();
   }
-  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, false);
+  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, 0, 0, false);
   cpio_file_destroy (vfs_file);
   if (vfs == -1) {
     syslog ("boot_automaton: error: Could not create vfs");
@@ -242,7 +242,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
     exit ();
   }
   /* Note:  We pass the buffer containing the cpio archive. */
-  aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, false);
+  aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false);
   cpio_file_destroy (tmpfs_file);
   if (tmpfs == -1) {
     syslog ("boot_automaton: error: Could not create tmpfs");

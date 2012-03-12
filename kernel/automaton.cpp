@@ -149,8 +149,20 @@ automaton::create (bd_t text_bd,
 		   size_t /*text_size*/,
 		   bd_t bda,
 		   bd_t bdb,
+		   const char* name,
+		   size_t name_size,
 		   bool retain_privilege)
 {
+  // Check the name.
+  if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
+    return make_pair (-1, LILY_SYSCALL_EINVAL);
+  }
+  
+  kstring name_str (name, name_size);
+  if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
+    return make_pair (-1, LILY_SYSCALL_EEXISTS);
+  }
+
   // Find the text buffer.
   buffer* text_buffer = lookup_buffer (text_bd);
   
@@ -178,7 +190,7 @@ automaton::create (bd_t text_bd,
   physical_address_t old = vm::switch_to_directory (vm::get_kernel_page_directory_physical_address ());
   
   // Create the automaton.
-  automaton* child = create_automaton (this, text_buffer, text_buffer->size () * PAGE_SIZE, retain_privilege && privileged_);
+  automaton* child = create_automaton (this, text_buffer, text_buffer->size () * PAGE_SIZE, name_str, retain_privilege && privileged_);
   
   // Switch back.
   vm::switch_to_directory (old);
@@ -224,6 +236,7 @@ automaton*
 automaton::create_automaton (automaton* parent,
 			     buffer* text,
 			     size_t text_size,
+			     const kstring& name,
 			     bool privileged)
 {
   // Map the text of the initial automaton just after low memory.
@@ -244,7 +257,7 @@ automaton::create_automaton (automaton* parent,
   // Create the automaton.
   
   // Create the automaton and insert it into the map.
-  automaton* a = new automaton (parent, privileged);
+  automaton* a = new automaton (parent, name, privileged);
   if (parent != 0) {
     parent->add_child (a);
     // Remove the reference count from creation.
@@ -343,7 +356,7 @@ automaton::create_automaton (automaton* parent,
   }
 
   // Switch to the automaton.
-  physical_address_t old = vm::switch_to_directory (a->page_directory_physical_address ());
+  physical_address_t old = vm::switch_to_directory (a->page_directory_);
   
   // We can only use data in the kernel, i.e., we can't use automaton_text or hp.
   
@@ -384,3 +397,109 @@ automaton::create_automaton (automaton* parent,
   //     remove_from_scheduler (*pos);
   //   }
   // }
+
+void
+automaton::execute (const caction& action_,
+		    buffer* output_buffer_a_,
+		    buffer* output_buffer_b_)
+{
+  kassert (action_.action != 0);
+  kassert (action_.action->automaton == this);
+  
+  if (enabled_) {
+    // switch (action_.action->type) {
+    // case INPUT:
+    // 	kout << "?";
+    // 	break;
+    // case OUTPUT:
+    // 	kout << "!";
+    // 	break;
+    // case INTERNAL:
+    // 	kout << "#";
+    // 	break;
+    // case SYSTEM_INPUT:
+    // 	kout << "*";
+    // 	break;
+    // }
+    // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+    
+    // Switch page directories.
+    vm::switch_to_directory (page_directory_);
+    
+    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (stack_area_->end ());
+    
+    // These instructions serve a dual purpose.
+    // First, they set up the cdecl calling convention for actions.
+    // Second, they force the stack to be created if it is not.
+    
+    switch (action_.action->type) {
+    case INPUT:
+    case SYSTEM_INPUT:
+      {
+	bd_t bda = -1;
+	bd_t bdb = -1;
+	
+	if (output_buffer_a_ != 0) {
+	  // Copy the buffer to the input automaton.
+	  bda = buffer_create (*output_buffer_a_);
+	}
+	
+	if (output_buffer_b_ != 0) {
+	  // Copy the buffer to the input automaton.
+	  bdb = buffer_create (*output_buffer_b_);
+	}
+	
+	// Push the buffers.
+	*--stack_pointer = bdb;
+	*--stack_pointer = bda;
+      }
+      break;
+    case OUTPUT:
+    case INTERNAL:
+      // Do nothing.
+      break;
+    }
+    
+    // Push the parameter.
+    *--stack_pointer = action_.parameter;
+    
+    // Push a bogus instruction pointer so we can use the cdecl calling convention.
+    *--stack_pointer = 0;
+    uint32_t* sp = stack_pointer;
+    
+    // Push the stack segment.
+    *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
+    
+    // Push the stack pointer.
+    *--stack_pointer = reinterpret_cast<uint32_t> (sp);
+    
+    // Push the flags.
+    uint32_t eflags;
+    asm ("pushf\n"
+	 "pop %0\n" : "=g"(eflags) : :);
+    *--stack_pointer = eflags;
+    
+    // Push the code segment.
+    *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
+    
+    // Push the instruction pointer.
+    *--stack_pointer = reinterpret_cast<uint32_t> (action_.action->action_entry_point);
+    
+    asm ("mov %0, %%ds\n"	// Load the data segments.
+	 "mov %0, %%es\n"	// Load the data segments.
+	 "mov %0, %%fs\n"	// Load the data segments.
+	 "mov %0, %%gs\n"	// Load the data segments.
+	 "mov %1, %%esp\n"	// Load the new stack pointer.
+	 "xor %%eax, %%eax\n"	// Clear the registers.
+	 "xor %%ebx, %%ebx\n"
+	 "xor %%ecx, %%ecx\n"
+	 "xor %%edx, %%edx\n"
+	 "xor %%edi, %%edi\n"
+	 "xor %%esi, %%esi\n"
+	 "xor %%ebp, %%ebp\n"
+	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
+  }
+  else {
+    scheduler::finish (false, -1, -1);
+  }
+}

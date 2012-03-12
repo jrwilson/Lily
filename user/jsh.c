@@ -188,7 +188,7 @@ create_callback (void* data,
   }
 
   if (error == VFS_SUCCESS) {
-    aid_t aid = create (bdb, size, cc->bda, cc->bdb, cc->retain_privilege);
+    aid_t aid = create (bdb, size, cc->bda, cc->bdb, 0, 0, cc->retain_privilege);
     if (aid != -1) {
       syslog ("TODO:  Subscribe to created automaton");
       /* Assign the result to a variable. */

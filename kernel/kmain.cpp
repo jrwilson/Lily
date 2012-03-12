@@ -286,7 +286,7 @@ kmain (uint32_t multiboot_magic,
   }
   
   // Create the automaton.
-  automaton* child = automaton::create_automaton (0, &text, boot_automaton_size, true);
+  automaton* child = automaton::create_automaton (0, &text, boot_automaton_size, kstring (), true);
   
   // Create a buffer to contain the initial data.
   buffer* data_buffer = new buffer (0);
