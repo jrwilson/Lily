@@ -2,6 +2,7 @@
 
 global_fifo_scheduler::context_map_type global_fifo_scheduler::context_map_;
 global_fifo_scheduler::queue_type global_fifo_scheduler::ready_queue_;
+volatile bool global_fifo_scheduler::ready_queue_empty_ = true;
 
 caction global_fifo_scheduler::action_;
 global_fifo_scheduler::input_action_list_type global_fifo_scheduler::input_action_list_;

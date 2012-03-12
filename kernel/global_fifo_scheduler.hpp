@@ -45,6 +45,8 @@ private:
   // Queue of automaton with actions to execute.
   typedef linear_set<automaton_context*> queue_type;
   static queue_type ready_queue_;
+  // Make this flag volatile because it is updated in interrupt contexts.
+  static volatile bool ready_queue_empty_;
 
   // The action that is currently executing.
   static caction action_;
@@ -127,6 +129,7 @@ public:
     automaton_context* c = pos->second;
     context_map_.erase (pos);
     ready_queue_.erase (c);
+    ready_queue_empty_ = ready_queue_.empty ();
     for (automaton_context::const_iterator pos = c->begin ();
     	 pos != c->end ();
     	 ++pos) {
@@ -161,6 +164,7 @@ public:
     }
     
     ready_queue_.push_back (c);
+    ready_queue_empty_ = ready_queue_.empty ();
   }
   
   static inline void
@@ -242,10 +246,11 @@ public:
 
     for (;;) {
 
-      while (!ready_queue_.empty ()) {
+      while (!ready_queue_empty_) {
 	// Get the automaton context and remove it from the ready queue.
 	automaton_context* c = ready_queue_.front ();
 	ready_queue_.pop_front ();
+	ready_queue_empty_ = ready_queue_.empty ();
 	
 	// Load the action.
 	action_ = c->front ();
@@ -314,6 +319,7 @@ public:
 	if (!c->empty ()) {
 	  // Automaton has more actions, return to ready queue.
 	  ready_queue_.push_back (c);
+	  ready_queue_empty_ = ready_queue_.empty ();
 	}
 	
 	// This call does not return.
@@ -325,8 +331,6 @@ public:
       asm volatile ("sti\n"
 		    "hlt\n"
 		    "cli\n");
-
-      kout << "Woke up" << endl;
     }
   }
 };

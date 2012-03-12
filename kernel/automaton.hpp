@@ -115,7 +115,7 @@ private:
    */
 
 public:
-  static inline automaton*
+  static automaton*
   lookup (aid_t aid)
   {
     // TODO:  This should lookup and increment the reference count atomically.
