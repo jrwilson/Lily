@@ -137,20 +137,6 @@ private:
    * IDENTIFICATION
    */
 
-public:
-  // static automaton*
-  // lookup (aid_t aid)
-  // {
-  //   // TODO:  This should lookup and increment the reference count atomically.
-  //   aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
-  //   if (pos != aid_to_automaton_map_.end ()) {
-  //     return pos->second;
-  //   }
-  //   else {
-  //     return 0;
-  //   }
-  // }
-
   /*
    * DESCRIPTION
    */
@@ -159,6 +145,7 @@ public:
    * AUTOMATA HIERARCHY
    */
 
+public:
   static pair<shared_ptr<automaton>, int>
   create_automaton (const kstring& name,
 		    const shared_ptr<automaton>& parent,
@@ -179,23 +166,6 @@ public:
   /*
    * BINDING
    */
-
-private:
-  static void
-  lock_bindings_in_order (const shared_ptr<automaton>&,
-			  const shared_ptr<automaton>&,
-			  const shared_ptr<automaton>&)
-  {
-    // TODO
-  }
-
-  static void
-  unlock_bindings_in_order (const shared_ptr<automaton>&,
-			    const shared_ptr<automaton>&,
-			    const shared_ptr<automaton>&)
-  {
-    // TODO
-  }
 
   /*
    * I/O
@@ -248,10 +218,8 @@ private:
    * EXECUTION
    */
 
-  // Flag indicating if this automaton can execute actions.
-  bool enabled_;
   // Mutual exlusion lock for executing actions.
-  int execution_lock_;
+  mutex execution_mutex_;
 
   /*
    * MEMORY MAP AND BUFFERS
@@ -278,8 +246,6 @@ private:
    * BINDING
    */
 
-  // Mutual exclusion lock for manipulating the bindings associated with this automaton.
-  int binding_lock_;
   // Bound outputs.
   typedef unordered_map <caction, binding_set_type, caction_hash> bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
@@ -328,13 +294,13 @@ private:
    */
 
 public:
-  aid_t
+  inline aid_t
   aid () const
   {
     return aid_;
   }
 
-  pair<aid_t, int>
+  inline pair<aid_t, int>
   lookup (const char* name,
 	  size_t size)
   {
@@ -360,7 +326,7 @@ public:
    */
 
 public:
-  bool
+  inline bool
   add_action (action_type_t t,
 	      parameter_mode_t pm,
 	      const void* aep,
@@ -380,8 +346,7 @@ public:
     }
   }
 
-  // TODO:  Make private.
-  const paction*
+  inline const paction*
   find_action (ano_t ano) const
   {
     ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (ano);
@@ -393,7 +358,7 @@ public:
     }
   }
   
-  pair<bd_t, int>
+  inline pair<bd_t, int>
   describe (aid_t aid)
   {
     aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
@@ -463,58 +428,6 @@ public:
    * AUTOMATA HIERARCHY
    */
   
-  children_set_type::const_iterator
-  children_begin () const
-  {
-    return children_.begin ();
-  }
-
-  children_set_type::const_iterator
-  children_end () const
-  {
-    return children_.end ();
-  }
-
-  // automaton*
-  // forget_parent (void)
-  // {
-  //   // TODO:  This should be atomic (?)
-  //   for (children_set_type::const_iterator pos = children_.begin ();
-  // 	 pos != children_.end ();
-  // 	 ++pos) {
-  //     (*pos)->forget_parent ();
-  //   }
-
-  //   if (parent_ != 0) {
-  //     parent_->decref ();
-  //   }
-  //   automaton* retval = parent_;
-  //   parent_ = 0;
-  //   return retval;
-  // }
-
-  // void
-  // forget_child (automaton* child)
-  // {
-  //   // TODO:  This should be atomic.
-  //   size_t count = children_.erase (child);
-  //   kassert (count == 1);
-  //   child->decref ();
-  // }
-
-  // void
-  // forget_children (void)
-  // {
-  //   for (children_set_type::const_iterator pos = children_.begin ();
-  // 	 pos != children_.end ();
-  // 	 ++pos) {
-  //     (*pos)->forget_children ();
-  //     (*pos)->decref ();
-  //   }
-
-  //   children_.clear ();
-  // }
-
   pair<aid_t, int>
   create (const shared_ptr<automaton>& ths,
 	  bd_t text_bd,
@@ -530,52 +443,10 @@ public:
    */
 
 public:
-  void
-  disable ()
-  {
-    // TODO:  This should be atomic.
-    if (enabled_) {
-      // Disable ourselves.
-      enabled_ = false;
-      
-      // Disable our bindings.
-      for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
-	   pos != bound_outputs_map_.end ();
-	   ++pos) {
-	for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-	     pos1 != pos->second.end ();
-	     ++pos1) {
-	  (*pos1)->disable ();
-	}
-      }
-      for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
-	   pos != bound_inputs_map_.end ();
-	   ++pos) {
-	for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-	     pos1 != pos->second.end ();
-	     ++pos1) {
-	  (*pos1)->disable ();
-	}
-      }
-      for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
-	   pos1 != owned_bindings_.end ();
-	   ++pos1) {
-	(*pos1)->disable ();
-      }
-      
-      // Disable our children.
-      for (children_set_type::const_iterator pos = children_.begin ();
-	   pos != children_.end ();
-	   ++pos) {
-	(*pos)->disable ();
-      }
-    }
-  }
-
-  void
+  inline void
   lock_execution ()
   {
-    // TODO
+    execution_mutex_.lock ();
   }
   
   // Does not return.
@@ -695,7 +566,7 @@ public:
   	  bd_t bdb);
 
   // The automaton would like to no longer exist.
-  void
+  inline void
   exit (void)
   {
     kassert (0);
@@ -723,10 +594,10 @@ public:
     // scheduler::finish (false, -1, -1);
   }
 
-  void
+  inline void
   unlock_execution ()
   {
-    // TODO
+    execution_mutex_.unlock ();
   }
 
   /*
@@ -735,7 +606,7 @@ public:
 
 private:
   struct compare_vm_area {
-    bool
+    inline bool
     operator () (const vm_area_base* const x,
 		 const vm_area_base* const y) const
     {
@@ -743,7 +614,7 @@ private:
     }
   };
 
-  memory_map_type::const_iterator
+  inline memory_map_type::const_iterator
   find_address (logical_address_t address) const
   {
     vm_area_base k (address, address);
@@ -760,7 +631,7 @@ private:
     return memory_map_.end ();
   }
 
-  memory_map_type::iterator
+  inline memory_map_type::iterator
   find_address (logical_address_t address)
   {
     vm_area_base k (address, address);
@@ -777,7 +648,7 @@ private:
     return memory_map_.end ();
   }
 
-  bd_t
+  inline bd_t
   generate_bd ()
   {
     // Generate an id.
@@ -790,7 +661,7 @@ private:
   }
 
 public:
-  bool
+  inline bool
   insert_heap_and_stack ()
   {
     kassert (heap_area_ == 0);
@@ -815,7 +686,7 @@ public:
     return true;
   }
   
-  void
+  inline void
   map_heap_and_stack ()
   {
     kassert (heap_area_ != 0);
@@ -837,8 +708,7 @@ public:
     }
   }
 
-  // TODO:  Make this private.
-  bool
+  inline bool
   vm_area_is_free (logical_address_t begin,
   		   logical_address_t end)
   {
@@ -865,7 +735,7 @@ public:
     return true;
   }
 
-  void
+  inline void
   insert_vm_area (vm_area_base* area)
   {
     kassert (area != 0);
@@ -876,7 +746,7 @@ public:
   }
 
 private:
-  bool
+  inline bool
   verify_span (const void* ptr,
   	       size_t size) const
   {
@@ -886,7 +756,7 @@ private:
   }
 
 public:
-  bool
+  inline bool
   verify_stack (const void* ptr,
 		size_t size) const
   {
@@ -896,7 +766,7 @@ public:
     return stack_area_->begin () <= address && (address + size) <= stack_area_->end ();
   }
 
-  pair<void*, int>
+  inline pair<void*, int>
   adjust_break (ptrdiff_t size)
   {
     kassert (heap_area_ != 0);
@@ -950,7 +820,7 @@ public:
 
   // BUG:  Limit the number and size of buffers.
 
-  pair<bd_t, int>
+  inline pair<bd_t, int>
   buffer_create (size_t size)
   {
     
@@ -964,7 +834,7 @@ public:
     return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
 
-  pair<bd_t, int>
+  inline pair<bd_t, int>
   buffer_copy (bd_t other)
   {
     
@@ -986,38 +856,7 @@ public:
     return make_pair (bd, LILY_SYSCALL_ESUCCESS);
   }
   
-  // pair<bd_t, int>
-  // buffer_copy (bd_t other,
-  // 	       size_t begin,
-  // 	       size_t end)
-  // {
-  //   if (begin > end) {
-  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
-  //   }
-
-  //   bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
-  //   if (bpos == bd_to_buffer_map_.end ()) {
-  //     // Buffer does not exist.
-  //     return make_pair (-1, LILY_SYSCALL_EBDDNE);
-  //   }
-
-  //   buffer* b = bpos->second;
-  //   if (end > b->size ()) {
-  //     // End is past end of buffer.
-  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
-  //   }
-
-  //   // Generate an id.
-  //   bd_t bd = generate_bd ();
-    
-  //   // Create the buffer and insert it into the map.
-  //   buffer* n = new buffer (*b, begin, end);
-  //   bd_to_buffer_map_.insert (make_pair (bd, n));
-    
-  //   return make_pair (bd, LILY_SYSCALL_ESUCCESS);
-  // }
-
-  bd_t
+  inline bd_t
   buffer_create (const buffer& other)
   {
     // Generate an id.
@@ -1030,7 +869,7 @@ public:
     return bd;
   }
 
-  pair<size_t, int>
+  inline pair<size_t, int>
   buffer_resize (bd_t bd,
 		 size_t size)
   {
@@ -1050,7 +889,7 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  pair<size_t, int>
+  inline pair<size_t, int>
   buffer_append (bd_t dst,
 		 bd_t src)
   {
@@ -1074,41 +913,7 @@ public:
     return make_pair (d->append (*s, 0, s->size ()), LILY_SYSCALL_ESUCCESS);
   }
 
-  // pair<size_t, int>
-  // buffer_append (bd_t dst,
-  // 		 bd_t src,
-  // 		 size_t begin,
-  // 		 size_t end)
-  // {
-  //   if (begin > end) {
-  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
-  //   }
-
-  //   bd_to_buffer_map_type::const_iterator dst_pos = bd_to_buffer_map_.find (dst);
-  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
-  //   if (dst_pos == bd_to_buffer_map_.end () ||
-  // 	src_pos == bd_to_buffer_map_.end ()) {
-  //     // One of the buffers does not exist.
-  //     return make_pair (-1, LILY_SYSCALL_EBDDNE);
-  //   }
-
-  //   buffer* d = dst_pos->second;
-  //   buffer* s = src_pos->second;
-  //   if (end > s->size ()) {
-  //     // Offset is past end of source.
-  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
-  //   }
-    
-  //   if (d->begin () != 0) {
-  //     // The destination is mapped.
-  //     return make_pair (-1, LILY_SYSCALL_EMAPPED);
-  //   }
-
-  //   // Append.
-  //   return make_pair (d->append (*s, begin, end), LILY_SYSCALL_ESUCCESS);
-  // }
-
-  pair<int, int>
+  inline pair<int, int>
   buffer_assign (bd_t dest,
 		 bd_t src)
   {
@@ -1131,43 +936,7 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  // int
-  // buffer_assign (bd_t dest,
-  // 		 size_t dest_begin,
-  // 		 bd_t src,
-  // 		 size_t src_begin,
-  // 		 size_t src_end)
-  // {
-  //   if (src_begin > src_end) {
-  //     // Bad range.
-  //     return -1;
-  //   }
-
-  //   bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
-  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
-  //   if (dest_pos == bd_to_buffer_map_.end () ||
-  // 	src_pos == bd_to_buffer_map_.end ()) {
-  //     // One of the buffers does not exist.
-  //     return -1;
-  //   }
-
-  //   buffer* dest_b = dest_pos->second;
-  //   buffer* src_b = src_pos->second;
-
-  //   if (src_end > src_b->size ()) {
-  //     return -1;
-  //   }
-
-  //   if (dest_begin + (src_end - src_begin) > dest_b->size ()) {
-  //     return -1;
-  //   }
-
-  //   // Assign.
-  //   dest_b->assign (dest_begin, *src_b, src_begin, src_end);
-  //   return 0;
-  // }
-
-  pair<void*, int>
+  inline pair<void*, int>
   buffer_map (bd_t bd)
   {
     kassert (heap_area_ != 0);
@@ -1220,7 +989,7 @@ public:
     return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
   }
 
-  pair<int, int>
+  inline pair<int, int>
   buffer_unmap (bd_t bd)
   {
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
@@ -1242,7 +1011,7 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  pair<int, int>
+  inline pair<int, int>
   buffer_destroy (bd_t bd)
   {
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
@@ -1271,7 +1040,7 @@ public:
     }
   }
 
-  pair<size_t, int>
+  inline pair<size_t, int>
   buffer_size (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
@@ -1284,7 +1053,7 @@ public:
     }
   }
 
-  buffer*
+  inline buffer*
   lookup_buffer (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
@@ -1304,103 +1073,13 @@ public:
    * The functions between lock_bindings and unlock_bindings all require the bindings lock. *
    ******************************************************************************************/
 
-  void
+  inline void
   lock_bindings ()
   {
     // TODO
   }
-
-  bool
-  is_output_bound_to_automaton (const caction& output_action,
-				const shared_ptr<automaton>& input_automaton) const
-  {
-    kassert (output_action.automaton.get () == this);
-
-    bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.find (output_action);
-    if (pos1 != bound_outputs_map_.end ()) {
-      // TODO:  Replace this iteration with look-up in a data structure.
-      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if ((*pos2)->input_action ().automaton == input_automaton) {
-	  return true;
-	}
-      }
-    }
-
-    return false;
-  }
-
-  void
-  bind_output (const shared_ptr<binding>& b)
-  {
-    
-    kassert (b->output_action ().automaton.get () == this);
-
-    pair<bound_outputs_map_type::iterator, bool> r = bound_outputs_map_.insert (make_pair (b->output_action (), binding_set_type ()));
-    r.first->second.insert (b);
-  }
-
-  void
-  unbind_output (const shared_ptr<binding>& b)
-  {
-    kassert (b->output_action ().automaton.get () == this);
-
-    bound_outputs_map_type::iterator pos = bound_outputs_map_.find (b->output_action ());
-    kassert (pos != bound_outputs_map_.end ());
-    size_t count = pos->second.erase (b);
-    kassert (count == 1);
-    if (pos->second.empty ()) {
-      bound_outputs_map_.erase (pos);
-    }
-  }
   
-  bool
-  is_input_bound (const caction& input_action) const
-  {
-    kassert (input_action.automaton.get () == this);
-
-    return bound_inputs_map_.find (input_action) != bound_inputs_map_.end ();
-  }
-
-  void
-  bind_input (const shared_ptr<binding>& b)
-  {
-    
-    kassert (b->input_action ().automaton.get () == this);
-
-    pair<bound_inputs_map_type::iterator, bool> r = bound_inputs_map_.insert (make_pair (b->input_action (), binding_set_type ()));
-    r.first->second.insert (b);
-  }
-
-  void
-  unbind_input (const shared_ptr<binding>& b)
-  {
-    kassert (b->input_action ().automaton.get () == this);
-
-    bound_inputs_map_type::iterator pos = bound_inputs_map_.find (b->input_action ());
-    kassert (pos != bound_inputs_map_.end ());
-    size_t count = pos->second.erase (b);
-    kassert (count == 1);
-    if (pos->second.empty ()) {
-      bound_inputs_map_.erase (pos);
-    }
-  }
-
-  void
-  bind (const shared_ptr<binding>& b)
-  {
-    
-    pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
-    kassert (r.second);
-  }
-
-  void
-  unbind (const shared_ptr<binding>& b)
-  {
-    size_t count = owned_bindings_.erase (b);
-    kassert (count == 1);
-  }
-
-  const binding_set_type&
+  inline const binding_set_type&
   get_bound_inputs (const caction& output_action) const
   {
     bound_outputs_map_type::const_iterator pos = bound_outputs_map_.find (output_action);
@@ -1412,7 +1091,7 @@ public:
     }
   }
 
-  void
+  inline void
   unlock_bindings ()
   {
     // TODO
@@ -1427,71 +1106,11 @@ public:
 	ano_t input_ano,
 	int input_parameter);
 
-  // void
-  // purge_bindings (void)
-  // {
-  //   // Copy the bindings.
-  //   binding_set_type all_bindings;
-  //   for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
-  //   	 pos != bound_outputs_map_.end ();
-  //   	 ++pos) {
-  //     for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-  //   	   pos1 != pos->second.end ();
-  //   	   ++pos1) {
-  // 	all_bindings.insert (*pos1);
-  //     }
-  //   }
-  //   for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
-  //   	 pos != bound_inputs_map_.end ();
-  //   	 ++pos) {
-  //     for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-  //   	   pos1 != pos->second.end ();
-  //   	   ++pos1) {
-  //   	all_bindings.insert (*pos1);
-  //     }
-  //   }
-  //   for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
-  //   	 pos1 != owned_bindings_.end ();
-  //   	 ++pos1) {
-  //     all_bindings.insert (*pos1);
-  //   }
-
-  //   for (binding_set_type::const_iterator pos = all_bindings.begin ();
-  // 	 pos != all_bindings.end ();
-  // 	 ++pos) {
-  //     binding* b = *pos;
-  //     shared_ptr<automaton> output_automaton = b->output_action ().automaton;
-  //     shared_ptr<automaton> input_automaton = b->input_action ().automaton;
-  //     shared_ptr<automaton> owner = b->owner ();
-  //     lock_bindings_in_order (output_automaton, input_automaton, owner);
-  //     output_automaton->unbind_output (b);
-  //     input_automaton->unbind_input (b);
-  //     owner->unbind (b);
-  //     unlock_bindings_in_order (output_automaton, input_automaton, owner);
-  //   }
-
-  //   kassert (bound_outputs_map_.empty ());
-  //   kassert (bound_inputs_map_.empty ());
-  //   kassert (owned_bindings_.empty ());
-
-  //   for (children_set_type::const_iterator pos = children_.begin ();
-  // 	 pos != children_.end ();
-  // 	 ++pos) {
-  //     (*pos)->purge_bindings ();
-  //   }
-  // }
-
   /*
    * I/O
    */
 
 public:
-  bool
-  privileged () const
-  {
-    return privileged_;
-  }
-
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.
   // The destination and source are aligned to a page boundary and the size is rounded up to a multiple of the page size.
   // Map can fail for the following reasons:
@@ -1501,7 +1120,7 @@ public:
   // *  Part of the source lies outside the regions of memory marked for memory-mapped I/O.
   // *  Part of the source is already claimed by some other automaton.  (Mapping the same region twice is an error.)
   // *  The destination address is not available.
-  pair<int, int>
+  inline pair<int, int>
   map (const void* destination,
        const void* source,
        size_t size)
@@ -1557,7 +1176,7 @@ public:
   }
 
   // The automaton is requesting access to the specified I/O port.
-  pair<int, int>
+  inline pair<int, int>
   reserve_port (unsigned short port)
   {
     if (!privileged_) {
@@ -1576,7 +1195,7 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  pair<uint8_t, int>
+  inline pair<uint8_t, int>
   inb (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
@@ -1587,7 +1206,7 @@ public:
     }
   }
 
-  pair<int, int>
+  inline pair<int, int>
   outb (uint16_t port,
 	uint8_t value)
   {
@@ -1600,7 +1219,7 @@ public:
     }
   }
 
-  pair<uint16_t, int>
+  inline pair<uint16_t, int>
   inw (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
@@ -1611,7 +1230,7 @@ public:
     }
   }
 
-  pair<int, int>
+  inline pair<int, int>
   outw (uint16_t port,
 	uint16_t value)
   {
@@ -1624,7 +1243,7 @@ public:
     }
   }
 
-  pair<uint32_t, int>
+  inline pair<uint32_t, int>
   inl (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
@@ -1635,7 +1254,7 @@ public:
     }
   }
 
-  pair<int, int>
+  inline pair<int, int>
   outl (uint16_t port,
 	uint32_t value)
   {
@@ -1648,7 +1267,7 @@ public:
     }
   }
 
-  pair<int, int>
+  inline pair<int, int>
   subscribe_irq (const shared_ptr<automaton>& ths,
 		 int irq,
 		 ano_t action_number,
@@ -1656,7 +1275,7 @@ public:
   {
     kassert (ths.get () == this);
 
-    if (!privileged ()) {
+    if (!privileged_) {
       return make_pair (-1, LILY_SYSCALL_EPERM);
     }
 
@@ -1689,7 +1308,7 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
-  pair<int, int>
+  inline pair<int, int>
   syslog (const char* string,
 	  size_t size)
   {
@@ -1716,7 +1335,7 @@ public:
   // The automaton must have an action for receiving the event.
   // The automaton corresponding to aid must exist.
   // Not an error if already subscribed.
-  pair<int, int>
+  inline pair<int, int>
   subscribe_destroyed (const shared_ptr<automaton>& ths,
 		       ano_t action_number,
 		       aid_t aid)
@@ -1749,13 +1368,10 @@ public:
     aid_ (-1),
     regenerate_description_ (false),
     parent_ (0),
-    enabled_ (true),
-    execution_lock_ (0),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),
     heap_area_ (0),
     stack_area_ (0),
     current_bd_ (0),
-    binding_lock_ (0),
     privileged_ (false)
   {
     frame_t frame = physical_address_to_frame (page_directory);
@@ -1815,7 +1431,7 @@ public:
      * EXECUTION
      */
 
-    kassert (!enabled_);
+    //kassert (!enabled_);
     
     /*
      * MEMORY MAP AND BUFFERS

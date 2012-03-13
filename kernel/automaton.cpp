@@ -24,39 +24,35 @@ automaton::finish (const shared_ptr<automaton>& ths,
 {
   kassert (ths.get () == this);
 
-  if (enabled_ && action_number > LILY_ACTION_NO_ACTION) {
-
-    // Only schedule if we are enabled.
-    if (enabled_) {
-      const paction* action = find_action (action_number);
-      if (action != 0) {
-	/* Correct the parameter. */
-	switch (action->parameter_mode) {
-	case NO_PARAMETER:
-	  parameter = 0;
-	  break;
-	case PARAMETER:
-	case AUTO_PARAMETER:
-	  /* No correction necessary. */
-	  break;
-	}
-	
-	switch (action->type) {
-	case OUTPUT:
-	case INTERNAL:
-	  scheduler::schedule (caction (ths, action, parameter));
-	  break;
-	case INPUT:
-	case SYSTEM_INPUT:
-	  // BUG:  Can't schedule non-local actions.
-	  kassert (0);
-	  break;
-	}
+  if (action_number > LILY_ACTION_NO_ACTION) {
+    const paction* action = find_action (action_number);
+    if (action != 0) {
+      /* Correct the parameter. */
+      switch (action->parameter_mode) {
+      case NO_PARAMETER:
+	parameter = 0;
+	break;
+      case PARAMETER:
+      case AUTO_PARAMETER:
+	/* No correction necessary. */
+	break;
       }
-      else {
-	// BUG:  Scheduled an action that doesn't exist.
+      
+      switch (action->type) {
+      case OUTPUT:
+      case INTERNAL:
+	scheduler::schedule (caction (ths, action, parameter));
+	break;
+      case INPUT:
+      case SYSTEM_INPUT:
+	// BUG:  Can't schedule non-local actions.
 	kassert (0);
+	break;
       }
+    }
+    else {
+      // BUG:  Scheduled an action that doesn't exist.
+      kassert (0);
     }
   }
   
@@ -301,13 +297,19 @@ automaton::bind (const shared_ptr<automaton>& ths,
   
   // Check that the input action is not bound.
   // (Also checks that the binding does not exist.)
-  if (input_automaton->is_input_bound (ia)) {
+  if (input_automaton->bound_inputs_map_.find (ia) != input_automaton->bound_inputs_map_.end ()) {
     return make_pair (-1, LILY_SYSCALL_EINVAL);
   }
   
   // Check that the output action is not bound to an action in the input automaton.
-  if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
-    return make_pair (-1, LILY_SYSCALL_EINVAL);
+  bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
+  if (pos1 != output_automaton->bound_outputs_map_.end ()) {
+    // TODO:  Replace this iteration with look-up in a data structure.
+    for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+      if ((*pos2)->input_action ().automaton == input_automaton) {
+	return make_pair (-1, LILY_SYSCALL_EINVAL);
+      }
+    }
   }
 
   // Generate an id.
@@ -322,10 +324,21 @@ automaton::bind (const shared_ptr<automaton>& ths,
   bid_to_binding_map_.insert (make_pair (bid, b));
 
   // Bind.
-  output_automaton->bind_output (b);
-  input_automaton->bind_input (b);
-  this->bind (b);
-    
+  {
+    pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
+    r.first->second.insert (b);
+  }
+
+  {
+    pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
+    r.first->second.insert (b);
+  }
+
+  {
+    pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
+    kassert (r.second);
+  }
+
   // TODO:  Remove this.
   // Schedule the output action.
   scheduler::schedule (caction (output_automaton, output_action, output_parameter));
@@ -343,4 +356,288 @@ automaton::bind (const shared_ptr<automaton>& ths,
   //   	 ++pos) {
   //     remove_from_scheduler (*pos);
   //   }
+  // }
+
+  // children_set_type::const_iterator
+  // children_begin () const
+  // {
+  //   return children_.begin ();
+  // }
+
+  // children_set_type::const_iterator
+  // children_end () const
+  // {
+  //   return children_.end ();
+  // }
+
+  // automaton*
+  // forget_parent (void)
+  // {
+  //   // TODO:  This should be atomic (?)
+  //   for (children_set_type::const_iterator pos = children_.begin ();
+  // 	 pos != children_.end ();
+  // 	 ++pos) {
+  //     (*pos)->forget_parent ();
+  //   }
+
+  //   if (parent_ != 0) {
+  //     parent_->decref ();
+  //   }
+  //   automaton* retval = parent_;
+  //   parent_ = 0;
+  //   return retval;
+  // }
+
+  // void
+  // forget_child (automaton* child)
+  // {
+  //   // TODO:  This should be atomic.
+  //   size_t count = children_.erase (child);
+  //   kassert (count == 1);
+  //   child->decref ();
+  // }
+
+  // void
+  // forget_children (void)
+  // {
+  //   for (children_set_type::const_iterator pos = children_.begin ();
+  // 	 pos != children_.end ();
+  // 	 ++pos) {
+  //     (*pos)->forget_children ();
+  //     (*pos)->decref ();
+  //   }
+
+  //   children_.clear ();
+  // }
+
+  // void
+  // disable ()
+  // {
+  //   // TODO:  This should be atomic.
+  //   if (enabled_) {
+  //     // Disable ourselves.
+  //     enabled_ = false;
+      
+  //     // Disable our bindings.
+  //     for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
+  // 	   pos != bound_outputs_map_.end ();
+  // 	   ++pos) {
+  // 	for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+  // 	     pos1 != pos->second.end ();
+  // 	     ++pos1) {
+  // 	  (*pos1)->disable ();
+  // 	}
+  //     }
+  //     for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
+  // 	   pos != bound_inputs_map_.end ();
+  // 	   ++pos) {
+  // 	for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+  // 	     pos1 != pos->second.end ();
+  // 	     ++pos1) {
+  // 	  (*pos1)->disable ();
+  // 	}
+  //     }
+  //     for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
+  // 	   pos1 != owned_bindings_.end ();
+  // 	   ++pos1) {
+  // 	(*pos1)->disable ();
+  //     }
+      
+  //     // Disable our children.
+  //     for (children_set_type::const_iterator pos = children_.begin ();
+  // 	   pos != children_.end ();
+  // 	   ++pos) {
+  // 	(*pos)->disable ();
+  //     }
+  //   }
+  // }
+
+  // pair<bd_t, int>
+  // buffer_copy (bd_t other,
+  // 	       size_t begin,
+  // 	       size_t end)
+  // {
+  //   if (begin > end) {
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
+  //   if (bpos == bd_to_buffer_map_.end ()) {
+  //     // Buffer does not exist.
+  //     return make_pair (-1, LILY_SYSCALL_EBDDNE);
+  //   }
+
+  //   buffer* b = bpos->second;
+  //   if (end > b->size ()) {
+  //     // End is past end of buffer.
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+
+  //   // Generate an id.
+  //   bd_t bd = generate_bd ();
+    
+  //   // Create the buffer and insert it into the map.
+  //   buffer* n = new buffer (*b, begin, end);
+  //   bd_to_buffer_map_.insert (make_pair (bd, n));
+    
+  //   return make_pair (bd, LILY_SYSCALL_ESUCCESS);
+  // }
+
+  // pair<size_t, int>
+  // buffer_append (bd_t dst,
+  // 		 bd_t src,
+  // 		 size_t begin,
+  // 		 size_t end)
+  // {
+  //   if (begin > end) {
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator dst_pos = bd_to_buffer_map_.find (dst);
+  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+  //   if (dst_pos == bd_to_buffer_map_.end () ||
+  // 	src_pos == bd_to_buffer_map_.end ()) {
+  //     // One of the buffers does not exist.
+  //     return make_pair (-1, LILY_SYSCALL_EBDDNE);
+  //   }
+
+  //   buffer* d = dst_pos->second;
+  //   buffer* s = src_pos->second;
+  //   if (end > s->size ()) {
+  //     // Offset is past end of source.
+  //     return make_pair (-1, LILY_SYSCALL_EINVAL);
+  //   }
+    
+  //   if (d->begin () != 0) {
+  //     // The destination is mapped.
+  //     return make_pair (-1, LILY_SYSCALL_EMAPPED);
+  //   }
+
+  //   // Append.
+  //   return make_pair (d->append (*s, begin, end), LILY_SYSCALL_ESUCCESS);
+  // }
+
+  // int
+  // buffer_assign (bd_t dest,
+  // 		 size_t dest_begin,
+  // 		 bd_t src,
+  // 		 size_t src_begin,
+  // 		 size_t src_end)
+  // {
+  //   if (src_begin > src_end) {
+  //     // Bad range.
+  //     return -1;
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
+  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+  //   if (dest_pos == bd_to_buffer_map_.end () ||
+  // 	src_pos == bd_to_buffer_map_.end ()) {
+  //     // One of the buffers does not exist.
+  //     return -1;
+  //   }
+
+  //   buffer* dest_b = dest_pos->second;
+  //   buffer* src_b = src_pos->second;
+
+  //   if (src_end > src_b->size ()) {
+  //     return -1;
+  //   }
+
+  //   if (dest_begin + (src_end - src_begin) > dest_b->size ()) {
+  //     return -1;
+  //   }
+
+  //   // Assign.
+  //   dest_b->assign (dest_begin, *src_b, src_begin, src_end);
+  //   return 0;
+  // }
+
+  // void
+  // purge_bindings (void)
+  // {
+  //   // Copy the bindings.
+  //   binding_set_type all_bindings;
+  //   for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
+  //   	 pos != bound_outputs_map_.end ();
+  //   	 ++pos) {
+  //     for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+  //   	   pos1 != pos->second.end ();
+  //   	   ++pos1) {
+  // 	all_bindings.insert (*pos1);
+  //     }
+  //   }
+  //   for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
+  //   	 pos != bound_inputs_map_.end ();
+  //   	 ++pos) {
+  //     for (binding_set_type::const_iterator pos1 = pos->second.begin ();
+  //   	   pos1 != pos->second.end ();
+  //   	   ++pos1) {
+  //   	all_bindings.insert (*pos1);
+  //     }
+  //   }
+  //   for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
+  //   	 pos1 != owned_bindings_.end ();
+  //   	 ++pos1) {
+  //     all_bindings.insert (*pos1);
+  //   }
+
+  //   for (binding_set_type::const_iterator pos = all_bindings.begin ();
+  // 	 pos != all_bindings.end ();
+  // 	 ++pos) {
+  //     binding* b = *pos;
+  //     shared_ptr<automaton> output_automaton = b->output_action ().automaton;
+  //     shared_ptr<automaton> input_automaton = b->input_action ().automaton;
+  //     shared_ptr<automaton> owner = b->owner ();
+  //     lock_bindings_in_order (output_automaton, input_automaton, owner);
+  //     output_automaton->unbind_output (b);
+  //     input_automaton->unbind_input (b);
+  //     owner->unbind (b);
+  //     unlock_bindings_in_order (output_automaton, input_automaton, owner);
+  //   }
+
+  //   kassert (bound_outputs_map_.empty ());
+  //   kassert (bound_inputs_map_.empty ());
+  //   kassert (owned_bindings_.empty ());
+
+  //   for (children_set_type::const_iterator pos = children_.begin ();
+  // 	 pos != children_.end ();
+  // 	 ++pos) {
+  //     (*pos)->purge_bindings ();
+  //   }
+  // }
+
+  // inline void
+  // unbind_output (const shared_ptr<binding>& b)
+  // {
+  //   kassert (b->output_action ().automaton.get () == this);
+
+  //   bound_outputs_map_type::iterator pos = bound_outputs_map_.find (b->output_action ());
+  //   kassert (pos != bound_outputs_map_.end ());
+  //   size_t count = pos->second.erase (b);
+  //   kassert (count == 1);
+  //   if (pos->second.empty ()) {
+  //     bound_outputs_map_.erase (pos);
+  //   }
+  // }
+
+  // inline void
+  // unbind_input (const shared_ptr<binding>& b)
+  // {
+  //   kassert (b->input_action ().automaton.get () == this);
+
+  //   bound_inputs_map_type::iterator pos = bound_inputs_map_.find (b->input_action ());
+  //   kassert (pos != bound_inputs_map_.end ());
+  //   size_t count = pos->second.erase (b);
+  //   kassert (count == 1);
+  //   if (pos->second.empty ()) {
+  //     bound_inputs_map_.erase (pos);
+  //   }
+  // }
+
+  // inline void
+  // unbind (const shared_ptr<binding>& b)
+  // {
+  //   size_t count = owned_bindings_.erase (b);
+  //   kassert (count == 1);
   // }

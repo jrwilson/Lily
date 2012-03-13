@@ -265,6 +265,11 @@ public:
 	      // +FFF
 	      input_automaton->lock_execution ();
 	    }
+	    if (!output_locked) {
+	      // +EEE
+	      action_.automaton->lock_execution ();
+	      output_locked = true;
+	    }
 	    
 	    input_action_pos_ = input_action_list_.begin ();
 	  }

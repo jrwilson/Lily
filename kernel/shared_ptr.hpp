@@ -5,8 +5,7 @@
 
 template <typename T>
 class shared_ptr {
-  //private:
-public:
+private:
   T* ptr;
   size_t* count;
 

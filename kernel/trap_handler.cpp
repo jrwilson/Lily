@@ -586,7 +586,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<unsigned char, int> r = a->subscribe_irq (a, ptr->irq, ptr->action_number, ptr->parameter);
+      pair<int, int> r = a->subscribe_irq (a, ptr->irq, ptr->action_number, ptr->parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -606,7 +606,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<unsigned char, int> r = a->syslog (ptr->string, ptr->size);
+      pair<int, int> r = a->syslog (ptr->string, ptr->size);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

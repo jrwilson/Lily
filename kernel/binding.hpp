@@ -47,37 +47,37 @@ public:
     kassert (0);
   }
 
-  bid_t
+  inline bid_t
   bid () const
   {
     return bid_;
   }
 
-  const caction&
+  inline const caction&
   output_action () const
   {
     return output_action_;
   }
 
-  const caction&
+  inline const caction&
   input_action () const
   {
     return input_action_;
   }
   
-  const shared_ptr<automaton>&
+  inline const shared_ptr<automaton>&
   owner () const
   {
     return owner_;
   }
 
-  bool
+  inline bool
   enabled () const
   {
     return enabled_;
   }
 
-  void
+  inline void
   disable ()
   {
     enabled_ = false;
