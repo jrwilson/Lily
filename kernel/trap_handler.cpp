@@ -179,7 +179,7 @@ trap_dispatch (volatile registers regs)
 {
   kassert (regs.number == SYSCALL_INTERRUPT);
 
-  automaton* a = scheduler::current_automaton ();
+  shared_ptr<automaton> a = scheduler::current_automaton ();
 
   /* These match the order in lily/syscall.h.
      Please keep it that way.
@@ -192,7 +192,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      a->finish (ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bda, ptr->bdb);
+      a->finish (a, ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bda, ptr->bdb);
       return;
     }
     break;
@@ -209,7 +209,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<aid_t, int> r = a->create (ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->name, ptr->name_size, ptr->retain_privilege);
+      pair<aid_t, int> r = a->create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->name, ptr->name_size, ptr->retain_privilege);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -222,7 +222,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = a->bind (ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
+      pair<bid_t, int> r = a->bind (a, ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -263,7 +263,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = a->subscribe_destroyed (ptr->action_number, ptr->aid);
+      pair<bid_t, int> r = a->subscribe_destroyed (a, ptr->action_number, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -586,7 +586,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<unsigned char, int> r = a->subscribe_irq (ptr->irq, ptr->action_number, ptr->parameter);
+      pair<unsigned char, int> r = a->subscribe_irq (a, ptr->irq, ptr->action_number, ptr->parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

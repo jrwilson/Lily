@@ -5,7 +5,9 @@
 aid_t automaton::current_aid_ = 0;
 automaton::aid_to_automaton_map_type automaton::aid_to_automaton_map_;
 automaton::registry_map_type automaton::registry_map_;
-mutex automaton::id_mutex_;
+
+bid_t automaton::current_bid_ = 0;
+automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 
 bitset<ONE_MEGABYTE / PAGE_SIZE> automaton::mmapped_frames_;
 bitset<65536> automaton::reserved_ports_;
@@ -13,17 +15,17 @@ bitset<65536> automaton::reserved_ports_;
 automaton::binding_set_type automaton::empty_set_;
 
 void
-automaton::finish (ano_t action_number,
+automaton::finish (const shared_ptr<automaton>& ths,
+		   ano_t action_number,
 		   int parameter,
 		   bool output_fired,
 		   bd_t bda,
 		   bd_t bdb)
 {
+  kassert (ths.get () == this);
+
   if (enabled_ && action_number > LILY_ACTION_NO_ACTION) {
 
-    // Acquire the modification mutex.
-    lock mod_lock (mod_mutex_);
-    
     // Only schedule if we are enabled.
     if (enabled_) {
       const paction* action = find_action (action_number);
@@ -42,7 +44,7 @@ automaton::finish (ano_t action_number,
 	switch (action->type) {
 	case OUTPUT:
 	case INTERNAL:
-	  scheduler::schedule (caction (this, action, parameter));
+	  scheduler::schedule (caction (ths, action, parameter));
 	  break;
 	case INPUT:
 	case SYSTEM_INPUT:
@@ -74,25 +76,10 @@ automaton::finish (ano_t action_number,
   Installing is the process where global data structures are updated.
   Context (2) acquires the id_lock_ before invoking this function for thread safety.
 */
- 
-template <typename T>
-class auto_decref {
-private:
-  T& obj_;
-public:
-  auto_decref (T& obj) :
-    obj_ (obj)
-  { }
 
-  ~auto_decref ()
-  {
-    obj_.decref ();
-  }
-};
-
-pair<automaton*, int>
+pair<shared_ptr<automaton>, int>
 automaton::create_automaton (const kstring& name,
-			     automaton* parent,
+			     const shared_ptr<automaton>& parent,
 			     bool privileged,
 			     buffer* text,
 			     size_t text_size,
@@ -102,11 +89,7 @@ automaton::create_automaton (const kstring& name,
   // If the parent exists, we enter with the id_mutex_ locked and the parent's mod_mutex_ locked.
 
   // Create the automaton.
-  automaton* child = new automaton ();
-
-  // We want to drop its reference count when we return.
-  // To succeed we must increment its reference count.
-  auto_decref<automaton> child_cleanup (*child);
+  shared_ptr<automaton> child = shared_ptr<automaton> (new automaton ());
 
   // First, we want to map the text of the automaton in the kernel's address space.
 
@@ -134,14 +117,11 @@ automaton::create_automaton (const kstring& name,
 
   // Parse the file.
   if (elf::parse (child, text_begin, text_end) == -1) {
-    return make_pair ((automaton*)0, LILY_SYSCALL_EBADTEXT);
+    return make_pair (shared_ptr<automaton> (), LILY_SYSCALL_EBADTEXT);
   }
 
   // Unmap the text.
   text->unmap ();
-
-  // Success.
-  lock mod_lock (child->mod_mutex_);
 
   // Generate an id and insert into the aid to automaton map.
   aid_t child_aid = current_aid_;
@@ -159,9 +139,8 @@ automaton::create_automaton (const kstring& name,
   }
 
   // Add the child to the parent.
-  if (parent != 0) {
+  if (parent.get () != 0) {
     parent->children_.insert (child);
-    ++child->reference_count_;
   }
 
   // Switch back.
@@ -172,13 +151,7 @@ automaton::create_automaton (const kstring& name,
   child->aid_ = child_aid;
   child->name_ = name;
   child->parent_ = parent;
-  if (parent != 0) {
-    ++parent->reference_count_;
-  }
   child->privileged_ = privileged;
-
-  // Increment the reference count for success.
-  ++child->reference_count_;
 
   // Add to the scheduler.
   scheduler::add_automaton (child);
@@ -201,7 +174,8 @@ automaton::create_automaton (const kstring& name,
 }
 
 pair<aid_t, int>
-automaton::create (bd_t text_bd,
+automaton::create (const shared_ptr<automaton>& ths,
+		   bd_t text_bd,
 		   size_t /*text_size*/,
 		   bd_t bda,
 		   bd_t bdb,
@@ -209,8 +183,7 @@ automaton::create (bd_t text_bd,
 		   size_t name_size,
 		   bool retain_privilege)
 {
-  lock id_lock (id_mutex_);
-  lock mod_lock (mod_mutex_);
+  kassert (ths.get () == this);
 
   // Check the name data.
   if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
@@ -241,9 +214,9 @@ automaton::create (bd_t text_bd,
   }
   
   // Create the automaton.
-  pair<automaton*, int> r = create_automaton (name_str, this, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+  pair<shared_ptr<automaton>, int> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
 
-  if (r.first != 0) {
+  if (r.first.get () != 0) {
     return make_pair (r.first->aid (), r.second);
   }
   else {
@@ -252,14 +225,15 @@ automaton::create (bd_t text_bd,
 }
 
 pair<bid_t, int>
-automaton::bind (aid_t output_aid,
+automaton::bind (const shared_ptr<automaton>& ths,
+		 aid_t output_aid,
 		 ano_t output_ano,
 		 int output_parameter,
 		 aid_t input_aid,
 		 ano_t input_ano,
 		 int input_parameter)
 {
-  lock id_lock (id_mutex_);
+  kassert (ths.get () == this);
 
   aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
   if (output_pos == aid_to_automaton_map_.end ()) {
@@ -273,9 +247,9 @@ automaton::bind (aid_t output_aid,
     return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
   }
 
-  automaton* output_automaton = output_pos->second;
+  shared_ptr<automaton> output_automaton = output_pos->second;
   
-  automaton* input_automaton = input_pos->second;
+  shared_ptr<automaton> input_automaton = input_pos->second;
   
   if (output_automaton == input_automaton) {
     // The output and input automata must be different.
@@ -335,13 +309,23 @@ automaton::bind (aid_t output_aid,
   if (output_automaton->is_output_bound_to_automaton (oa, input_automaton)) {
     return make_pair (-1, LILY_SYSCALL_EINVAL);
   }
+
+  // Generate an id.
+  bid_t bid = current_bid_;
+  while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
+    bid = max (bid + 1, 0); // Handles overflow.
+  }
+  current_bid_ = max (bid + 1, 0);
   
+  // Create the binding.
+  shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
+  bid_to_binding_map_.insert (make_pair (bid, b));
+
   // Bind.
-  binding* b = new binding (oa, ia, this);
   output_automaton->bind_output (b);
   input_automaton->bind_input (b);
   this->bind (b);
-  
+    
   // TODO:  Remove this.
   // Schedule the output action.
   scheduler::schedule (caction (output_automaton, output_action, output_parameter));

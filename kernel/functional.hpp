@@ -1,6 +1,8 @@
 #ifndef __functional_hpp__
 #define __functional_hpp__
 
+#include "shared_ptr.hpp"
+
 template <typename A1,
 	  typename Result>
 struct unary_function {
@@ -85,6 +87,15 @@ struct hash<unsigned long> : public unary_function<unsigned long, size_t> {
   operator() (unsigned long value) const
   {
     return value;
+  }
+};
+
+template <typename T>
+struct hash<shared_ptr<T> > : public unary_function<shared_ptr<T>, size_t> {
+  size_t
+  operator () (const shared_ptr<T>& p) const
+  {
+    return reinterpret_cast<size_t> (p.get ());
   }
 };
 

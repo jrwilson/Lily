@@ -4,6 +4,7 @@
 #include <lily/types.h>
 #include <lily/action.h>
 #include "kstring.hpp"
+#include "shared_ptr.hpp"
 
 class automaton;
 class buffer;
@@ -51,7 +52,7 @@ private:
 
 // Complete action.
 struct caction {
-  ::automaton* automaton;
+  shared_ptr< ::automaton> automaton;
   const paction* action;
   int parameter;
   // For system inputs.
@@ -66,7 +67,7 @@ struct caction {
     buffer_b (0)
   { }
 
-  caction (::automaton* a,
+  caction (const shared_ptr< ::automaton>& a,
 	   const paction* act,
 	   int p) :
     automaton (a),
@@ -76,7 +77,7 @@ struct caction {
     buffer_b (0)
   { }
 
-  caction (::automaton* au,
+  caction (const shared_ptr< ::automaton>& au,
 	   const paction* act,
 	   int p,
 	   buffer* a,
@@ -100,7 +101,7 @@ struct caction_hash {
   size_t
   operator() (const caction& c) const
   {
-    return reinterpret_cast<size_t> (c.automaton) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter;
+    return reinterpret_cast<size_t> (c.automaton.get ()) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter;
   }
 };
 

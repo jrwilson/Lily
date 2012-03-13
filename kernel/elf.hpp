@@ -108,7 +108,7 @@ namespace elf {
 
   // Interpret a region of memory as an ELF file.
   int
-  parse (automaton* a,
+  parse (const shared_ptr<automaton>& a,
 	 logical_address_t begin,
 	 logical_address_t end)
   {
