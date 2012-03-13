@@ -254,8 +254,6 @@ namespace elf {
 	    return -1;
 	  }
 
-	  // BUG:  Check the memory map from the parse.
-  
 	  vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
 	  
 	  size_t s;

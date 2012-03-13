@@ -96,7 +96,6 @@ struct caction {
   }
 };
 
-// TODO:  Come up with a better hash function.
 struct caction_hash {
   size_t
   operator() (const caction& c) const

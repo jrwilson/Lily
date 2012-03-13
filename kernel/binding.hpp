@@ -22,65 +22,28 @@
 
 class automaton;
 
-class binding {
-private:
-  bid_t bid_;
-  caction const output_action_;
-  caction const input_action_;
-  shared_ptr<automaton> const owner_;
-  bool enabled_;
+struct binding {
+  bid_t const bid;
+  caction const output_action;
+  caction const input_action;
+  shared_ptr<automaton> const owner;
+  unordered_set<shared_ptr<automaton> > subscribers;
+  bool enabled;
 
-public:
-  binding (bid_t bid,
+  binding (bid_t b,
 	   const caction& oa,
 	   const caction& ia,
 	   const shared_ptr<automaton>& o) :
-    bid_ (bid),
-    output_action_ (oa),
-    input_action_ (ia),
-    owner_ (o),
-    enabled_ (true)
+    bid (b),
+    output_action (oa),
+    input_action (ia),
+    owner (o),
+    enabled (true)
   { }
 
   ~binding () {
-    // TODO:  Return the bid.  This also needs to be atomic.
+    // BUG:  Return the bid.  This also needs to be atomic.
     kassert (0);
-  }
-
-  inline bid_t
-  bid () const
-  {
-    return bid_;
-  }
-
-  inline const caction&
-  output_action () const
-  {
-    return output_action_;
-  }
-
-  inline const caction&
-  input_action () const
-  {
-    return input_action_;
-  }
-  
-  inline const shared_ptr<automaton>&
-  owner () const
-  {
-    return owner_;
-  }
-
-  inline bool
-  enabled () const
-  {
-    return enabled_;
-  }
-
-  inline void
-  disable ()
-  {
-    enabled_ = false;
   }
 };
 

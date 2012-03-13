@@ -62,10 +62,36 @@ struct bind_args {
   int input_parameter;
 };
 
+struct unbind_args {
+  uint32_t eip;
+  bid_t bid;
+};
+
+struct destroy_args {
+  uint32_t eip;
+  aid_t aid;
+};
+
+struct subscribe_unbound_args {
+  uint32_t eip;
+  bid_t bid;
+  ano_t action_number;
+};
+
+struct unsubscribe_unbound_args {
+  uint32_t eip;
+  bid_t bid;
+};
+
 struct subscribe_destroyed_args {
   uint32_t eip;
   aid_t aid;
   ano_t action_number;
+};
+
+struct unsubscribe_destroyed_args {
+  uint32_t eip;
+  aid_t aid;
 };
 
 struct adjust_break_args {
@@ -128,6 +154,11 @@ struct map_args {
   size_t size;
 };
 
+struct unmap_args {
+  uint32_t eip;
+  const void* destination;
+};
+
 struct reserve_port_args {
   uint32_t eip;
   uint32_t port;
@@ -149,6 +180,11 @@ struct subscribe_irq_args {
   int irq;
   ano_t action_number;
   int parameter;
+};
+
+struct unsubscribe_irq_args {
+  uint32_t eip;
+  int irq;
 };
 
 struct sysconf_args {
@@ -179,7 +215,7 @@ trap_dispatch (volatile registers regs)
 {
   kassert (regs.number == SYSCALL_INTERRUPT);
 
-  shared_ptr<automaton> a = scheduler::current_automaton ();
+  const shared_ptr<automaton>& a = scheduler::current_automaton ();
 
   /* These match the order in lily/syscall.h.
      Please keep it that way.
@@ -230,29 +266,53 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_UNBIND:
     {
-      // BUG
-      kassert (0);
+      unbind_args* ptr = reinterpret_cast<unbind_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (unbind_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<bid_t, int> r = a->unbind (ptr->bid);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
   case LILY_SYSCALL_DESTROY:
     {
-      // BUG
-      kassert (0);
+      destroy_args* ptr = reinterpret_cast<destroy_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (destroy_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<bid_t, int> r = a->destroy (ptr->aid);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
   case LILY_SYSCALL_SUBSCRIBE_UNBOUND:
     {
-      // BUG
-      kassert (0);
+      subscribe_unbound_args* ptr = reinterpret_cast<subscribe_unbound_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (subscribe_unbound_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<bid_t, int> r = a->subscribe_unbound (a, ptr->bid, ptr->action_number);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
   case LILY_SYSCALL_UNSUBSCRIBE_UNBOUND:
     {
-      // BUG
-      kassert (0);
+      unsubscribe_unbound_args* ptr = reinterpret_cast<unsubscribe_unbound_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (unsubscribe_unbound_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<bid_t, int> r = a->unsubscribe_unbound (a, ptr->bid);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -263,7 +323,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = a->subscribe_destroyed (a, ptr->action_number, ptr->aid);
+      pair<bid_t, int> r = a->subscribe_destroyed (a, ptr->aid, ptr->action_number);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -271,8 +331,14 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_UNSUBSCRIBE_DESTROYED:
     {
-      // BUG
-      kassert (0);
+      unsubscribe_destroyed_args* ptr = reinterpret_cast<unsubscribe_destroyed_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (unsubscribe_destroyed_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<bid_t, int> r = a->unsubscribe_destroyed (a, ptr->aid);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -428,6 +494,19 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
+  case LILY_SYSCALL_SYSLOG:
+    {
+      syslog_args* ptr = reinterpret_cast<syslog_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (syslog_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<int, int> r = a->syslog (ptr->string, ptr->size);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
   case LILY_SYSCALL_LOOKUP:
     {
       lookup_args* ptr = reinterpret_cast<lookup_args*> (regs.useresp);
@@ -476,8 +555,14 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_UNMAP:
     {
-      // BUG
-      kassert (0);
+      unmap_args* ptr = reinterpret_cast<unmap_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (unmap_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<int, int> r = a->unmap (ptr->destination);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -496,8 +581,14 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_UNRESERVE_PORT:
     {
-      // BUG
-      kassert (0);
+      reserve_port_args* ptr = reinterpret_cast<reserve_port_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (reserve_port_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<int, int> r = a->unreserve_port (ptr->port);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -594,19 +685,12 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_UNSUBSCRIBE_IRQ:
     {
-      // BUG
-      kassert (0);
-      return;
-    }
-    break;
-  case LILY_SYSCALL_SYSLOG:
-    {
-      syslog_args* ptr = reinterpret_cast<syslog_args*> (regs.useresp);
-      if (!a->verify_stack (ptr, sizeof (syslog_args))) {
+      unsubscribe_irq_args* ptr = reinterpret_cast<unsubscribe_irq_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (unsubscribe_irq_args))) {
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<int, int> r = a->syslog (ptr->string, ptr->size);
+      pair<int, int> r = a->unsubscribe_irq (ptr->irq);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

@@ -103,11 +103,6 @@ private:
   typedef unordered_map<bid_t, shared_ptr<binding> > bid_to_binding_map_type;
   static bid_to_binding_map_type bid_to_binding_map_;
 
-public:
-  typedef unordered_set <shared_ptr<binding> > binding_set_type;
-private:
-  static binding_set_type empty_set_;
-
   /*
    * I/O
    */
@@ -246,6 +241,7 @@ private:
    * BINDING
    */
 
+  typedef unordered_set <shared_ptr<binding> > binding_set_type;
   // Bound outputs.
   typedef unordered_map <caction, binding_set_type, caction_hash> bound_outputs_map_type;
   bound_outputs_map_type bound_outputs_map_;
@@ -275,11 +271,14 @@ private:
    */
 
   // Automata to which this automaton is subscribed.
-  typedef unordered_set<shared_ptr<automaton> > subscriptions_set_type;
-  subscriptions_set_type subscriptions_;
+  typedef unordered_set<shared_ptr<automaton> > automaton_subscriptions_type;
+  automaton_subscriptions_type automaton_subscriptions_;
   // Automata that receive notification when this automaton is destroyed.
   typedef unordered_set<shared_ptr<automaton> > subscribers_set_type;
   subscribers_set_type subscribers_;
+  // Bindings to which this automaton is subscribed.
+  typedef unordered_set<shared_ptr<binding> > binding_subscriptions_type;
+  binding_subscriptions_type binding_subscriptions_;
 
   /*
    * CREATION AND DESTRUCTION
@@ -438,6 +437,14 @@ public:
 	  size_t name_size,
 	  bool retain_privilege);
 
+  pair<int, int>
+  destroy (aid_t aid)
+  {
+    // BUG
+    kassert (0);
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
   /*
    * EXECUTION
    */
@@ -569,6 +576,7 @@ public:
   inline void
   exit (void)
   {
+    // BUG
     kassert (0);
 
     // // Disable the automaton.
@@ -611,6 +619,20 @@ private:
 		 const vm_area_base* const y) const
     {
       return x->begin () < y->begin ();
+    }
+  };
+
+  struct contains_address {
+    logical_address_t address;
+
+    contains_address (const void* ptr) :
+      address (reinterpret_cast<logical_address_t> (ptr))
+    { }
+
+    inline bool
+    operator() (const mapped_area* area)
+    {
+      return address >= area->begin () && address < area->end ();
     }
   };
 
@@ -818,7 +840,7 @@ public:
     }
   }
 
-  // BUG:  Limit the number and size of buffers.
+  // TODO:  Limit the number and size of buffers.
 
   inline pair<bd_t, int>
   buffer_create (size_t size)
@@ -1073,38 +1095,145 @@ public:
    * The functions between lock_bindings and unlock_bindings all require the bindings lock. *
    ******************************************************************************************/
 
+  template <typename OutputIterator>
   inline void
-  lock_bindings ()
-  {
-    // TODO
-  }
-  
-  inline const binding_set_type&
-  get_bound_inputs (const caction& output_action) const
+  copy_bound_inputs (const caction& output_action,
+		     OutputIterator iter) const
   {
     bound_outputs_map_type::const_iterator pos = bound_outputs_map_.find (output_action);
     if (pos != bound_outputs_map_.end ()) {
-      return pos->second;
-    }
-    else {
-      return empty_set_;
+      copy (pos->second.begin (), pos->second.end (), iter);
     }
   }
 
-  inline void
-  unlock_bindings ()
-  {
-    // TODO
-  }
-
-  pair<bid_t, int>
+  inline pair<bid_t, int>
   bind (const shared_ptr<automaton>& ths,
 	aid_t output_aid,
 	ano_t output_ano,
 	int output_parameter,
 	aid_t input_aid,
 	ano_t input_ano,
-	int input_parameter);
+	int input_parameter)
+  {
+    kassert (ths.get () == this);
+    
+    aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
+    if (output_pos == aid_to_automaton_map_.end ()) {
+      // Output automaton DNE.
+      return make_pair (-1, LILY_SYSCALL_EOAIDDNE);
+    }
+    
+    aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
+    if (input_pos == aid_to_automaton_map_.end ()) {
+      // Input automaton DNE.
+      return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
+    }
+    
+    shared_ptr<automaton> output_automaton = output_pos->second;
+    
+    shared_ptr<automaton> input_automaton = input_pos->second;
+    
+    if (output_automaton == input_automaton) {
+      // The output and input automata must be different.
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+    
+    // Check the output action dynamically.
+    const paction* output_action = output_automaton->find_action (output_ano);
+    if (output_action == 0 ||
+	output_action->type != OUTPUT) {
+      // Output action does not exist or has the wrong type.
+      return make_pair (-1, LILY_SYSCALL_EOBADANO);
+    }
+    
+    // Check the input action dynamically.
+    const paction* input_action = input_automaton->find_action (input_ano);
+    if (input_action == 0 ||
+	input_action->type != INPUT) {
+      // Input action does not exist or has the wrong type.
+      return make_pair (-1, LILY_SYSCALL_EIBADANO);
+    }
+    
+    // Correct the parameters.
+    switch (output_action->parameter_mode) {
+    case NO_PARAMETER:
+      output_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      output_parameter = input_automaton->aid ();
+      break;
+    }
+    
+    switch (input_action->parameter_mode) {
+    case NO_PARAMETER:
+      input_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      input_parameter = output_automaton->aid ();
+      break;
+    }
+    
+    // Form complete actions.
+    caction oa (output_automaton, output_action, output_parameter);
+    caction ia (input_automaton, input_action, input_parameter);
+    
+    // Check that the input action is not bound.
+    // (Also checks that the binding does not exist.)
+    if (input_automaton->bound_inputs_map_.find (ia) != input_automaton->bound_inputs_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+    
+    // Check that the output action is not bound to an action in the input automaton.
+    bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
+    if (pos1 != output_automaton->bound_outputs_map_.end ()) {
+      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	if ((*pos2)->input_action.automaton == input_automaton) {
+	  return make_pair (-1, LILY_SYSCALL_EINVAL);
+	}
+      }
+    }
+    
+    // Generate an id.
+    bid_t bid = current_bid_;
+    while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
+      bid = max (bid + 1, 0); // Handles overflow.
+    }
+    current_bid_ = max (bid + 1, 0);
+    
+    // Create the binding.
+    shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
+    bid_to_binding_map_.insert (make_pair (bid, b));
+    
+    // Bind.
+    {
+      pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
+      r.first->second.insert (b);
+    }
+    
+    {
+      pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
+      r.first->second.insert (b);
+    }
+    
+    {
+      pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
+      kassert (r.second);
+    }
+    
+    return make_pair (b->bid, LILY_SYSCALL_ESUCCESS);
+  }
+
+  pair<int, int>
+  unbind (bid_t bid)
+  {
+    // BUG
+    kassert (0);
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
 
   /*
    * I/O
@@ -1175,6 +1304,33 @@ public:
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
+  inline pair<int, int>
+  unmap (const void* destination)
+  {
+    mapped_areas_type::iterator pos = find_if (mapped_areas_.begin (), mapped_areas_.end (), contains_address (destination));
+    if (pos == mapped_areas_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_ENOTMAPPED);
+    }
+
+    mapped_area* area = *pos;
+
+    physical_address_t pa = area->physical_begin;
+    for (logical_address_t la = area->begin ();
+	 la != area->end ();
+	 la += PAGE_SIZE, pa += PAGE_SIZE) {
+      vm::unmap (la);
+      mmapped_frames_[physical_address_to_frame (pa)] = false;
+    }
+
+    mapped_areas_.erase (pos);
+
+    memory_map_type::iterator pos2 = find (memory_map_.begin (), memory_map_.end (), area);
+    kassert (pos2 != memory_map_.end ());
+    memory_map_.erase (pos2);
+    
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
   // The automaton is requesting access to the specified I/O port.
   inline pair<int, int>
   reserve_port (unsigned short port)
@@ -1191,6 +1347,20 @@ public:
     // Reserve the port.
     reserved_ports_[port] = true;
     port_set_.insert (port);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  inline pair<int, int>
+  unreserve_port (unsigned short port)
+  {
+    port_set_type::iterator pos = port_set_.find (port);
+    if (pos == port_set_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_ENOTRESERVED);
+    }
+
+    reserved_ports_[port] = false;
+    port_set_.erase (pos);
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
@@ -1309,6 +1479,20 @@ public:
   }
 
   inline pair<int, int>
+  unsubscribe_irq (int irq)
+  {
+    irq_map_type::iterator pos = irq_map_.find (irq);
+    if (pos == irq_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+    }
+
+    irq_handler::unsubscribe (pos->first, pos->second);
+    irq_map_.erase (pos);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  inline pair<int, int>
   syslog (const char* string,
 	  size_t size)
   {
@@ -1331,14 +1515,61 @@ public:
    * SUBSCRIPTIONS
    */
 
+  inline pair<int, int>
+  subscribe_unbound (const shared_ptr<automaton>& ths,
+		     bid_t bid,
+		     ano_t action_number)
+  {
+    kassert (ths.get () == this);
+
+    const paction* action = find_action (action_number);
+    if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
+      return make_pair (-1, LILY_SYSCALL_EBADANO);
+    }
+
+    bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
+    if (subject_pos == bid_to_binding_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EBIDDNE);
+    }
+
+    shared_ptr<binding> subject = subject_pos->second;
+
+    binding_subscriptions_.insert (subject);
+    subject->subscribers.insert (ths);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  inline pair<int, int>
+  unsubscribe_unbound (const shared_ptr<automaton>& ths,
+		       bid_t bid)
+  {
+    bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
+    if (subject_pos == bid_to_binding_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EBIDDNE);
+    }
+
+    shared_ptr<binding> subject = subject_pos->second;
+
+    size_t count = binding_subscriptions_.erase (subject);
+    if (count == 0) {
+      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+    }
+
+    count = subject->subscribers.erase (ths);
+    kassert (count == 1);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
   // The automaton wants to receive a notification via action_number when the automaton corresponding to aid is destroyed.
   // The automaton must have an action for receiving the event.
   // The automaton corresponding to aid must exist.
   // Not an error if already subscribed.
   inline pair<int, int>
   subscribe_destroyed (const shared_ptr<automaton>& ths,
-		       ano_t action_number,
-		       aid_t aid)
+		       aid_t aid,
+		       ano_t action_number)
   {
     kassert (ths.get () == this);
 
@@ -1354,8 +1585,30 @@ public:
 
     shared_ptr<automaton> subject = subject_pos->second;
 
-    subscriptions_.insert (subject);
+    automaton_subscriptions_.insert (subject);
     subject->subscribers_.insert (ths);
+
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
+  inline pair<int, int>
+  unsubscribe_destroyed (const shared_ptr<automaton>& ths,
+			 aid_t aid)
+  {
+    aid_to_automaton_map_type::const_iterator subject_pos = aid_to_automaton_map_.find (aid);
+    if (subject_pos == aid_to_automaton_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+    }
+
+    shared_ptr<automaton> subject = subject_pos->second;
+
+    size_t count = automaton_subscriptions_.erase (subject);
+    if (count == 0) {
+      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+    }
+
+    count = subject->subscribers_.erase (ths);
+    kassert (count == 1);
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
@@ -1400,96 +1653,94 @@ private:
 public:
   ~automaton ()
   {
+    // BUG
     kassert (0);
 
-    /*
-     * IDENTIFICATION
-     */
+    // /*
+    //  * IDENTIFICATION
+    //  */
 
-    // TODO:  This should be atomic.
-    size_t count = aid_to_automaton_map_.erase (aid_);
-    kassert (count == 1);
+    // size_t count = aid_to_automaton_map_.erase (aid_);
+    // kassert (count == 1);
 
-    /*
-     * DESCRIPTION
-     */
+    // /*
+    //  * DESCRIPTION
+    //  */
 
-    for (ano_to_action_map_type::const_iterator pos = ano_to_action_map_.begin ();
-	 pos != ano_to_action_map_.end ();
-	 ++pos) {
-      delete pos->second;
-    }
+    // for (ano_to_action_map_type::const_iterator pos = ano_to_action_map_.begin ();
+    // 	 pos != ano_to_action_map_.end ();
+    // 	 ++pos) {
+    //   delete pos->second;
+    // }
     
-    /*
-     * AUTOMATA HIERARCHY
-     */
+    // /*
+    //  * AUTOMATA HIERARCHY
+    //  */
     
-    // kassert (parent_ == 0);
-    kassert (children_.empty ());
+    // // kassert (parent_ == 0);
+    // kassert (children_.empty ());
     
-    /*
-     * EXECUTION
-     */
+    // /*
+    //  * EXECUTION
+    //  */
 
-    //kassert (!enabled_);
+    // //kassert (!enabled_);
     
-    /*
-     * MEMORY MAP AND BUFFERS
-     */
+    // /*
+    //  * MEMORY MAP AND BUFFERS
+    //  */
     
-    count = frame_manager::decref (physical_address_to_frame (page_directory));
-    kassert (count == 1);
-    count = frame_manager::decref (physical_address_to_frame (page_directory));
-    kassert (count == 0);
+    // count = frame_manager::decref (physical_address_to_frame (page_directory));
+    // kassert (count == 1);
+    // count = frame_manager::decref (physical_address_to_frame (page_directory));
+    // kassert (count == 0);
 
-    /*
-     * BINDING
-     */
+    // /*
+    //  * BINDING
+    //  */
 
-    kassert (bound_outputs_map_.empty ());
-    kassert (bound_inputs_map_.empty ());
-    kassert (owned_bindings_.empty ());
+    // kassert (bound_outputs_map_.empty ());
+    // kassert (bound_inputs_map_.empty ());
+    // kassert (owned_bindings_.empty ());
     
-    /*
-     * I/O
-     */
+    // /*
+    //  * I/O
+    //  */
 
-    for (mapped_areas_type::const_iterator pos = mapped_areas_.begin ();
-	 pos != mapped_areas_.end ();
-	 ++pos) {
-      mapped_area* area = *pos;
-      memory_map_.erase (find (memory_map_.begin (), memory_map_.end (), area));
+    // for (mapped_areas_type::const_iterator pos = mapped_areas_.begin ();
+    // 	 pos != mapped_areas_.end ();
+    // 	 ++pos) {
+    //   mapped_area* area = *pos;
+    //   memory_map_.erase (find (memory_map_.begin (), memory_map_.end (), area));
 
-      for (physical_address_t address = area->physical_begin;
-	   address != area->physical_end;
-	   address += PAGE_SIZE) {
-	mmapped_frames_[physical_address_to_frame (address)] = false;
-      }
+    //   for (physical_address_t address = area->physical_begin;
+    // 	   address != area->physical_end;
+    // 	   address += PAGE_SIZE) {
+    // 	mmapped_frames_[physical_address_to_frame (address)] = false;
+    //   }
 
-      delete area;
-    }
+    //   delete area;
+    // }
 
-    for (port_set_type::const_iterator pos = port_set_.begin ();
-	 pos != port_set_.end ();
-	 ++pos) {
-      reserved_ports_[*pos] = false;
-    }
+    // for (port_set_type::const_iterator pos = port_set_.begin ();
+    // 	 pos != port_set_.end ();
+    // 	 ++pos) {
+    //   reserved_ports_[*pos] = false;
+    // }
 
-    for (irq_map_type::const_iterator pos = irq_map_.begin ();
-	 pos != irq_map_.end ();
-	 ++pos) {
-      irq_handler::unsubscribe (pos->first, pos->second);
-    }
+    // for (irq_map_type::const_iterator pos = irq_map_.begin ();
+    // 	 pos != irq_map_.end ();
+    // 	 ++pos) {
+    //   irq_handler::unsubscribe (pos->first, pos->second);
+    // }
     
-    /*
-     * SUBSCRIPTIONS
-     */
+    // /*
+    //  * SUBSCRIPTIONS
+    //  */
     
-    /*
-     * CREATION AND DESTRUCTION
-     */
-
-    kassert (0);
+    // /*
+    //  * CREATION AND DESTRUCTION
+    //  */
   }
 
 };

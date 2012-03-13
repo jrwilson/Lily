@@ -222,7 +222,6 @@ public:
   insert (iterator pos,
 	  const T& value)
   {
-    // TODO:  If we are full, then we copy twice.  This could be reduces to once.
     size_type idx = pos - begin_;
     // This might invalidate the iterator.
     reserve (size () + 1);

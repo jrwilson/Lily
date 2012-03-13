@@ -13,9 +13,8 @@
   Below, you will see comments like +AAA and -AAA.
   These are reference counting and locking markup where -AAA reverses the effect of +AAA.
 
-  DDD - Locking an automaton's bindings to copy.
   EEE - Lock the automaton containing the local action.
-  FFF - Lock the automaton containing input actions.
+  FFF - Lock the automata containing input actions.
 
   Authors:
   Justin R. Wilson
@@ -64,7 +63,7 @@ private:
     operator () (const shared_ptr<binding>& x,
 		 const shared_ptr<binding>& y) const
     {
-      return x->input_action ().automaton->aid () < y->input_action ().automaton->aid ();
+      return x->input_action.automaton->aid () < y->input_action.automaton->aid ();
     }
   };
 
@@ -73,8 +72,8 @@ private:
   {
     // Do not use temporary shared_ptr<binding> because it will not be destroyed if execute is called.
     while (input_action_pos_ != input_action_list_.end ()) {
-      if ((*input_action_pos_)->enabled ()) {
-	action_ = (*input_action_pos_)->input_action ();
+      if ((*input_action_pos_)->enabled) {
+	action_ = (*input_action_pos_)->input_action;
 	// This does not return.
 	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
@@ -91,7 +90,7 @@ private:
 	 pos != input_action_list_.end ();
 	 ++pos) {
       // -FFF
-      (*pos)->input_action ().automaton->unlock_execution ();
+      (*pos)->input_action.automaton->unlock_execution ();
     }
     input_action_list_.clear ();
   }
@@ -159,7 +158,7 @@ public:
 	++input_action_pos_;
 	proceed_to_input ();
 	// -EEE
-	input_action_list_.front ()->output_action ().automaton->unlock_execution ();
+	input_action_list_.front ()->output_action.automaton->unlock_execution ();
 	finish_output ();
 	break;
       case OUTPUT:
@@ -235,18 +234,8 @@ public:
 	case OUTPUT:
 	  {
 	    kassert (input_action_list_.empty ());
-	    // +DDD
-	    action_.automaton->lock_bindings ();
 	    // Copy the bindings.
-	    const automaton::binding_set_type& input_actions = action_.automaton->get_bound_inputs (action_);
-	    for (automaton::binding_set_type::const_iterator pos = input_actions.begin ();
-		 pos != input_actions.end ();
-		 ++pos) {
-	      input_action_list_.push_back (*pos);
-	      // So they don't disappear.
-	    }
-	    // -DDD
-	    action_.automaton->unlock_bindings ();
+	    action_.automaton->copy_bound_inputs (action_, back_inserter (input_action_list_));
 	    
 	    // Sort the bindings by input automaton.
 	    sort (input_action_list_.begin (), input_action_list_.end (), sort_bindings_by_input ());
@@ -256,7 +245,7 @@ public:
 	    for (input_action_list_type::const_iterator pos = input_action_list_.begin ();
 		 pos != input_action_list_.end ();
 		 ++pos) {
-	      shared_ptr<automaton> input_automaton = (*pos)->input_action ().automaton;
+	      shared_ptr<automaton> input_automaton = (*pos)->input_action.automaton;
 	      if (!output_locked && action_.automaton->aid () < input_automaton->aid ()) {
 		// +EEE
 		action_.automaton->lock_execution ();

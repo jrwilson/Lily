@@ -12,8 +12,6 @@ automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 bitset<ONE_MEGABYTE / PAGE_SIZE> automaton::mmapped_frames_;
 bitset<65536> automaton::reserved_ports_;
 
-automaton::binding_set_type automaton::empty_set_;
-
 void
 automaton::finish (const shared_ptr<automaton>& ths,
 		   ano_t action_number,
@@ -220,132 +218,6 @@ automaton::create (const shared_ptr<automaton>& ths,
   }
 }
 
-pair<bid_t, int>
-automaton::bind (const shared_ptr<automaton>& ths,
-		 aid_t output_aid,
-		 ano_t output_ano,
-		 int output_parameter,
-		 aid_t input_aid,
-		 ano_t input_ano,
-		 int input_parameter)
-{
-  kassert (ths.get () == this);
-
-  aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
-  if (output_pos == aid_to_automaton_map_.end ()) {
-    // Output automaton DNE.
-    return make_pair (-1, LILY_SYSCALL_EOAIDDNE);
-  }
-
-  aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
-  if (input_pos == aid_to_automaton_map_.end ()) {
-    // Input automaton DNE.
-    return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
-  }
-
-  shared_ptr<automaton> output_automaton = output_pos->second;
-  
-  shared_ptr<automaton> input_automaton = input_pos->second;
-  
-  if (output_automaton == input_automaton) {
-    // The output and input automata must be different.
-    return make_pair (-1, LILY_SYSCALL_EINVAL);
-  }
-  
-  // Check the output action dynamically.
-  const paction* output_action = output_automaton->find_action (output_ano);
-  if (output_action == 0 ||
-      output_action->type != OUTPUT) {
-    // Output action does not exist or has the wrong type.
-    return make_pair (-1, LILY_SYSCALL_EOBADANO);
-  }
-  
-  // Check the input action dynamically.
-  const paction* input_action = input_automaton->find_action (input_ano);
-  if (input_action == 0 ||
-      input_action->type != INPUT) {
-    // Input action does not exist or has the wrong type.
-    return make_pair (-1, LILY_SYSCALL_EIBADANO);
-  }
-
-  // Correct the parameters.
-  switch (output_action->parameter_mode) {
-  case NO_PARAMETER:
-    output_parameter = 0;
-    break;
-  case PARAMETER:
-    break;
-  case AUTO_PARAMETER:
-    output_parameter = input_automaton->aid ();
-      break;
-  }
-  
-  switch (input_action->parameter_mode) {
-  case NO_PARAMETER:
-    input_parameter = 0;
-    break;
-  case PARAMETER:
-    break;
-  case AUTO_PARAMETER:
-    input_parameter = output_automaton->aid ();
-    break;
-  }
-  
-  // Form complete actions.
-  caction oa (output_automaton, output_action, output_parameter);
-  caction ia (input_automaton, input_action, input_parameter);
-  
-  // Check that the input action is not bound.
-  // (Also checks that the binding does not exist.)
-  if (input_automaton->bound_inputs_map_.find (ia) != input_automaton->bound_inputs_map_.end ()) {
-    return make_pair (-1, LILY_SYSCALL_EINVAL);
-  }
-  
-  // Check that the output action is not bound to an action in the input automaton.
-  bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
-  if (pos1 != output_automaton->bound_outputs_map_.end ()) {
-    // TODO:  Replace this iteration with look-up in a data structure.
-    for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-      if ((*pos2)->input_action ().automaton == input_automaton) {
-	return make_pair (-1, LILY_SYSCALL_EINVAL);
-      }
-    }
-  }
-
-  // Generate an id.
-  bid_t bid = current_bid_;
-  while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
-    bid = max (bid + 1, 0); // Handles overflow.
-  }
-  current_bid_ = max (bid + 1, 0);
-  
-  // Create the binding.
-  shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
-  bid_to_binding_map_.insert (make_pair (bid, b));
-
-  // Bind.
-  {
-    pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
-    r.first->second.insert (b);
-  }
-
-  {
-    pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
-    r.first->second.insert (b);
-  }
-
-  {
-    pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
-    kassert (r.second);
-  }
-
-  // TODO:  Remove this.
-  // Schedule the output action.
-  scheduler::schedule (caction (output_automaton, output_action, output_parameter));
-  
-  return make_pair (b->bid (), LILY_SYSCALL_ESUCCESS);
-}
-
   // void
   // remove_from_scheduler (automaton* a)
   // {
@@ -373,7 +245,6 @@ automaton::bind (const shared_ptr<automaton>& ths,
   // automaton*
   // forget_parent (void)
   // {
-  //   // TODO:  This should be atomic (?)
   //   for (children_set_type::const_iterator pos = children_.begin ();
   // 	 pos != children_.end ();
   // 	 ++pos) {
@@ -391,7 +262,6 @@ automaton::bind (const shared_ptr<automaton>& ths,
   // void
   // forget_child (automaton* child)
   // {
-  //   // TODO:  This should be atomic.
   //   size_t count = children_.erase (child);
   //   kassert (count == 1);
   //   child->decref ();
@@ -413,7 +283,6 @@ automaton::bind (const shared_ptr<automaton>& ths,
   // void
   // disable ()
   // {
-  //   // TODO:  This should be atomic.
   //   if (enabled_) {
   //     // Disable ourselves.
   //     enabled_ = false;
