@@ -1068,7 +1068,7 @@ end_output_action (bool output_fired,
    
    Post: if successful, then output_buffer_initialized == true && the output buffer is not empty
  */
-BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -1142,7 +1142,7 @@ text_precondition (void)
   return buffer_file_size (&output_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (TEXT_NO, param);

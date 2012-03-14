@@ -234,7 +234,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_EXIT:
     {
-      a->exit ();
+      a->exit (a);
       return;
     }
     break;

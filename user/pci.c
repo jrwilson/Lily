@@ -348,7 +348,7 @@ end_input_action (bd_t bda,
   finish (NO_ACTION, 0, false, -1, -1);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   end_input_action (bda, bdb);

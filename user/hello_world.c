@@ -82,7 +82,7 @@ end_internal_action (void)
    
    Post: if state == START then state == EXECUTING
  */
-BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -107,7 +107,7 @@ stdout_precondition (void)
   return buffer_file_size (&stdout_bf) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, int param)
+BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (STDOUT_NO, param);
@@ -134,7 +134,7 @@ done_precondition (void)
   return state == EXECUTING && buffer_file_size (&stdout_bf) == 0;
 }
 
-BEGIN_INTERNAL (NO_PARAMETER, DONE_NO, "", "", done, int param)
+BEGIN_INTERNAL (NO_PARAMETER, DONE_NO, "", "", done, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (DONE_NO, param);

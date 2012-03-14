@@ -733,7 +733,7 @@ process_control (client_t* client,
   }
 }
 
-BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -803,7 +803,7 @@ vga_op_precondition (void)
   return active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int param)
+BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (VGA_OP_NO, param);
@@ -840,7 +840,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
   }
 }
 
-BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 

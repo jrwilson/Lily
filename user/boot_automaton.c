@@ -172,7 +172,7 @@ mount_callback (void* data,
    
    Post: mount_state == MOUNT && tmpfs != -1 && init_file != 0
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t boot_aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -263,7 +263,7 @@ vfs_request_precondition (void)
   return !vfs_request_queue_empty (&vfs_request_queue);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (VFS_REQUEST_NO, param);
@@ -286,7 +286,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 
    Post: ???
  */
-BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 

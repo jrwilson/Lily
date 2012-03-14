@@ -36,25 +36,25 @@
   "3: .balign 4\n" \
        ".popsection\n");
 
-#define BEGIN_SYSTEM_INPUT(action_no, action_name, action_desc, func, param, bda, bdb) \
-void func (param, bda, bdb);						\
+#define BEGIN_SYSTEM_INPUT(action_no, action_name, action_desc, func, ano, param, bda, bdb) \
+void func (ano, param, bda, bdb);					\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_SYSTEM_INPUT, PARAMETER, func, action_no, action_name, action_desc); \
-void func (param, bda, bdb)
+void func (ano, param, bda, bdb)
 
-#define BEGIN_INPUT(parameter_mode, action_no, action_name, action_desc, func, param, bda, bdb) \
-void func (param, bda, bdb);						\
+#define BEGIN_INPUT(parameter_mode, action_no, action_name, action_desc, func, ano, param, bda, bdb) \
+void func (ano, param, bda, bdb);					\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INPUT, parameter_mode, func, action_no, action_name, action_desc); \
-void func (param, bda, bdb)
+void func (ano, param, bda, bdb)
 
-#define BEGIN_OUTPUT(parameter_mode, action_no, action_name, action_desc, func, param) \
-void func (param); \
+#define BEGIN_OUTPUT(parameter_mode, action_no, action_name, action_desc, func, ano, param) \
+void func (ano, param);						\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_OUTPUT, parameter_mode, func, action_no, action_name, action_desc); \
-void func (param)
+void func (ano, param)
 
-#define BEGIN_INTERNAL(parameter_mode, action_no, action_name, action_desc, func, param) \
-void func (param); \
+#define BEGIN_INTERNAL(parameter_mode, action_no, action_name, action_desc, func, ano, param) \
+void func (ano, param);						\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INTERNAL, parameter_mode, func, action_no, action_name, action_desc); \
-void func (param)
+void func (ano, param)
 
 extern int automatonerrno;
 

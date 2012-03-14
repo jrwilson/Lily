@@ -496,7 +496,7 @@ end_output_action (bool output_fired,
   scheduler_finish (output_fired, bda, bdb);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   end_input_action (bda, bdb);
@@ -508,7 +508,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
    
    Post: keyboard_output_buffer_initialized == true && the output buffer is not empty
  */
-BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   if (buffer_file_put (&keyboard_output_buffer, inb (DATA_PORT)) != 0) {
@@ -531,7 +531,7 @@ scan_code_precondition (void)
   return buffer_file_size (&keyboard_output_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (SCAN_CODE_NO, param);
@@ -554,7 +554,7 @@ BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code,
    
    Post: ???
  */
-BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -605,7 +605,7 @@ mouse_packet_precondition (void)
   return mouse_packet_list.count != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_NO, "mouse_packet", "ps2_mouse_packet_list_t", mouse_packet, int param)
+BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_NO, "mouse_packet", "ps2_mouse_packet_list_t", mouse_packet, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (MOUSE_PACKET_NO, param);

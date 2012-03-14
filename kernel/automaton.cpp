@@ -57,6 +57,25 @@ automaton::finish (const shared_ptr<automaton>& ths,
   scheduler::finish (output_fired, bda, bdb);
 }
 
+// The automaton would like to no longer exist.
+void
+automaton::exit (const shared_ptr<automaton>& ths)
+{
+  kassert (ths.get () == this);
+  
+  shared_ptr<automaton> parent = parent_;
+  
+  unsubscribe (ths);
+  destroy (ths);
+  
+  if (parent.get () != 0) {
+    size_t count = parent->children_.erase (ths);
+    kassert (count == 1);
+  }
+  
+  scheduler::finish (false, -1, -1);
+}
+
 /*
   This function is called in two contexts:
   (1)  In kmain to create the initial automaton.

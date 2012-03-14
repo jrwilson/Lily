@@ -18,13 +18,10 @@
 bind @terminal vga_op @vga vga_op
 bind @this stdout @terminal text
 
-@hello_world = create /bin/hello_world
-destroy @hello_world
-
+#@hello_world = create /bin/hello_world
 #bind @this start @hello_world start
 #bind @hello_world stdout @this stdin_col
 #start @hello_world
-
 
 # Load the keyboard driver.
 # The keyboard driver has the same privilege as this automaton.

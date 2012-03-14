@@ -1073,7 +1073,7 @@ readscript_callback (void* data,
 
    Post: ???
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -1139,7 +1139,7 @@ vfs_request_precondition (void)
   return !vfs_request_queue_empty (&vfs_request_queue);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (VFS_REQUEST_NO, param);
@@ -1162,7 +1162,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
 
    Post: the callback queue has one item removed
  */
-BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -1194,7 +1194,7 @@ load_text_precondition (void)
   return interpret_bd == -1 && !buffer_queue_empty (&interpret_queue);
 }
 
-BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, int param)
+BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (LOAD_TEXT_NO, param);
@@ -1255,7 +1255,7 @@ process_text_precondition (void)
   return interpret_bd != -1 && !evaluating;
 }
 
-BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, int param)
+BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (PROCESS_TEXT_NO, param);
@@ -1281,7 +1281,7 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, int param)
 
    Post: ???
  */
-BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file", stdin, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -1303,7 +1303,7 @@ stdout_precondition (void)
   return buffer_file_size (&stdout_bf) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, int param)
+BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (STDOUT_NO, param);
@@ -1324,7 +1324,7 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, int para
    Pre:  ???
    Post: ???
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, ano_t ano, aid_t aid)
 {
   initialize ();
   scheduler_remove (START_NO, aid);
@@ -1345,7 +1345,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, aid_t aid)
 
    Post: ???
  */
-BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file", stdin_col, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file", stdin_col, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 

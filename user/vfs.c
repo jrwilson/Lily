@@ -740,7 +740,7 @@ end_output_action (bool output_fired,
 
    Post: the request is added to the request queue of the client or a response is added to the response queue of the client
  */
-BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   client_push_request (find_or_create_client (aid), bda, bdb);
@@ -754,7 +754,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
    Pre:  The client exists and has a response.
    Post: The first response for the client is removed.
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, ano_t ano, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_RESPONSE_NO, aid);
@@ -778,7 +778,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
    Pre:  ???
    Post: ???
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ano_t ano, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
@@ -801,7 +801,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
 
    Post:
  */
-BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 

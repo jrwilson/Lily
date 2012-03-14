@@ -543,7 +543,7 @@ public:
 	   buffer* output_buffer_a_,
 	   buffer* output_buffer_b_)
   {
-    // switch (action_.action->type) {
+    // switch (action.type) {
     // case INPUT:
     // 	kout << "?";
     // 	break;
@@ -557,7 +557,7 @@ public:
     // 	kout << "*";
     // 	break;
     // }
-    // kout << "\t" << action_.action->automaton->aid () << "\t" << action_.action->action_number << "\t" << action_.parameter << endl;
+    // kout << "\t" << aid_ << "\t" << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
     
     // Switch page directories.
     vm::switch_to_directory (page_directory);
@@ -598,6 +598,9 @@ public:
     
     // Push the parameter.
     *--stack_pointer = parameter;
+
+    // Push the action number.
+    *--stack_pointer = action.action_number;
     
     // Push a bogus instruction pointer so we can use the cdecl calling convention.
     *--stack_pointer = 0;
@@ -653,34 +656,8 @@ public:
   	  bd_t bdb);
 
   // The automaton would like to no longer exist.
-  inline void
-  exit (void)
-  {
-    // BUG
-    kassert (0);
-
-    // // Disable the automaton.
-    // disable ();
-
-    // // Tell the automaton and its children to forget their parents.
-    // automaton* parent = forget_parent ();
-
-    // // Remove all of the bindings.
-    // purge_bindings ();
-
-    // // Remove from the scheduler.
-    // remove_from_scheduler (a);
-
-    // // Forget all of the children.
-    // forget_children ();
-
-    // // Tell the parent to forget its child.
-    // if (parent != 0) {
-    //   parent->forget_child (a);
-    // }
-
-    // scheduler::finish (false, -1, -1);
-  }
+  void
+  exit (const shared_ptr<automaton>& ths);
 
   inline void
   unlock_execution ()
