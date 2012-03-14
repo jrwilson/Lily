@@ -284,7 +284,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = a->destroy (ptr->aid);
+      pair<bid_t, int> r = a->destroy (a, ptr->aid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

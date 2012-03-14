@@ -167,49 +167,21 @@ automaton::create_automaton (const kstring& name,
   return make_pair (child, LILY_SYSCALL_ESUCCESS);    
 }
 
-pair<int, int>
-automaton::unbind (const shared_ptr<automaton>& ths,
-		   bid_t bid)
+void
+automaton::unbind (const shared_ptr<binding>& binding,
+		   bool remove_from_output,
+		   bool remove_from_input,
+		   bool remove_from_owner)
 {
-  kassert (ths.get () == this);
-  
-  // Look up the binding.
-  bid_to_binding_map_type::iterator pos = bid_to_binding_map_.find (bid);
-  if (pos == bid_to_binding_map_.end ()) {
-    return make_pair (-1, LILY_SYSCALL_EBIDDNE);
-  }
-  
-  shared_ptr<binding> binding = pos->second;
-  
-  // Are we the owner?
-  if (binding->owner != ths) {
-    return make_pair (-1, LILY_SYSCALL_ENOTOWNER);
-  }
+  // Remove from the map.
+  size_t count = bid_to_binding_map_.erase (binding->bid);
+  kassert (count == 1);
   
   // Disable the binding.
   binding->bid = -1;
   
-  // Remove from the map.
-  bid_to_binding_map_.erase (pos);
-  
   // Unbind.
-  {
-    size_t count = owned_bindings_.erase (binding);
-    kassert (count == 1);
-  }
-  
-  {
-    shared_ptr<automaton> input_automaton = binding->input_action.automaton;
-    bound_inputs_map_type::iterator pos = input_automaton->bound_inputs_map_.find (binding->input_action);
-    kassert (pos != input_automaton->bound_inputs_map_.end ());
-    size_t count = pos->second.erase (binding);
-    kassert (count == 1);
-    if (pos->second.empty ()) {
-      input_automaton->bound_inputs_map_.erase (pos);
-    }
-  }
-  
-  {
+  if (remove_from_output) {
     shared_ptr<automaton> output_automaton = binding->output_action.automaton;
     bound_outputs_map_type::iterator pos = output_automaton->bound_outputs_map_.find (binding->output_action);
     kassert (pos != output_automaton->bound_outputs_map_.end ());
@@ -220,7 +192,22 @@ automaton::unbind (const shared_ptr<automaton>& ths,
     }
   }
   
-  // BUG:  Do something with subscribers.    
+  if (remove_from_input) {
+    shared_ptr<automaton> input_automaton = binding->input_action.automaton;
+    bound_inputs_map_type::iterator pos = input_automaton->bound_inputs_map_.find (binding->input_action);
+    kassert (pos != input_automaton->bound_inputs_map_.end ());
+    size_t count = pos->second.erase (binding);
+    kassert (count == 1);
+    if (pos->second.empty ()) {
+      input_automaton->bound_inputs_map_.erase (pos);
+    }
+  }
+  
+  if (remove_from_owner) {
+    size_t count = binding->owner->owned_bindings_.erase (binding);
+    kassert (count == 1);
+  }
+  
   for (binding::subscribers_type::const_iterator pos = binding->subscribers.begin ();
        pos != binding->subscribers.end ();
        ++pos) {
@@ -229,112 +216,146 @@ automaton::unbind (const shared_ptr<automaton>& ths,
     kassert (count == 1);
   }
   binding->subscribers.clear ();
-  
-  return make_pair (0, LILY_SYSCALL_ESUCCESS);
 }
 
-  // void
-  // remove_from_scheduler (automaton* a)
-  // {
-  //   scheduler::remove_automaton (a);
-
-  //   for (automaton::children_set_type::const_iterator pos = a->children_begin ();
-  //   	 pos != a->children_end ();
-  //   	 ++pos) {
-  //     remove_from_scheduler (*pos);
-  //   }
-  // }
-
-  // children_set_type::const_iterator
-  // children_begin () const
-  // {
-  //   return children_.begin ();
-  // }
-
-  // children_set_type::const_iterator
-  // children_end () const
-  // {
-  //   return children_.end ();
-  // }
-
-  // automaton*
-  // forget_parent (void)
-  // {
-  //   for (children_set_type::const_iterator pos = children_.begin ();
-  // 	 pos != children_.end ();
-  // 	 ++pos) {
-  //     (*pos)->forget_parent ();
-  //   }
-
-  //   if (parent_ != 0) {
-  //     parent_->decref ();
-  //   }
-  //   automaton* retval = parent_;
-  //   parent_ = 0;
-  //   return retval;
-  // }
-
-  // void
-  // forget_child (automaton* child)
-  // {
-  //   size_t count = children_.erase (child);
-  //   kassert (count == 1);
-  //   child->decref ();
-  // }
-
-  // void
-  // forget_children (void)
-  // {
-  //   for (children_set_type::const_iterator pos = children_.begin ();
-  // 	 pos != children_.end ();
-  // 	 ++pos) {
-  //     (*pos)->forget_children ();
-  //     (*pos)->decref ();
-  //   }
-
-  //   children_.clear ();
-  // }
-
-  // void
-  // disable ()
-  // {
-  //   if (enabled_) {
-  //     // Disable ourselves.
-  //     enabled_ = false;
-      
-  //     // Disable our bindings.
-  //     for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
-  // 	   pos != bound_outputs_map_.end ();
-  // 	   ++pos) {
-  // 	for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-  // 	     pos1 != pos->second.end ();
-  // 	     ++pos1) {
-  // 	  (*pos1)->disable ();
-  // 	}
-  //     }
-  //     for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
-  // 	   pos != bound_inputs_map_.end ();
-  // 	   ++pos) {
-  // 	for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-  // 	     pos1 != pos->second.end ();
-  // 	     ++pos1) {
-  // 	  (*pos1)->disable ();
-  // 	}
-  //     }
-  //     for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
-  // 	   pos1 != owned_bindings_.end ();
-  // 	   ++pos1) {
-  // 	(*pos1)->disable ();
-  //     }
-      
-  //     // Disable our children.
-  //     for (children_set_type::const_iterator pos = children_.begin ();
-  // 	   pos != children_.end ();
-  // 	   ++pos) {
-  // 	(*pos)->disable ();
-  //     }
-  //   }
-  // }
+void
+automaton::destroy (const shared_ptr<automaton>& ths)
+{
+  kassert (ths.get () == this);
+  
+  /*
+    Address the instance variables:
+    
+    aid_
+    name_
+    ano_to_action_map_
+    description_
+    regenerate_description_
+    parent_
+    children_
+    execution_mutex_
+    page_directory_
+    memory_map_
+    heap_area_
+    stack_area_
+    current_bd_
+    bd_to_buffer_map_
+    bound_outputs_map_
+    bound_inputs_map_
+    owned_bindings_
+    privileged_
+    mapped_areas_
+    port_set_
+    irq_map_
+    automaton_subscriptions_
+    subscribers_;
+    binding_subscriptions_
+  */
+  
+  aid_to_automaton_map_.erase (aid_);
+  aid_ = -1;
+  
+  if (name_.size () != 0) {
+    registry_map_.erase (name_);
+  }
+  
+  // Leave ano_to_action_map_ for dtor.
+  // Leave description_ for dtor.
+  // Leave regenterate_description_ for dtor.
+  
+  parent_ = shared_ptr<automaton> ();
+  
+  for (children_set_type::const_iterator pos = children_.begin ();
+       pos != children_.end ();
+       ++pos) {
+    (*pos)->destroy (*pos);
+  }
+  children_.clear ();
+  
+  // Leave execution_mutex_ for dtor.
+  // Leave page_directory_ for dtor.
+  // Leave memory_map_ for dtor.
+  // Leave heap_area_ for dtor.
+  // Leave stack_area_ for dtor.
+  // Leave current_bd_ for dtor.
+  // Leave bd_to_buffer_map_ for dtor.
+  
+  for (bound_outputs_map_type::const_iterator pos1 = bound_outputs_map_.begin ();
+       pos1 != bound_outputs_map_.end ();
+       ++pos1) {
+    for (binding_set_type::const_iterator pos2 = pos1->second.begin ();
+	 pos2 != pos1->second.end ();
+	 ++pos2) {
+      unbind (*pos2, false, true, true);
+    }
+  }
+  bound_outputs_map_.clear ();
+  
+  for (bound_inputs_map_type::const_iterator pos1 = bound_inputs_map_.begin ();
+       pos1 != bound_inputs_map_.end ();
+       ++pos1) {
+    for (binding_set_type::const_iterator pos2 = pos1->second.begin ();
+	 pos2 != pos1->second.end ();
+	 ++pos2) {
+      unbind (*pos2, true, false, true);
+    }
+  }
+  bound_inputs_map_.clear ();
+  
+  for (binding_set_type::const_iterator pos = owned_bindings_.begin ();
+       pos != owned_bindings_.end ();
+       ++pos) {
+    unbind (*pos, true, true, false);
+  }
+  owned_bindings_.clear ();
+  
+  // Leave privileged_ for dtor.
+  
+  for (mapped_areas_type::const_iterator pos = mapped_areas_.begin ();
+       pos != mapped_areas_.end ();
+       ++pos) {
+    physical_address_t pa = (*pos)->physical_begin;
+    for (logical_address_t la = (*pos)->begin ();
+	 la != (*pos)->end ();
+	 la += PAGE_SIZE, pa += PAGE_SIZE) {
+      mmapped_frames_[physical_address_to_frame (pa)] = false;
+      memory_map_type::iterator pos2 = find (memory_map_.begin (), memory_map_.end (), *pos);
+      kassert (pos2 != memory_map_.end ());
+      memory_map_.erase (pos2);
+      delete (*pos);
+    }
+  }
+  mapped_areas_.clear ();
+  
+  for (port_set_type::const_iterator pos = port_set_.begin ();
+       pos != port_set_.end ();
+       ++pos) {
+    reserved_ports_[*pos] = false;
+  }
+  port_set_.clear ();
+  
+  for (irq_map_type::const_iterator pos = irq_map_.begin ();
+       pos != irq_map_.end ();
+       ++pos) {
+    irq_handler::unsubscribe (pos->first, pos->second);
+  }
+  irq_map_.clear ();
+  
+  kassert (automaton_subscriptions_.empty ());
+  
+  for (subscribers_type::const_iterator pos = subscribers_.begin ();
+       pos != subscribers_.end ();
+       ++pos) {
+    scheduler::schedule (pos->second);
+    size_t count = pos->first->automaton_subscriptions_.erase (ths);
+    kassert (count == 1);
+  }
+  subscribers_.clear ();
+  
+  kassert (binding_subscriptions_.empty ());
+  
+  scheduler::remove_automaton (ths);
+}
 
   // pair<bd_t, int>
   // buffer_copy (bd_t other,
@@ -435,93 +456,4 @@ automaton::unbind (const shared_ptr<automaton>& ths,
   //   // Assign.
   //   dest_b->assign (dest_begin, *src_b, src_begin, src_end);
   //   return 0;
-  // }
-
-  // void
-  // purge_bindings (void)
-  // {
-  //   // Copy the bindings.
-  //   binding_set_type all_bindings;
-  //   for (bound_outputs_map_type::const_iterator pos = bound_outputs_map_.begin ();
-  //   	 pos != bound_outputs_map_.end ();
-  //   	 ++pos) {
-  //     for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-  //   	   pos1 != pos->second.end ();
-  //   	   ++pos1) {
-  // 	all_bindings.insert (*pos1);
-  //     }
-  //   }
-  //   for (bound_inputs_map_type::const_iterator pos = bound_inputs_map_.begin ();
-  //   	 pos != bound_inputs_map_.end ();
-  //   	 ++pos) {
-  //     for (binding_set_type::const_iterator pos1 = pos->second.begin ();
-  //   	   pos1 != pos->second.end ();
-  //   	   ++pos1) {
-  //   	all_bindings.insert (*pos1);
-  //     }
-  //   }
-  //   for (binding_set_type::const_iterator pos1 = owned_bindings_.begin ();
-  //   	 pos1 != owned_bindings_.end ();
-  //   	 ++pos1) {
-  //     all_bindings.insert (*pos1);
-  //   }
-
-  //   for (binding_set_type::const_iterator pos = all_bindings.begin ();
-  // 	 pos != all_bindings.end ();
-  // 	 ++pos) {
-  //     binding* b = *pos;
-  //     shared_ptr<automaton> output_automaton = b->output_action ().automaton;
-  //     shared_ptr<automaton> input_automaton = b->input_action ().automaton;
-  //     shared_ptr<automaton> owner = b->owner ();
-  //     lock_bindings_in_order (output_automaton, input_automaton, owner);
-  //     output_automaton->unbind_output (b);
-  //     input_automaton->unbind_input (b);
-  //     owner->unbind (b);
-  //     unlock_bindings_in_order (output_automaton, input_automaton, owner);
-  //   }
-
-  //   kassert (bound_outputs_map_.empty ());
-  //   kassert (bound_inputs_map_.empty ());
-  //   kassert (owned_bindings_.empty ());
-
-  //   for (children_set_type::const_iterator pos = children_.begin ();
-  // 	 pos != children_.end ();
-  // 	 ++pos) {
-  //     (*pos)->purge_bindings ();
-  //   }
-  // }
-
-  // inline void
-  // unbind_output (const shared_ptr<binding>& b)
-  // {
-  //   kassert (b->output_action ().automaton.get () == this);
-
-  //   bound_outputs_map_type::iterator pos = bound_outputs_map_.find (b->output_action ());
-  //   kassert (pos != bound_outputs_map_.end ());
-  //   size_t count = pos->second.erase (b);
-  //   kassert (count == 1);
-  //   if (pos->second.empty ()) {
-  //     bound_outputs_map_.erase (pos);
-  //   }
-  // }
-
-  // inline void
-  // unbind_input (const shared_ptr<binding>& b)
-  // {
-  //   kassert (b->input_action ().automaton.get () == this);
-
-  //   bound_inputs_map_type::iterator pos = bound_inputs_map_.find (b->input_action ());
-  //   kassert (pos != bound_inputs_map_.end ());
-  //   size_t count = pos->second.erase (b);
-  //   kassert (count == 1);
-  //   if (pos->second.empty ()) {
-  //     bound_inputs_map_.erase (pos);
-  //   }
-  // }
-
-  // inline void
-  // unbind (const shared_ptr<binding>& b)
-  // {
-  //   size_t count = owned_bindings_.erase (b);
-  //   kassert (count == 1);
   // }

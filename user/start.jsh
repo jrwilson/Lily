@@ -19,12 +19,9 @@ bind @terminal vga_op @vga vga_op
 bind @this stdout @terminal text
 
 @hello_world = create /bin/hello_world
-&x = bind @this start @hello_world start
+destroy @hello_world
 
-unbind &x
-
-
-
+#bind @this start @hello_world start
 #bind @hello_world stdout @this stdin_col
 #start @hello_world
 

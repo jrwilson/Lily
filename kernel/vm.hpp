@@ -372,22 +372,27 @@ namespace vm {
 
   inline void
   unmap (logical_address_t logical_addr,
-	 bool decref = true)
+	 bool decref = true,
+	 bool error_if_not_present = true)
   {
     page_directory* page_directory = get_page_directory ();
     page_table* page_table = get_page_table (logical_addr);
     const page_table_idx_t directory_entry = get_page_directory_idx (logical_addr);
     const page_table_idx_t table_entry = get_page_table_idx (logical_addr);
     
-    kassert (page_directory->entry[directory_entry].present_ == PRESENT);
-    kassert (page_table->entry[table_entry].present_ == PRESENT);
-
-    if (decref) {
-      frame_manager::decref (page_table->entry[table_entry].frame_);
+    if (page_directory->entry[directory_entry].present_ == PRESENT &&
+	page_table->entry[table_entry].present_ == PRESENT) {
+      if (decref) {
+	frame_manager::decref (page_table->entry[table_entry].frame_);
+      }
+      page_table->entry[table_entry] = page_table_entry ();
+      /* Flush the TLB. */
+      asm ("invlpg (%0)\n" :: "r"(logical_addr));
     }
-    page_table->entry[table_entry] = page_table_entry ();
-    /* Flush the TLB. */
-    asm ("invlpg (%0)\n" :: "r"(logical_addr));
+    else if (error_if_not_present) {
+      kassert (0);
+    }
+
   }
 
   inline void
@@ -447,10 +452,9 @@ namespace vm {
   inline physical_address_t
   get_directory ()
   {
-    /* Switch to the page directory returning the old one. */
-    physical_address_t old;
-    asm ("mov %%cr3, %0\n" : "=r"(old));
-    return old;
+    physical_address_t dir;
+    asm ("mov %%cr3, %0\n" : "=r"(dir));
+    return dir;
   }
 
   inline physical_address_t

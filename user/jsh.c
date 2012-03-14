@@ -46,6 +46,20 @@ create_automaton (aid_t aid,
   automaton_head = a;
 }
 
+static void
+destroy_automaton (automaton_t* b)
+{
+  automaton_t** ptr;
+  for (ptr = &automaton_head; *ptr != 0; ptr = &(*ptr)->next) {
+    if ((*ptr) == b) {
+      *ptr = b->next;
+      free (b->name);
+      free (b);
+      return;
+    }
+  }
+}
+
 static automaton_t*
 find_automaton (const char* name,
 		size_t size)
@@ -509,6 +523,37 @@ unbind_ ()
 }
 
 static void
+destroy_ ()
+{
+  /* Get the argument tokens. */
+  token_list_item_t* automaton_token;
+  if ((automaton_token = accept (AUTOMATON_VAR)) == 0) {
+    syslog ("TODO:  Expected an automaton variable");
+    return;
+  }
+
+  if (current_token != 0) {
+    syslog ("TODO:  Expected no more tokens");
+    return;
+  }
+
+  /* Look up the automaton variable. */
+  automaton_t* automaton = find_automaton (automaton_token->string, automaton_token->size);
+  if (automaton == 0) {
+    syslog ("TODO:  Automaton is not defined");
+    return;
+  }
+
+  syslog ("TODO:  Unsubscribe from automaton??");
+
+  if (destroy (automaton->aid) != 0) {
+    syslog ("TODO:  destroy failed");
+  }
+
+  destroy_automaton (automaton);
+}
+
+static void
 start_ (void)
 {
   /* Get the argument token. */
@@ -589,6 +634,10 @@ statement (void)
     }
     else if (strncmp ("unbind", t->string, t->size) == 0) {
       unbind_ ();
+      return;
+    }
+    else if (strncmp ("destroy", t->string, t->size) == 0) {
+      destroy_ ();
       return;
     }
     else if (strncmp ("start", t->string, t->size) == 0) {

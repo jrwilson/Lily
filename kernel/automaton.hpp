@@ -32,24 +32,6 @@
 #include "lock.hpp"
 #include "shared_ptr.hpp"
 
-/*
-  Thread Safety
-  =============
-  Protected by id_mutex_:
-  * current_aid_
-  * aid_to_automaton_map_
-  * registry_map_
-
-  Protected by mod_mutex_:
-  * enabled_ (can read to optimize check as it only transitions from true to false)
-  * ano_to_action_map_
-  * parent_
-  * children_
-
-  In the create functions, the locking order is id_mutex_, parent->mod_mutex_, and then child->mod_mutex_.
-
- */
-
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
 static const logical_address_t STACK_BEGIN = STACK_END - PAGE_SIZE;
@@ -161,6 +143,13 @@ public:
   /*
    * BINDING
    */
+
+private:
+  static void
+  unbind (const shared_ptr<binding>& binding,
+	  bool remove_from_output,
+	  bool remove_from_input,
+	  bool remove_from_owner);
 
   /*
    * I/O
@@ -274,8 +263,8 @@ private:
   typedef unordered_set<shared_ptr<automaton> > automaton_subscriptions_type;
   automaton_subscriptions_type automaton_subscriptions_;
   // Automata that receive notification when this automaton is destroyed.
-  typedef unordered_set<shared_ptr<automaton> > subscribers_set_type;
-  subscribers_set_type subscribers_;
+  typedef unordered_map<shared_ptr<automaton>, caction> subscribers_type;
+  subscribers_type subscribers_;
   // Bindings to which this automaton is subscribed.
   typedef unordered_set<shared_ptr<binding> > binding_subscriptions_type;
   binding_subscriptions_type binding_subscriptions_;
@@ -427,7 +416,7 @@ public:
    * AUTOMATA HIERARCHY
    */
   
-  pair<aid_t, int>
+  inline pair<aid_t, int>
   create (const shared_ptr<automaton>& ths,
 	  bd_t text_bd,
 	  size_t /*text_size*/,
@@ -478,11 +467,61 @@ public:
     }
   }
   
-  pair<int, int>
-  destroy (aid_t aid)
+private:
+  inline void
+  unsubscribe (const shared_ptr<automaton>& ths)
   {
-    // BUG
-    kassert (0);
+    kassert (ths.get () == this);
+
+    for (automaton_subscriptions_type::const_iterator pos = automaton_subscriptions_.begin ();
+	 pos != automaton_subscriptions_.end ();
+	 ++pos) {
+      size_t count = (*pos)->subscribers_.erase (ths);
+      kassert (count == 1);
+    }
+    automaton_subscriptions_.clear ();
+
+    for (binding_subscriptions_type::const_iterator pos = binding_subscriptions_.begin ();
+	 pos != binding_subscriptions_.end ();
+	 ++pos) {
+      size_t count = (*pos)->subscribers.erase (ths);
+      kassert (count == 1);
+    }
+    binding_subscriptions_.clear ();
+
+    for (children_set_type::const_iterator pos = children_.begin ();
+	 pos != children_.end ();
+	 ++pos) {
+      (*pos)->unsubscribe (*pos);
+    }
+  }
+
+  void
+  destroy (const shared_ptr<automaton>& ths);
+
+public:
+  inline pair<int, int>
+  destroy (const shared_ptr<automaton>& ths,
+	   aid_t aid)
+  {
+    aid_to_automaton_map_type::iterator pos = aid_to_automaton_map_.find (aid);
+    if (pos == aid_to_automaton_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+    }
+
+    shared_ptr<automaton> child = pos->second;
+
+    // Are we the parent?
+    if (child->parent_ != ths) {
+      return make_pair (-1, LILY_SYSCALL_ENOTOWNER);
+    }
+
+    child->unsubscribe (child);
+    child->destroy (child);
+
+    size_t count = children_.erase (child);
+    kassert (count == 1);
+
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
@@ -807,6 +846,15 @@ public:
     memory_map_type::iterator pos = upper_bound (memory_map_.begin (), memory_map_.end (), area, compare_vm_area ());
     memory_map_.insert (pos, area);
   }
+  
+  inline void
+  remove_vm_area (vm_area_base* area)
+  {
+    // TODO:  Use binary search.
+    memory_map_type::iterator pos = find (memory_map_.begin (), memory_map_.end (), area);
+    kassert (pos != memory_map_.end ());
+    memory_map_.erase (pos);
+  }
 
 private:
   inline bool
@@ -1066,7 +1114,7 @@ public:
     
     if (b->begin () != 0) {
       // Remove from the memory map.
-      memory_map_.erase (find_address (b->begin ()));
+      remove_vm_area (b);
       
       // Unmap the buffer.	
       b->unmap ();
@@ -1082,16 +1130,14 @@ public:
     if (bpos != bd_to_buffer_map_.end ()) {
       buffer* b = bpos->second;
 
-      if (b->begin () != 0) {
-	// Remove from the memory map.
-	memory_map_.erase (find_address (b->begin ()));
-
-	// Unmap the buffer.	
-	b->unmap ();
-      }
-
       // Remove from the bd map.
       bd_to_buffer_map_.erase (bpos);
+
+      if (b->begin () != 0) {
+	// Remove from the memory map.
+	remove_vm_area (b);
+	// Buffer will be unmapped automatically when destroyed.
+      }
 
       // Destroy it.
       delete b;
@@ -1279,10 +1325,31 @@ public:
     return make_pair (b->bid, LILY_SYSCALL_ESUCCESS);
   }
 
-  pair<int, int>
-  unbind (const shared_ptr<automaton>& ths,
-	  bid_t bid);
 
+  inline pair<int, int>
+  unbind (const shared_ptr<automaton>& ths,
+	  bid_t bid)
+  {
+    kassert (ths.get () == this);
+    
+    // Look up the binding.
+    bid_to_binding_map_type::iterator pos = bid_to_binding_map_.find (bid);
+    if (pos == bid_to_binding_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EBIDDNE);
+    }
+    
+    shared_ptr<binding> binding = pos->second;
+    
+    // Are we the owner?
+    if (binding->owner != ths) {
+      return make_pair (-1, LILY_SYSCALL_ENOTOWNER);
+    }
+    
+    unbind (binding, true, true, true);
+    
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+  
   /*
    * I/O
    */
@@ -1372,9 +1439,7 @@ public:
 
     mapped_areas_.erase (pos);
 
-    memory_map_type::iterator pos2 = find (memory_map_.begin (), memory_map_.end (), area);
-    kassert (pos2 != memory_map_.end ());
-    memory_map_.erase (pos2);
+    remove_vm_area (area);
     
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
@@ -1634,7 +1699,7 @@ public:
     shared_ptr<automaton> subject = subject_pos->second;
 
     automaton_subscriptions_.insert (subject);
-    subject->subscribers_.insert (ths);
+    subject->subscribers_.insert (make_pair (ths, caction (ths, action, subject->aid_)));
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
@@ -1701,94 +1766,133 @@ private:
 public:
   ~automaton ()
   {
-    // BUG
-    kassert (0);
+    /*
+      Address the instance variables:
+      
+      aid_
+      name_
+      ano_to_action_map_
+      description_
+      regenerate_description_
+      parent_
+      children_
+      execution_mutex_
+      page_directory_
+      memory_map_
+      heap_area_
+      stack_area_
+      current_bd_
+      bd_to_buffer_map_
+      bound_outputs_map_
+      bound_inputs_map_
+      owned_bindings_
+      privileged_
+      mapped_areas_
+      port_set_
+      irq_map_
+      automaton_subscriptions_
+      subscribers_;
+      binding_subscriptions_
+    */
 
-    // /*
-    //  * IDENTIFICATION
-    //  */
-
-    // size_t count = aid_to_automaton_map_.erase (aid_);
-    // kassert (count == 1);
-
-    // /*
-    //  * DESCRIPTION
-    //  */
-
-    // for (ano_to_action_map_type::const_iterator pos = ano_to_action_map_.begin ();
-    // 	 pos != ano_to_action_map_.end ();
-    // 	 ++pos) {
-    //   delete pos->second;
-    // }
+    kassert (aid_ == -1);
     
-    // /*
-    //  * AUTOMATA HIERARCHY
-    //  */
+    // Nothing for name_.
+    for (ano_to_action_map_type::const_iterator pos = ano_to_action_map_.begin ();
+    	 pos != ano_to_action_map_.end ();
+    	 ++pos) {
+      delete pos->second;
+    }
+    // Nothing for description_.
+    // Nothing for regenerate_description_.
+    kassert (parent_.get () == 0);
+    kassert (children_.empty ());
+    kassert (!execution_mutex_.locked ());
+
+    // We need to switch to this automaton's page directory to take apart the memory map.
+    // Either we are already using this automaton's memory map or we are using someone else's (including the kernel).
+    // If we were using our own, pretend we were using the kernel.
+    physical_address_t old_page_directory;
+    if (vm::get_directory () == page_directory) {
+      old_page_directory = vm::get_kernel_page_directory_physical_address ();
+    }
+    else {
+      old_page_directory = vm::switch_to_directory (page_directory);
+    }
+
+    // Nothing for current_bd_.
+    for (bd_to_buffer_map_type::const_iterator pos = bd_to_buffer_map_.begin ();
+	 pos != bd_to_buffer_map_.end ();
+	 ++pos) {
+      // Remove from the memory map.
+      remove_vm_area (pos->second);
+      // Destroy it.  (This will also unmap it if necessary.)
+      delete pos->second;
+    }
+
+    // Nothing for heap_area_.
+    // Nothing for stack_area_.
+
+    /*
+      The tricky part is returning all of the frames used by this automaton.
+      Let's start by reviewing the memory map of an automaton.
+      
+      0-KERNEL_VIRTUAL_BASE		: Memory mapped I/O regions, text, data, heap, buffers, stack in roughly that order
+      KERNEL_VIRTUAL_BASE - PAGING_AREA : Kernel text and data
+      PAGING_AREA - end			: Page tables and page directory.
+
+      The frames occupied by memory mapped I/O regions are not managed by the frame manager, thus, we should ignore them.
+      Note that all of the mapped_areas were removed from memory_map_ in destroy ().
+
+      Buffers need to be synchronized before they are destroyed due to copy-on-write semantics.
+      The preceding code destroys all of the buffers.
+
+      Thus, we need to be concerned with (1) the text/data/heap/stack frames, (2) the kernel, and (3) the paging area.
+      First, we will remove (1).
+     */
+
+    for (memory_map_type::const_iterator pos = memory_map_.begin ();
+	 pos != memory_map_.end ();
+	 ++pos) {
+      for (logical_address_t la = (*pos)->begin ();
+	   la < (*pos)->end ();
+	   la += PAGE_SIZE) {
+	// No error if not mapped.
+	// We need this because regions overlap.
+	vm::unmap (la, true, false);
+      }
+
+      delete (*pos);
+    }
+
+    /* To remove (2) and (3) we scan the page directory for page tables that are present and decref the frame.
+       This works because all of these frames including the kernel are reference counted.
+     */
+    vm::page_directory* dir = vm::get_page_directory ();
+    for (page_table_idx_t idx = 0; idx != PAGE_ENTRY_COUNT; ++idx) {
+      if (dir->entry[idx].present_ == vm::PRESENT) {
+	frame_manager::decref (dir->entry[idx].frame_);
+      }
+    }
+
+    /* Switch back to the old page directory. */
+    vm::switch_to_directory (old_page_directory);
+
+    /* The page directory has a reference from when we allocated it.
+       Drop the reference count. */
+    size_t count = frame_manager::decref (physical_address_to_frame (page_directory));
+    kassert (count == 0);
     
-    // // kassert (parent_ == 0);
-    // kassert (children_.empty ());
-    
-    // /*
-    //  * EXECUTION
-    //  */
-
-    // //kassert (!enabled_);
-    
-    // /*
-    //  * MEMORY MAP AND BUFFERS
-    //  */
-    
-    // count = frame_manager::decref (physical_address_to_frame (page_directory));
-    // kassert (count == 1);
-    // count = frame_manager::decref (physical_address_to_frame (page_directory));
-    // kassert (count == 0);
-
-    // /*
-    //  * BINDING
-    //  */
-
-    // kassert (bound_outputs_map_.empty ());
-    // kassert (bound_inputs_map_.empty ());
-    // kassert (owned_bindings_.empty ());
-    
-    // /*
-    //  * I/O
-    //  */
-
-    // for (mapped_areas_type::const_iterator pos = mapped_areas_.begin ();
-    // 	 pos != mapped_areas_.end ();
-    // 	 ++pos) {
-    //   mapped_area* area = *pos;
-    //   memory_map_.erase (find (memory_map_.begin (), memory_map_.end (), area));
-
-    //   for (physical_address_t address = area->physical_begin;
-    // 	   address != area->physical_end;
-    // 	   address += PAGE_SIZE) {
-    // 	mmapped_frames_[physical_address_to_frame (address)] = false;
-    //   }
-
-    //   delete area;
-    // }
-
-    // for (port_set_type::const_iterator pos = port_set_.begin ();
-    // 	 pos != port_set_.end ();
-    // 	 ++pos) {
-    //   reserved_ports_[*pos] = false;
-    // }
-
-    // for (irq_map_type::const_iterator pos = irq_map_.begin ();
-    // 	 pos != irq_map_.end ();
-    // 	 ++pos) {
-    //   irq_handler::unsubscribe (pos->first, pos->second);
-    // }
-    
-    // /*
-    //  * SUBSCRIPTIONS
-    //  */
-    
-    // /*
-    //  * CREATION AND DESTRUCTION
-    //  */
+    kassert (bound_outputs_map_.empty ());
+    kassert (bound_inputs_map_.empty ());
+    kassert (owned_bindings_.empty ());
+    // Nothing for privileged_.
+    kassert (mapped_areas_.empty ());
+    kassert (port_set_.empty ());
+    kassert (irq_map_.empty ());
+    kassert (automaton_subscriptions_.empty ());
+    kassert (subscribers_.empty ());
+    kassert (binding_subscriptions_.empty ());
   }
 
 };
