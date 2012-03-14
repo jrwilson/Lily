@@ -319,7 +319,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   initialize ();
 
   vfs_fs_type_t type;
-  if (read_vfs_fs_request_type (bda, bdb, &type) == -1) {
+  if (read_vfs_fs_request_type (bda, bdb, &type) != 0) {
     vfs_fs_response_queue_push_bad_request (&response_queue, type);
     end_input_action (bda, bdb);
   }
@@ -331,7 +331,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
       const char* name;
       size_t name_size;
       vfs_fs_node_t no_node;
-      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) == -1) {
+      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) != 0) {
   	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node);
   	end_input_action (bda, bdb);
       }
@@ -371,7 +371,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   case VFS_FS_READFILE:
     {
       size_t id;
-      if (read_vfs_fs_readfile_request (bda, bdb, &id) == -1) {
+      if (read_vfs_fs_readfile_request (bda, bdb, &id) != 0) {
   	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1);
   	end_input_action (bda, bdb);
       }
@@ -393,7 +393,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   	end_input_action (bda, bdb);
       }
 
-      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) == -1) {
+      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
 	syslog ("tmpfs: error: Could not enqueue readfile response");
 	exit ();
       }
@@ -421,7 +421,7 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
   scheduler_remove (TMPFS_RESPONSE_NO, 0);
 
   if (response_precondition ()) {
-    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) == -1) {
+    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
       syslog ("tmpfs: error: Could not write output buffer");
       exit ();
     }

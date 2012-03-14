@@ -271,7 +271,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      pair<bid_t, int> r = a->unbind (ptr->bid);
+      pair<bid_t, int> r = a->unbind (a, ptr->bid);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

@@ -754,7 +754,7 @@ ascii_func (symbol_t symbol,
       }
     }
 
-    if (buffer_file_put (&output_buffer, c) == -1) {
+    if (buffer_file_put (&output_buffer, c) != 0) {
       syslog ("kb_us_104: errro: Could not write to output buffer");
       exit ();
     }
@@ -784,7 +784,7 @@ up_func (symbol_t symbol,
 	 bool make)
 {
   if (make) {
-    if (buffer_file_puts (&output_buffer, "\e[A") == -1) {
+    if (buffer_file_puts (&output_buffer, "\e[A") != 0) {
       syslog ("kb_us_104: errro: Could not write to output buffer");
       exit ();
     }
@@ -796,7 +796,7 @@ down_func (symbol_t symbol,
 	   bool make)
 {
   if (make) {
-    if (buffer_file_puts (&output_buffer, "\e[B") == -1) {
+    if (buffer_file_puts (&output_buffer, "\e[B") != 0) {
       syslog ("kb_us_104: errro: Could not write to output buffer");
       exit ();
     }
@@ -808,7 +808,7 @@ left_func (symbol_t symbol,
 	   bool make)
 {
   if (make) {
-    if (buffer_file_puts (&output_buffer, "\e[D") == -1) {
+    if (buffer_file_puts (&output_buffer, "\e[D") != 0) {
       syslog ("kb_us_104: errro: Could not write to output buffer");
       exit ();
     }
@@ -820,7 +820,7 @@ right_func (symbol_t symbol,
 	    bool make)
 {
   if (make) {
-    if (buffer_file_puts (&output_buffer, "\e[C") == -1) {
+    if (buffer_file_puts (&output_buffer, "\e[C") != 0) {
       syslog ("kb_us_104: errro: Could not write to output buffer");
       exit ();
     }
@@ -839,7 +839,7 @@ initialize (void)
       syslog ("kb_us_104: error: Could not create output buffer");
       exit ();
     }
-    if (buffer_file_initw (&output_buffer, output_buffer_bd) == -1) {
+    if (buffer_file_initw (&output_buffer, output_buffer_bd) != 0) {
       syslog ("kb_us_104: error: Could not initialize output buffer");
       exit ();
     }
@@ -1073,7 +1073,7 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, 
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) == -1) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     end_input_action (bda, bdb);
   }
 

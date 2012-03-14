@@ -23,12 +23,12 @@
 class automaton;
 
 struct binding {
-  bid_t const bid;
+  bid_t bid;
   caction const output_action;
   caction const input_action;
   shared_ptr<automaton> const owner;
-  unordered_set<shared_ptr<automaton> > subscribers;
-  bool enabled;
+  typedef unordered_map<shared_ptr<automaton>, caction> subscribers_type;
+  subscribers_type subscribers;
 
   binding (bid_t b,
 	   const caction& oa,
@@ -37,13 +37,18 @@ struct binding {
     bid (b),
     output_action (oa),
     input_action (ia),
-    owner (o),
-    enabled (true)
+    owner (o)
   { }
 
   ~binding () {
-    // BUG:  Return the bid.  This also needs to be atomic.
-    kassert (0);
+    kassert (bid == -1);
+    kassert (subscribers.empty ());
+  }
+
+  bool
+  enabled () const
+  {
+    return bid != -1;
   }
 };
 

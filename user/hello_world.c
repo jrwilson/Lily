@@ -36,7 +36,7 @@ initialize (void)
       syslog ("jsh: error: Could not create stdout buffer");
       exit ();
     }
-    if (buffer_file_initw (&stdout_bf, stdout_bd) == -1) {
+    if (buffer_file_initw (&stdout_bf, stdout_bd) != 0) {
       syslog ("jsh: error: Could not initialize stdout buffer");
       exit ();
     }

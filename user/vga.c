@@ -467,7 +467,7 @@ create_client_context (aid_t aid)
   context->next = context_list_head;
   context_list_head = context;
 
-  if (subscribe_destroyed (aid, DESTROYED_NO) == -1) {
+  if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
     syslog ("vga: Could not subscribe to client automaton");
     exit ();
   }
@@ -527,22 +527,22 @@ initialize (void)
 {
   if (!initialized) {
     /* Reserve all of the VGA ports.*/
-    if (reserve_port (MISCELLANEOUS_OUTPUT_PORT_READ) == -1 ||
-	reserve_port (MISCELLANEOUS_OUTPUT_PORT_WRITE) == -1 ||
-	reserve_port (FEATURE_CONTROL_PORT_READ) == -1 ||
-	reserve_port (FEATURE_CONTROL_PORT_WRITE) == -1 ||
-	reserve_port (SEQUENCER_ADDRESS_PORT) == -1 ||
-	reserve_port (SEQUENCER_DATA_PORT) == -1 ||
-	reserve_port (CRT_ADDRESS_PORT) == -1 ||
-	reserve_port (CRT_DATA_PORT) == -1 ||
-	reserve_port (GRAPHICS_ADDRESS_PORT) == -1 ||
-	reserve_port (GRAPHICS_DATA_PORT) == -1) {
+    if (reserve_port (MISCELLANEOUS_OUTPUT_PORT_READ) != 0 ||
+	reserve_port (MISCELLANEOUS_OUTPUT_PORT_WRITE) != 0 ||
+	reserve_port (FEATURE_CONTROL_PORT_READ) != 0 ||
+	reserve_port (FEATURE_CONTROL_PORT_WRITE) != 0 ||
+	reserve_port (SEQUENCER_ADDRESS_PORT) != 0 ||
+	reserve_port (SEQUENCER_DATA_PORT) != 0 ||
+	reserve_port (CRT_ADDRESS_PORT) != 0 ||
+	reserve_port (CRT_DATA_PORT) != 0 ||
+	reserve_port (GRAPHICS_ADDRESS_PORT) != 0 ||
+	reserve_port (GRAPHICS_DATA_PORT) != 0) {
       syslog ("vga: Could not reserve vga ports");
       exit ();
     }
 
     /* Map in the video memory. */
-    if (map ((const void*)VIDEO_MEMORY_BEGIN, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE) == -1) {
+    if (map ((const void*)VIDEO_MEMORY_BEGIN, (const void*)VIDEO_MEMORY_BEGIN, VIDEO_MEMORY_SIZE) != 0) {
       syslog ("vga: Could not map vga memory");
       exit ();
     }
@@ -618,7 +618,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
 
   vga_op_list_t vol;
   size_t count;
-  if (vga_op_list_initr (&vol, bda, bdb, &count) == -1) {
+  if (vga_op_list_initr (&vol, bda, bdb, &count) != 0) {
     end_input_action (bda, bdb);
   }
 
@@ -632,7 +632,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
 
   for (size_t i = 0; i != count; ++i) {
     vga_op_type_t type;
-    if (vga_op_list_next_op_type (&vol, &type) == -1) {
+    if (vga_op_list_next_op_type (&vol, &type) != 0) {
       end_input_action (bda, bdb);
     }
 
@@ -640,7 +640,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
     case VGA_SET_START_ADDRESS:
       {
   	size_t address;
-  	if (vga_op_list_read_set_start_address (&vol, &address) == -1) {
+  	if (vga_op_list_read_set_start_address (&vol, &address) != 0) {
 	  end_input_action (bda, bdb);
   	}
   	set_start_address (&context->registers, address);
@@ -649,7 +649,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
     case VGA_SET_CURSOR_LOCATION:
       {
   	size_t location;
-  	if (vga_op_list_read_set_cursor_location (&vol, &location) == -1) {
+  	if (vga_op_list_read_set_cursor_location (&vol, &location) != 0) {
 	  end_input_action (bda, bdb);
   	}
   	set_cursor_location (&context->registers, location);
@@ -660,7 +660,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t a
   	size_t address;
   	const void* data;
   	size_t size;
-  	if (vga_op_list_read_assign (&vol, &address, &data, &size) == -1) {
+  	if (vga_op_list_read_assign (&vol, &address, &data, &size) != 0) {
 	  end_input_action (bda, bdb);
   	}
   	assign (context, address, data, size);

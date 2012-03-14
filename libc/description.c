@@ -12,7 +12,7 @@ description_init (description_t* d,
   if (bd == -1) {
     return -1;
   }
-  if (buffer_file_initr (&d->bf, bd) == -1) {
+  if (buffer_file_initr (&d->bf, bd) != 0) {
     return -1;
   }
   return 0;
@@ -29,7 +29,7 @@ description_name_to_number (description_t* d,
 			    const char* action_name,
 			    size_t size)
 {
-  if (buffer_file_seek (&d->bf, 0) == -1) {
+  if (buffer_file_seek (&d->bf, 0) != 0) {
     return NO_ACTION;
   }
 

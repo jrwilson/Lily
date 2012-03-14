@@ -106,7 +106,7 @@ readfile_callback (void* data,
 {
   vfs_error_t error;
   size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
+  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
     syslog ("boot_automaton: error: vfs provided bad readfile response");
     exit ();
   }
@@ -120,17 +120,17 @@ readfile_callback (void* data,
   bd_t bd2;
 
   argv_t argv;
-  if (argv_initw (&argv, &bd1, &bd2) == -1) {
+  if (argv_initw (&argv, &bd1, &bd2) != 0) {
     syslog ("boot_automaton: error: Could not initialize argv");
     exit ();
   }
 
-  if (argv_append (&argv, SHELL_PATH, strlen (SHELL_PATH) + 1) == -1) {
+  if (argv_append (&argv, SHELL_PATH, strlen (SHELL_PATH) + 1) != 0) {
     syslog ("boot_automaton: error: Could not write to argv");
     exit ();
   }
 
-  if (argv_append (&argv, SHELL_CMDLINE, strlen (SHELL_CMDLINE) + 1) == -1) {
+  if (argv_append (&argv, SHELL_CMDLINE, strlen (SHELL_CMDLINE) + 1) != 0) {
     syslog ("boot_automaton: error: Could not write to argv");
     exit ();
   }
@@ -149,7 +149,7 @@ mount_callback (void* data,
 		bd_t bdb)
 {
   vfs_error_t error;
-  if (read_vfs_mount_response (bda, bdb, &error) == -1) {
+  if (read_vfs_mount_response (bda, bdb, &error) != 0) {
     syslog ("boot_automaton: error: vfs provided bad mount response");
     exit ();
   }
@@ -177,7 +177,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
   initialize ();
 
   cpio_archive_t archive;
-  if (cpio_archive_init (&archive, bda) == -1) {
+  if (cpio_archive_init (&archive, bda) != 0) {
     syslog ("boot_automaton: error: Could not initialize cpio archive");
     exit ();
   }
@@ -212,7 +212,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t boot_aid, bd_t bda, bd_t bdb)
 
   /* Bind to the vfs so we can mount the tmpfs. */
   description_t vfs_description;
-  if (description_init (&vfs_description, vfs) == -1) {
+  if (description_init (&vfs_description, vfs) != 0) {
     syslog ("boot_automaton: error: Could not describe vfs");
     exit ();
   }
@@ -269,7 +269,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) == -1) {
+    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
       syslog ("boot_automaton: error: Could not write to output buffer");
       exit ();
     }

@@ -167,55 +167,70 @@ automaton::create_automaton (const kstring& name,
   return make_pair (child, LILY_SYSCALL_ESUCCESS);    
 }
 
-pair<aid_t, int>
-automaton::create (const shared_ptr<automaton>& ths,
-		   bd_t text_bd,
-		   size_t /*text_size*/,
-		   bd_t bda,
-		   bd_t bdb,
-		   const char* name,
-		   size_t name_size,
-		   bool retain_privilege)
+pair<int, int>
+automaton::unbind (const shared_ptr<automaton>& ths,
+		   bid_t bid)
 {
   kassert (ths.get () == this);
-
-  // Check the name data.
-  if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
-    return make_pair (-1, LILY_SYSCALL_EINVAL);
-  }
-
-  // Check that the name does not exist.
-  kstring name_str (name, name_size);
-  if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
-    return make_pair (-1, LILY_SYSCALL_EEXISTS);
+  
+  // Look up the binding.
+  bid_to_binding_map_type::iterator pos = bid_to_binding_map_.find (bid);
+  if (pos == bid_to_binding_map_.end ()) {
+    return make_pair (-1, LILY_SYSCALL_EBIDDNE);
   }
   
-  // Find the text buffer.
-  buffer* text_buffer = lookup_buffer (text_bd);
-  if (text_buffer == 0) {
-    // Buffer does not exist.
-    return make_pair (-1, LILY_SYSCALL_EBDDNE);
-  }
-
-  // Find and synchronize the data buffers so the frames listed in the buffers are correct.
-  buffer* buffer_a = lookup_buffer (bda);
-  if (buffer_a != 0) {
-    buffer_a->sync (0, buffer_a->size ());
-  }
-  buffer* buffer_b = lookup_buffer (bdb);
-  if (buffer_b != 0) {
-    buffer_b->sync (0, buffer_b->size ());
+  shared_ptr<binding> binding = pos->second;
+  
+  // Are we the owner?
+  if (binding->owner != ths) {
+    return make_pair (-1, LILY_SYSCALL_ENOTOWNER);
   }
   
-  // Create the automaton.
-  pair<shared_ptr<automaton>, int> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
-
-  if (r.first.get () != 0) {
-    return make_pair (r.first->aid (), r.second);
+  // Disable the binding.
+  binding->bid = -1;
+  
+  // Remove from the map.
+  bid_to_binding_map_.erase (pos);
+  
+  // Unbind.
+  {
+    size_t count = owned_bindings_.erase (binding);
+    kassert (count == 1);
   }
-  else {
-    return make_pair (-1, r.second);
+  
+  {
+    shared_ptr<automaton> input_automaton = binding->input_action.automaton;
+    bound_inputs_map_type::iterator pos = input_automaton->bound_inputs_map_.find (binding->input_action);
+    kassert (pos != input_automaton->bound_inputs_map_.end ());
+    size_t count = pos->second.erase (binding);
+    kassert (count == 1);
+    if (pos->second.empty ()) {
+      input_automaton->bound_inputs_map_.erase (pos);
+    }
   }
+  
+  {
+    shared_ptr<automaton> output_automaton = binding->output_action.automaton;
+    bound_outputs_map_type::iterator pos = output_automaton->bound_outputs_map_.find (binding->output_action);
+    kassert (pos != output_automaton->bound_outputs_map_.end ());
+    size_t count = pos->second.erase (binding);
+    kassert (count == 1);
+    if (pos->second.empty ()) {
+      output_automaton->bound_outputs_map_.erase (pos);
+    }
+  }
+  
+  // BUG:  Do something with subscribers.    
+  for (binding::subscribers_type::const_iterator pos = binding->subscribers.begin ();
+       pos != binding->subscribers.end ();
+       ++pos) {
+    scheduler::schedule (pos->second);
+    size_t count = pos->first->binding_subscriptions_.erase (binding);
+    kassert (count == 1);
+  }
+  binding->subscribers.clear ();
+  
+  return make_pair (0, LILY_SYSCALL_ESUCCESS);
 }
 
   // void

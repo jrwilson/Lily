@@ -89,6 +89,9 @@ int
 unbind (bid_t bid);
 
 int
+destroy (aid_t aid);
+
+int
 subscribe_unbound (bid_t bid,
 		   ano_t action_number);
 

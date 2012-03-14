@@ -48,7 +48,7 @@ int
 cpio_archive_init (cpio_archive_t* ar,
 		   bd_t bd)
 {
-  if (buffer_file_initr (&ar->bf, bd) == -1) {
+  if (buffer_file_initr (&ar->bf, bd) != 0) {
     return -1;
   }
 
@@ -61,7 +61,7 @@ cpio_archive_next_file (cpio_archive_t* ar)
   /* Align to a 4-byte boundary. */
   size_t pos = buffer_file_position (&ar->bf);
   pos = align_up (pos, 4);
-  if (buffer_file_seek (&ar->bf, pos) == -1) {
+  if (buffer_file_seek (&ar->bf, pos) != 0) {
     return 0;
   }
 
@@ -96,7 +96,7 @@ cpio_archive_next_file (cpio_archive_t* ar)
   /* Align to a 4-byte boundary. */
   pos = buffer_file_position (&ar->bf);
   pos = align_up (pos, 4);
-  if (buffer_file_seek (&ar->bf, pos) == -1) {
+  if (buffer_file_seek (&ar->bf, pos) != 0) {
     return 0;
   }
 

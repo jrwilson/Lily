@@ -49,7 +49,7 @@ buffer_file_write (buffer_file_t* bf,
     buffer_unmap (bf->bd);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
-    if (buffer_resize (bf->bd, bf->bd_size) == -1) {
+    if (buffer_resize (bf->bd, bf->bd_size) != 0) {
       return -1;
     }
     bf->ptr = buffer_map (bf->bd);
@@ -87,7 +87,7 @@ buffer_file_put (buffer_file_t* bf,
     buffer_unmap (bf->bd);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
-    if (buffer_resize (bf->bd, bf->bd_size) == -1) {
+    if (buffer_resize (bf->bd, bf->bd_size) != 0) {
       return -1;
     }
     bf->ptr = buffer_map (bf->bd);
@@ -113,7 +113,7 @@ buffer_file_puts (buffer_file_t* bf,
   size_t size = strlen (s);
   const char* end = s + size;
   while (s != end) {
-    if (buffer_file_put (bf, *s) == -1) {
+    if (buffer_file_put (bf, *s) != 0) {
       return -1;
     }
     ++s;
@@ -318,7 +318,7 @@ bfprintf (buffer_file_t* bf,
 	  int num = va_arg (ap, int);
 	  fbuf_reset (&fbuf);
 	  if (num == 0) {
-	    if (buffer_file_put (bf, '0') == -1) {
+	    if (buffer_file_put (bf, '0') != 0) {
 	      return -1;
 	    }
 	  }
@@ -334,19 +334,19 @@ bfprintf (buffer_file_t* bf,
 	    }
 
 	    while (!fbuf_empty_left (&fbuf)) {
-	      if (buffer_file_put (bf, fbuf_pop_left (&fbuf)) == -1) {
+	      if (buffer_file_put (bf, fbuf_pop_left (&fbuf)) != 0) {
 		return -1;
 	      }
 	    }
 
 	    while (!fbuf_empty_right (&fbuf)) {
-	      if (buffer_file_put (bf, fbuf_pop_right (&fbuf)) == -1) {
+	      if (buffer_file_put (bf, fbuf_pop_right (&fbuf)) != 0) {
 		return -1;
 	      }
 	    }
 	  }
 	  else {
-	    if (buffer_file_puts (bf, "-2147483648") == -1) {
+	    if (buffer_file_puts (bf, "-2147483648") != 0) {
 	      return -1;
 	    }
 	  }
@@ -359,7 +359,7 @@ bfprintf (buffer_file_t* bf,
 	  int num = va_arg (ap, int);
 	  fbuf_reset (&fbuf);
 	  if (num == 0) {
-	    if (buffer_file_put (bf, '0') == -1) {
+	    if (buffer_file_put (bf, '0') != 0) {
 	      return -1;
 	    }
 	  }
@@ -375,19 +375,19 @@ bfprintf (buffer_file_t* bf,
 	    }
 
 	    while (!fbuf_empty_left (&fbuf)) {
-	      if (buffer_file_put (bf, fbuf_pop_left (&fbuf)) == -1) {
+	      if (buffer_file_put (bf, fbuf_pop_left (&fbuf)) != 0) {
 		return -1;
 	      }
 	    }
 
 	    while (!fbuf_empty_right (&fbuf)) {
-	      if (buffer_file_put (bf, fbuf_pop_right (&fbuf)) == -1) {
+	      if (buffer_file_put (bf, fbuf_pop_right (&fbuf)) != 0) {
 		return -1;
 	      }
 	    }
 	  }
 	  else {
-	    if (buffer_file_puts (bf, "-ffffffff") == -1) {
+	    if (buffer_file_puts (bf, "-ffffffff") != 0) {
 	      return -1;
 	    }
 	  }
@@ -398,7 +398,7 @@ bfprintf (buffer_file_t* bf,
       case 's':
 	{
 	  char* str = va_arg (ap, char*);
-	  if (buffer_file_puts (bf, str) == -1) {
+	  if (buffer_file_puts (bf, str) != 0) {
 	    return -1;
 	  }
 	  ++format;
@@ -407,7 +407,7 @@ bfprintf (buffer_file_t* bf,
       }
       break;
     default:
-      if (buffer_file_put (bf, *format) == -1) {
+      if (buffer_file_put (bf, *format) != 0) {
 	return -1;
       }
       ++format;

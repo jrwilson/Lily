@@ -38,7 +38,7 @@ initialize (void)
       syslog ("ps2_mouse_test: error: Could not create output buffer");
       exit ();
     }
-    if (buffer_file_initw (&output_buffer, output_buffer_bd) == -1) {
+    if (buffer_file_initw (&output_buffer, output_buffer_bd) != 0) {
       syslog ("ps2_mouse_test: error: Could not initialize output buffer");
       exit ();
     }
@@ -84,7 +84,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKET_IN_NO, "mouse_packet_in", "ps2_mouse_pac
   size_t count = 0;
   mouse_packet_t mp;
   ps2_mouse_packet_list_t input_buffer;
-  if (ps2_mouse_packet_list_initr (&input_buffer, bda, &count) == -1) {
+  if (ps2_mouse_packet_list_initr (&input_buffer, bda, &count) != 0) {
     end_input_action (bda, bdb);
   }
 

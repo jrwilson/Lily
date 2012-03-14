@@ -13,14 +13,14 @@ argv_initw (argv_t* a,
     return -1;
   }
   
-  if (buffer_file_initw (&a->argv_bf, *bda) == -1) {
+  if (buffer_file_initw (&a->argv_bf, *bda) != 0) {
     buffer_destroy (*bda);
     return -1;
   }
   
   a->argc = 0;
   
-  if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) != 0) {
     buffer_destroy (*bda);
     return -1;
   }
@@ -32,7 +32,7 @@ argv_initw (argv_t* a,
     return -1;
   }
 
-  if (buffer_file_initw (&a->string_bf, *bdb) == -1) {
+  if (buffer_file_initw (&a->string_bf, *bdb) != 0) {
     buffer_destroy (*bda);
     buffer_destroy (*bdb);
     return -1;
@@ -50,13 +50,13 @@ argv_append (argv_t* a,
   size_t string_offset = buffer_file_position (&a->string_bf);
 
   /* Write the string. */
-  if (buffer_file_write (&a->string_bf, ptr, size) == -1) {
+  if (buffer_file_write (&a->string_bf, ptr, size) != 0) {
     return -1;
   }
 
   /* Write the offset and size. */
-  if (buffer_file_write (&a->argv_bf, &string_offset, sizeof (size_t)) == -1 ||
-      buffer_file_write (&a->argv_bf, &size, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&a->argv_bf, &string_offset, sizeof (size_t)) != 0 ||
+      buffer_file_write (&a->argv_bf, &size, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -64,13 +64,13 @@ argv_append (argv_t* a,
   ++a->argc;
 
   size_t argv_offset = buffer_file_position (&a->argv_bf);
-  if (buffer_file_seek (&a->argv_bf, 0) == -1) {
+  if (buffer_file_seek (&a->argv_bf, 0) != 0) {
     return -1;
   }
-  if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) != 0) {
     return -1;
   }
-  if (buffer_file_seek (&a->argv_bf, argv_offset) == -1) {
+  if (buffer_file_seek (&a->argv_bf, argv_offset) != 0) {
     return -1;
   }
 
@@ -83,15 +83,15 @@ argv_initr (argv_t* a,
 	    bd_t bdb,
 	    size_t* argc)
 {
-  if (buffer_file_initr (&a->argv_bf, bda) == -1) {
+  if (buffer_file_initr (&a->argv_bf, bda) != 0) {
     return -1;
   }
   
-  if (buffer_file_initr (&a->string_bf, bdb) == -1) {
+  if (buffer_file_initr (&a->string_bf, bdb) != 0) {
     return -1;
   }
 
-  if (buffer_file_read (&a->argv_bf, &a->argc, sizeof (size_t)) == -1) {
+  if (buffer_file_read (&a->argv_bf, &a->argc, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -99,12 +99,12 @@ argv_initr (argv_t* a,
   for (size_t i = 0; i != a->argc; ++i) {
     size_t offset;
     size_t size;
-    if (buffer_file_read (&a->argv_bf, &offset, sizeof (size_t)) == -1 ||
-	buffer_file_read (&a->argv_bf, &size, sizeof (size_t)) == -1) {
+    if (buffer_file_read (&a->argv_bf, &offset, sizeof (size_t)) != 0 ||
+	buffer_file_read (&a->argv_bf, &size, sizeof (size_t)) != 0) {
       return -1;
     }
 
-    if (buffer_file_seek (&a->string_bf, offset) == -1) {
+    if (buffer_file_seek (&a->string_bf, offset) != 0) {
       return -1;
     }
 
@@ -134,17 +134,17 @@ argv_arg (argv_t* a,
     return -1;
   }
 
-  if (buffer_file_seek (&a->argv_bf, sizeof (size_t) + idx * (sizeof (size_t) + sizeof (size_t))) == -1) {
+  if (buffer_file_seek (&a->argv_bf, sizeof (size_t) + idx * (sizeof (size_t) + sizeof (size_t))) != 0) {
     return -1;
   }
 
   size_t offset;
-  if (buffer_file_read (&a->argv_bf, &offset, sizeof (size_t)) == -1 ||
-      buffer_file_read (&a->argv_bf, size, sizeof (size_t)) == -1) {
+  if (buffer_file_read (&a->argv_bf, &offset, sizeof (size_t)) != 0 ||
+      buffer_file_read (&a->argv_bf, size, sizeof (size_t)) != 0) {
     return -1;
   }
 
-  if (buffer_file_seek (&a->string_bf, offset) == -1) {
+  if (buffer_file_seek (&a->string_bf, offset) != 0) {
     return -1;
   }
 

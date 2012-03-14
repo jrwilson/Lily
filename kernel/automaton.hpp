@@ -435,8 +435,49 @@ public:
 	  bd_t bdb,
 	  const char* name,
 	  size_t name_size,
-	  bool retain_privilege);
-
+	  bool retain_privilege)
+  {
+    kassert (ths.get () == this);
+    
+    // Check the name data.
+    if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+    
+    // Check that the name does not exist.
+    kstring name_str (name, name_size);
+    if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_EEXISTS);
+    }
+    
+    // Find the text buffer.
+    buffer* text_buffer = lookup_buffer (text_bd);
+    if (text_buffer == 0) {
+      // Buffer does not exist.
+      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+    }
+    
+    // Find and synchronize the data buffers so the frames listed in the buffers are correct.
+    buffer* buffer_a = lookup_buffer (bda);
+    if (buffer_a != 0) {
+      buffer_a->sync (0, buffer_a->size ());
+    }
+    buffer* buffer_b = lookup_buffer (bdb);
+    if (buffer_b != 0) {
+      buffer_b->sync (0, buffer_b->size ());
+    }
+    
+    // Create the automaton.
+    pair<shared_ptr<automaton>, int> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+    
+    if (r.first.get () != 0) {
+      return make_pair (r.first->aid (), r.second);
+    }
+    else {
+      return make_pair (-1, r.second);
+    }
+  }
+  
   pair<int, int>
   destroy (aid_t aid)
   {
@@ -932,7 +973,8 @@ public:
     }
 
     // Append.
-    return make_pair (d->append (*s, 0, s->size ()), LILY_SYSCALL_ESUCCESS);
+    d->append (*s, 0, s->size ());
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
 
   inline pair<int, int>
@@ -1181,18 +1223,28 @@ public:
     caction oa (output_automaton, output_action, output_parameter);
     caction ia (input_automaton, input_action, input_parameter);
     
-    // Check that the input action is not bound.
-    // (Also checks that the binding does not exist.)
-    if (input_automaton->bound_inputs_map_.find (ia) != input_automaton->bound_inputs_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    {
+      // Check that the input action is not bound to an enabled action.
+      // (Also checks that the binding does not exist.)
+      bound_inputs_map_type::const_iterator pos1 = input_automaton->bound_inputs_map_.find (ia);
+      if (pos1 != input_automaton->bound_inputs_map_.end ()) {
+	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	  if ((*pos2)->enabled ()) {
+	    // The input is bound to an enabled action.
+	    return make_pair (-1, LILY_SYSCALL_EINVAL);
+	  }
+	}
+      }
     }
-    
-    // Check that the output action is not bound to an action in the input automaton.
-    bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
-    if (pos1 != output_automaton->bound_outputs_map_.end ()) {
-      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if ((*pos2)->input_action.automaton == input_automaton) {
-	  return make_pair (-1, LILY_SYSCALL_EINVAL);
+
+    {
+      // Check that the output action is not bound to an enabled action in the input automaton.
+      bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
+      if (pos1 != output_automaton->bound_outputs_map_.end ()) {
+	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	  if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
+	    return make_pair (-1, LILY_SYSCALL_EINVAL);
+	  }
 	}
       }
     }
@@ -1228,12 +1280,8 @@ public:
   }
 
   pair<int, int>
-  unbind (bid_t bid)
-  {
-    // BUG
-    kassert (0);
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
-  }
+  unbind (const shared_ptr<automaton>& ths,
+	  bid_t bid);
 
   /*
    * I/O
@@ -1535,7 +1583,7 @@ public:
     shared_ptr<binding> subject = subject_pos->second;
 
     binding_subscriptions_.insert (subject);
-    subject->subscribers.insert (ths);
+    subject->subscribers.insert (make_pair (ths, caction (ths, action, subject->bid)));
 
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }

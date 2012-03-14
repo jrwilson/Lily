@@ -21,44 +21,96 @@ static callback_queue_t vfs_response_queue;
   ===================
 */
 
-typedef struct automaton_var automaton_var_t;
-struct automaton_var {
+typedef struct automaton automaton_t;
+struct automaton {
+  aid_t aid;
   char* name;
   size_t name_size;
-  aid_t aid;
-  automaton_var_t* next;
+  automaton_t* next;
 };
 
-static automaton_var_t* automaton_var_head = 0;
+static automaton_t* automaton_head = 0;
 
-static automaton_var_t*
-create_automaton_var (const char* name,
-		      size_t size)
+static void
+create_automaton (aid_t aid,
+		  const char* name,
+		  size_t size)
 {
-  automaton_var_t* var = malloc (sizeof (automaton_var_t));
-  memset (var, 0, sizeof (automaton_var_t));
-  var->name = malloc (size);
-  memcpy (var->name, name, size);
-  var->name_size = size;
-  var->aid = -1;
-  var->next = automaton_var_head;
-  automaton_var_head = var;
-
-  return var;
+  automaton_t* a = malloc (sizeof (automaton_t));
+  memset (a, 0, sizeof (automaton_t));
+  a->aid = aid;
+  a->name = malloc (size);
+  memcpy (a->name, name, size);
+  a->name_size = size;
+  a->next = automaton_head;
+  automaton_head = a;
 }
 
-static automaton_var_t*
-find_automaton_var (const char* name,
-		    size_t size)
+static automaton_t*
+find_automaton (const char* name,
+		size_t size)
 {
-  automaton_var_t* var;
-  for (var = automaton_var_head; var != 0; var = var->next) {
-    if (var->name_size == size && memcmp (var->name, name, size) == 0) {
+  automaton_t* a;
+  for (a = automaton_head; a != 0; a = a->next) {
+    if (a->name_size == size && memcmp (a->name, name, size) == 0) {
       break;
     }
   }
   
-  return var;
+  return a;
+}
+
+typedef struct binding binding_t;
+struct binding {
+  bid_t bid;
+  char* name;
+  size_t name_size;
+  binding_t* next;
+};
+
+static binding_t* binding_head = 0;
+
+static void
+create_binding (bid_t bid,
+		const char* name,
+		size_t size)
+{
+  binding_t* a = malloc (sizeof (binding_t));
+  memset (a, 0, sizeof (binding_t));
+  a->bid = bid;
+  a->name = malloc (size);
+  memcpy (a->name, name, size);
+  a->name_size = size;
+  a->next = binding_head;
+  binding_head = a;
+}
+
+static void
+destroy_binding (binding_t* b)
+{
+  binding_t** ptr;
+  for (ptr = &binding_head; *ptr != 0; ptr = &(*ptr)->next) {
+    if ((*ptr) == b) {
+      *ptr = b->next;
+      free (b->name);
+      free (b);
+      return;
+    }
+  }
+}
+
+static binding_t*
+find_binding (const char* name,
+	      size_t size)
+{
+  binding_t* a;
+  for (a = binding_head; a != 0; a = a->next) {
+    if (a->name_size == size && memcmp (a->name, name, size) == 0) {
+      break;
+    }
+  }
+  
+  return a;
 }
 
 typedef struct start_queue_item start_queue_item_t;
@@ -135,8 +187,8 @@ start_queue_front (void)
 static bool evaluating = false;
 
 typedef struct {
-  char* var_name;
-  size_t var_name_size;
+  char* name;
+  size_t name_size;
   bd_t bda;
   bd_t bdb;
   argv_t argv;
@@ -144,16 +196,16 @@ typedef struct {
 } create_context_t;
 
 static create_context_t*
-create_create_context (const char* var_name,
-		       size_t var_name_size,
+create_create_context (const char* name,
+		       size_t name_size,
 		       bool retain_privilege)
 {
   create_context_t* cc = malloc (sizeof (create_context_t));
   memset (cc, 0, sizeof (create_context_t));
-  cc->var_name = malloc (var_name_size);
-  memcpy (cc->var_name, var_name, var_name_size);
-  cc->var_name_size = var_name_size;
-  if (argv_initw (&cc->argv, &cc->bda, &cc->bdb) == -1) {
+  cc->name = malloc (name_size);
+  memcpy (cc->name, name, name_size);
+  cc->name_size = name_size;
+  if (argv_initw (&cc->argv, &cc->bda, &cc->bdb) != 0) {
     syslog ("jsh: error: could create argv");
     exit ();
   }
@@ -170,7 +222,7 @@ destroy_create_context (create_context_t* cc)
   if (cc->bdb != -1) {
     buffer_destroy (cc->bdb);
   }
-  free (cc->var_name);
+  free (cc->name);
   free (cc);
 }
 
@@ -182,7 +234,7 @@ create_callback (void* data,
   create_context_t* cc = data;
   vfs_error_t error;
   size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
+  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
     syslog ("jsh: error: vfs provide bad readfile response");
     exit ();
   }
@@ -192,11 +244,7 @@ create_callback (void* data,
     if (aid != -1) {
       syslog ("TODO:  Subscribe to created automaton");
       /* Assign the result to a variable. */
-      automaton_var_t* var = find_automaton_var (cc->var_name, cc->var_name_size);
-      if (var == 0) {
-	var = create_automaton_var (cc->var_name, cc->var_name_size);
-      }
-      var->aid = aid;
+      create_automaton (aid, cc->name, cc->name_size);
     }
     else {
       syslog ("TODO:  create create failed");
@@ -224,6 +272,7 @@ create_callback (void* data,
 
 typedef enum {
   AUTOMATON_VAR,
+  BINDING_VAR,
   STRING,
   ASSIGN,
 } token_type_t;
@@ -286,7 +335,7 @@ create_ (token_list_item_t* var)
   bool retain_privilege = false;
   token_list_item_t* filename;
 
-  if (find_automaton_var (var->string, var->size) != 0) {
+  if (find_automaton (var->string, var->size) != 0) {
     syslog ("TODO:  Automaton variable already assigned");
     return;
   }
@@ -331,8 +380,13 @@ create_ (token_list_item_t* var)
 }
 
 static void
-bind_ (void)
+bind_ (token_list_item_t* var)
 {
+  if (var != 0 && find_binding (var->string, var->size) != 0) {
+    syslog ("TODO:  Binding variable already assigned");
+    return;
+  }
+
   /* Get the argument tokens. */
   token_list_item_t* output_automaton_token;
   token_list_item_t* output_action_token;
@@ -364,12 +418,12 @@ bind_ (void)
   }
 
   /* Look up the variables for the output and input automaton. */
-  automaton_var_t* output_automaton = find_automaton_var (output_automaton_token->string, output_automaton_token->size);
+  automaton_t* output_automaton = find_automaton (output_automaton_token->string, output_automaton_token->size);
   if (output_automaton == 0) {
     syslog ("TODO:  Output automaton is not defined");
     return;
   }
-  automaton_var_t* input_automaton = find_automaton_var (input_automaton_token->string, input_automaton_token->size);
+  automaton_t* input_automaton = find_automaton (input_automaton_token->string, input_automaton_token->size);
   if (input_automaton == 0) {
     syslog ("TODO:  Input automaton is not defined");
     return;
@@ -378,11 +432,11 @@ bind_ (void)
   /* Describe the output and input automaton. */
   description_t output_description;
   description_t input_description;
-  if (description_init (&output_description, output_automaton->aid) == -1) {
+  if (description_init (&output_description, output_automaton->aid) != 0) {
     syslog ("TODO:  Could not describe output");
     return;
   }
-  if (description_init (&input_description, input_automaton->aid) == -1) {
+  if (description_init (&input_description, input_automaton->aid) != 0) {
     syslog ("TODO:  Could not describe input");
     return;
   }
@@ -404,12 +458,54 @@ bind_ (void)
     return;
   }
 
-  if (bind (output_automaton->aid, output_action, 0, input_automaton->aid, input_action, 0) == -1) {
+  bid_t bid = bind (output_automaton->aid, output_action, 0, input_automaton->aid, input_action, 0);
+  if (bid == -1) {
     syslog ("TODO:  Bind failed");
     return;
   }
 
+  if (var == 0) {
+    syslog ("TODO:  Create binding");
+    /* char buffer[sizeof (bid_t) * 8]; */
+    /* size_t sz = snprintf (buffer, sizeof (bid_t) * 8, "&b%d", bid); */
+    /* create_binding (bid, buffer, sz + 1); */
+  }
+  else {
+    create_binding (bid, var->string, var->size);
+  }
+  
   syslog ("TODO:  Subscribe to binding??");
+}
+
+static void
+unbind_ ()
+{
+  /* Get the argument tokens. */
+  token_list_item_t* binding_token;
+  if ((binding_token = accept (BINDING_VAR)) == 0) {
+    syslog ("TODO:  Expected a binding variable");
+    return;
+  }
+
+  if (current_token != 0) {
+    syslog ("TODO:  Expected no more tokens");
+    return;
+  }
+
+  /* Look up the binding variable. */
+  binding_t* binding = find_binding (binding_token->string, binding_token->size);
+  if (binding == 0) {
+    syslog ("TODO:  Binding is not defined");
+    return;
+  }
+
+  syslog ("TODO:  Unsubscribe from binding??");
+
+  if (unbind (binding->bid) != 0) {
+    syslog ("TODO:  unbind failed");
+  }
+
+  destroy_binding (binding);
 }
 
 static void
@@ -428,7 +524,7 @@ start_ (void)
   }
 
   /* Look up the variables for the automaton. */
-  automaton_var_t* automaton = find_automaton_var (automaton_token->string, automaton_token->size);
+  automaton_t* automaton = find_automaton (automaton_token->string, automaton_token->size);
   if (automaton == 0) {
     syslog ("TODO:  Automaton is not defined");
     return;
@@ -457,6 +553,23 @@ automaton_assignment (token_list_item_t* var)
 }
 
 static void
+binding_assignment (token_list_item_t* var)
+{
+  if (accept (ASSIGN) == 0) {
+    syslog ("TODO:  Expected =");
+    return;
+  }
+  
+  token_list_item_t* t;
+  if ((t = accept (STRING)) != 0 && strncmp ("bind", t->string, t->size) == 0) {
+    bind_ (var);
+  }
+  else {
+    syslog ("TODO:  syntax error");
+  }
+}
+
+static void
 statement (void)
 {
   token_list_item_t* t;
@@ -465,9 +578,17 @@ statement (void)
     automaton_assignment (t);
     return;
   }
+  else if ((t = accept (BINDING_VAR)) != 0) {
+    binding_assignment (t);
+    return;
+  }
   else if ((t = accept (STRING)) != 0) {
     if (strncmp ("bind", t->string, t->size) == 0) {
-      bind_ ();
+      bind_ (0);
+      return;
+    }
+    else if (strncmp ("unbind", t->string, t->size) == 0) {
+      unbind_ ();
       return;
     }
     else if (strncmp ("start", t->string, t->size) == 0) {
@@ -503,6 +624,7 @@ evaluate (void)
 typedef enum {
   SCAN_START,
   SCAN_AUTOMATON_VAR,
+  SCAN_BINDING_VAR,
   SCAN_STRING,
   SCAN_COMMENT,
   SCAN_ERROR,
@@ -557,6 +679,8 @@ scan_string_steal (char** string,
    evaluation symbol - [;\n]
 
    automaton variable - @[a-zA-Z0-9_]+
+
+   binding_variable - &[a-zA-Z0-9_]+
  */
 static void
 put (char c)
@@ -576,8 +700,12 @@ put (char c)
 
     switch (c) {
     case '@':
-      scan_string_append ('@');
+      scan_string_append (c);
       scan_state = SCAN_AUTOMATON_VAR;
+      break;
+    case '&':
+      scan_string_append (c);
+      scan_state = SCAN_BINDING_VAR;
       break;
     case '=':
       push_token (ASSIGN, 0, 0);
@@ -686,6 +814,48 @@ put (char c)
     }
     break;
 
+  case SCAN_BINDING_VAR:
+    if ((c >= 'a' && c <= 'z') ||
+	(c >= 'A' && c <= 'Z') ||
+	(c >= '0' && c <= '9') ||
+	c == '_') {
+      /* Continue. */
+      scan_string_append (c);
+      break;
+    }
+
+    {
+      /* Terminate with null. */
+      scan_string_append (0);
+      char* string;
+      size_t size;
+      scan_string_steal (&string, &size);
+      push_token (BINDING_VAR, string, size);
+    }
+    
+    switch (c) {
+    case '=':
+      push_token (ASSIGN, 0, 0);
+      scan_state = SCAN_START;
+      break;
+    case '#':
+      scan_state = SCAN_COMMENT;
+      break;
+    case ';':
+    case '\n':
+      evaluate ();
+      scan_state = SCAN_START;
+      break;
+    case ' ':
+    case '\t':
+      scan_state = SCAN_START;
+      break;
+    default:
+      scan_state = SCAN_ERROR;
+      break;
+    }
+    break;
+
   case SCAN_COMMENT:
     switch (c) {
     case '\n':
@@ -765,8 +935,7 @@ initialize (void)
     initialized = true;
 
     /* Create an automaton to represent the shell. */
-    automaton_var_t* this = create_automaton_var ("@this", 6);
-    this->aid = getaid ();
+    create_automaton (getaid (), "@this", 6);
 
     vfs_request_bda = buffer_create (0);
     if (vfs_request_bda == -1) {
@@ -788,7 +957,7 @@ initialize (void)
       syslog ("jsh: error: Could not create stdout buffer");
       exit ();
     }
-    if (buffer_file_initw (&stdout_bf, stdout_bd) == -1) {
+    if (buffer_file_initw (&stdout_bf, stdout_bd) != 0) {
       syslog ("jsh: error: Could not initialize stdout buffer");
       exit ();
     }
@@ -835,7 +1004,7 @@ readscript_callback (void* data,
 {
   vfs_error_t error;
   size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) == -1) {
+  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
     syslog ("jsh: error: vfs provide bad readfile response");
     exit ();
   }
@@ -867,7 +1036,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   }
 
   description_t vfs_description;
-  if (description_init (&vfs_description, vfs_aid) == -1) {
+  if (description_init (&vfs_description, vfs_aid) != 0) {
     syslog ("jsh: error: couldn't describe vfs");
     exit ();
   }
@@ -895,7 +1064,7 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
       /* Request the script. */
       const char* filename;
       size_t size;
-      if (argv_arg (&argv, 1, (const void**)&filename, &size) == -1) {
+      if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
 	syslog ("jsh: error: Couldn't read filename argument");
 	exit ();
       }
@@ -927,7 +1096,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, int param)
   scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) == -1) {
+    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
       syslog ("jsh: error: Could not write to output buffer");
       exit ();
     }
@@ -1132,7 +1301,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file", stdin_col
   initialize ();
 
   buffer_file_t bf;
-  if (buffer_file_initr (&bf, bda) == -1) {
+  if (buffer_file_initr (&bf, bda) != 0) {
     end_input_action (bda, bdb);
   }
 

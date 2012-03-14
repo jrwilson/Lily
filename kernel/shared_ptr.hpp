@@ -39,32 +39,38 @@ public:
     dispose ();
   }
 
-  T&
+  inline T&
   operator* () const
   {
     return *ptr;
   }
 
-  T*
+  inline T*
   operator-> () const
   {
     return ptr;
   }
 
-  T*
+  inline T*
   get () const
   {
     return ptr;
   }
 
-  bool
+  inline bool
   operator== (const shared_ptr<T>& other) const
   {
     return ptr == other.ptr;
   }
 
+  inline bool
+  operator!= (const shared_ptr<T>& other) const
+  {
+    return ptr != other.ptr;
+  }
+
 private:
-  void
+  inline void
   dispose () {
     if (--*count == 0) {
       delete ptr;
