@@ -26,6 +26,8 @@
 #include "string.hpp"
 #include "linear_set.hpp"
 
+extern volatile uint32_t irq_set;
+
 class global_fifo_scheduler {
 private:
 
@@ -41,8 +43,6 @@ private:
   // Queue of automaton with actions to execute.
   typedef linear_set<automaton_context*> queue_type;
   static queue_type ready_queue_;
-  // Make this flag volatile because it is updated in interrupt contexts.
-  static volatile bool ready_queue_empty_;
 
   // The action that is currently executing.
   static caction action_;
@@ -57,6 +57,10 @@ private:
   // Buffers produced by an output action that will be copied to the input action.
   static buffer* output_buffer_a_;
   static buffer* output_buffer_b_;
+
+  typedef vector<caction> subscriber_list_type;
+  typedef vector<subscriber_list_type> subscribers_type;
+  static subscribers_type subscribers_; // (irq_handler::MAX_IRQ + 1);
 
   struct sort_bindings_by_input {
     bool
@@ -119,7 +123,6 @@ public:
     automaton_context* c = pos->second;
     context_map_.erase (pos);
     ready_queue_.erase (c);
-    ready_queue_empty_ = ready_queue_.empty ();
     c->clear ();
     delete c;
   }
@@ -141,7 +144,6 @@ public:
     c->push_back (ad);
     
     ready_queue_.push_back (c);
-    ready_queue_empty_ = ready_queue_.empty ();
   }
   
   static inline void
@@ -207,19 +209,33 @@ public:
     // We are done with the current action.
     action_.automaton = shared_ptr<automaton> ();
 
-    // Check for interrupts.
-    asm volatile ("sti\n"
-		  "nop\n"
-		  "cli\n");
-
     for (;;) {
 
-      while (!ready_queue_empty_) {
+      // Check for interrupts.
+      // TODO:  Use atomic swap.
+      asm volatile ("cli");
+      uint32_t is = irq_set;
+      irq_set = 0;
+      asm volatile ("sti");
 
+      if (is != 0) {
+	uint32_t mask = 1;
+	for (int irq = irq_handler::IRQ_BASE; irq != irq_handler::IRQ_LIMIT; ++irq, mask = mask << 1) {
+	  if ((is & mask) != 0) {
+	    for (subscriber_list_type::const_iterator pos = subscribers_[irq].begin ();
+		 pos != subscribers_[irq].end ();
+		 ++pos) {
+	      // TODO:  Put this at the front of the queue.
+	      schedule (*pos);
+	    }
+	  }
+	}
+      }
+
+      if (!ready_queue_.empty ()) {
 	// Get the automaton context and remove it from the ready queue.
 	automaton_context* c = ready_queue_.front ();
 	ready_queue_.pop_front ();
-	ready_queue_empty_ = ready_queue_.empty ();
 
 	// Load the action.
 	action_ = c->front ();
@@ -279,7 +295,6 @@ public:
 	if (!c->empty ()) {
 	  // Automaton has more actions, return to ready queue.
 	  ready_queue_.push_back (c);
-	  ready_queue_empty_ = ready_queue_.empty ();
 	}
 
 	// This call does not return.
@@ -288,9 +303,31 @@ public:
 
       /* Out of actions.  Halt. */
       action_.automaton = shared_ptr<automaton> ();
-      asm volatile ("sti\n"
-		    "hlt\n"
-		    "cli\n");
+      asm volatile ("hlt");
+    }
+  }
+
+  static void
+  subscribe (int irq,
+  	     const caction& action)
+  {
+    if (subscribers_[irq].empty ()) {
+      irq_handler::enable_irq (irq);
+    }
+
+    subscribers_[irq].push_back (action);
+  }
+
+  static void
+  unsubscribe (int irq,
+	       const caction& action)
+  {
+    subscriber_list_type::iterator pos = find (subscribers_[irq].begin (), subscribers_[irq].end (), action);
+    kassert (pos != subscribers_[irq].end ());
+    subscribers_[irq].erase (pos);
+    
+    if (subscribers_[irq].empty ()) {
+      irq_handler::disable_irq (irq);
     }
   }
 };

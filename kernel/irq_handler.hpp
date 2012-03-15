@@ -15,25 +15,22 @@
 */
 
 #include "integer_types.hpp"
-#include "action.hpp"
-#include "utility.hpp"
 
 namespace irq_handler {
+  static const int IRQ_BASE = 0;
+  static const int IRQ_LIMIT = 16;
 
   void
   install ();
 
   void
-  subscribe (int irq,
-	     const caction& action);
+  enable_irq (int irq);
 
   void
-  unsubscribe (int irq,
-	       const caction& action);
+  disable_irq (int irq);
 
-  static const int MIN_IRQ = 0;
-  static const int MAX_IRQ = 15;
-
+  uint16_t
+  get_irqs (void);
 };
 
 #endif /* __irq_handler_hpp__ */

@@ -4,6 +4,66 @@
 
 	.include "selectors.S"
 
+	.section .data
+
+	/* Bitset of IRQs that have fired. */
+	.global irq_set
+irq_set:
+	.long 0
+
+	.section .text
+
+	.set PIC_MASTER_LOW,  0x20
+	.set PIC_SLAVE_LOW, 0xA0
+
+	.set PIC_OCW2_LOW, 0
+	.set PIC_OCW2_NON_SPECIFIC_EOI, 1<<5
+
+.macro MASTER_IRQ irq_num
+	.global irq\irq_num
+irq\irq_num:
+	/* Set the bit. */
+	orl $(1 << \irq_num), irq_set
+	/* Send end of interrupt. */
+	push %eax
+	mov $(PIC_OCW2_LOW | PIC_OCW2_NON_SPECIFIC_EOI), %al
+	outb $PIC_MASTER_LOW
+	pop %eax
+	iret
+.endm
+
+.macro SLAVE_IRQ irq_num
+	.global irq\irq_num
+irq\irq_num:
+	/* Set the bit. */
+	orl $(1 << \irq_num), irq_set
+	/* Send end of interrupt. */
+	push %eax
+	mov $(PIC_OCW2_LOW | PIC_OCW2_NON_SPECIFIC_EOI), %al
+	outb $PIC_SLAVE_LOW
+	outb $PIC_MASTER_LOW
+	pop %eax
+	iret
+.endm
+
+MASTER_IRQ 0
+MASTER_IRQ 1
+MASTER_IRQ 2
+MASTER_IRQ 3
+MASTER_IRQ 4
+MASTER_IRQ 5
+MASTER_IRQ 6
+MASTER_IRQ 7
+SLAVE_IRQ 8
+SLAVE_IRQ 9
+SLAVE_IRQ 10
+SLAVE_IRQ 11
+SLAVE_IRQ 12
+SLAVE_IRQ 13
+SLAVE_IRQ 14
+SLAVE_IRQ 15
+
+/*
 .macro IRQ irq_num int_num
 	.global irq\irq_num
 irq\irq_num:
@@ -11,7 +71,7 @@ irq\irq_num:
 	push $\int_num	# Interrupt number.
 	jmp irq_common_stub
 .endm
-
+	
 	# Import irq_dispatch.
 	.extern irq_dispatch
 irq_common_stub:
@@ -40,20 +100,23 @@ irq_common_stub:
 	# Pop the error and interrupt number.
 	add $8, %esp
 	iret
-	
-IRQ 0 32
-IRQ 1 33
-IRQ 2 34
-IRQ 3 35
-IRQ 4 36
-IRQ 5 37
-IRQ 6 38
-IRQ 7 39
-IRQ 8 40
-IRQ 9 41
-IRQ 10 42
-IRQ 11 43
-IRQ 12 44
-IRQ 13 45
-IRQ 14 46
-IRQ 15 47
+*/
+
+/*
+MASTER_IRQ 0 32
+MASTER_IRQ 1 33
+MASTER_IRQ 2 34
+MASTER_IRQ 3 35
+MASTER_IRQ 4 36
+MASTER_IRQ 5 37
+MASTER_IRQ 6 38
+MASTER_IRQ 7 39
+SLAVE_IRQ 8 40
+SLAVE_IRQ 9 41
+SLAVE_IRQ 10 42
+SLAVE_IRQ 11 43
+SLAVE_IRQ 12 44
+SLAVE_IRQ 13 45
+SLAVE_IRQ 14 46
+SLAVE_IRQ 15 47
+*/
