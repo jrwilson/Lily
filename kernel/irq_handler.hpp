@@ -20,6 +20,9 @@ namespace irq_handler {
   static const int IRQ_BASE = 0;
   static const int IRQ_LIMIT = 16;
 
+  static const int PIT_IRQ = 0;
+  static const int CASCADE_IRQ = 2;
+
   void
   install ();
 

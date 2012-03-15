@@ -15,6 +15,7 @@
 #include "idt.hpp"
 #include "gdt.hpp"
 #include "io.hpp"
+#include "automaton.hpp"
 
 #define PIC_MASTER_IRQ_BASE 0
 #define PIC_MASTER_IRQ_LIMIT 8
@@ -103,6 +104,11 @@ extern "C" void irq15 ();
 void
 irq_handler::install ()
 {
+  automaton::reserve_port_s (PIC_MASTER_LOW);
+  automaton::reserve_port_s (PIC_MASTER_HIGH);
+  automaton::reserve_port_s (PIC_SLAVE_LOW);
+  automaton::reserve_port_s (PIC_SLAVE_HIGH);
+
   pic_master_mask_ = ~(1 << PIC_SLAVE_PIN);
   pic_slave_mask_ = 0xFF;
     

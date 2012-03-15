@@ -154,6 +154,12 @@ private:
   /*
    * I/O
    */
+public:
+  static void
+  reserve_port_s (unsigned short port)
+  {
+    reserved_ports_[port] = true;
+  }
 
   /*
    * SUBSCRIPTIONS

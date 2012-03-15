@@ -388,7 +388,9 @@ automaton::subscribe_irq (const shared_ptr<automaton>& ths,
     return make_pair (-1, LILY_SYSCALL_EPERM);
   }
   
-  if (irq < irq_handler::IRQ_BASE ||
+  if (irq == irq_handler::PIT_IRQ ||
+      irq == irq_handler::CASCADE_IRQ ||
+      irq < irq_handler::IRQ_BASE ||
       irq >= irq_handler::IRQ_LIMIT) {
     return make_pair (-1, LILY_SYSCALL_EINVAL);
   }
