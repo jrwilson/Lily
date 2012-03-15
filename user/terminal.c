@@ -327,7 +327,7 @@ create_client (aid_t aid)
   client->next = client_list_head;
   client_list_head = client;
 
-  if (subscribe_destroyed (aid, DESTROYED_NO) == -1) {
+  if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
     syslog ("terminal: Could not subscribe");
     exit ();
   }
@@ -393,7 +393,7 @@ initialize (void)
       exit ();
     }
 
-    if (vga_op_list_initw (&output_buffer, output_buffer_bda, output_buffer_bdb) == -1) {
+    if (vga_op_list_initw (&output_buffer, output_buffer_bda, output_buffer_bdb) != 0) {
       syslog ("terminal: Could not initialize vga op list");
       exit ();
     }
@@ -733,12 +733,12 @@ process_control (client_t* client,
   }
 }
 
-BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) == -1) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     end_input_action (bda, bdb);
   }
 
@@ -759,7 +759,7 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, aid_t aid, bd
        If we write to the client buffer, it will be copied for copy-on-write.
        By reinitializing the output buffer, we potentially drop the reference count to 1 and avoid copy-on-write.
     */
-    if (vga_op_list_reset (&output_buffer) == -1) {
+    if (vga_op_list_reset (&output_buffer) != 0) {
       syslog ("terminal: error: Could not reset vga_op_list");
       exit ();
     }
@@ -803,21 +803,21 @@ vga_op_precondition (void)
   return active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int param)
+BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (VGA_OP_NO, param);
 
   if (vga_op_precondition ()) {
 
-    if (vga_op_list_reset (&output_buffer) == -1) {
+    if (vga_op_list_reset (&output_buffer) != 0) {
       syslog ("terminal: error: Could not reset vga_op_list");
       exit ();
     }
 
     if (active_client->graphics_refresh) {
       /* Send the data. */
-      if (vga_op_list_write_assign (&output_buffer, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) == -1) {
+      if (vga_op_list_write_assign (&output_buffer, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) != 0) {
       	syslog ("terminal: Could not write vga op list");
       	exit ();
       }
@@ -826,7 +826,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
 
     if (active_client->cursor_refresh) {
       /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&output_buffer, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) == -1) {
+      if (vga_op_list_write_set_cursor_location (&output_buffer, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
       	syslog ("terminal: Could not write vga op list");
       	exit ();
       }
@@ -840,7 +840,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, int para
   }
 }
 
-BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 

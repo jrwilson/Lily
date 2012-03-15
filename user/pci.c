@@ -312,8 +312,8 @@ initialize (void)
     initialized = true;
 
     /* Reserve the ports to configure the PCI. */
-    if (reserve_port (CONFIG_ADDRESS) == -1 ||
-	reserve_port (CONFIG_DATA) == -1) {
+    if (reserve_port (CONFIG_ADDRESS) != 0 ||
+	reserve_port (CONFIG_DATA) != 0) {
       syslog ("pci: Could not reserve ports");
       exit ();
     }
@@ -348,86 +348,8 @@ end_input_action (bd_t bda,
   finish (NO_ACTION, 0, false, -1, -1);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   end_input_action (bda, bdb);
 }
-
-/* /\* BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, aid_t aid, bd_t bda, bd_t bdb) *\/ */
-/* /\* { *\/ */
-/* /\*   initialize (); *\/ */
-
-/* /\*   vga_op_list_t vol; *\/ */
-/* /\*   size_t count; *\/ */
-/* /\*   if (vga_op_list_initr (&vol, bda, bdb, &count) == -1) { *\/ */
-/* /\*     end_input_action (bda, bdb); *\/ */
-/* /\*   } *\/ */
-
-/* /\*   client_context_t* context = find_client_context (aid); *\/ */
-/* /\*   if (context == 0) { *\/ */
-/* /\*     context = create_client_context (aid); *\/ */
-/* /\*   } *\/ */
-  
-/* /\*   /\\* TODO:  Remove this line. *\\/ *\/ */
-/* /\*   switch_to_context (context); *\/ */
-
-/* /\*   for (size_t i = 0; i != count; ++i) { *\/ */
-/* /\*     vga_op_type_t type; *\/ */
-/* /\*     if (vga_op_list_next_op_type (&vol, &type) == -1) { *\/ */
-/* /\*       end_input_action (bda, bdb); *\/ */
-/* /\*     } *\/ */
-
-/* /\*     switch (type) { *\/ */
-/* /\*     case VGA_SET_START_ADDRESS: *\/ */
-/* /\*       { *\/ */
-/* /\*   	size_t address; *\/ */
-/* /\*   	if (vga_op_list_read_set_start_address (&vol, &address) == -1) { *\/ */
-/* /\* 	  end_input_action (bda, bdb); *\/ */
-/* /\*   	} *\/ */
-/* /\*   	set_start_address (&context->registers, address); *\/ */
-/* /\*       } *\/ */
-/* /\*       break; *\/ */
-/* /\*     case VGA_SET_CURSOR_LOCATION: *\/ */
-/* /\*       { *\/ */
-/* /\*   	size_t location; *\/ */
-/* /\*   	if (vga_op_list_read_set_cursor_location (&vol, &location) == -1) { *\/ */
-/* /\* 	  end_input_action (bda, bdb); *\/ */
-/* /\*   	} *\/ */
-/* /\*   	set_cursor_location (&context->registers, location); *\/ */
-/* /\*       } *\/ */
-/* /\*       break; *\/ */
-/* /\*     case VGA_ASSIGN: *\/ */
-/* /\*       { *\/ */
-/* /\*   	size_t address; *\/ */
-/* /\*   	const void* data; *\/ */
-/* /\*   	size_t size; *\/ */
-/* /\*   	if (vga_op_list_read_assign (&vol, &address, &data, &size) == -1) { *\/ */
-/* /\* 	  end_input_action (bda, bdb); *\/ */
-/* /\*   	} *\/ */
-/* /\*   	assign (context, address, data, size); *\/ */
-/* /\*       } *\/ */
-/* /\*       break; *\/ */
-/* /\*     default: *\/ */
-/* /\*       end_input_action (bda, bdb); *\/ */
-/* /\*     } *\/ */
-/* /\*   } *\/ */
-
-/* /\*   end_input_action (bda, bdb); *\/ */
-/* /\* } *\/ */
-
-/* /\* BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, aid_t aid, bd_t bda, bd_t bdb) *\/ */
-/* /\* { *\/ */
-/* /\*   initialize (); *\/ */
-
-/* /\*   /\\* Destroy the client context. *\\/ *\/ */
-/* /\*   client_context_t** ptr = &context_list_head; *\/ */
-/* /\*   for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;; *\/ */
-/* /\*   if (*ptr != 0) { *\/ */
-/* /\*     client_context_t* temp = *ptr; *\/ */
-/* /\*     *ptr = temp->next; *\/ */
-/* /\*     destroy_client_context (temp); *\/ */
-/* /\*   } *\/ */
-
-/* /\*   end_input_action (bda, bdb); *\/ */
-/* /\* } *\/ */

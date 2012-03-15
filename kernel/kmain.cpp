@@ -298,9 +298,9 @@ kmain (uint32_t multiboot_magic,
   }
 
   // Create the automaton.
-  pair<automaton*, int> r = automaton::create_automaton (kstring (), 0, true, text, boot_automaton_size, data_buffer, 0);
+  pair<shared_ptr<automaton>, int> r = automaton::create_automaton (kstring (), shared_ptr<automaton> (), true, text, boot_automaton_size, data_buffer, 0);
 
-  if (r.first == 0) {
+  if (r.first.get () == 0) {
     kout << "Could not create the boot automaton.  Halting." << endl;
     halt ();
   }

@@ -38,6 +38,13 @@ unbind:
 	mov %ecx, automatonerrno
 	ret
 
+	.global destroy
+destroy:
+	mov $LILY_SYSCALL_DESTROY, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
 	.global subscribe_destroyed
 subscribe_destroyed:
 	mov $LILY_SYSCALL_SUBSCRIBE_DESTROYED, %eax

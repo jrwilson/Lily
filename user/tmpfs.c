@@ -263,7 +263,7 @@ end_output_action (bool output_fired,
   scheduler_finish (output_fired, bda, bdb);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -314,12 +314,12 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
   end_input_action (bda, bdb);
 }
 
-BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
   vfs_fs_type_t type;
-  if (read_vfs_fs_request_type (bda, bdb, &type) == -1) {
+  if (read_vfs_fs_request_type (bda, bdb, &type) != 0) {
     vfs_fs_response_queue_push_bad_request (&response_queue, type);
     end_input_action (bda, bdb);
   }
@@ -331,7 +331,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
       const char* name;
       size_t name_size;
       vfs_fs_node_t no_node;
-      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) == -1) {
+      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) != 0) {
   	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node);
   	end_input_action (bda, bdb);
       }
@@ -371,7 +371,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   case VFS_FS_READFILE:
     {
       size_t id;
-      if (read_vfs_fs_readfile_request (bda, bdb, &id) == -1) {
+      if (read_vfs_fs_readfile_request (bda, bdb, &id) != 0) {
   	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1);
   	end_input_action (bda, bdb);
       }
@@ -393,7 +393,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, i
   	end_input_action (bda, bdb);
       }
 
-      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) == -1) {
+      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
 	syslog ("tmpfs: error: Could not enqueue readfile response");
 	exit ();
       }
@@ -415,13 +415,13 @@ response_precondition (void)
   return !vfs_fs_response_queue_empty (&response_queue);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (TMPFS_RESPONSE_NO, 0);
 
   if (response_precondition ()) {
-    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) == -1) {
+    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
       syslog ("tmpfs: error: Could not write output buffer");
       exit ();
     }

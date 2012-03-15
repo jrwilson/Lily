@@ -145,7 +145,7 @@ static void
 controller_write_command (unsigned char c)
 {
   wait_to_send ();
-  if (outb (CONTROLLER_PORT, c) == -1) { 
+  if (outb (CONTROLLER_PORT, c) != 0) { 
     syslog ("mouse: error:  could not send byte to mouse:");
     syslog_print_byte (c);
     exit ();
@@ -156,7 +156,7 @@ static void
 controller_write_data (unsigned char c)
 {
   wait_to_send ();
-  if (outb (DATA_PORT, c) == -1) { 
+  if (outb (DATA_PORT, c) != 0) { 
     syslog ("controller: error:  could not send byte to controller:");
     syslog_print_byte (c);
     exit ();
@@ -375,17 +375,17 @@ initialize (void)
     initialized = true;
 
     /* Reserve common system resources. */
-    if (reserve_port (DATA_PORT) == -1) {
+    if (reserve_port (DATA_PORT) != 0) {
       syslog ("keyboard: error:  Could not reserve data port");
       exit ();
     }
-    if (reserve_port (CONTROLLER_PORT) == -1) {
+    if (reserve_port (CONTROLLER_PORT) != 0) {
       syslog ("keyboard: error:  Could not reserve controller port");
       exit ();
     }
 
     /* Reserve keyboard system resources. */
-    if (subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0) == -1) {
+    if (subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0) != 0) {
       syslog ("keyboard: error:  Could not subscribe to keyboard irq");
       exit ();
     }
@@ -396,13 +396,13 @@ initialize (void)
       syslog ("keyboard: error:  Could not create output buffer");
       exit ();
     }
-    if (buffer_file_initw (&keyboard_output_buffer, keyboard_output_buffer_bd) == -1) {
+    if (buffer_file_initw (&keyboard_output_buffer, keyboard_output_buffer_bd) != 0) {
       syslog ("keyboard: error:  Could not initialize output buffer");
       exit ();
     }
 
     /* Reserve mouse system resources. */
-    if (subscribe_irq (MOUSE_IRQ, MOUSE_INTERRUPT_NO, 0) == -1) {
+    if (subscribe_irq (MOUSE_IRQ, MOUSE_INTERRUPT_NO, 0) != 0) {
       syslog ("mouse: error:  Could not subscribe to mouse irq");
       exit ();
     }
@@ -413,7 +413,7 @@ initialize (void)
       syslog ("mouse: error:  Could not create output buffer");
       exit ();
     }
-    if (ps2_mouse_packet_list_initw (&mouse_packet_list, mouse_packet_bd) == -1) {
+    if (ps2_mouse_packet_list_initw (&mouse_packet_list, mouse_packet_bd) != 0) {
       syslog ("mouse: error:  Could not initialize output buffer");
       exit ();
     }
@@ -496,7 +496,7 @@ end_output_action (bool output_fired,
   scheduler_finish (output_fired, bda, bdb);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   end_input_action (bda, bdb);
@@ -508,10 +508,10 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, aid_t aid, bd_t bda, bd_t bdb)
    
    Post: keyboard_output_buffer_initialized == true && the output buffer is not empty
  */
-BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  if (buffer_file_put (&keyboard_output_buffer, inb (DATA_PORT)) == -1) {
+  if (buffer_file_put (&keyboard_output_buffer, inb (DATA_PORT)) != 0) {
     syslog ("keyboard: error:  Could not write to output buffer");
     exit ();
   }
@@ -531,7 +531,7 @@ scan_code_precondition (void)
   return buffer_file_size (&keyboard_output_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (SCAN_CODE_NO, param);
@@ -554,7 +554,7 @@ BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODE_NO, "scan_code", "buffer_file", scan_code,
    
    Post: ???
  */
-BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -605,7 +605,7 @@ mouse_packet_precondition (void)
   return mouse_packet_list.count != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_NO, "mouse_packet", "ps2_mouse_packet_list_t", mouse_packet, int param)
+BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_NO, "mouse_packet", "ps2_mouse_packet_list_t", mouse_packet, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (MOUSE_PACKET_NO, param);

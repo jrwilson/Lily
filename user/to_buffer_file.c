@@ -20,7 +20,7 @@ main (int argc,
   const char* filename = argv[1];
 
   struct stat sb;
-  if (stat (filename, &sb) == -1) {
+  if (stat (filename, &sb) != 0) {
     fprintf (stderr, "Could not stat %s: %s\n", filename, strerror (errno));
     exit (EXIT_FAILURE);
   }

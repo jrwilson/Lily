@@ -137,6 +137,21 @@ public:
 
       return *this;
     }
+
+    const_iterator
+    operator++ (int)
+    {
+      const_iterator retval = *this;
+
+      size_type lookup_idx = (bucket_->hash % map_->lookup_size_) + 1;
+      bucket_ = bucket_->next;
+
+      for (; bucket_ == 0 && lookup_idx != map_->lookup_size_; ++lookup_idx) {
+	bucket_ = map_->lookup_[lookup_idx];
+      }
+
+      return retval;
+    }
   };
 
   typedef Hash hasher;

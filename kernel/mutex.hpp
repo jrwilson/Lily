@@ -10,17 +10,25 @@ public:
   { }
 
   void
-  lock () {
+  lock ()
+  {
     // TODO
     kassert (!state_);
     state_ = true;
   }
 
   void
-  unlock () {
+  unlock ()
+  {
     // TODO
     kassert (state_);
     state_ = false;
+  }
+
+  bool
+  locked () const
+  {
+    return state_;
   }
 };
 

@@ -1,10 +1,9 @@
 #ifndef __shared_ptr_hpp__
 #define __shared_ptr_hpp__
 
-/* From The C++ Standard Library:  A Tutorial and Reference by Josuttis pp. 222-223. */
+// From The C++ Standard Library:  A Tutorial and Reference by Josuttis pp. 222-223.
 
 // TODO:  Make these operations atomic.
-
 template <typename T>
 class shared_ptr {
 private:
@@ -24,10 +23,6 @@ public:
     ++*count;
   }
 
-  ~shared_ptr () {
-    dispose ();
-  }
-
   shared_ptr<T>&
   operator= (const shared_ptr<T>& p)
   {
@@ -40,25 +35,47 @@ public:
     return *this;
   }
 
-  T&
+  ~shared_ptr ()
+  {
+    dispose ();
+  }
+
+  inline T&
   operator* () const
   {
     return *ptr;
   }
 
-  T*
+  inline T*
   operator-> () const
   {
     return ptr;
   }
 
-private:
-  void
-  dispose ()
+  inline T*
+  get () const
   {
+    return ptr;
+  }
+
+  inline bool
+  operator== (const shared_ptr<T>& other) const
+  {
+    return ptr == other.ptr;
+  }
+
+  inline bool
+  operator!= (const shared_ptr<T>& other) const
+  {
+    return ptr != other.ptr;
+  }
+
+private:
+  inline void
+  dispose () {
     if (--*count == 0) {
-      delete count;
       delete ptr;
+      delete count;
     }
   }
 };

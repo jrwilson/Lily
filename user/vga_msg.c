@@ -5,14 +5,14 @@ vga_op_list_initw (vga_op_list_t* vol,
 		   bd_t bda,
 		   bd_t bdb)
 {
-  if (buffer_file_initw (&vol->bf, bda) == -1) {
+  if (buffer_file_initw (&vol->bf, bda) != 0) {
     return -1;
   }
 
   vol->count = 0;
   vol->bdb = bdb;
 
-  if (buffer_file_seek (&vol->bf, sizeof (size_t)) == -1) {
+  if (buffer_file_seek (&vol->bf, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -30,11 +30,11 @@ vga_op_list_reset (vga_op_list_t* vol)
 
   buffer_file_truncate (&vol->bf);
 
-  if (buffer_file_seek (&vol->bf, sizeof (size_t)) == -1) {
+  if (buffer_file_seek (&vol->bf, sizeof (size_t)) != 0) {
     return -1;
   }
 
-  if (buffer_resize (vol->bdb, 0) == -1) {
+  if (buffer_resize (vol->bdb, 0) != 0) {
     return -1;
   }
 
@@ -46,8 +46,8 @@ vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
 				       size_t location)
 {
   vga_op_type_t type = VGA_SET_CURSOR_LOCATION;
-  if (buffer_file_write (&vol->bf, &type, sizeof (vga_op_type_t)) == -1 ||
-      buffer_file_write (&vol->bf, &location, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
+      buffer_file_write (&vol->bf, &location, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -55,13 +55,13 @@ vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
 
   size_t position = buffer_file_position (&vol->bf);
 
-  if (buffer_file_seek (&vol->bf, 0) == -1) {
+  if (buffer_file_seek (&vol->bf, 0) != 0) {
     return -1;
   }
-  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) != 0) {
     return -1;
   }
-  if (buffer_file_seek (&vol->bf, position) == -1) {
+  if (buffer_file_seek (&vol->bf, position) != 0) {
     return -1;
   }
 
@@ -83,15 +83,15 @@ vga_op_list_write_assign (vga_op_list_t* vol,
   /* Find the offset in pages of the data. */
   size_t bd_offset = buffer_size (vol->bdb);
   /* Append the data. */
-  if (buffer_append (vol->bdb, bd) == -1) {
+  if (buffer_append (vol->bdb, bd) != 0) {
     return -1;
   }
   
   vga_op_type_t type = VGA_ASSIGN;
-  if (buffer_file_write (&vol->bf, &type, sizeof (vga_op_type_t)) == -1 ||
-      buffer_file_write (&vol->bf, &address, sizeof (size_t)) == -1 ||
-      buffer_file_write (&vol->bf, &size, sizeof (size_t)) == -1 ||
-      buffer_file_write (&vol->bf, &bd_offset, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
+      buffer_file_write (&vol->bf, &address, sizeof (size_t)) != 0 ||
+      buffer_file_write (&vol->bf, &size, sizeof (size_t)) != 0 ||
+      buffer_file_write (&vol->bf, &bd_offset, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -99,13 +99,13 @@ vga_op_list_write_assign (vga_op_list_t* vol,
 
   size_t position = buffer_file_position (&vol->bf);
 
-  if (buffer_file_seek (&vol->bf, 0) == -1) {
+  if (buffer_file_seek (&vol->bf, 0) != 0) {
     return -1;
   }
-  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) != 0) {
     return -1;
   }
-  if (buffer_file_seek (&vol->bf, position) == -1) {
+  if (buffer_file_seek (&vol->bf, position) != 0) {
     return -1;
   }
 
@@ -118,11 +118,11 @@ vga_op_list_initr (vga_op_list_t* vol,
 		   bd_t bdb,
 		   size_t* count)
 {
-  if (buffer_file_initr (&vol->bf, bda) == -1) {
+  if (buffer_file_initr (&vol->bf, bda) != 0) {
     return -1;
   }
 
-  if (buffer_file_read (&vol->bf, &vol->count, sizeof (size_t)) == -1) {
+  if (buffer_file_read (&vol->bf, &vol->count, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -142,12 +142,12 @@ vga_op_list_next_op_type (vga_op_list_t* vol,
   /* Save the current position. */
   size_t pos = buffer_file_position (&vol->bf);
 
-  if (buffer_file_read (&vol->bf, type, sizeof (vga_op_type_t)) == -1) {
+  if (buffer_file_read (&vol->bf, type, sizeof (vga_op_type_t)) != 0) {
     return -1;
   }
 
   /* Reset. */
-  if (buffer_file_seek (&vol->bf, pos) == -1) {
+  if (buffer_file_seek (&vol->bf, pos) != 0) {
     return -1;
   }
 
@@ -159,9 +159,9 @@ vga_op_list_read_set_start_address (vga_op_list_t* vol,
 				    size_t* address)
 {
   vga_op_type_t type;
-  if (buffer_file_read (&vol->bf, &type, sizeof (vga_op_type_t)) == -1 ||
+  if (buffer_file_read (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
       type != VGA_SET_START_ADDRESS ||
-      buffer_file_read (&vol->bf, address, sizeof (size_t)) == -1) {
+      buffer_file_read (&vol->bf, address, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -173,9 +173,9 @@ vga_op_list_read_set_cursor_location (vga_op_list_t* vol,
 				      size_t* location)
 {
   vga_op_type_t type;
-  if (buffer_file_read (&vol->bf, &type, sizeof (vga_op_type_t)) == -1 ||
+  if (buffer_file_read (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
       type != VGA_SET_CURSOR_LOCATION ||
-      buffer_file_read (&vol->bf, location, sizeof (size_t)) == -1) {
+      buffer_file_read (&vol->bf, location, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -190,11 +190,11 @@ vga_op_list_read_assign (vga_op_list_t* vol,
 {
   vga_op_type_t type;
   size_t bd_offset;
-  if (buffer_file_read (&vol->bf, &type, sizeof (vga_op_type_t)) == -1 ||
+  if (buffer_file_read (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
       type != VGA_ASSIGN ||
-      buffer_file_read (&vol->bf, address, sizeof (size_t)) == -1 ||
-      buffer_file_read (&vol->bf, size, sizeof (size_t)) == -1 ||
-      buffer_file_read (&vol->bf, &bd_offset, sizeof (size_t)) == -1) {
+      buffer_file_read (&vol->bf, address, sizeof (size_t)) != 0 ||
+      buffer_file_read (&vol->bf, size, sizeof (size_t)) != 0 ||
+      buffer_file_read (&vol->bf, &bd_offset, sizeof (size_t)) != 0) {
     return -1;
   }
 

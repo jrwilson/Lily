@@ -215,5 +215,51 @@ distance (InputIterator begin,
   return distance_impl (begin, end, typename iterator_traits<InputIterator>::iterator_category ());
 }
 
+/* From www.cplusplus.com */
+template <typename T>
+class back_insert_iterator :
+  public iterator<output_iterator_tag, void, void, void, void> {
+protected:
+  T& t_;
+
+public:
+  typedef T container_type;
+
+  explicit back_insert_iterator (T& t) :
+    t_ (t)
+  { }
+
+  back_insert_iterator<T>&
+  operator= (typename T::const_reference value)
+  {
+    t_.push_back (value);
+    return *this;
+  }
+
+  back_insert_iterator<T>&
+  operator* ()
+  {
+    return *this;
+  }
+
+  back_insert_iterator<T>&
+  operator++ ()
+  {
+    return *this;
+  }
+  
+  back_insert_iterator<T>
+  operator++ (int)
+  {
+    return *this;
+  }
+};
+
+template <typename T>
+back_insert_iterator<T>
+back_inserter (T& t)
+{
+  return back_insert_iterator<T> (t);
+}
 
 #endif /* __iterator_hpp__ */

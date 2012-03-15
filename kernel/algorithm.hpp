@@ -5,6 +5,17 @@
 #include "functional.hpp"
 
 template <typename InputIterator,
+	  typename OutputIterator>
+OutputIterator
+copy (InputIterator begin,
+      InputIterator end,
+      OutputIterator dest)
+{
+  for (; begin != end; *dest++ = *begin++) ;;
+  return dest;
+}
+
+template <typename InputIterator,
 	  typename T>
 InputIterator
 find (InputIterator begin,

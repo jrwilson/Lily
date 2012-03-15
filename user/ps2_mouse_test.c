@@ -38,7 +38,7 @@ initialize (void)
       syslog ("ps2_mouse_test: error: Could not create output buffer");
       exit ();
     }
-    if (buffer_file_initw (&output_buffer, output_buffer_bd) == -1) {
+    if (buffer_file_initw (&output_buffer, output_buffer_bd) != 0) {
       syslog ("ps2_mouse_test: error: Could not initialize output buffer");
       exit ();
     }
@@ -77,14 +77,14 @@ end_output_action (bool output_fired,
    
    Post: if successful, then output_buffer_initialized == true && the output buffer is not empty
  */
-BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKET_IN_NO, "mouse_packet_in", "ps2_mouse_packet_list_t", mouse_packet_in, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKET_IN_NO, "mouse_packet_in", "ps2_mouse_packet_list_t", mouse_packet_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
   size_t count = 0;
   mouse_packet_t mp;
   ps2_mouse_packet_list_t input_buffer;
-  if (ps2_mouse_packet_list_initr (&input_buffer, bda, &count) == -1) {
+  if (ps2_mouse_packet_list_initr (&input_buffer, bda, &count) != 0) {
     end_input_action (bda, bdb);
   }
 
@@ -120,7 +120,7 @@ mouse_packet_out_precondition (void)
   return buffer_file_size (&output_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_OUT_NO, "mouse_packet_out", "buffer_file", mouse_packet_out, int param)
+BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_OUT_NO, "mouse_packet_out", "buffer_file", mouse_packet_out, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (MOUSE_PACKET_OUT_NO, param);

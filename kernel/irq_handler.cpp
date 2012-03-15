@@ -183,6 +183,7 @@ irq_handler::unsubscribe (int irq,
 extern "C" void
 irq_dispatch (volatile registers regs)
 {
+  // TODO:  Spurious interrupts.
   const int irq = regs.number - PIC_MASTER_BASE;
   for (subscriber_list_type::const_iterator pos = subscribers_[irq].begin ();
        pos != subscribers_[irq].end ();

@@ -65,7 +65,7 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
   vfs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) != 0) {
     return -1;
   }
 
@@ -73,7 +73,7 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) == -1) {
+  if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) != 0) {
     return -1;
   }
 
@@ -82,15 +82,15 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
     return -1;
     break;
   case VFS_MOUNT:
-    if (buffer_file_write (&file, &item->u.mount.aid, sizeof (aid_t)) == -1 ||
-	buffer_file_write (&file, &item->u.mount.path_size, sizeof (size_t)) == -1 ||
-	buffer_file_write (&file, item->u.mount.path, item->u.mount.path_size) == -1) {
+    if (buffer_file_write (&file, &item->u.mount.aid, sizeof (aid_t)) != 0 ||
+	buffer_file_write (&file, &item->u.mount.path_size, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, item->u.mount.path, item->u.mount.path_size) != 0) {
       return -1;
     }
     break;
   case VFS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.path_size, sizeof (size_t)) == -1 ||
-	buffer_file_write (&file, item->u.readfile.path, item->u.readfile.path_size) == -1) {
+    if (buffer_file_write (&file, &item->u.readfile.path_size, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, item->u.readfile.path, item->u.readfile.path_size) != 0) {
       return -1;
     }
     break;
@@ -110,11 +110,11 @@ vfs_request_queue_push_from_buffer (vfs_request_queue_t* vrq,
   *type = VFS_UNKNOWN;
 
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
 
-  if (buffer_file_read (&file, type, sizeof (vfs_type_t)) == -1) {
+  if (buffer_file_read (&file, type, sizeof (vfs_type_t)) != 0) {
     return -1;
   }
 
@@ -127,8 +127,8 @@ vfs_request_queue_push_from_buffer (vfs_request_queue_t* vrq,
       aid_t aid;
       size_t path_size;
       const char* path;
-      if (buffer_file_read (&file, &aid, sizeof (aid_t)) == -1 ||
-	  buffer_file_read (&file, &path_size, sizeof (size_t)) == -1) {
+      if (buffer_file_read (&file, &aid, sizeof (aid_t)) != 0 ||
+	  buffer_file_read (&file, &path_size, sizeof (size_t)) != 0) {
 	return -1;
       }
 
@@ -147,7 +147,7 @@ vfs_request_queue_push_from_buffer (vfs_request_queue_t* vrq,
     {
       size_t path_size;
       const char* path;
-      if (buffer_file_read (&file, &path_size, sizeof (size_t)) == -1) {
+      if (buffer_file_read (&file, &path_size, sizeof (size_t)) != 0) {
 	return -1;
       }
 
@@ -280,7 +280,7 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
   vfs_response_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) != 0) {
     return -1;
   }
 
@@ -288,8 +288,8 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) == -1 ||
-      buffer_file_write (&file, &item->error, sizeof (vfs_error_t)) == -1) {
+  if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) != 0 ||
+      buffer_file_write (&file, &item->error, sizeof (vfs_error_t)) != 0) {
     return -1;
   }
 
@@ -301,17 +301,17 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
     /* Nothing. */
     break;
   case VFS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) == -1) {
+    if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) != 0) {
       return -1;
     }
     if (item->u.readfile.bd != -1) {
-      if (buffer_assign (bdb, item->u.readfile.bd) == -1) {
+      if (buffer_assign (bdb, item->u.readfile.bd) != 0) {
 	return -1;
       }
       buffer_destroy (item->u.readfile.bd);
     }
     else {
-      if (buffer_resize (bdb, 0) == -1) {
+      if (buffer_resize (bdb, 0) != 0) {
 	return -1;
       }
     }
@@ -334,14 +334,14 @@ read_vfs_mount_response (bd_t bda,
 			 vfs_error_t* error)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
   
   vfs_type_t type;
-  if (buffer_file_read (&file, &type, sizeof (vfs_type_t)) == -1 ||
+  if (buffer_file_read (&file, &type, sizeof (vfs_type_t)) != 0 ||
       type != VFS_MOUNT ||
-      buffer_file_read (&file, error, sizeof (vfs_error_t)) == -1) {
+      buffer_file_read (&file, error, sizeof (vfs_error_t)) != 0) {
     return -1;
   }
 
@@ -354,15 +354,15 @@ read_vfs_readfile_response (bd_t bd,
 			    size_t* size)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bd) == -1) {
+  if (buffer_file_initr (&file, bd) != 0) {
     return -1;
   }
   
   vfs_type_t type;
-  if (buffer_file_read (&file, &type, sizeof (vfs_type_t)) == -1 ||
+  if (buffer_file_read (&file, &type, sizeof (vfs_type_t)) != 0 ||
       type != VFS_READFILE ||
-      buffer_file_read (&file, error, sizeof (vfs_error_t)) == -1 ||
-      buffer_file_read (&file, size, sizeof (size_t)) == -1) {
+      buffer_file_read (&file, error, sizeof (vfs_error_t)) != 0 ||
+      buffer_file_read (&file, size, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -377,11 +377,11 @@ read_vfs_fs_request_type (bd_t bda,
 			  vfs_fs_type_t* type)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
 
-  if (buffer_file_read (&file, type, sizeof (vfs_fs_type_t)) == -1) {
+  if (buffer_file_read (&file, type, sizeof (vfs_fs_type_t)) != 0) {
     return -1;
   }
 
@@ -396,15 +396,15 @@ read_vfs_fs_descend_request (bd_t bda,
 			     size_t* name_size)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
 
   vfs_fs_type_t type;
-  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
+  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) != 0 ||
       type != VFS_FS_DESCEND ||
-      buffer_file_read (&file, id, sizeof (size_t)) == -1 ||
-      buffer_file_read (&file, name_size, sizeof (size_t)) == -1) {
+      buffer_file_read (&file, id, sizeof (size_t)) != 0 ||
+      buffer_file_read (&file, name_size, sizeof (size_t)) != 0) {
     return -1;
   }
   
@@ -425,15 +425,15 @@ read_vfs_fs_descend_response (bd_t bda,
 			      vfs_fs_node_t* node)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
   
   vfs_fs_type_t type;
-  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
+  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) != 0 ||
       type != VFS_FS_DESCEND ||
-      buffer_file_read (&file, error, sizeof (vfs_fs_error_t)) == -1 ||
-      buffer_file_read (&file, node, sizeof (vfs_fs_node_t)) == -1) {
+      buffer_file_read (&file, error, sizeof (vfs_fs_error_t)) != 0 ||
+      buffer_file_read (&file, node, sizeof (vfs_fs_node_t)) != 0) {
     return -1;
   }
 
@@ -446,14 +446,14 @@ read_vfs_fs_readfile_request (bd_t bda,
 			      size_t* id)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
   
   vfs_fs_type_t type;
-  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
+  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) != 0 ||
       type != VFS_FS_READFILE ||
-      buffer_file_read (&file, id, sizeof (size_t)) == -1) {
+      buffer_file_read (&file, id, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -467,15 +467,15 @@ read_vfs_fs_readfile_response (bd_t bda,
 			       size_t* size)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) == -1) {
+  if (buffer_file_initr (&file, bda) != 0) {
     return -1;
   }
   
   vfs_fs_type_t type;
-  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) == -1 ||
+  if (buffer_file_read (&file, &type, sizeof (vfs_fs_type_t)) != 0 ||
       type != VFS_FS_READFILE ||
-      buffer_file_read (&file, error, sizeof (vfs_fs_error_t)) == -1 ||
-      buffer_file_read (&file, size, sizeof (size_t)) == -1) {
+      buffer_file_read (&file, error, sizeof (vfs_fs_error_t)) != 0 ||
+      buffer_file_read (&file, size, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -535,7 +535,7 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
   vfs_fs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) != 0) {
     return -1;
   }
 
@@ -543,7 +543,7 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_fs_type_t)) == -1) {
+  if (buffer_file_write (&file, &item->type, sizeof (vfs_fs_type_t)) != 0) {
     return -1;
   }
 
@@ -552,14 +552,14 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
     return -1;
     break;
   case VFS_FS_DESCEND:
-    if (buffer_file_write (&file, &item->u.descend.id, sizeof (size_t)) == -1 ||
-	buffer_file_write (&file, &item->u.descend.name_size, sizeof (size_t)) == -1 ||
-	buffer_file_write (&file, item->u.descend.name, item->u.descend.name_size) == -1) {
+    if (buffer_file_write (&file, &item->u.descend.id, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, &item->u.descend.name_size, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, item->u.descend.name, item->u.descend.name_size) != 0) {
       return -1;
     }
     break;
   case VFS_FS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.id, sizeof (size_t)) == -1) {
+    if (buffer_file_write (&file, &item->u.readfile.id, sizeof (size_t)) != 0) {
       return -1;
     }
     break;
@@ -684,7 +684,7 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
   vfs_fs_response_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) == -1) {
+  if (buffer_file_initw (&file, bda) != 0) {
     return -1;
   }
 
@@ -692,8 +692,8 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_fs_type_t)) == -1 ||
-      buffer_file_write (&file, &item->error, sizeof (vfs_fs_error_t)) == -1) {
+  if (buffer_file_write (&file, &item->type, sizeof (vfs_fs_type_t)) != 0 ||
+      buffer_file_write (&file, &item->error, sizeof (vfs_fs_error_t)) != 0) {
     return -1;
   }
 
@@ -702,15 +702,15 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
     return -1;
     break;
   case VFS_FS_DESCEND:
-    if (buffer_file_write (&file, &item->u.descend.node, sizeof (vfs_fs_node_t)) == -1) {
+    if (buffer_file_write (&file, &item->u.descend.node, sizeof (vfs_fs_node_t)) != 0) {
       return -1;
     }
     break;
   case VFS_FS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) == -1) {
+    if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) != 0) {
       return -1;
     }
-    if (buffer_assign (bdb, item->u.readfile.bd) == -1) {
+    if (buffer_assign (bdb, item->u.readfile.bd) != 0) {
       return -1;
     }
     break;

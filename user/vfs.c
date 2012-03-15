@@ -174,7 +174,7 @@ file_system_pop_request (file_system_t** f)
 {
   file_system_t* fs = *f;
   /* Pop the response. */
-  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) == -1) {
+  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) != 0) {
     syslog ("vfs: error: Could not write to file system request buffer");
     exit ();
   }
@@ -378,7 +378,7 @@ readfile_callback (void* data,
 
   vfs_fs_error_t error;
   size_t size;
-  if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) == -1) {
+  if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) != 0) {
     /* TODO:  This is a protocol violation. */
     exit ();
   }
@@ -394,7 +394,7 @@ readfile_callback (void* data,
   }
 
   /* Answer. */
-  if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) == -1) {
+  if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) != 0) {
     syslog ("vfs: error: Could not copy file buffer");
     exit ();
   }
@@ -430,7 +430,7 @@ client_path_lookup_done (client_t* client,
 
     /* Bind to the file system. */
     description_t desc;
-    if (description_init (&desc, req->u.mount.aid) == -1) {
+    if (description_init (&desc, req->u.mount.aid) != 0) {
       /* Answer. */
       vfs_response_queue_push_mount (&client->response_queue, VFS_AID_DNE);
       client_answer (client);
@@ -524,7 +524,7 @@ descend_callback (void* data,
 
   vfs_fs_error_t error;
   vfs_fs_node_t node;
-  if (read_vfs_fs_descend_response (bda, bdb, &error, &node) == -1) {
+  if (read_vfs_fs_descend_response (bda, bdb, &error, &node) != 0) {
     /* TODO:  This is a protocol violation. */
     exit ();
   }
@@ -669,7 +669,7 @@ client_pop_response (client_t** c)
 {
   client_t* client = *c;
   /* Pop the response. */
-  if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) == -1) {
+  if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) != 0) {
     syslog ("vfs: error: Could not write to client response buffer");
     exit ();
   }
@@ -740,7 +740,7 @@ end_output_action (bool output_fired,
 
    Post: the request is added to the request queue of the client or a response is added to the response queue of the client
  */
-BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   client_push_request (find_or_create_client (aid), bda, bdb);
@@ -754,7 +754,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
    Pre:  The client exists and has a response.
    Post: The first response for the client is removed.
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, ano_t ano, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_RESPONSE_NO, aid);
@@ -775,10 +775,10 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
    -------------------
    Send a request to a file system.
 
-   Pre:  fs_aid != -1 && fs_bd != -1 && fs_bd_size != 0
-   Post: fs_aid == -1 && fs_bd == -1 && fs_bd_size == 0
+   Pre:  ???
+   Post: ???
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ano_t ano, aid_t aid)
 {
   initialize ();
   scheduler_remove (VFS_FS_REQUEST_NO, aid);
@@ -801,7 +801,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ai
 
    Post:
  */
-BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
