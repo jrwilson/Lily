@@ -9,4 +9,3 @@ global_fifo_scheduler::input_action_list_type::const_iterator global_fifo_schedu
 buffer* global_fifo_scheduler::output_buffer_a_;
 buffer* global_fifo_scheduler::output_buffer_b_;
 
-global_fifo_scheduler::subscribers_type global_fifo_scheduler::subscribers_ (irq_handler::IRQ_LIMIT);

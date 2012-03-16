@@ -1338,6 +1338,19 @@ public:
    */
 
 public:
+  inline pair<int, int>
+  getmonotime (mono_time_t* t)
+  {
+    // Check the name.
+    if (!verify_span (t, sizeof (mono_time_t))) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+
+    irq_handler::getmonotime (t);
+    
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.
   // The destination and source are aligned to a page boundary and the size is rounded up to a multiple of the page size.
   // Map can fail for the following reasons:
@@ -1533,15 +1546,63 @@ public:
     }
   }
 
-  pair<int, int>
+  inline pair<int, int>
   subscribe_irq (const shared_ptr<automaton>& ths,
 		 int irq,
 		 ano_t action_number,
-		 int parameter);
-
-  pair<int, int>
-  unsubscribe_irq (int irq);
-
+		 int parameter)
+  {
+    kassert (ths.get () == this);
+    
+    if (!privileged_) {
+      return make_pair (-1, LILY_SYSCALL_EPERM);
+    }
+    
+    if (irq == irq_handler::PIT_IRQ ||
+	irq == irq_handler::CASCADE_IRQ ||
+	irq < irq_handler::IRQ_BASE ||
+	irq >= irq_handler::IRQ_LIMIT) {
+      return make_pair (-1, LILY_SYSCALL_EINVAL);
+    }
+    
+    // Find the action.
+    const paction* action = find_action (action_number);
+    if (action == 0 || action->type != SYSTEM_INPUT) {
+      return make_pair (-1, LILY_SYSCALL_EBADANO);
+    }
+    
+    // Correct the parameter.
+    if (action->parameter_mode == NO_PARAMETER) {
+      parameter = 0;
+    }
+    
+    if (irq_map_.find (irq) != irq_map_.end ()) {
+      /* Already subscribed.  Note that we don't check the action. */
+      return make_pair (-1, LILY_SYSCALL_EALREADY);
+    }
+    
+    caction c (ths, action, parameter);
+    
+    irq_map_.insert (make_pair (irq, c));
+    irq_handler::subscribe (irq, c);
+    
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+  
+  inline pair<int, int>
+  unsubscribe_irq (int irq)
+  {
+    irq_map_type::iterator pos = irq_map_.find (irq);
+    if (pos == irq_map_.end ()) {
+      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+    }
+    
+    irq_handler::unsubscribe (pos->first, pos->second);
+    irq_map_.erase (pos);
+    
+    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+  }
+  
   inline pair<int, int>
   syslog (const char* string,
 	  size_t size)

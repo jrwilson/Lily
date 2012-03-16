@@ -156,3 +156,10 @@ getaid:
 	int $0x80
 	mov %ecx, automatonerrno
 	ret
+
+	.global getmonotime
+getmonotime:
+	mov $LILY_SYSCALL_GETMONOTIME, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret

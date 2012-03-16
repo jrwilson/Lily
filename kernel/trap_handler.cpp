@@ -147,6 +147,11 @@ struct buffer_size_args {
   bd_t bd;
 };
 
+struct getmonotime_args {
+  uint32_t eip;
+  mono_time_t* t;
+};
+
 struct map_args {
   uint32_t eip;
   const void* destination;
@@ -537,6 +542,19 @@ trap_dispatch (volatile registers regs)
     {
       regs.eax = a->aid ();
       regs.ecx = LILY_SYSCALL_ESUCCESS;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_GETMONOTIME:
+    {
+      getmonotime_args* ptr = reinterpret_cast<getmonotime_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (getmonotime_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<int, int> r = a->getmonotime (ptr->t);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;

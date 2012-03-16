@@ -15,6 +15,10 @@
 */
 
 #include "integer_types.hpp"
+#include "action.hpp"
+
+extern volatile unsigned int mono_seconds;
+extern volatile unsigned int mono_nanoseconds;
 
 namespace irq_handler {
   static const int IRQ_BASE = 0;
@@ -27,13 +31,30 @@ namespace irq_handler {
   install ();
 
   void
-  enable_irq (int irq);
+  subscribe (int irq,
+	     const caction& action);
 
   void
-  disable_irq (int irq);
+  unsubscribe (int irq,
+	       const caction& action);
 
-  uint16_t
-  get_irqs (void);
+  void
+  process_interrupts ();
+
+  inline void
+  wait_for_interrupt (void)
+  {
+    asm volatile ("hlt");
+  }
+
+  inline void
+  getmonotime (mono_time_t* t)
+  {
+    asm volatile ("cli");
+    t->seconds = mono_seconds;
+    t->nanoseconds = mono_nanoseconds;
+    asm volatile ("sti");
+  }
 };
 
 #endif /* __irq_handler_hpp__ */

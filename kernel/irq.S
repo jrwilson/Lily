@@ -6,6 +6,17 @@
 
 	.section .data
 
+	/* Time since boot divided into seconds, nano-seconds, and atto-seconds. */
+	.global mono_seconds
+mono_seconds:
+	.long 0
+	.global mono_nanoseconds
+mono_nanoseconds:
+	.long 0
+	.global mono_attoseconds
+mono_attoseconds:
+	.long 0
+	
 	/* Bitset of IRQs that have fired. */
 	.global irq_set
 irq_set:
@@ -46,7 +57,52 @@ irq\irq_num:
 	iret
 .endm
 
-MASTER_IRQ 0
+	/* See irq_handler for a description of these constants. */
+	.set ATTO_INC, 776621468
+	.set NANO_INC,   1000727
+	.set BILLION, 1000000000
+	
+	.global irq0
+irq0:
+	push %eax
+	push %ebx
+	push %ecx
+	
+	mov mono_attoseconds, %eax
+	mov mono_nanoseconds, %ebx
+	mov mono_seconds, %ecx
+	add $ATTO_INC, %eax
+atto_cond:
+	cmp $BILLION, %eax
+	jl atto_done
+	add $1, %ebx
+	sub $BILLION, %eax
+	jmp atto_cond
+atto_done:	
+
+	add $NANO_INC, %ebx
+nano_cond:
+	cmp $BILLION, %ebx
+	jl nano_done
+	add $1, %ecx
+	sub $BILLION, %ebx
+	jmp nano_cond
+nano_done:	
+
+	mov %eax, mono_attoseconds
+	mov %ebx, mono_nanoseconds
+	mov %ecx, mono_seconds
+	
+	/* Send end of interrupt. */
+	mov $(PIC_OCW2_LOW | PIC_OCW2_NON_SPECIFIC_EOI), %al
+	outb $PIC_MASTER_LOW
+	
+	pop %ecx
+	pop %ebx
+	pop %eax
+	
+	iret
+
 MASTER_IRQ 1
 MASTER_IRQ 2
 MASTER_IRQ 3

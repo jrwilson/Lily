@@ -356,7 +356,7 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   for (irq_map_type::const_iterator pos = irq_map_.begin ();
        pos != irq_map_.end ();
        ++pos) {
-    scheduler::unsubscribe (pos->first, pos->second);
+    irq_handler::unsubscribe (pos->first, pos->second);
   }
   irq_map_.clear ();
   
@@ -374,63 +374,6 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   kassert (binding_subscriptions_.empty ());
   
   scheduler::remove_automaton (ths);
-}
-
-pair<int, int>
-automaton::subscribe_irq (const shared_ptr<automaton>& ths,
-			  int irq,
-			  ano_t action_number,
-			  int parameter)
-{
-  kassert (ths.get () == this);
-  
-  if (!privileged_) {
-    return make_pair (-1, LILY_SYSCALL_EPERM);
-  }
-  
-  if (irq == irq_handler::PIT_IRQ ||
-      irq == irq_handler::CASCADE_IRQ ||
-      irq < irq_handler::IRQ_BASE ||
-      irq >= irq_handler::IRQ_LIMIT) {
-    return make_pair (-1, LILY_SYSCALL_EINVAL);
-  }
-  
-  // Find the action.
-  const paction* action = find_action (action_number);
-  if (action == 0 || action->type != SYSTEM_INPUT) {
-    return make_pair (-1, LILY_SYSCALL_EBADANO);
-  }
-  
-  // Correct the parameter.
-  if (action->parameter_mode == NO_PARAMETER) {
-    parameter = 0;
-  }
-  
-  if (irq_map_.find (irq) != irq_map_.end ()) {
-    /* Already subscribed.  Note that we don't check the action. */
-    return make_pair (-1, LILY_SYSCALL_EALREADY);
-  }
-  
-  caction c (ths, action, parameter);
-  
-  irq_map_.insert (make_pair (irq, c));
-  scheduler::subscribe (irq, c);
-  
-  return make_pair (0, LILY_SYSCALL_ESUCCESS);
-}
-
-pair<int, int>
-automaton::unsubscribe_irq (int irq)
-{
-  irq_map_type::iterator pos = irq_map_.find (irq);
-  if (pos == irq_map_.end ()) {
-    return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
-  }
-  
-  scheduler::unsubscribe (pos->first, pos->second);
-  irq_map_.erase (pos);
-  
-  return make_pair (0, LILY_SYSCALL_ESUCCESS);
 }
 
 // pair<bd_t, int>

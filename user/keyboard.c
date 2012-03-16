@@ -320,9 +320,10 @@ write_ps2_mouse_packet () {
     packet.z_delta_vertical = 0;
     packet.z_delta_horizontal = 0;
 
-    /* TODO - need to initialize time properly */
-    packet.time_stamp.seconds = 0;
-    packet.time_stamp.nanoseconds = 0;
+    if (getmonotime (&packet.time_stamp) != 0) {
+      syslog ("mouse: error:  could not get the time");
+      exit ();
+    }
 
     switch (mouse_id) {
 

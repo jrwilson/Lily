@@ -169,4 +169,7 @@ describe (aid_t aid);
 aid_t
 getaid (void);
 
+int
+getmonotime (mono_time_t* t);
+
 #endif /* AUTOMATON_H */

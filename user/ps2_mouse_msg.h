@@ -10,7 +10,7 @@ typedef struct {
   int y_delta;
   int z_delta_vertical;
   int z_delta_horizontal;
-  time_t time_stamp;
+  mono_time_t time_stamp;
 } mouse_packet_t;
 
 typedef struct {

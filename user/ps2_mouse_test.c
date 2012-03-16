@@ -96,12 +96,14 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKET_IN_NO, "mouse_packet_in", "ps2_mouse_pac
     }
     /* TODO print out time stamp once its implemented */
     bfprintf (&output_buffer,
-	      "status %x dx %d dy %d dzv %d dzh %d \n",
+	      "status %x dx %d dy %d dzv %d dzh %d %d %d\n",
 	      mp.button_status_bits,
 	      mp.x_delta,
 	      mp.y_delta,
 	      mp.z_delta_vertical,
-	      mp.z_delta_horizontal);
+	      mp.z_delta_horizontal,
+	      mp.time_stamp.seconds,
+	      mp.time_stamp.nanoseconds);
   }
 
   end_input_action (bda, bdb);

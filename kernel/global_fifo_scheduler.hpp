@@ -26,8 +26,6 @@
 #include "string.hpp"
 #include "linear_set.hpp"
 
-extern volatile uint32_t irq_set;
-
 class global_fifo_scheduler {
 private:
 
@@ -57,10 +55,6 @@ private:
   // Buffers produced by an output action that will be copied to the input action.
   static buffer* output_buffer_a_;
   static buffer* output_buffer_b_;
-
-  typedef vector<caction> subscriber_list_type;
-  typedef vector<subscriber_list_type> subscribers_type;
-  static subscribers_type subscribers_; // (irq_handler::MAX_IRQ + 1);
 
   struct sort_bindings_by_input {
     bool
@@ -211,26 +205,7 @@ public:
 
     for (;;) {
 
-      // Check for interrupts.
-      // TODO:  Use atomic swap.
-      asm volatile ("cli");
-      uint32_t is = irq_set;
-      irq_set = 0;
-      asm volatile ("sti");
-
-      if (is != 0) {
-	uint32_t mask = 1;
-	for (int irq = irq_handler::IRQ_BASE; irq != irq_handler::IRQ_LIMIT; ++irq, mask = mask << 1) {
-	  if ((is & mask) != 0) {
-	    for (subscriber_list_type::const_iterator pos = subscribers_[irq].begin ();
-		 pos != subscribers_[irq].end ();
-		 ++pos) {
-	      // TODO:  Put this at the front of the queue.
-	      schedule (*pos);
-	    }
-	  }
-	}
-      }
+      irq_handler::process_interrupts ();
 
       if (!ready_queue_.empty ()) {
 	// Get the automaton context and remove it from the ready queue.
@@ -301,35 +276,12 @@ public:
 	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
 
-      /* Out of actions.  Halt. */
+      // Out of actions.
       action_.automaton = shared_ptr<automaton> ();
-      asm volatile ("hlt");
+      irq_handler::wait_for_interrupt ();
     }
   }
 
-  static void
-  subscribe (int irq,
-  	     const caction& action)
-  {
-    if (subscribers_[irq].empty ()) {
-      irq_handler::enable_irq (irq);
-    }
-
-    subscribers_[irq].push_back (action);
-  }
-
-  static void
-  unsubscribe (int irq,
-	       const caction& action)
-  {
-    subscriber_list_type::iterator pos = find (subscribers_[irq].begin (), subscribers_[irq].end (), action);
-    kassert (pos != subscribers_[irq].end ());
-    subscribers_[irq].erase (pos);
-    
-    if (subscribers_[irq].empty ()) {
-      irq_handler::disable_irq (irq);
-    }
-  }
 };
 
 #endif /* __global_fifo_scheduler_hpp__ */

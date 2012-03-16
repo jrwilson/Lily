@@ -20,13 +20,9 @@ typedef struct {
   size_t description_size;
 } action_descriptor_t;
 
-typedef enum {MONOTONIC, WALL} time_source_t;
-
 typedef struct {
   unsigned int seconds;
   unsigned int nanoseconds;
-  time_source_t time_source;
-} time_t;
-
+} mono_time_t;
 
 #endif /* LILY_TYPES_H */
