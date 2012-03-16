@@ -103,6 +103,7 @@ static unsigned char mouse_packet_data [MAX_MOUSE_PACKET_SIZE];
 #define SCAN_CODE_NO 2
 #define MOUSE_INTERRUPT_NO 3
 #define MOUSE_PACKET_NO 4
+#define INIT_NO 5
 
 static void
 syslog_print_byte (unsigned char c)
@@ -471,36 +472,10 @@ initialize (void)
   }
 }
 
-static void
-schedule (void);
-
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
-{
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
-}
-
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_input_action (bda, bdb);
+  end_internal_action ();
 }
 
 /* keyboard_interrupt
@@ -625,7 +600,7 @@ BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_NO, "mouse_packet", "ps2_mouse_packet_l
 
 /*===*/
 
-static void
+void
 schedule (void)
 {
   if (scan_code_precondition ()) {

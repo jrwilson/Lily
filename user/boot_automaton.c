@@ -24,7 +24,7 @@
 
 #define VFS_REQUEST_NO 1
 #define VFS_RESPONSE_NO 2
-#define DESTROY_BUFFERS_NO 3
+#define INIT_NO 3
 
 /* Name to register the VFS under. */
 #define VFS_NAME "vfs"
@@ -50,54 +50,6 @@ static vfs_request_queue_t vfs_request_queue;
 
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
-
-static void
-initialize (void)
-{
-  if (!initialized) {
-    initialized = true;
-
-    vfs_request_bda = buffer_create (1);
-    if (vfs_request_bda == -1) {
-      syslog ("boot_automaton: error: Could not create vfs request buffer");
-      exit ();
-    }
-    vfs_request_bdb = buffer_create (0);
-    if (vfs_request_bdb == -1) {
-      syslog ("boot_automaton: error: Could not create vfs request buffer");
-      exit ();
-    }
-
-    vfs_request_queue_init (&vfs_request_queue);
-    callback_queue_init (&vfs_response_queue);
-  }
-}
-
-static void
-schedule (void);
-
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
-{
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
-}
 
 static void
 readfile_callback (void* data,
@@ -164,6 +116,110 @@ mount_callback (void* data,
   callback_queue_push (&vfs_response_queue, readfile_callback, 0);
 }
 
+static void
+initialize (void)
+{
+  if (!initialized) {
+    initialized = true;
+
+    vfs_request_bda = buffer_create (1);
+    if (vfs_request_bda == -1) {
+      syslog ("boot_automaton: error: Could not create vfs request buffer");
+      exit ();
+    }
+    vfs_request_bdb = buffer_create (0);
+    if (vfs_request_bdb == -1) {
+      syslog ("boot_automaton: error: Could not create vfs request buffer");
+      exit ();
+    }
+
+    vfs_request_queue_init (&vfs_request_queue);
+    callback_queue_init (&vfs_response_queue);
+
+    aid_t aid = getaid ();
+    bd_t bda = getinita ();
+    bd_t bdb = getinitb ();
+
+    cpio_archive_t archive;
+    if (cpio_archive_init (&archive, bda) != 0) {
+      syslog ("boot_automaton: error: Could not initialize cpio archive");
+      exit ();
+    }
+    
+    cpio_file_t* vfs_file = 0;
+    cpio_file_t* tmpfs_file = 0;
+    cpio_file_t* file;
+    while ((file = cpio_archive_next_file (&archive)) != 0) {
+      if (strcmp (file->name, VFS_PATH) == 0) {
+	vfs_file = file;
+      }
+      else if (strcmp (file->name, TMPFS_PATH) == 0) {
+	tmpfs_file = file;
+      }
+      else {
+	/* Destroy the file if we don't need it. */
+	cpio_file_destroy (file);
+      }
+    }
+    
+    /* Create the vfs. */
+    if (vfs_file == 0) {
+      syslog ("boot_automaton: error: No vfs file");
+      exit ();
+    }
+    aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false);
+    cpio_file_destroy (vfs_file);
+    if (vfs == -1) {
+      syslog ("boot_automaton: error: Could not create vfs");
+      exit ();
+    }
+    
+    /* Bind to the vfs so we can mount the tmpfs. */
+    description_t vfs_description;
+    if (description_init (&vfs_description, vfs) != 0) {
+      syslog ("boot_automaton: error: Could not describe vfs");
+      exit ();
+    }
+    
+    /* If these actions don't exist, then attempts to bind below will fail. */
+    const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
+    const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
+    
+    description_fini (&vfs_description);
+    
+    /* We bind the response first so they don't get lost. */
+    if (bind (vfs, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
+	bind (aid, VFS_REQUEST_NO, 0, vfs, vfs_request, 0) == -1) {
+      syslog ("boot_automaton: error: Could not bind to vfs");
+      exit ();
+    }
+    
+    /* Create the tmpfs. */
+    if (tmpfs_file == 0) {
+      syslog ("boot_automaton: error: No tmpfs file\n");
+      exit ();
+    }
+    /* Note:  We pass the buffer containing the cpio archive. */
+    aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false);
+    cpio_file_destroy (tmpfs_file);
+    if (tmpfs == -1) {
+      syslog ("boot_automaton: error: Could not create tmpfs");
+      exit ();
+    }
+    
+    /* Mount tmpfs on ROOT_PATH. */
+    vfs_request_queue_push_mount (&vfs_request_queue, tmpfs, ROOT_PATH);
+    callback_queue_push (&vfs_response_queue, mount_callback, 0);
+
+    if (bda != -1) {
+      buffer_destroy (bda);
+    }
+    if (bdb != -1) {
+      buffer_destroy (bdb);
+    }
+  }
+}
+
 /* init
    ----
    Init receives a buffer containing a cpio archive.
@@ -172,82 +228,10 @@ mount_callback (void* data,
    
    Post: mount_state == MOUNT && tmpfs != -1 && init_file != 0
  */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t boot_aid, bd_t bda, bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-
-  cpio_archive_t archive;
-  if (cpio_archive_init (&archive, bda) != 0) {
-    syslog ("boot_automaton: error: Could not initialize cpio archive");
-    exit ();
-  }
-
-  cpio_file_t* vfs_file = 0;
-  cpio_file_t* tmpfs_file = 0;
-  cpio_file_t* file;
-  while ((file = cpio_archive_next_file (&archive)) != 0) {
-    if (strcmp (file->name, VFS_PATH) == 0) {
-      vfs_file = file;
-    }
-    else if (strcmp (file->name, TMPFS_PATH) == 0) {
-      tmpfs_file = file;
-    }
-    else {
-      /* Destroy the file if we don't need it. */
-      cpio_file_destroy (file);
-    }
-  }
-  
-  /* Create the vfs. */
-  if (vfs_file == 0) {
-    syslog ("boot_automaton: error: No vfs file");
-    exit ();
-  }
-  aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false);
-  cpio_file_destroy (vfs_file);
-  if (vfs == -1) {
-    syslog ("boot_automaton: error: Could not create vfs");
-    exit ();
-  }
-
-  /* Bind to the vfs so we can mount the tmpfs. */
-  description_t vfs_description;
-  if (description_init (&vfs_description, vfs) != 0) {
-    syslog ("boot_automaton: error: Could not describe vfs");
-    exit ();
-  }
-
-  /* If these actions don't exist, then attempts to bind below will fail. */
-  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
-  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
-
-  description_fini (&vfs_description);
-
-  /* We bind the response first so they don't get lost. */
-  if (bind (vfs, vfs_response, 0, boot_aid, VFS_RESPONSE_NO, 0) == -1 ||
-      bind (boot_aid, VFS_REQUEST_NO, 0, vfs, vfs_request, 0) == -1) {
-    syslog ("boot_automaton: error: Could not bind to vfs");
-    exit ();
-  }
-
-  /* Create the tmpfs. */
-  if (tmpfs_file == 0) {
-    syslog ("boot_automaton: error: No tmpfs file\n");
-    exit ();
-  }
-  /* Note:  We pass the buffer containing the cpio archive. */
-  aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false);
-  cpio_file_destroy (tmpfs_file);
-  if (tmpfs == -1) {
-    syslog ("boot_automaton: error: Could not create tmpfs");
-    exit ();
-  }
-
-  /* Mount tmpfs on ROOT_PATH. */
-  vfs_request_queue_push_mount (&vfs_request_queue, tmpfs, ROOT_PATH);
-  callback_queue_push (&vfs_response_queue, mount_callback, 0);
-
-  end_input_action (bda, bdb);
+  end_internal_action ();
 }
 
 /* vfs_request
@@ -305,7 +289,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
   end_input_action (bda, bdb);
 }
 
-static void
+void
 schedule (void)
 {
   if (vfs_request_precondition ()) {

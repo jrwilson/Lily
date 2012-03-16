@@ -45,6 +45,7 @@ static aid_t vfs_aid = -1;
 #define VFS_RESPONSE_NO 2
 #define VFS_FS_REQUEST_NO 3
 #define VFS_FS_RESPONSE_NO 4
+#define INIT_NO 5
 
 /*
   Begin Path Section
@@ -707,31 +708,10 @@ initialize (void)
   }
 }
 
-static void
-schedule (void);
-
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
+  initialize ();
+  end_internal_action ();
 }
 
 /* client_request
@@ -822,7 +802,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
   end_input_action (bda, bdb);
 }
 
-static void
+void
 schedule (void)
 {
   if (response_head != 0) {

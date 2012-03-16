@@ -308,12 +308,6 @@ kmain (uint32_t multiboot_magic,
   text = shared_ptr<buffer> ();
   data_buffer = shared_ptr<buffer> ();
   
-  // Check the init action.
-  if (r.first->find_action (LILY_ACTION_INIT) == 0) {
-    kout << "The boot automaton does not contain an init action.  Halting." << endl;
-    halt ();
-  }
-  
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, -1);
 }

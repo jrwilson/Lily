@@ -53,7 +53,7 @@ vga : vga.o vga_msg.o
 	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
 
 pci : pci.o 
-	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
 
 # Programs
 jsh : jsh.o argv.o vfs_msg.o

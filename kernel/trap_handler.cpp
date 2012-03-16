@@ -545,6 +545,20 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
+  case LILY_SYSCALL_GETINITA:
+    {
+      regs.eax = a->inita ();
+      regs.ecx = LILY_SYSCALL_ESUCCESS;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_GETINITB:
+    {
+      regs.eax = a->initb ();
+      regs.ecx = LILY_SYSCALL_ESUCCESS;
+      return;
+    }
+    break;
   case LILY_SYSCALL_GETMONOTIME:
     {
       getmonotime_args* ptr = reinterpret_cast<getmonotime_args*> (regs.useresp);

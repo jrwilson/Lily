@@ -52,6 +52,9 @@ scheduler_remove (ano_t action_number,
 }
 
 void
+schedule (void);
+
+static void
 scheduler_finish (bool output_fired,
 		  bd_t bda,
 		  bd_t bdb)
@@ -62,4 +65,34 @@ scheduler_finish (bool output_fired,
   else {
     finish (NO_ACTION, 0, output_fired, bda, bdb);
   }
+}
+
+void
+end_input_action (bd_t bda,
+		  bd_t bdb)
+{
+  if (bda != -1) {
+    buffer_destroy (bda);
+  }
+  if (bdb != -1) {
+    buffer_destroy (bdb);
+  }
+  schedule ();
+  scheduler_finish (false, -1, -1);
+}
+
+void
+end_output_action (bool output_fired,
+		   bd_t bda,
+		   bd_t bdb)
+{
+  schedule ();
+  scheduler_finish (output_fired, bda, bdb);
+}
+
+void
+end_internal_action (void)
+{
+  schedule ();
+  scheduler_finish (false, -1, -1);
 }

@@ -157,6 +157,20 @@ getaid:
 	mov %ecx, automatonerrno
 	ret
 
+	.global getinita
+getinita:
+	mov $LILY_SYSCALL_GETINITA, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
+	.global getinitb
+getinitb:
+	mov $LILY_SYSCALL_GETINITB, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
 	.global getmonotime
 getmonotime:
 	mov $LILY_SYSCALL_GETMONOTIME, %eax

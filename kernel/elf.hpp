@@ -398,12 +398,6 @@ namespace elf {
 		      // The action number LILY_ACTION_NO_ACTION is reserved.
 		      return -1;
 		      break;
-		    case LILY_ACTION_INIT:
-		      if (d->action_type != LILY_ACTION_SYSTEM_INPUT || d->parameter_mode != PARAMETER) {
-			// These must have the correct type.
-			return -1;
-		      }
-		      // Fall through.
 		    default:
 		      if (!a->add_action (static_cast<action_type_t> (d->action_type), static_cast<parameter_mode_t> (d->parameter_mode), reinterpret_cast<const void*> (d->action_entry_point), d->action_number, kstring (action_name, d->action_name_size), kstring (action_description, d->action_description_size))) {
 			// Action conflicts.

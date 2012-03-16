@@ -68,6 +68,7 @@
 
 #define TMPFS_REQUEST_NO 1
 #define TMPFS_RESPONSE_NO 2
+#define INIT_NO 3
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -234,84 +235,67 @@ initialize (void)
       exit ();
     }
     vfs_fs_response_queue_init (&response_queue);
-  }
-}
 
-static void
-schedule (void);
+    bd_t bda = getinita ();
+    bd_t bdb = getinitb ();
 
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
-{
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
-}
-
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  /* Parse the cpio archive looking for files that we need. */
-  cpio_archive_t archive;
-  if (cpio_archive_init (&archive, bda) == 0) {
-
-    cpio_file_t* file;
-    while ((file = cpio_archive_next_file (&archive)) != 0) {
-
-      /* Ignore the "." directory. */
-      if (strcmp (file->name, ".") != 0) {
+    /* Parse the cpio archive looking for files that we need. */
+    cpio_archive_t archive;
+    if (cpio_archive_init (&archive, bda) == 0) {
+      
+      cpio_file_t* file;
+      while ((file = cpio_archive_next_file (&archive)) != 0) {
 	
-	/* Start at the root. */
-      	inode_t* parent = nodes[0];
-	
-  	const char* begin;
-      	for (begin = file->name; begin < file->name + file->name_size;) {
-      	  /* Find the delimiter. */
-      	  const char* end = memchr (begin, '/', file->name_size - (begin - file->name));
+	/* Ignore the "." directory. */
+	if (strcmp (file->name, ".") != 0) {
 	  
-      	  if (end != 0) {
-      	    /* Process part of the path. */
-      	    parent = directory_find_or_create (parent, begin, end - begin);
-      	    /* Update the beginning. */
-      	    begin = end + 1;
-      	  }
-      	  else {
-      	    break;
-      	  }
-      	}
+	  /* Start at the root. */
+	  inode_t* parent = nodes[0];
+	  
+	  const char* begin;
+	  for (begin = file->name; begin < file->name + file->name_size;) {
+	    /* Find the delimiter. */
+	    const char* end = memchr (begin, '/', file->name_size - (begin - file->name));
+	    
+	    if (end != 0) {
+	      /* Process part of the path. */
+	      parent = directory_find_or_create (parent, begin, end - begin);
+	      /* Update the beginning. */
+	      begin = end + 1;
+	    }
+	    else {
+	      break;
+	    }
+	  }
+	  
+	  switch (file->mode & CPIO_TYPE_MASK) {
+	  case CPIO_REGULAR:
+	    file_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name), file->bd, file->size);
+	    break;
+	  case CPIO_DIRECTORY:
+	    directory_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name));
+	    break;
+	  }
+	}
 	
-      	switch (file->mode & CPIO_TYPE_MASK) {
-      	case CPIO_REGULAR:
-  	  file_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name), file->bd, file->size);
-      	  break;
-      	case CPIO_DIRECTORY:
-      	  directory_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name));
-      	  break;
-      	}
+	/* Destroy the cpio file. */
+	cpio_file_destroy (file);
       }
+    }
 
-      /* Destroy the cpio file. */
-      cpio_file_destroy (file);
+    if (bda != -1) {
+      buffer_destroy (bda);
+    }
+    if (bdb != -1) {
+      buffer_destroy (bdb);
     }
   }
+}
 
-  end_input_action (bda, bdb);
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+{
+  initialize ();
+  end_internal_action ();
 }
 
 BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, ano_t ano, int param, bd_t bda, bd_t bdb)
@@ -432,7 +416,7 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
   }
 }
 
-static void
+void
 schedule (void)
 {
   if (response_precondition ()) {

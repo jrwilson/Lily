@@ -13,7 +13,6 @@
 #define AUTO_PARAMETER LILY_ACTION_AUTO_PARAMETER
 
 #define NO_ACTION LILY_ACTION_NO_ACTION
-#define INIT LILY_ACTION_INIT
 
 /* A macro for embedding the action information. */
 #define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, func_name, action_number, action_name, action_description) \
@@ -168,6 +167,12 @@ describe (aid_t aid);
 
 aid_t
 getaid (void);
+
+bd_t
+getinita (void);
+
+bd_t
+getinitb (void);
 
 int
 getmonotime (mono_time_t* t);

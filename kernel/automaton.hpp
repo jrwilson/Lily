@@ -211,6 +211,10 @@ private:
   // Mutual exlusion lock for executing actions.
   mutex execution_mutex_;
 
+  // Initialization buffers.
+  bd_t init_buffer_a_;
+  bd_t init_buffer_b_;
+
   /*
    * MEMORY MAP AND BUFFERS
    */
@@ -340,6 +344,7 @@ public:
     }
   }
 
+private:
   inline const paction*
   find_action (ano_t ano) const
   {
@@ -351,7 +356,8 @@ public:
       return 0;
     }
   }
-  
+
+public:  
   inline pair<bd_t, int>
   describe (aid_t aid)
   {
@@ -583,12 +589,12 @@ public:
 	
 	if (output_buffer_a_.get () != 0) {
 	  // Copy the buffer to the input automaton.
-	  bda = buffer_create (*output_buffer_a_);
+	  bda = buffer_create (output_buffer_a_);
 	}
 	
 	if (output_buffer_b_.get () != 0) {
 	  // Copy the buffer to the input automaton.
-	  bdb = buffer_create (*output_buffer_b_);
+	  bdb = buffer_create (output_buffer_b_);
 	}
 	
 	// Push the buffers.
@@ -669,6 +675,18 @@ public:
   unlock_execution ()
   {
     execution_mutex_.unlock ();
+  }
+
+  inline bd_t
+  inita () const
+  {
+    return init_buffer_a_;
+  }
+
+  inline bd_t
+  initb () const
+  {
+    return init_buffer_b_;
   }
 
   /*
@@ -951,13 +969,13 @@ public:
   }
   
   inline bd_t
-  buffer_create (const buffer& other)
+  buffer_create (const shared_ptr<buffer>& other)
   {
     // Generate an id.
     bd_t bd = generate_bd ();
     
     // Create the buffer and insert it into the map.
-    buffer* b = new buffer (other);
+    shared_ptr<buffer> b = shared_ptr<buffer> (new buffer (*other));
     bd_to_buffer_map_.insert (make_pair (bd, b));
     
     return bd;
@@ -1729,6 +1747,8 @@ public:
     aid_ (-1),
     regenerate_description_ (false),
     parent_ (0),
+    init_buffer_a_ (-1),
+    init_buffer_b_ (-1),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),
     heap_area_ (0),
     stack_area_ (0),
@@ -1772,6 +1792,8 @@ public:
       parent_
       children_
       execution_mutex_
+      init_buffer_a_
+      init_buffer_b_
       page_directory_
       memory_map_
       heap_area_
@@ -1803,6 +1825,8 @@ public:
     kassert (parent_.get () == 0);
     kassert (children_.empty ());
     kassert (!execution_mutex_.locked ());
+    // Nothing for init_buffer_a_.
+    // Nothing for init_buffer_b_.
 
     // We need to switch to this automaton's page directory to take apart the memory map.
     // Either we are already using this automaton's memory map or we are using someone else's (including the kernel).

@@ -955,6 +955,7 @@ put (char c)
 #define STDOUT_NO 7
 #define START_NO 8
 #define STDIN_COL_NO 9
+#define INIT_NO 10
 
 #define VFS_NAME "vfs"
 
@@ -976,6 +977,27 @@ static size_t interpret_string_idx;
 /* Text to output. */
 static bd_t stdout_bd;
 static buffer_file_t stdout_bf;
+
+static void
+readscript_callback (void* data,
+		     bd_t bda,
+		     bd_t bdb)
+{
+  vfs_error_t error;
+  size_t size;
+  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
+    syslog ("jsh: error: vfs provide bad readfile response");
+    exit ();
+  }
+
+  if (error != VFS_SUCCESS) {
+    syslog ("jsh: error: readfile failed");
+    exit ();
+  }
+
+  /* Put the file on the interpret queue. */
+  buffer_queue_push (&interpret_queue, 0, -1, 0, buffer_copy (bdb), size);
+}
 
 static void
 initialize (void)
@@ -1010,120 +1032,70 @@ initialize (void)
       syslog ("jsh: error: Could not initialize stdout buffer");
       exit ();
     }
-  }
-}
 
-static void
-schedule (void);
+    aid_t aid = getaid ();
+    bd_t bda = getinita ();
+    bd_t bdb = getinitb ();
 
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
-{
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
-}
-
-static void
-end_internal_action (void)
-{
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-readscript_callback (void* data,
-		     bd_t bda,
-		     bd_t bdb)
-{
-  vfs_error_t error;
-  size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    syslog ("jsh: error: vfs provide bad readfile response");
-    exit ();
-  }
-
-  if (error != VFS_SUCCESS) {
-    syslog ("jsh: error: readfile failed");
-    exit ();
-  }
-
-  /* Put the file on the interpret queue. */
-  buffer_queue_push (&interpret_queue, 0, -1, 0, buffer_copy (bdb), size);
-}
-
-/* init
-   ----
-   The script to execute comes in on bda.
-
-   Post: ???
- */
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  /* Bind to the vfs. */
-  vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
-  if (vfs_aid == -1) {
-    syslog ("jsh: error: no vfs");
-    exit ();
-  }
-
-  description_t vfs_description;
-  if (description_init (&vfs_description, vfs_aid) != 0) {
-    syslog ("jsh: error: couldn't describe vfs");
-    exit ();
-  }
-  const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
-  const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
-  description_fini (&vfs_description);
-
-  if (vfs_request == NO_ACTION ||
-      vfs_response == NO_ACTION) {
-    syslog ("jsh: error: the vfs does not appear to be a vfs");
-    exit ();
-  }
-
-  /* We bind the response first so they don't get lost. */
-  if (bind (vfs_aid, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-      bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) {
-    syslog ("jsh: error: Couldn't bind to vfs");
-    exit ();
-  }
-
-  argv_t argv;
-  size_t argc;
-  if (argv_initr (&argv, bda, bdb, &argc) != -1) {
-    if (argc >= 2) {
-      /* Request the script. */
-      const char* filename;
-      size_t size;
-      if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
-	syslog ("jsh: error: Couldn't read filename argument");
-	exit ();
+    /* Bind to the vfs. */
+    vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
+    if (vfs_aid == -1) {
+      syslog ("jsh: error: no vfs");
+      exit ();
+    }
+    
+    description_t vfs_description;
+    if (description_init (&vfs_description, vfs_aid) != 0) {
+      syslog ("jsh: error: couldn't describe vfs");
+      exit ();
+    }
+    const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
+    const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
+    description_fini (&vfs_description);
+    
+    if (vfs_request == NO_ACTION ||
+	vfs_response == NO_ACTION) {
+      syslog ("jsh: error: the vfs does not appear to be a vfs");
+      exit ();
+    }
+    
+    /* We bind the response first so they don't get lost. */
+    if (bind (vfs_aid, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
+	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) {
+      syslog ("jsh: error: Couldn't bind to vfs");
+      exit ();
+    }
+    
+    argv_t argv;
+    size_t argc;
+    if (argv_initr (&argv, bda, bdb, &argc) != -1) {
+      if (argc >= 2) {
+	/* Request the script. */
+	const char* filename;
+	size_t size;
+	if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
+	  syslog ("jsh: error: Couldn't read filename argument");
+	  exit ();
+	}
+	
+	vfs_request_queue_push_readfile (&vfs_request_queue, filename);
+	callback_queue_push (&vfs_response_queue, readscript_callback, 0);
       }
-
-      vfs_request_queue_push_readfile (&vfs_request_queue, filename);
-      callback_queue_push (&vfs_response_queue, readscript_callback, 0);
+    }
+    
+    if (bda != -1) {
+      buffer_destroy (bda);
+    }
+    if (bdb != -1) {
+      buffer_destroy (bdb);
     }
   }
+}
 
-  end_input_action (bda, bdb);
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+{
+  initialize ();
+  end_internal_action ();
 }
 
 /* vfs_request
@@ -1365,7 +1337,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file", stdin_col
   end_input_action (bda, bdb);
 }
 
-static void
+void
 schedule (void)
 {
   if (vfs_request_precondition ()) {

@@ -13,7 +13,6 @@
 #define LILY_ACTION_AUTO_PARAMETER 2
 
 #define LILY_ACTION_NO_ACTION 0
-#define LILY_ACTION_INIT -1
 
 #endif /* LILY_ACTION_H */
 

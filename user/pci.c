@@ -3,6 +3,7 @@
 #include <dymem.h>
 #include <buffer_file.h>
 #include <string.h>
+#include <fifo_scheduler.h>
 
 #define CONFIG_ADDRESS	0xCF8
 #define CONFIG_DATA	0xCFC
@@ -335,21 +336,16 @@ initialize (void)
   }
 }
 
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
-{
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  finish (NO_ACTION, 0, false, -1, -1);
-}
+#define INIT_NO 1
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_input_action (bda, bdb);
+  end_internal_action ();
+}
+
+void
+schedule (void)
+{
+
 }

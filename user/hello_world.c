@@ -10,6 +10,7 @@
 #define START_NO 1
 #define STDOUT_NO 2
 #define DONE_NO 3
+#define INIT_NO 4
 
 typedef enum {
   START,
@@ -43,37 +44,10 @@ initialize (void)
   }
 }
 
-static void
-schedule (void);
-
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
-}
-
-static void
-end_internal_action (void)
-{
-  schedule ();
-  scheduler_finish (false, -1, -1);
+  initialize ();
+  end_internal_action ();
 }
 
 /* start
@@ -147,7 +121,7 @@ BEGIN_INTERNAL (NO_PARAMETER, DONE_NO, "", "", done, ano_t ano, int param)
   }
 }
 
-static void
+void
 schedule (void)
 {
   if (stdout_precondition ()) {

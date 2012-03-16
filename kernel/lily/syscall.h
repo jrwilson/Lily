@@ -33,7 +33,9 @@
 #define LILY_SYSCALL_LOOKUP                0x52
 #define LILY_SYSCALL_DESCRIBE              0x53
 #define LILY_SYSCALL_GETAID                0x54
-#define LILY_SYSCALL_GETMONOTIME           0x55
+#define LILY_SYSCALL_GETINITA              0x55
+#define LILY_SYSCALL_GETINITB              0x56
+#define LILY_SYSCALL_GETMONOTIME           0x57
 
 /* Privileged system calls. */
 #define LILY_SYSCALL_MAP                   0x100

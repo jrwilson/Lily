@@ -8,6 +8,7 @@
 
 #define DESTROYED_NO 1
 #define VGA_OP_NO 2
+#define INIT_NO 3
 
 #define VIDEO_MEMORY_BEGIN 0xA0000
 #define VIDEO_MEMORY_END   0xC0000
@@ -583,12 +584,6 @@ end_input_action (bd_t bda,
   finish (NO_ACTION, 0, false, -1, -1);
 }
 
-BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
-  end_input_action (bda, bdb);
-}
-
 /* typedef struct { */
 /*   aid_t aid; */
 /* } focus_arg_t; */
@@ -611,6 +606,12 @@ BEGIN_SYSTEM_INPUT (INIT, "", "", init, ano_t ano, aid_t aid, bd_t bda, bd_t bdb
 /*   finish (NO_ACTION, 0, bd, FINISH_DESTROY); */
 /* } */
 /* EMBED_ACTION_DESCRIPTOR (INPUT, NO_PARAMETER, VGA_FOCUS, vga_focus); */
+
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+{
+  initialize ();
+  finish (NO_ACTION, 0, false, -1, -1);
+}
 
 BEGIN_INPUT (AUTO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {

@@ -169,20 +169,21 @@ automaton::create_automaton (const kstring& name,
   // Add to the scheduler.
   scheduler::add_automaton (child);
 
+  if (buffer_a_.get () != 0) {
+    child->init_buffer_a_ = child->buffer_create (buffer_a_);
+  }
+  if (buffer_b_.get () != 0) {
+    child->init_buffer_b_ = child->buffer_create (buffer_b_);
+  }
+
   // Schedule the init action.
-  const paction* action = child->find_action (LILY_ACTION_INIT);
-  if (action != 0) {
-    shared_ptr<buffer> buffer_a;
-    shared_ptr<buffer> buffer_b;
-    // Replace the buffers with copies.
-    if (buffer_a_.get () != 0) {
-      buffer_a = shared_ptr<buffer> (new buffer (*buffer_a_));
+  const kstring init_name ("init");
+  for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
+       pos != child->ano_to_action_map_.end ();
+       ++pos) {
+    if (pos->second->name == init_name && pos->second->type == INTERNAL) {
+      scheduler::schedule (caction (child, pos->second, child_aid));
     }
-    if (buffer_b_.get () != 0) {
-      buffer_b = shared_ptr<buffer> (new buffer (*buffer_b_));
-    }
-    
-    scheduler::schedule (caction (child, action, child_aid, buffer_a, buffer_b));
   }
 
   return make_pair (child, LILY_SYSCALL_ESUCCESS);    

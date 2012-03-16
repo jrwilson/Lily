@@ -78,16 +78,18 @@ struct caction {
   { }
 
   caction (const shared_ptr< ::automaton>& au,
-	   const paction* act,
-	   int p,
-	   const shared_ptr<buffer>& a,
-	   const shared_ptr<buffer>& b) :
+  	   const paction* act,
+  	   int p,
+  	   const shared_ptr<buffer>& a,
+  	   const shared_ptr<buffer>& b) :
     automaton (au),
     action (act),
     parameter (p),
     buffer_a (a),
     buffer_b (b)
-  { }
+  {
+    kassert (act->type == SYSTEM_INPUT);
+  }
   
   inline bool
   operator== (const caction& other) const

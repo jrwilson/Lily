@@ -18,6 +18,7 @@
 
 #define MOUSE_PACKET_IN_NO 1
 #define MOUSE_PACKET_OUT_NO 2
+#define INIT_NO 3
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -45,30 +46,10 @@ initialize (void)
   }
 }
 
-static void
-schedule (void);
-
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
+  initialize ();
+  end_internal_action ();
 }
 
 /* mouse packet
@@ -136,7 +117,7 @@ BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKET_OUT_NO, "mouse_packet_out", "buffer_fil
   }
 }
 
-static void
+void
 schedule (void)
 {
   if (mouse_packet_out_precondition ()) {

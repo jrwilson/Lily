@@ -222,6 +222,7 @@
 #define DESTROYED_NO 2
 #define TEXT_NO 3
 #define VGA_OP_NO 4
+#define INIT_NO 5
 
 #define LINE_HOME_POSITION 0
 #define LINE_LIMIT_POSITION 80
@@ -399,32 +400,6 @@ initialize (void)
     }
 
   }
-}
-
-static void
-schedule (void);
-
-static void
-end_input_action (bd_t bda,
-		  bd_t bdb)
-{
-  if (bda != -1) {
-    buffer_destroy (bda);
-  }
-  if (bdb != -1) {
-    buffer_destroy (bdb);
-  }
-  schedule ();
-  scheduler_finish (false, -1, -1);
-}
-
-static void
-end_output_action (bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
-{
-  schedule ();
-  scheduler_finish (output_fired, bda, bdb);
 }
 
 /* typedef struct { */
@@ -733,6 +708,12 @@ process_control (client_t* client,
   }
 }
 
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+{
+  initialize ();
+  end_internal_action ();
+}
+
 BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
@@ -856,7 +837,7 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t 
   end_input_action (bda, bdb);
 }
 
-static void
+void
 schedule (void)
 {
   if (vga_op_precondition ()) {
