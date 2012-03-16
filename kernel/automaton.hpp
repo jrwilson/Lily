@@ -127,10 +127,10 @@ public:
   create_automaton (const kstring& name,
 		    const shared_ptr<automaton>& parent,
 		    bool privileged,
-		    buffer* text,
+		    const shared_ptr<buffer>& text,
 		    size_t text_size,
-		    buffer* buffer_a,
-		    buffer* buffer_b);
+		    const shared_ptr<buffer>& buffer_a,
+		    const shared_ptr<buffer>& buffer_b);
 
   /*
    * EXECUTION
@@ -229,7 +229,7 @@ private:
   // Next buffer descriptor to allocate.
   bd_t current_bd_;
   // Map from bd_t to buffer*.
-  typedef unordered_map<bd_t, buffer*> bd_to_buffer_map_type;
+  typedef unordered_map<bd_t, shared_ptr<buffer> > bd_to_buffer_map_type;
   bd_to_buffer_map_type bd_to_buffer_map_;
 
   /*
@@ -394,7 +394,7 @@ public:
     if (r.first == -1) {
       return r;
     }
-    buffer* b = lookup_buffer (r.first);
+    shared_ptr<buffer> b = lookup_buffer (r.first);
     size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
     for (size_t idx = 0; idx != page_count; ++idx) {
       frame_t frame = frame_manager::alloc ();
@@ -446,19 +446,19 @@ public:
     }
     
     // Find the text buffer.
-    buffer* text_buffer = lookup_buffer (text_bd);
-    if (text_buffer == 0) {
+    shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
+    if (text_buffer.get () == 0) {
       // Buffer does not exist.
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
     
     // Find and synchronize the data buffers so the frames listed in the buffers are correct.
-    buffer* buffer_a = lookup_buffer (bda);
-    if (buffer_a != 0) {
+    shared_ptr<buffer> buffer_a = lookup_buffer (bda);
+    if (buffer_a.get () != 0) {
       buffer_a->sync (0, buffer_a->size ());
     }
-    buffer* buffer_b = lookup_buffer (bdb);
-    if (buffer_b != 0) {
+    shared_ptr<buffer> buffer_b = lookup_buffer (bdb);
+    if (buffer_b.get () != 0) {
       buffer_b->sync (0, buffer_b->size ());
     }
     
@@ -546,8 +546,8 @@ public:
   inline void
   execute (const paction& action,
 	   int parameter,
-	   buffer* output_buffer_a_,
-	   buffer* output_buffer_b_)
+	   const shared_ptr<buffer>& output_buffer_a_,
+	   const shared_ptr<buffer>& output_buffer_b_)
   {
     // switch (action.type) {
     // case INPUT:
@@ -581,12 +581,12 @@ public:
 	bd_t bda = -1;
 	bd_t bdb = -1;
 	
-	if (output_buffer_a_ != 0) {
+	if (output_buffer_a_.get () != 0) {
 	  // Copy the buffer to the input automaton.
 	  bda = buffer_create (*output_buffer_a_);
 	}
 	
-	if (output_buffer_b_ != 0) {
+	if (output_buffer_b_.get () != 0) {
 	  // Copy the buffer to the input automaton.
 	  bdb = buffer_create (*output_buffer_b_);
 	}
@@ -938,7 +938,7 @@ public:
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    buffer* b = bpos->second;
+    shared_ptr<buffer> b = bpos->second;
 
     // Generate an id.
     bd_t bd = generate_bd ();
@@ -973,7 +973,7 @@ public:
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    buffer* b = bpos->second;
+    shared_ptr<buffer> b = bpos->second;
     if (b->begin () != 0) {
       // Buffer was mapped.
       return make_pair (-1, LILY_SYSCALL_EMAPPED);
@@ -995,8 +995,8 @@ public:
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    buffer* d = dst_pos->second;
-    buffer* s = src_pos->second;
+    shared_ptr<buffer> d = dst_pos->second;
+    shared_ptr<buffer> s = src_pos->second;
     
     if (d->begin () != 0) {
       // The destination is mapped.
@@ -1020,8 +1020,8 @@ public:
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
 
-    buffer* dest_b = dest_pos->second;
-    buffer* src_b = src_pos->second;
+    shared_ptr<buffer> dest_b = dest_pos->second;
+    shared_ptr<buffer> src_b = src_pos->second;
 
     // Truncate and append.
     dest_b->resize (0);
@@ -1043,7 +1043,7 @@ public:
       return make_pair ((void*)0, LILY_SYSCALL_EBDDNE);
     }
 
-    buffer* b = bpos->second;
+    shared_ptr<buffer> b = bpos->second;
     
     if (b->size () == 0) {
       // The buffer is empty.
@@ -1074,7 +1074,7 @@ public:
       size_t size = (*stack_pos)->begin () - (*prev)->end ();
       if (size >= b->size () * PAGE_SIZE) {
 	b->map_end ((*stack_pos)->begin ());
-	memory_map_.insert (prev.base (), b);
+	memory_map_.insert (prev.base (), b.get ());
 	// Success.
 	return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_SYSCALL_ESUCCESS);
       }
@@ -1093,11 +1093,11 @@ public:
       return make_pair (-1, LILY_SYSCALL_EBDDNE);
     }
     
-    buffer* b = bpos->second;
+    shared_ptr<buffer> b = bpos->second;
     
     if (b->begin () != 0) {
       // Remove from the memory map.
-      remove_vm_area (b);
+      remove_vm_area (b.get ());
       
       // Unmap the buffer.	
       b->unmap ();
@@ -1111,19 +1111,16 @@ public:
   {
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos != bd_to_buffer_map_.end ()) {
-      buffer* b = bpos->second;
-
-      // Remove from the bd map.
-      bd_to_buffer_map_.erase (bpos);
+      shared_ptr<buffer> b = bpos->second;
 
       if (b->begin () != 0) {
 	// Remove from the memory map.
-	remove_vm_area (b);
+	remove_vm_area (b.get ());
 	// Buffer will be unmapped automatically when destroyed.
       }
 
-      // Destroy it.
-      delete b;
+      // Remove from the bd map.
+      bd_to_buffer_map_.erase (bpos);
 
       return make_pair (0, LILY_SYSCALL_ESUCCESS);
     }
@@ -1146,7 +1143,7 @@ public:
     }
   }
 
-  inline buffer*
+  inline shared_ptr<buffer>
   lookup_buffer (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
@@ -1154,7 +1151,7 @@ public:
       return bpos->second;
     }
     else {
-      return 0;
+      return shared_ptr<buffer> ();
     }
   }
 
@@ -1823,10 +1820,10 @@ public:
 	 pos != bd_to_buffer_map_.end ();
 	 ++pos) {
       // Remove from the memory map.
-      remove_vm_area (pos->second);
-      // Destroy it.  (This will also unmap it if necessary.)
-      delete pos->second;
+      remove_vm_area (pos->second.get ());
     }
+    // This removes references to the buffers.
+    bd_to_buffer_map_.clear ();
 
     // Nothing for heap_area_.
     // Nothing for stack_area_.

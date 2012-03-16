@@ -56,8 +56,8 @@ struct caction {
   const paction* action;
   int parameter;
   // For system inputs.
-  buffer* buffer_a;
-  buffer* buffer_b;
+  shared_ptr<buffer> buffer_a;
+  shared_ptr<buffer> buffer_b;
 
   caction () :
     automaton (0),
@@ -80,8 +80,8 @@ struct caction {
   caction (const shared_ptr< ::automaton>& au,
 	   const paction* act,
 	   int p,
-	   buffer* a,
-	   buffer* b) :
+	   const shared_ptr<buffer>& a,
+	   const shared_ptr<buffer>& b) :
     automaton (au),
     action (act),
     parameter (p),

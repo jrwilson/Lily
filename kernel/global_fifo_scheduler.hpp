@@ -53,8 +53,8 @@ private:
   static input_action_list_type::const_iterator input_action_pos_;
 
   // Buffers produced by an output action that will be copied to the input action.
-  static buffer* output_buffer_a_;
-  static buffer* output_buffer_b_;
+  static shared_ptr<buffer> output_buffer_a_;
+  static shared_ptr<buffer> output_buffer_b_;
 
   struct sort_bindings_by_input {
     bool
@@ -163,11 +163,11 @@ public:
 	  // ... and the output output did something.
 	  output_buffer_a_ = action_.automaton->lookup_buffer (bda);
 	  // Synchronize the buffers.
-	  if (output_buffer_a_ != 0) {
+	  if (output_buffer_a_.get () != 0) {
 	    output_buffer_a_->sync (0, output_buffer_a_->size ());
 	  }
 	  output_buffer_b_ = action_.automaton->lookup_buffer (bdb);
-	  if (output_buffer_b_ != 0) {
+	  if (output_buffer_b_.get () != 0) {
 	    output_buffer_b_->sync (0, output_buffer_b_->size ());
 	  }
 	  // Proceed to execute the inputs.
@@ -188,13 +188,11 @@ public:
 	// -EEE
 	action_.automaton->unlock_execution ();
 	// Destroy the buffers.
-	if (output_buffer_a_ != 0) {
-	  delete output_buffer_a_;
-	  output_buffer_a_ = 0;
+	if (output_buffer_a_.get () != 0) {
+	  output_buffer_a_ = shared_ptr<buffer> ();
 	}
-	if (output_buffer_b_ != 0) {
-	  delete output_buffer_b_;
-	  output_buffer_b_ = 0;
+	if (output_buffer_b_.get () != 0) {
+	  output_buffer_b_ = shared_ptr<buffer> ();
 	}
 	break;
       }

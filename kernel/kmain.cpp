@@ -277,8 +277,8 @@ kmain (uint32_t multiboot_magic,
 
   // Create a buffer containing the text of the initial automaton.
   const size_t automaton_frame_end = boot_automaton_frame + align_up (boot_automaton_size, PAGE_SIZE) / PAGE_SIZE;
-  buffer* text = new buffer (0);
-  kassert (text != 0);
+  shared_ptr<buffer> text = shared_ptr<buffer> (new buffer (0));
+  kassert (text.get () != 0);
   for (frame_t frame = boot_automaton_frame; frame != automaton_frame_end; ++frame) {
     text->append_frame (frame);
     // Drop the reference count.
@@ -288,8 +288,8 @@ kmain (uint32_t multiboot_magic,
 
   // Create a buffer to contain the initial data.
   const size_t data_frame_end = boot_data_frame + align_up (boot_data_size, PAGE_SIZE) / PAGE_SIZE;
-  buffer* data_buffer = new buffer (0);
-  kassert (data_buffer != 0);
+  shared_ptr<buffer> data_buffer = shared_ptr<buffer> (new buffer (0));
+  kassert (data_buffer.get () != 0);
   for (frame_t frame = boot_data_frame; frame != data_frame_end; ++frame) {
     data_buffer->append_frame (frame);
     // Drop the reference count.
@@ -298,15 +298,15 @@ kmain (uint32_t multiboot_magic,
   }
 
   // Create the automaton.
-  pair<shared_ptr<automaton>, int> r = automaton::create_automaton (kstring (), shared_ptr<automaton> (), true, text, boot_automaton_size, data_buffer, 0);
+  pair<shared_ptr<automaton>, int> r = automaton::create_automaton (kstring (), shared_ptr<automaton> (), true, text, boot_automaton_size, data_buffer, shared_ptr<buffer> ());
 
   if (r.first.get () == 0) {
     kout << "Could not create the boot automaton.  Halting." << endl;
     halt ();
   }
 
-  delete text;
-  delete data_buffer;
+  text = shared_ptr<buffer> ();
+  data_buffer = shared_ptr<buffer> ();
   
   // Check the init action.
   if (r.first->find_action (LILY_ACTION_INIT) == 0) {

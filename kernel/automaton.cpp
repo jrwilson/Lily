@@ -94,10 +94,10 @@ pair<shared_ptr<automaton>, int>
 automaton::create_automaton (const kstring& name,
 			     const shared_ptr<automaton>& parent,
 			     bool privileged,
-			     buffer* text,
+			     const shared_ptr<buffer>& text,
 			     size_t text_size,
-			     buffer* buffer_a,
-			     buffer* buffer_b)
+			     const shared_ptr<buffer>& buffer_a_,
+			     const shared_ptr<buffer>& buffer_b_)
 {
   // If the parent exists, we enter with the id_mutex_ locked and the parent's mod_mutex_ locked.
 
@@ -172,12 +172,14 @@ automaton::create_automaton (const kstring& name,
   // Schedule the init action.
   const paction* action = child->find_action (LILY_ACTION_INIT);
   if (action != 0) {
+    shared_ptr<buffer> buffer_a;
+    shared_ptr<buffer> buffer_b;
     // Replace the buffers with copies.
-    if (buffer_a != 0) {
-      buffer_a = new buffer (*buffer_a);
+    if (buffer_a_.get () != 0) {
+      buffer_a = shared_ptr<buffer> (new buffer (*buffer_a_));
     }
-    if (buffer_b != 0) {
-      buffer_b = new buffer (*buffer_b);
+    if (buffer_b_.get () != 0) {
+      buffer_b = shared_ptr<buffer> (new buffer (*buffer_b_));
     }
     
     scheduler::schedule (caction (child, action, child_aid, buffer_a, buffer_b));
