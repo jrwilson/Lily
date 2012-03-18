@@ -2,7 +2,7 @@
 #include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
-#include "ps2_mouse_msg.h"
+#include "mouse_msg.h"
 
 /*
   Driver for a PS2 mouse
@@ -64,14 +64,14 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKET_IN_NO, "mouse_packet_in", "ps2_mouse_pac
 
   size_t count = 0;
   mouse_packet_t mp;
-  ps2_mouse_packet_list_t input_buffer;
-  if (ps2_mouse_packet_list_initr (&input_buffer, bda, &count) != 0) {
+  mouse_packet_list_t input_buffer;
+  if (mouse_packet_list_initr (&input_buffer, bda, &count) != 0) {
     end_input_action (bda, bdb);
   }
 
   for (size_t idx = 0; idx != count; ++idx) {
 
-    if (ps2_mouse_packet_list_read (&input_buffer,
+    if (mouse_packet_list_read (&input_buffer,
 				    &mp) != 0) {
       end_input_action (bda, bdb);
     }
