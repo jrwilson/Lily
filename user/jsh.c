@@ -207,12 +207,16 @@ typedef struct {
   bd_t bdb;
   argv_t argv;
   bool retain_privilege;
+  char* registry_name;
+  size_t registry_name_size;
 } create_context_t;
 
 static create_context_t*
 create_create_context (const char* name,
 		       size_t name_size,
-		       bool retain_privilege)
+		       bool retain_privilege,
+		       const char* registry_name,
+		       size_t registry_name_size)
 {
   create_context_t* cc = malloc (sizeof (create_context_t));
   memset (cc, 0, sizeof (create_context_t));
@@ -224,6 +228,9 @@ create_create_context (const char* name,
     exit ();
   }
   cc->retain_privilege = retain_privilege;
+  cc->registry_name = malloc (registry_name_size);
+  memcpy (cc->registry_name, registry_name, registry_name_size);
+  cc->registry_name_size = registry_name_size;
   return cc;
 }
 
@@ -237,6 +244,7 @@ destroy_create_context (create_context_t* cc)
     buffer_destroy (cc->bdb);
   }
   free (cc->name);
+  free (cc->registry_name);
   free (cc);
 }
 
@@ -254,7 +262,7 @@ create_callback (void* data,
   }
 
   if (error == VFS_SUCCESS) {
-    aid_t aid = create (bdb, size, cc->bda, cc->bdb, 0, 0, cc->retain_privilege);
+    aid_t aid = create (bdb, size, cc->bda, cc->bdb, cc->registry_name, cc->registry_name_size, cc->retain_privilege);
     if (aid != -1) {
       syslog ("TODO:  Subscribe to created automaton");
       /* Assign the result to a variable. */
@@ -347,27 +355,39 @@ static void
 create_ (token_list_item_t* var)
 {
   bool retain_privilege = false;
+  const char* registry_name = 0;
+  size_t registry_name_size = 0;
   token_list_item_t* filename;
-
+  
   if (find_automaton (var->string, var->size) != 0) {
     syslog ("TODO:  Automaton variable already assigned");
     return;
   }
 
+  while (current_token != 0 &&
+	 current_token->type == STRING) {
+    if (strcmp (current_token->string, "-p") == 0) {
+      retain_privilege = true;
+      accept (STRING);
+    }
+    else if (strcmp (current_token->string, "-n") == 0) {
+      accept (STRING);
+      token_list_item_t* reg_name;
+      if ((reg_name = accept (STRING)) == 0) {
+	syslog ("TODO:  Expected a name");
+	return;
+      }
+      registry_name = reg_name->string;
+      registry_name_size = reg_name->size;
+    }
+    else {
+      break;
+    }
+  }
+
   if ((filename = accept (STRING)) == 0) {
     syslog ("TODO:  Expected a filename or argument");
     return;
-  }
-
-  if (strcmp (filename->string, "-p") == 0) {
-    /* Got an argument to retain privilege. */
-    retain_privilege = true;
-
-    /* Get the filename again. */
-    if ((filename = accept (STRING)) == 0) {
-      syslog ("TODO:  Expected a filename");
-      return;
-    }
   }
 
   token_list_item_t* string;
@@ -379,7 +399,7 @@ create_ (token_list_item_t* var)
   }
 
   /* Create context for the create callback. */
-  create_context_t* cc = create_create_context (var->string, var->size, retain_privilege);
+  create_context_t* cc = create_create_context (var->string, var->size, retain_privilege, registry_name, registry_name_size);
   
   while ((string = accept (STRING)) != 0) {
     /* Add the string to argv. */
@@ -1253,7 +1273,7 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, ano_t ano, 
 
    Post: ???
  */
-BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -1275,7 +1295,7 @@ stdout_precondition (void)
   return buffer_file_size (&stdout_bf) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (STDOUT_NO, param);
@@ -1317,7 +1337,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, ano_t ano, aid_t aid
 
    Post: ???
  */
-BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file", stdin_col, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file_t", stdin_col, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 

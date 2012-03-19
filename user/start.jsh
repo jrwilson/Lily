@@ -5,8 +5,9 @@
 
 
 # Syntax:
-# @automaton_variable = create [-p] path
-#   -p  retain the permission of the parent
+# @automaton_variable = create [-p] [-n name] path
+#   -p       Retain the permission of the parent
+#   -n name  Register the automaton with the given name
 
 #                      +--------------+
 #                      | echo         |
@@ -17,35 +18,36 @@
 # | keyboard/mouse |-->| terminal mux |-->| vga | 
 # +----------------+   +--------------+   +-----+
 
-# Load the keyboard driver.
-# The keyboard driver has the same privilege as this automaton.
-@ps2_keyboard_mouse = create -p /bin/ps2_keyboard_mouse
-
-@terminal = create /bin/terminal
+@syslog = create -n syslog /bin/syslog
 
 @vga = create -p /bin/vga
 
-bind @ps2_keyboard_mouse scan_codes @terminal scan_codes
-bind @ps2_keyboard_mouse mouse_packets @terminal mouse_packets
+@terminal = create /bin/terminal
+
+@ps2_keyboard_mouse = create -p /bin/ps2_keyboard_mouse
+
 bind @terminal vga_op @vga vga_op
+bind @syslog stdout @terminal stdin
+bind @this start @syslog start
+start @syslog
+
+bind @ps2_keyboard_mouse scan_codes @terminal scan_codes_in
+bind @ps2_keyboard_mouse mouse_packets_out @terminal mouse_packets_in
+
+@ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
+
+bind @terminal scan_codes_out @ps2_keyboard_mouse_test scan_codes_in
+bind @terminal mouse_packets_out @ps2_keyboard_mouse_test mouse_packets_in
+bind @ps2_keyboard_mouse_test stdout @terminal stdin
 
 
-bind @this start @vga start
-start @vga
-bind @this start @ps2_keyboard_mouse start
-start @ps2_keyboard_mouse
+
+
 
 # Load a driver to interpret keyscan codes.
 # We assume a US 104-key keyboard.
 # @kb_us_104 = create /bin/kb_us_104
 # bind @ps2_keyboard_mouse scan_codes @kb_us_104 scan_code
-
-# Load the terminal driver so we can multiplex the display.
-#@terminal = create /bin/terminal
-
-# Load the VGA driver.
-#@vga = create -p /bin/vga
-#bind @terminal vga_op @vga vga_op
 
 #bind @ps2_keyboard_mouse stderr @this stdin_col
 #bind @kb_us_104 text @this stdin_col

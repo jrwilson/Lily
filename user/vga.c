@@ -3,11 +3,12 @@
 #include <dymem.h>
 #include <string.h>
 #include <fifo_scheduler.h>
+#include <description.h>
 #include "vga_msg.h"
 
-#define START_NO 1
+#define INIT_NO 1
 #define STOP_NO 2
-#define STDERR_NO 3
+#define SYSLOG_NO 3
 #define VGA_OP_NO 4
 
 /* General or external registers. */
@@ -323,26 +324,17 @@
 static bool initialized = false;
 
 #define NAME "vga"
-static aid_t aid = -1;
+#define SYSLOG_NAME "syslog"
+#define SYSLOG_STDIN "stdin"
 
-/*
-  Automata state machine
-  ----------------------
-  The automaton starts in the START state.
-  When it receives the start input it transitions to the RUN state or to the STOP state if there is an error.
-  The automaton stays in the STOP state until the stderr buffer is empty.  
-  The start input tells the automaton that it is safe to execute the stderr action, i.e., something is bound to it and will receive the stderr messages.
- */
 typedef enum {
-  START,
   RUN,
   STOP,
 } state_t;
-static state_t state = START;
+static state_t state = RUN;
 
-/* Output buffer for stderr. */
-static bd_t stderr_bd = -1;
-static buffer_file_t stderr_buffer;
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
 
 static void
 set_cursor_location (unsigned short location)
@@ -368,34 +360,35 @@ static void
 initialize (void)
 {
   if (!initialized) {
-    
-    aid = getaid ();
-
-    /* Create the stderr buffer. */
-    stderr_bd = buffer_create (0);
-    if (stderr_bd == -1) {
-      exit ();
-    }
-    if (buffer_file_initw (&stderr_buffer, stderr_bd) != 0) {
-      exit ();
-    }
-
     initialized = true;
-  }
-}
+    
+    /* Create the syslog buffer. */
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
+      exit ();
+    }
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+      exit ();
+    }
 
-/* start
-   -----
-   Complete the initialization.
-   
-   Post: if state == START, then state == RUN or state == STOP
-*/
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
 
-BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  if (state == START) {
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
+      
+      description_fini (&syslog_description);
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	exit ();
+      }
+    }
 
     /* Reserve all of the VGA ports.*/
     if (reserve_port (MISCELLANEOUS_OUTPUT_PORT_READ) != 0 ||
@@ -408,37 +401,39 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
 	reserve_port (CRT_DATA_PORT) != 0 ||
 	reserve_port (GRAPHICS_ADDRESS_PORT) != 0 ||
 	reserve_port (GRAPHICS_DATA_PORT) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not reserve I/O ports\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not reserve I/O ports\n", NAME);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
 
     /* Map in the video memory. */
     if (map ((const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not map vga video memory\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not map vga video memory\n", NAME);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     /* Clear the text region. */
     memset ((void*)VGA_TEXT_MEMORY_BEGIN, 0, VGA_TEXT_MEMORY_SIZE);
-
-    state = RUN;
   }
-    
-  end_input_action (bda, bdb);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+{
+  initialize ();
+  end_internal_action ();
 }
 
 /* stop
    ----
    Stop the automaton.
    
-   Pre:  state == STOP and stderr_buffer is empty
+   Pre:  state == STOP and syslog_buffer is empty
    Post: 
 */
 static bool
 stop_precondition (void)
 {
-  return state == STOP && buffer_file_size (&stderr_buffer) == 0;
+  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
@@ -452,27 +447,27 @@ BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
   end_internal_action ();
 }
 
-/* stderr
+/* syslog
    ------
    Output error messages.
    
-   Pre:  state != START and stderr_buffer is not empty
-   Post: stderr_buffer is empty
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
 */
 static bool
-stderr_precondition (void)
+syslog_precondition (void)
 {
-  return state != START && buffer_file_size (&stderr_buffer) != 0;
+  return buffer_file_size (&syslog_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDERR_NO, "stderr", "buffer_file_t", stderr, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (ano, param);
 
-  if (stderr_precondition ()) {
-    buffer_file_truncate (&stderr_buffer);
-    end_output_action (true, stderr_bd, -1);
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    end_output_action (true, syslog_bd, -1);
   }
   else {
     end_output_action (false, -1, -1);
@@ -543,7 +538,7 @@ schedule (void)
   if (stop_precondition ()) {
     scheduler_add (STOP_NO, 0);
   }
-  if (stderr_precondition ()) {
-    scheduler_add (STDERR_NO, 0);
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
   }
 }

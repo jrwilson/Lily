@@ -81,7 +81,7 @@ stdout_precondition (void)
   return buffer_file_size (&stdout_bf) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (STDOUT_NO, param);

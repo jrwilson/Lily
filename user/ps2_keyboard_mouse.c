@@ -3,6 +3,7 @@
 #include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
+#include <description.h>
 #include "mouse_msg.h"
 
 /*
@@ -96,26 +97,18 @@
 static bool initialized = false;
 
 #define NAME "ps2_keyboard_mouse"
-static aid_t aid = -1;
+#define SYSLOG_NAME "syslog"
+#define SYSLOG_STDIN "stdin"
 
-/*
-  Automata state machine
-  ----------------------
-  The automaton starts in the START state.
-  When it receives the start input it transitions to the RUN state or to the STOP state if there is an error.
-  The automaton stays in the STOP state until the stderr buffer is empty.  
-  The start input tells the automaton that it is safe to execute the stderr action, i.e., something is bound to it and will receive the stderr messages.
- */
 typedef enum {
-  START,
   RUN,
   STOP,
 } state_t;
-static state_t state = START;
+static state_t state = RUN;
 
-/* Output buffer for stderr. */
-static bd_t stderr_bd = -1;
-static buffer_file_t stderr_buffer;
+/* Output buffer for syslog. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
 
 /* Output buffer for keyboard scan codes. */
 static bd_t scan_codes_bd = -1;
@@ -142,13 +135,13 @@ typedef enum {
 static mouse_byte_t mouse_byte = STATUS_BYTE;
 static unsigned char mouse_packet_data [MAX_MOUSE_PACKET_SIZE];
 
-#define START_NO 1
+#define INIT_NO 1
 #define STOP_NO 2
-#define STDERR_NO 3
+#define SYSLOG_NO 3
 #define KEYBOARD_INTERRUPT_NO 4
 #define SCAN_CODES_NO 5
 #define MOUSE_INTERRUPT_NO 6
-#define MOUSE_PACKETS_NO 7
+#define MOUSE_PACKETS_OUT_NO 7
 
 /* Basic I/O routines. */
 static unsigned char
@@ -216,13 +209,13 @@ mouse_set_sample_rate (unsigned char sample_rate)
   mouse_write (MOUSE_SET_SAMPLE_RATE);
   unsigned char c = read_byte ();
   if (c != MOUSE_COMMAND_ACK) {
-    bfprintf (&stderr_buffer, "%s(%d): error: mouse responded to set sample rate with %x\n", NAME, aid, c);
+    bfprintf (&syslog_buffer, "%s: error: mouse responded to set sample rate with %x\n", NAME, c);
     return -1;
   }
   mouse_write (sample_rate);
   c = read_byte ();
   if (c != MOUSE_COMMAND_ACK) {
-    bfprintf (&stderr_buffer, "%s(%d): error: mouse responded to sample rate with %x\n", NAME, aid, c);
+    bfprintf (&syslog_buffer, "%s: error: mouse responded to sample rate with %x\n", NAME, c);
     return -1;
   }
   return 0;
@@ -234,7 +227,7 @@ mouse_get_id (mouse_id_t* id)
   mouse_write (MOUSE_GET_ID);
   unsigned char c = read_byte ();
   if (c != MOUSE_COMMAND_ACK) {
-    bfprintf (&stderr_buffer, "%s(%d): error: mouse responded to get id with %x\n", NAME, aid, c);
+    bfprintf (&syslog_buffer, "%s: error: mouse responded to get id with %x\n", NAME, c);
     return -1;
   }
   *id = read_byte ();
@@ -247,7 +240,7 @@ mouse_set_defaults_and_disable (void)
   mouse_write (MOUSE_SET_DEFAULTS_AND_DISABLE);
   unsigned char c = read_byte ();
   if (c != MOUSE_COMMAND_ACK) {
-    bfprintf (&stderr_buffer, "%s(%d): error: mouse responded to set defaults and disable with %x\n", NAME, aid, c);
+    bfprintf (&syslog_buffer, "%s: error: mouse responded to set defaults and disable with %x\n", NAME, c);
     return -1;
   }
   return 0;
@@ -259,7 +252,7 @@ mouse_enable_movement_packets (void)
   mouse_write (MOUSE_ENABLE_MOVEMENT_PACKETS);
   unsigned char c = read_byte ();
   if (c != MOUSE_COMMAND_ACK) {
-    bfprintf (&stderr_buffer, "%s(%d): error: mouse responded to enable movement packets with %x\n", NAME, aid, c);
+    bfprintf (&syslog_buffer, "%s: error: mouse responded to enable movement packets with %x\n", NAME, c);
     return -1;
   }
   return 0;
@@ -306,7 +299,7 @@ write_mouse_packet () {
     packet.z_delta_horizontal = 0;
 
     if (getmonotime (&packet.time_stamp) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not get the time\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not get the time\n", NAME);
       state = STOP;
       return;
     }
@@ -334,7 +327,7 @@ write_mouse_packet () {
       case MOUSE_Z_ZERO:
 	break;
       default:
-	bfprintf (&stderr_buffer, "%s(%d): info: unexpected mouse z movement value %x\n", NAME, aid, mouse_packet_data[BONUS_BYTE] & BONUS_BYTE_Z_BITS);
+	bfprintf (&syslog_buffer, "%s: info: unexpected mouse z movement value %x\n", NAME, mouse_packet_data[BONUS_BYTE] & BONUS_BYTE_Z_BITS);
 	break;
       }
 
@@ -349,7 +342,7 @@ write_mouse_packet () {
     }
 
     if (mouse_packet_list_write (&mouse_packet_list, &packet) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: failed to write to mouse packet list\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: failed to write to mouse packet list\n", NAME);
       state = STOP;
       return;
     }
@@ -363,72 +356,83 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    aid = getaid ();
-
-    /* Create the stderr buffer. */
-    stderr_bd = buffer_create (0);
-    if (stderr_bd == -1) {
+    /* Create the syslog buffer. */
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&stderr_buffer, stderr_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
       exit ();
+    }
+
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
+      
+      description_fini (&syslog_description);
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	exit ();
+      }
     }
 
     /* Create the keyboard output buffer. */
     scan_codes_bd = buffer_create (0);
     if (scan_codes_bd == -1) {
-      exit ();
+      bfprintf (&syslog_buffer, "%s: error: could not create scan codes buffer\n", NAME);
+      state = STOP;
+      return;
     }
     if (buffer_file_initw (&scan_codes_buffer, scan_codes_bd) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, "%s: error: could not initialize scan codes buffer\n", NAME);
+      state = STOP;
+      return;
     }
 
     /* Create the mouse output buffer. */
     mouse_packets_bd = buffer_create (0);
     if (mouse_packets_bd == -1) {
-      exit ();
+      bfprintf (&syslog_buffer, "%s: error: could not create mouse packets buffer\n", NAME);
+      state = STOP;
+      return;
     }
     if (mouse_packet_list_initw (&mouse_packet_list, mouse_packets_bd) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, "%s: error: could not initialize mouse packets buffer\n", NAME);
+      state = STOP;
+      return;
     }
-  }
-}
 
-/* start
-   -----
-   Complete the initialization.
-   
-   Post: if state == START, then state == RUN or state == STOP
-*/
-
-BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  if (state == START) {
     /* Reserve ports. */
     if (reserve_port (DATA_PORT) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not reserve data port\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not reserve data port\n", NAME);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     if (reserve_port (CONTROLLER_PORT) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not reserve controller port\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not reserve controller port\n", NAME);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     
     /* Reserve IRQs. */
     if (subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not subscribe to keyboard irq\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not subscribe to keyboard irq\n", NAME);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     
     if (subscribe_irq (MOUSE_IRQ, MOUSE_INTERRUPT_NO, 0) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: could not subscribe to mouse irq\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: could not subscribe to mouse irq\n", NAME);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     
     /* Handshakes with mouse hardware to initialize, done exactly once. */
@@ -442,14 +446,14 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
 
     if (mouse_set_defaults_and_disable () != 0) {
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
 
     /* Try to enable the scroll wheel and buttons 4 and 5. */
     if (mouse_send_scroll_wheel_sequence () != 0 ||
 	mouse_send_five_button_sequence () != 0) {
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     
     switch (mouse_id) {
@@ -458,34 +462,35 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
     case FIVE_BUTTON_SCROLL_WHEEL_MOUSE:
       break;
     default:
-      bfprintf (&stderr_buffer, "%s(%d): error: unknown mouse id %x\n", NAME, aid, mouse_id);
+      bfprintf (&syslog_buffer, "%s: error: unknown mouse id %x\n", NAME, mouse_id);
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
     
     if (mouse_enable_movement_packets () != 0) {
       state = STOP;
-      end_input_action (bda, bdb);
+      return;
     }
-
-    /* Success. */
-    state = RUN;
   }
-    
-  end_input_action (bda, bdb);
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+{
+  initialize ();
+  end_internal_action ();
 }
 
 /* stop
    ----
    Stop the automaton.
    
-   Pre:  state == STOP and stderr_buffer is empty
+   Pre:  state == STOP and syslog_buffer is empty
    Post: 
 */
 static bool
 stop_precondition (void)
 {
-  return state == STOP && buffer_file_size (&stderr_buffer) == 0;
+  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
@@ -499,27 +504,27 @@ BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
   end_internal_action ();
 }
 
-/* stderr
+/* syslog
    ------
    Output error messages.
    
-   Pre:  state != START and stderr_buffer is not empty
-   Post: stderr_buffer is empty
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
 */
 static bool
-stderr_precondition (void)
+syslog_precondition (void)
 {
-  return state != START && buffer_file_size (&stderr_buffer) != 0;
+  return buffer_file_size (&syslog_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDERR_NO, "stderr", "buffer_file_t", stderr, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
   scheduler_remove (ano, param);
 
-  if (stderr_precondition ()) {
-    buffer_file_truncate (&stderr_buffer);
-    end_output_action (true, stderr_bd, -1);
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    end_output_action (true, syslog_bd, -1);
   }
   else {
     end_output_action (false, -1, -1);
@@ -536,7 +541,7 @@ BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano
 {
   initialize ();
   if (buffer_file_put (&scan_codes_buffer, read_byte ()) != 0) {
-    bfprintf (&stderr_buffer, "%s(%d): error: could not write to output buffer\n", NAME, aid);
+    bfprintf (&syslog_buffer, "%s: error: could not write to output buffer\n", NAME, aid);
     state = STOP;
   }
   end_input_action (bda, bdb);
@@ -602,7 +607,7 @@ BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int 
     write_mouse_packet ();
     break;
   default:
-    bfprintf (&stderr_buffer, "%s(%d): error: unrecognized packet byte state\n", NAME, aid);
+    bfprintf (&syslog_buffer, "%s: error: unrecognized packet byte state\n", NAME);
     state = STOP;
     end_input_action (bda, bdb);
   }
@@ -618,19 +623,19 @@ BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int 
    Post: mouse_packet_list is empty
 */
 static bool
-mouse_packets_precondition (void)
+mouse_packets_out_precondition (void)
 {
   return mouse_packet_list.count != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_NO, "mouse_packets", "mouse_packet_list_t", mouse_packets, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (MOUSE_PACKETS_NO, param);
+  scheduler_remove (ano, param);
 
-  if (mouse_packets_precondition ()) {
+  if (mouse_packets_out_precondition ()) {
     if (mouse_packet_list_reset (&mouse_packet_list) != 0) {
-      bfprintf (&stderr_buffer, "%s(%d): error: mouse packet list reset failed\n", NAME, aid);
+      bfprintf (&syslog_buffer, "%s: error: mouse packet list reset failed\n", NAME);
       state = STOP;
       end_output_action (false, -1, -1);
     }
@@ -647,13 +652,13 @@ schedule (void)
   if (stop_precondition ()) {
     scheduler_add (STOP_NO, 0);
   }
-  if (stderr_precondition ()) {
-    scheduler_add (STDERR_NO, 0);
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
   }
   if (scan_codes_precondition ()) {
     scheduler_add (SCAN_CODES_NO, 0);
   }
-  if (mouse_packets_precondition ()) {
-    scheduler_add (MOUSE_PACKETS_NO, 0);
+  if (mouse_packets_out_precondition ()) {
+    scheduler_add (MOUSE_PACKETS_OUT_NO, 0);
   }
 }
