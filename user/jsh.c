@@ -601,6 +601,30 @@ start_ (void)
 }
 
 static void
+lookup_ (token_list_item_t* var)
+{
+  /* Get the name. */
+  token_list_item_t* name_token;
+  if ((name_token = accept (STRING)) == 0) {
+    syslog ("TODO:  Expected a name");
+  }
+
+  if (current_token != 0) {
+    syslog ("TODO:  Expected no more tokens");
+    return;
+  }
+
+  aid_t aid = lookup (name_token->string, name_token->size);
+  if (aid != -1) {
+    /* Assign the result to a variable. */
+    create_automaton (aid, var->string, var->size);
+  }
+  else {
+    // TODO:  Automaton does not exist.
+  }
+}
+
+static void
 automaton_assignment (token_list_item_t* var)
 {
   if (accept (ASSIGN) == 0) {
@@ -609,8 +633,16 @@ automaton_assignment (token_list_item_t* var)
   }
   
   token_list_item_t* t;
-  if ((t = accept (STRING)) != 0 && strncmp ("create", t->string, t->size) == 0) {
-    create_ (var);
+  if ((t = accept (STRING)) != 0) {
+    if (strncmp ("create", t->string, t->size) == 0) {
+      create_ (var);
+    }
+    else if (strncmp ("lookup", t->string, t->size) == 0) {
+      lookup_ (var);
+    }
+    else {
+      syslog ("TODO:  syntax error");
+    }
   }
   else {
     syslog ("TODO:  syntax error");

@@ -36,7 +36,6 @@ vfs : vfs.o vfs_msg.o
 tmpfs : tmpfs.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
-# Device drivers
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
@@ -52,7 +51,6 @@ vga : vga.o vga_msg.o
 pci : pci.o 
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
 
-# Programs
 jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem
 

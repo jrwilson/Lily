@@ -18,7 +18,7 @@
 # | keyboard/mouse |-->| terminal mux |-->| vga | 
 # +----------------+   +--------------+   +-----+
 
-@syslog = create -n syslog /bin/syslog
+@syslog = lookup syslog
 
 @vga = create -p /bin/vga
 
