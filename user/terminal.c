@@ -218,11 +218,12 @@
   VTS  - LINE TABULATION SET
 */
 
-#define DESTROY_BUFFERS_NO 1
-#define DESTROYED_NO 2
-#define TEXT_NO 3
-#define VGA_OP_NO 4
-#define INIT_NO 5
+#define SCAN_CODES_NO 1
+#define MOUSE_PACKETS_NO 2
+#define DESTROYED_NO 3
+#define TEXT_NO 4
+#define VGA_OP_NO 5
+#define INIT_NO 6
 
 #define LINE_HOME_POSITION 0
 #define LINE_LIMIT_POSITION 80
@@ -708,68 +709,156 @@ process_control (client_t* client,
   }
 }
 
+
+
+
+
+
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
   end_internal_action ();
 }
 
-BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+/* scan_codes
+   ----------
+   Receive scan codes from the keyboard.
+   
+   Post: ???
+ */
+BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes", "buffer_file", scan_code, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
-    end_input_action (bda, bdb);
-  }
+  syslog ("scan_codes");
+  /* buffer_file_t input_buffer; */
+  /* if (buffer_file_initr (&input_buffer, bda) != 0) { */
+  /*   end_input_action (bda, bdb); */
+  /* } */
 
-  size_t size = buffer_file_size (&input_buffer);
-  const char* begin = buffer_file_readp (&input_buffer, size);
-  if (begin == 0) {
-    end_input_action (bda, bdb);
-  }
+  /* size_t size = buffer_file_size (&input_buffer); */
+  /* const unsigned char* codes = buffer_file_readp (&input_buffer, size); */
+  /* if (codes == 0) { */
+  /*   end_input_action (bda, bdb); */
+  /* } */
 
-  /* Find or create the client. */
-  client_t* client = find_client (aid);
-  if (client == 0) {
-    client = create_client (aid);
-  }
-  else {
-    /* The client buffer is appended to the output buffer.
-       Thus, the reference count for the client buffer is at least 2 after an output.
-       If we write to the client buffer, it will be copied for copy-on-write.
-       By reinitializing the output buffer, we potentially drop the reference count to 1 and avoid copy-on-write.
-    */
-    if (vga_op_list_reset (&output_buffer) != 0) {
-      syslog ("terminal: error: Could not reset vga_op_list");
-      exit ();
-    }
-  }
+  /* for (size_t idx = 0; idx != size; ++idx) { */
+  /*   if (consume != 0) { */
+  /*     --consume; */
+  /*     continue; */
+  /*   } */
 
-  /* Process the string. */
-  const char* end = begin + size;
-  for (; begin != end; ++begin) {
-    const char c = *begin;
-    if ((c & 0x80) == 0) {
-      switch (client->mode) {
-      case NORMAL:
-	process_normal (client, c);
-	break;
-      case ESCAPED:
-	process_escaped (client, c);
-	break;
-      case CONTROL:
-	process_control (client, c);
-	break;
-      }
-    }
-  }
-
-  /* TODO:  Remove this line. */
-  switch_to_client (client);
+  /*   unsigned char scan = codes[idx]; */
+  /*   if (scan < BREAK_MASK) { */
+  /*     if (!escaped) { */
+  /* 	process_key_code (scan_to_key[scan], true); */
+  /*     } */
+  /*     else { */
+  /* 	escaped = false; */
+  /* 	/\* Ignore fake shifts. *\/ */
+  /* 	if (scan != SCAN_LSHIFT) { */
+  /* 	  process_key_code (escaped_scan_to_key[scan], true); */
+  /* 	} */
+  /*     } */
+  /*   } */
+  /*   else if (scan == 0xE0) { */
+  /*     escaped = true; */
+  /*   } */
+  /*   else if (scan == 0xE1) { */
+  /*     process_key_code (KEY_PAUSE, true); */
+  /*     process_key_code (KEY_PAUSE, false); */
+  /*     consume = 5; */
+  /*   } */
+  /*   else { */
+  /*     /\* Break. *\/ */
+  /*     scan -= BREAK_MASK; */
+  /*     if (!escaped) { */
+  /* 	process_key_code (scan_to_key[scan], false); */
+  /*     } */
+  /*     else { */
+  /* 	escaped = false; */
+  /* 	/\* Ignore fake shifts. *\/ */
+  /* 	if (scan != SCAN_LSHIFT) { */
+  /* 	  process_key_code (escaped_scan_to_key[scan], false); */
+  /* 	} */
+  /*     } */
+  /*   } */
+  /* } */
 
   end_input_action (bda, bdb);
 }
+
+/* mouse_packets
+   -------------
+   Receive mouse packets from the mouse.
+   
+   Post: ???
+ */
+BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_NO, "mouse_packets", "mouse_packet_list_t", mouse_packets, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  syslog ("mouse_packets");
+
+  end_input_action (bda, bdb);
+}
+
+/* BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, aid_t aid, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
+
+/*   buffer_file_t input_buffer; */
+/*   if (buffer_file_initr (&input_buffer, bda) != 0) { */
+/*     end_input_action (bda, bdb); */
+/*   } */
+
+/*   size_t size = buffer_file_size (&input_buffer); */
+/*   const char* begin = buffer_file_readp (&input_buffer, size); */
+/*   if (begin == 0) { */
+/*     end_input_action (bda, bdb); */
+/*   } */
+
+/*   /\* Find or create the client. *\/ */
+/*   client_t* client = find_client (aid); */
+/*   if (client == 0) { */
+/*     client = create_client (aid); */
+/*   } */
+/*   else { */
+/*     /\* The client buffer is appended to the output buffer. */
+/*        Thus, the reference count for the client buffer is at least 2 after an output. */
+/*        If we write to the client buffer, it will be copied for copy-on-write. */
+/*        By reinitializing the output buffer, we potentially drop the reference count to 1 and avoid copy-on-write. */
+/*     *\/ */
+/*     if (vga_op_list_reset (&output_buffer) != 0) { */
+/*       syslog ("terminal: error: Could not reset vga_op_list"); */
+/*       exit (); */
+/*     } */
+/*   } */
+
+/*   /\* Process the string. *\/ */
+/*   const char* end = begin + size; */
+/*   for (; begin != end; ++begin) { */
+/*     const char c = *begin; */
+/*     if ((c & 0x80) == 0) { */
+/*       switch (client->mode) { */
+/*       case NORMAL: */
+/* 	process_normal (client, c); */
+/* 	break; */
+/*       case ESCAPED: */
+/* 	process_escaped (client, c); */
+/* 	break; */
+/*       case CONTROL: */
+/* 	process_control (client, c); */
+/* 	break; */
+/*       } */
+/*     } */
+/*   } */
+
+/*   /\* TODO:  Remove this line. *\/ */
+/*   switch_to_client (client); */
+
+/*   end_input_action (bda, bdb); */
+/* } */
 
 /* vga_op
    ------
@@ -781,7 +870,7 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_NO, "text", "buffer_file", text, ano_t ano, ai
 static bool
 vga_op_precondition (void)
 {
-  return active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh);
+  return true; //active_client != 0 && (active_client->graphics_refresh || active_client->cursor_refresh);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano, int param)
@@ -796,23 +885,36 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t an
       exit ();
     }
 
-    if (active_client->graphics_refresh) {
-      /* Send the data. */
-      if (vga_op_list_write_assign (&output_buffer, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) != 0) {
-      	syslog ("terminal: Could not write vga op list");
-      	exit ();
-      }
-      active_client->graphics_refresh = false;
+    const char* str = "HHeelllloo  WWoorrlldd!!";
+
+    if (vga_op_list_write_assign (&output_buffer, VGA_TEXT_MEMORY_BEGIN + 2, str, strlen (str)) != 0) {
+      syslog ("terminal: Could not write vga op list");
+      exit ();
+    }
+ 
+    if (vga_op_list_write_set_cursor_location (&output_buffer, 1) != 0) {
+      syslog ("terminal: Could not write vga op list");
+      exit ();
     }
 
-    if (active_client->cursor_refresh) {
-      /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&output_buffer, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-      	syslog ("terminal: Could not write vga op list");
-      	exit ();
-      }
-      active_client->cursor_refresh = false;
-    }
+
+    /* if (active_client->graphics_refresh) { */
+    /*   /\* Send the data. *\/ */
+    /*   if (vga_op_list_write_assign (&output_buffer, 0, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->bd) != 0) { */
+    /*   	syslog ("terminal: Could not write vga op list"); */
+    /*   	exit (); */
+    /*   } */
+    /*   active_client->graphics_refresh = false; */
+    /* } */
+
+    /* if (active_client->cursor_refresh) { */
+    /*   /\* Send the cursor. *\/ */
+    /*   if (vga_op_list_write_set_cursor_location (&output_buffer, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) { */
+    /*   	syslog ("terminal: Could not write vga op list"); */
+    /*   	exit (); */
+    /*   } */
+    /*   active_client->cursor_refresh = false; */
+    /* } */
 
     end_output_action (true, output_buffer_bda, output_buffer_bdb);
   }

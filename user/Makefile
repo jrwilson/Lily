@@ -50,7 +50,7 @@ terminal : terminal.o vga_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 vga : vga.o vga_msg.o
-	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
 
 pci : pci.o 
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem

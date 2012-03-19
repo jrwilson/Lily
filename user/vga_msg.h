@@ -4,10 +4,18 @@
 #include <automaton.h>
 #include <buffer_file.h>
 
+#define VGA_VIDEO_MEMORY_BEGIN 0xA0000
+#define VGA_VIDEO_MEMORY_END   0xC0000
+#define VGA_VIDEO_MEMORY_SIZE (VGA_VIDEO_MEMORY_END - VGA_VIDEO_MEMORY_BEGIN)
+
+#define VGA_TEXT_MEMORY_BEGIN 0xB8000
+#define VGA_TEXT_MEMORY_END   0xC0000
+#define VGA_TEXT_MEMORY_SIZE  (VGA_TEXT_MEMORY_END - VGA_TEXT_MEMORY_BEGIN)
+
 typedef enum {
-  VGA_SET_START_ADDRESS,
   VGA_SET_CURSOR_LOCATION,
   VGA_ASSIGN,
+  VGA_BASSIGN,
 } vga_op_type_t;
 
 typedef struct {
@@ -33,8 +41,14 @@ vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
 int
 vga_op_list_write_assign (vga_op_list_t* vol,
 			  size_t address,
-			  size_t size,
-			  bd_t bd);
+			  const void* data,
+			  size_t size);
+
+int
+vga_op_list_write_bassign (vga_op_list_t* vol,
+			   size_t address,
+			   size_t size,
+			   bd_t bd);
 
 int
 vga_op_list_initr (vga_op_list_t* vol,
@@ -47,10 +61,6 @@ vga_op_list_next_op_type (vga_op_list_t* vol,
 			  vga_op_type_t* type);
 
 int
-vga_op_list_read_set_start_address (vga_op_list_t* vol,
-				    size_t* address);
-
-int
 vga_op_list_read_set_cursor_location (vga_op_list_t* vol,
 				      size_t* location);
 
@@ -59,5 +69,11 @@ vga_op_list_read_assign (vga_op_list_t* vol,
 			 size_t* address,
 			 const void** data,
 			 size_t* size);
+
+int
+vga_op_list_read_bassign (vga_op_list_t* vol,
+			  size_t* address,
+			  const void** data,
+			  size_t* size);
 
 #endif /* VGA_MSG_H */
