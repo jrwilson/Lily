@@ -6,6 +6,7 @@
 #include <description.h>
 #include <dymem.h>
 #include <callback_queue.h>
+#include "syslog.h"
 
 /*
   VFS
@@ -38,14 +39,32 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
+#define INIT_NO 1
+#define STOP_NO 2
+#define SYSLOG_NO 3
+#define VFS_REQUEST_NO 4
+#define VFS_RESPONSE_NO 5
+#define VFS_FS_REQUEST_NO 6
+#define VFS_FS_RESPONSE_NO 7
+
+#define WARNING "vfs: warning: "
+#define INFO "vfs: info: "
+
 /* Our aid. */
 static aid_t vfs_aid = -1;
 
-#define VFS_REQUEST_NO 1
-#define VFS_RESPONSE_NO 2
-#define VFS_FS_REQUEST_NO 3
-#define VFS_FS_RESPONSE_NO 4
-#define INIT_NO 5
+/* Initialization flag. */
+static bool initialized = false;
+
+typedef enum {
+  RUN,
+  STOP,
+} state_t;
+static state_t state = RUN;
+
+/* Syslog buffer. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
 
 /*
   Begin Path Section
@@ -112,25 +131,27 @@ static file_system_t** request_tail = &request_head;
 static file_system_t*
 file_system_create (aid_t aid)
 {
+  bd_t request_bda = buffer_create (0);
+  if (request_bda == -1) {
+    return 0;
+  }
+  bd_t request_bdb = buffer_create (0);
+  if (request_bdb == -1) {
+    buffer_destroy (request_bda);
+    return 0;
+  }
+
   file_system_t* fs = malloc (sizeof (file_system_t));
   memset (fs, 0, sizeof (file_system_t));
   fs->aid = aid;
   vfs_fs_request_queue_init (&fs->request_queue);
   callback_queue_init (&fs->callback_queue);
-  fs->request_bda = buffer_create (0);
-  if (fs->request_bda == -1) {
-    syslog ("vfs: error: Could not create file system output buffer");
-    exit ();
-  }
-  fs->request_bdb = buffer_create (0);
-  if (fs->request_bdb == -1) {
-    syslog ("vfs: error: Could not create file system output buffer");
-    exit ();
-  }
+  fs->request_bda = request_bda;
+  fs->request_bdb = request_bdb;
   fs->global_next = file_system_head;
   file_system_head = fs;
 
-  syslog ("vfs: TODO:  Subscribe to file system");
+  bfprintf (&syslog_buffer, INFO "TODO:  subscribe to file system\n");
 
   return fs;
 }
@@ -176,8 +197,7 @@ file_system_pop_request (file_system_t** f)
   file_system_t* fs = *f;
   /* Pop the response. */
   if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) != 0) {
-    syslog ("vfs: error: Could not write to file system request buffer");
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "could not write to file system request buffer\n");
   }
 
   /* Remove the file system from the request queue. */
@@ -308,32 +328,30 @@ find_client_response (aid_t aid)
 }
 
 static client_t*
-find_or_create_client (aid_t aid)
+create_client (aid_t aid)
 {
-  client_t* client = find_client (aid);
-
-  if (client == 0) {
-    client = malloc (sizeof (client_t));
-    memset (client, 0, sizeof (client_t));
-    client->aid = aid;
-    vfs_request_queue_init (&client->request_queue);
-    vfs_response_queue_init (&client->response_queue);
-    client->response_bda = buffer_create (0);
-    if (client->response_bda == -1) {
-      syslog ("vfs: error: Could not create client response buffer");
-      exit ();
-    }
-    client->response_bdb = buffer_create (0);
-    if (client->response_bdb == -1) {
-      syslog ("vfs: error: Could not create client response buffer");
-      exit ();
-    }
-    client->global_next = client_head;
-    client_head = client;
-    client->on_response_queue = false;
-
-  syslog ("vfs: TODO:  Subscribe to client");
+  bd_t response_bda = buffer_create (0);
+  if (response_bda == -1) {
+    return 0;
   }
+  bd_t response_bdb = buffer_create (0);
+  if (response_bdb == -1) {
+    buffer_destroy (response_bda);
+    return 0;
+  }
+
+  client_t* client = malloc (sizeof (client_t));
+  memset (client, 0, sizeof (client_t));
+  client->aid = aid;
+  vfs_request_queue_init (&client->request_queue);
+  vfs_response_queue_init (&client->response_queue);
+  client->response_bda = response_bda;
+  client->response_bdb = response_bdb;
+  client->global_next = client_head;
+  client_head = client;
+  client->on_response_queue = false;
+  
+  bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to client\n");
 
   return client;
 }
@@ -380,24 +398,24 @@ readfile_callback (void* data,
   vfs_fs_error_t error;
   size_t size;
   if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) != 0) {
-    /* TODO:  This is a protocol violation. */
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "could not read readfile response\n");
+    return;
   }
 
   if (error != VFS_FS_SUCCESS) {
-    /* TODO:  We just looked up a file but could not read it.  Something is wrong. */
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "readfile did not succeed\n");
+    return;
   }
       
   if (size > buffer_size (bdb) * pagesize ()) {
-    /* TODO:  The size does not match the number of pages in the buffer. */
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "readfile response has bad size\n");
+    return;
   }
 
   /* Answer. */
   if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) != 0) {
-    syslog ("vfs: error: Could not copy file buffer");
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "could not copy file buffer\n");
+    return;
   }
   client_answer (client);
 }
@@ -409,8 +427,7 @@ client_path_lookup_done (client_t* client,
   const vfs_request_queue_item_t* req = vfs_request_queue_front (&client->request_queue);
   switch (req->type) {
   case VFS_UNKNOWN:
-    syslog ("vfs: error: Unknown request in client request queue");
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "unknown request in client request queue\n");
     break;
   case VFS_MOUNT:
     /* The path could not be translated. */
@@ -470,6 +487,9 @@ client_path_lookup_done (client_t* client,
 
     /* The mount succeeded.  Insert an entry into the list. */
     file_system_t* fs = file_system_create (req->u.mount.aid);
+    if (fs == 0) {
+      // TODO
+    }
 
     vnode_t b;
     b.fs = fs;
@@ -526,8 +546,8 @@ descend_callback (void* data,
   vfs_fs_error_t error;
   vfs_fs_node_t node;
   if (read_vfs_fs_descend_response (bda, bdb, &error, &node) != 0) {
-    /* TODO:  This is a protocol violation. */
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "could not read descend response\n");
+    return;
   }
 
   if (error != VFS_FS_SUCCESS) {
@@ -601,8 +621,7 @@ client_start (client_t* client)
     switch (req->type) {
     case VFS_UNKNOWN:
       /* An unknown request type got on the queue.  This is a logic error. */
-      syslog ("vfs: error: unknown request on client request queue");
-      exit ();
+      bfprintf (&syslog_buffer, WARNING "unknown request on client request queue\n");
       break;
     case VFS_MOUNT:
       if (!check_absolute_path (req->u.mount.path, req->u.mount.path_size)) {
@@ -671,8 +690,7 @@ client_pop_response (client_t** c)
   client_t* client = *c;
   /* Pop the response. */
   if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) != 0) {
-    syslog ("vfs: error: Could not write to client response buffer");
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "could not write to client response buffer\n");
   }
 
   /* Remove the client from the response queue. */
@@ -691,14 +709,40 @@ client_pop_response (client_t** c)
   ==================
 */
 
-/* Initialization flag. */
-static bool initialized = false;
-
 static void
 initialize (void)
 {
   if (!initialized) {
     initialized = true;
+
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
+      /* Nothing we can do. */
+      exit ();
+    }
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+      /* Nothing we can do. */
+      exit ();
+    }
+
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
+      
+      description_fini (&syslog_description);
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	exit ();
+      }
+    }
 
     root.fs = 0;
     root.node.type = DIRECTORY;
@@ -714,6 +758,57 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   end_internal_action ();
 }
 
+/* stop
+   ----
+   Stop the automaton.
+   
+   Pre:  state == STOP and syslog_buffer is empty
+   Post: 
+*/
+static bool
+stop_precondition (void)
+{
+  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (stop_precondition ()) {
+    exit ();
+  }
+  end_internal_action ();
+}
+
+/* syslog
+   ------
+   Output error messages.
+   
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
+*/
+static bool
+syslog_precondition (void)
+{
+  return buffer_file_size (&syslog_buffer) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    end_output_action (true, syslog_bd, -1);
+  }
+  else {
+    end_output_action (false, -1, -1);
+  }
+}
+
 /* client_request
    --------------
    Receive a request from a client.
@@ -723,7 +818,15 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_request, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  client_push_request (find_or_create_client (aid), bda, bdb);
+  client_t* client = find_client (aid);
+  if (client == 0) {
+    client = create_client (aid);
+    if (client == 0) {
+      bfprintf (&syslog_buffer, WARNING "could not create client\n");
+      end_input_action (bda, bdb);
+    }
+  }
+  client_push_request (client, bda, bdb);
   end_input_action (bda, bdb);
 }
 
@@ -805,6 +908,12 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
 void
 schedule (void)
 {
+  if (stop_precondition ()) {
+    scheduler_add (STOP_NO, 0);
+  }
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
+  }
   if (response_head != 0) {
     scheduler_add (VFS_RESPONSE_NO, response_head->aid);
   }

@@ -12,32 +12,28 @@ vga_op_list_initw (vga_op_list_t* vol,
   vol->count = 0;
   vol->bdb = bdb;
 
-  if (buffer_file_seek (&vol->bf, sizeof (size_t)) != 0) {
-    return -1;
-  }
-
   return 0;
 }
 
-int
+void
 vga_op_list_reset (vga_op_list_t* vol)
 {
-  if (vol->count == 0) {
-    return 0;
-  }
-
   vol->count = 0;
+}
 
-  buffer_file_truncate (&vol->bf);
+static int
+reset (vga_op_list_t* vol)
+{
+  if (vol->count == 0) {
+    buffer_file_truncate (&vol->bf);
+    if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) != 0) {
+      return -1;
+    }
 
-  if (buffer_file_seek (&vol->bf, sizeof (size_t)) != 0) {
-    return -1;
+    if (buffer_resize (vol->bdb, 0) != 0) {
+      return -1;
+    }
   }
-
-  if (buffer_resize (vol->bdb, 0) != 0) {
-    return -1;
-  }
-
   return 0;
 }
 
@@ -65,6 +61,9 @@ int
 vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
 				       size_t location)
 {
+  if (reset (vol) != 0) {
+    return -1;
+  }
   vga_op_type_t type = VGA_SET_CURSOR_LOCATION;
   if (buffer_file_write (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
       buffer_file_write (&vol->bf, &location, sizeof (size_t)) != 0) {
@@ -80,6 +79,9 @@ vga_op_list_write_assign (vga_op_list_t* vol,
 			  const void* data,
 			  size_t size)
 {
+  if (reset (vol) != 0) {
+    return -1;
+  }
   vga_op_type_t type = VGA_ASSIGN;
   if (buffer_file_write (&vol->bf, &type, sizeof (vga_op_type_t)) != 0 ||
       buffer_file_write (&vol->bf, &address, sizeof (size_t)) != 0 ||
@@ -97,6 +99,9 @@ vga_op_list_write_bassign (vga_op_list_t* vol,
 			   size_t size,
 			   bd_t bd)
 {
+  if (reset (vol) != 0) {
+    return -1;
+  }
   size_t bd_size = buffer_size (bd);
   if (bd_size == -1 || size > bd_size * pagesize ()) {
     /* The buffer was too small. */

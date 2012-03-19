@@ -31,7 +31,7 @@ vga_op_list_initw (vga_op_list_t* vol,
 		   bd_t bda,
 		   bd_t bdb);
 
-int
+void
 vga_op_list_reset (vga_op_list_t* vol);
 
 int

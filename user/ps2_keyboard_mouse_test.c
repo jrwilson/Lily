@@ -18,8 +18,9 @@
 
 #define INIT_NO 1
 #define SCAN_CODES_IN_NO 2
-#define MOUSE_PACKETS_IN_NO 3
-#define STDOUT_NO 4
+#define STDIN_NO 3
+#define MOUSE_PACKETS_IN_NO 4
+#define STDOUT_NO 5
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -67,6 +68,28 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
 
   for (size_t idx = 0; idx != size; ++idx) {
     bfprintf (&stdout_buffer, "scan code %x\n", codes[idx]);
+  }
+
+  end_input_action (bda, bdb);
+}
+
+BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  buffer_file_t input_buffer;
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
+    end_input_action (bda, bdb);
+  }
+
+  size_t size = buffer_file_size (&input_buffer);
+  const char* codes = buffer_file_readp (&input_buffer, size);
+  if (codes == 0) {
+    end_input_action (bda, bdb);
+  }
+
+  for (size_t idx = 0; idx != size; ++idx) {
+    bfprintf (&stdout_buffer, "ascii %c\n", codes[idx]);
   }
 
   end_input_action (bda, bdb);
@@ -122,10 +145,20 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t 
   }
 }
 
+#define HELLO_NO 10
+BEGIN_INTERNAL (NO_PARAMETER, HELLO_NO, "", "", hello, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+  bfprintf (&stdout_buffer, "Hello, world!\n");
+  end_internal_action ();
+}
+
 void
 schedule (void)
 {
   if (stdout_precondition ()) {
     scheduler_add (STDOUT_NO, 0);
   }
+  scheduler_add (HELLO_NO, 0);
 }

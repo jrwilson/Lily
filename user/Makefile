@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=vfs tmpfs jsh syslog ps2_keyboard_mouse terminal vga pci hello_world ps2_keyboard_mouse_test
+PROGRAMS=vfs tmpfs jsh syslog ps2_keyboard_mouse terminal vga pci ps2_keyboard_mouse_test
 # shell
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -34,7 +34,7 @@ vfs : vfs.o vfs_msg.o
 	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
 tmpfs : tmpfs.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lfifo_scheduler -ldymem
@@ -49,16 +49,13 @@ vga : vga.o vga_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
 pci : pci.o 
-	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
+	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -lfifo_scheduler -ldymem
 
 jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -lfifo_scheduler -ldymem
 
 syslog : syslog.o 
 	$(CC) -o $@ $^ -lio -lbuffer_file -lfifo_scheduler -ldymem
-
-hello_world : hello_world.o
-	$(CC) -o $@ $^ -lbuffer_file -lfifo_scheduler -ldymem
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

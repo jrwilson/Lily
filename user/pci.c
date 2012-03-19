@@ -4,6 +4,8 @@
 #include <buffer_file.h>
 #include <string.h>
 #include <fifo_scheduler.h>
+#include <description.h>
+#include "syslog.h"
 
 #define CONFIG_ADDRESS	0xCF8
 #define CONFIG_DATA	0xCFC
@@ -282,8 +284,24 @@ create_device (unsigned char bus,
   return dev;
 }
 
+#define INIT_NO 1
+#define STOP_NO 2
+#define SYSLOG_NO 3
+
 /* Initialization flag. */
 static bool initialized = false;
+
+#define ERROR "pci: error: "
+
+typedef enum {
+  RUN,
+  STOP,
+} state_t;
+static state_t state = RUN;
+
+/* Output buffer for syslog. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
 
 static void
 enumerate_buses (void)
@@ -312,31 +330,49 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    /* Create the syslog buffer. */
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
+      exit ();
+    }
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+      exit ();
+    }
+
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
+      
+      description_fini (&syslog_description);
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	exit ();
+      }
+    }
+
     /* Reserve the ports to configure the PCI. */
     if (reserve_port (CONFIG_ADDRESS) != 0 ||
 	reserve_port (CONFIG_DATA) != 0) {
-      syslog ("pci: Could not reserve ports");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not reserve I/O ports\n");
+      state = STOP;
+      return;
     }
 
     enumerate_buses ();
 
-    bd_t bd = buffer_create (0);
-    buffer_file_t bf;
-    
-    buffer_file_initw (&bf, bd);
-
     for (dev_t* dev = dev_head; dev != 0; dev = dev->next) {
-      bfprintf (&bf, "%x:%x.%x vendor = %x device = %x command = %x status = %x revision = %x prog = %x subclass = %x class = %x\n", dev->bus, dev->slot, dev->function, dev->vendor, dev->device, dev->command, dev->status, dev->revision, dev->programming_interface, dev->subclass, dev->class);
+      bfprintf (&syslog_buffer, "%x:%x.%x vendor = %x device = %x command = %x status = %x revision = %x prog = %x subclass = %x class = %x\n", dev->bus, dev->slot, dev->function, dev->vendor, dev->device, dev->command, dev->status, dev->revision, dev->programming_interface, dev->subclass, dev->class);
     }
-
-    buffer_file_initr (&bf, bd);
-    syslogn (buffer_file_readp (&bf, 1), buffer_file_size (&bf));
-
   }
 }
-
-#define INIT_NO 1
 
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
@@ -344,8 +380,64 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   end_internal_action ();
 }
 
+/* stop
+   ----
+   Stop the automaton.
+   
+   Pre:  state == STOP and syslog_buffer is empty
+   Post: 
+*/
+static bool
+stop_precondition (void)
+{
+  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (stop_precondition ()) {
+    exit ();
+  }
+  end_internal_action ();
+}
+
+/* syslog
+   ------
+   Output error messages.
+   
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
+*/
+static bool
+syslog_precondition (void)
+{
+  return buffer_file_size (&syslog_buffer) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    end_output_action (true, syslog_bd, -1);
+  }
+  else {
+    end_output_action (false, -1, -1);
+  }
+}
+
 void
 schedule (void)
 {
-
+  if (stop_precondition ()) {
+    scheduler_add (STOP_NO, 0);
+  }
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
+  }
 }

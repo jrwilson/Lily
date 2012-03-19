@@ -5,6 +5,8 @@
 #include <buffer_file.h>
 #include "cpio.h"
 #include "vfs_msg.h"
+#include "syslog.h"
+#include <description.h>
 
 /*
   Tmpfs
@@ -66,9 +68,11 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define TMPFS_REQUEST_NO 1
-#define TMPFS_RESPONSE_NO 2
-#define INIT_NO 3
+#define INIT_NO 1
+#define STOP_NO 2
+#define SYSLOG_NO 3
+#define TMPFS_REQUEST_NO 4
+#define TMPFS_RESPONSE_NO 5
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -93,6 +97,18 @@ static inode_t* free_list = 0;
 
 /* Initialization flag. */
 static bool initialized = false;
+
+#define ERROR "tmpfs: error: "
+
+typedef enum {
+  RUN,
+  STOP,
+} state_t;
+static state_t state = RUN;
+
+/* Output buffer for syslog. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
 
 /* Queue of response. */
 static bd_t response_bda = -1;
@@ -192,14 +208,14 @@ file_find_or_create (inode_t* parent,
 /*     /\* Print this node. *\/ */
 /*     switch (node->node.type) { */
 /*     case FILE: */
-/*       ssyslog ("FILE "); */
+/*       bfprintf (&syslog_buffer, "FILE "); */
 /*       break; */
 /*     case DIRECTORY: */
-/*       ssyslog ("DIRECTORY "); */
+/*       bfprintf (&syslog_buffer, "DIRECTORY "); */
 /*       break; */
 /*     } */
-/*     syslog (node->name, node->name_size); */
-/*     ssyslog ("\n"); */
+/*     buffer_file_write (&syslog_buffer, node->name, node->name_size); */
+/*     buffer_file_put (&syslog_buffer, '\n'); */
 
 /*     /\* Print the children. *\/ */
 /*     for (inode_t* child = node->first_child; child != 0; child = child->next_sibling) { */
@@ -214,6 +230,34 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    /* Create the syslog buffer. */
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
+      exit ();
+    }
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+      exit ();
+    }
+
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
+      
+      description_fini (&syslog_description);
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	exit ();
+      }
+    }
+
     /* Allocate the inode vector. */
     nodes_capacity = 1;
     nodes_size = 0;
@@ -225,14 +269,12 @@ initialize (void)
     /* TODO:  Do we need to make the root its own parent? */
 
     response_bda = buffer_create (0);
-    if (response_bda == -1) {
-      syslog ("tmpfs: error: Could not create output buffer");
-      exit ();
-    }
     response_bdb = buffer_create (0);
-    if (response_bdb == -1) {
-      syslog ("tmpfs: error: Could not create output buffer");
-      exit ();
+    if (response_bda == -1 ||
+	response_bdb == -1) {
+      bfprintf (&syslog_buffer, ERROR "could not create response buffer\n");
+      state = STOP;
+      return;
     }
     vfs_fs_response_queue_init (&response_queue);
 
@@ -296,6 +338,57 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
   end_internal_action ();
+}
+
+/* stop
+   ----
+   Stop the automaton.
+   
+   Pre:  state == STOP and syslog_buffer is empty
+   Post: 
+*/
+static bool
+stop_precondition (void)
+{
+  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (stop_precondition ()) {
+    exit ();
+  }
+  end_internal_action ();
+}
+
+/* syslog
+   ------
+   Output error messages.
+   
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
+*/
+static bool
+syslog_precondition (void)
+{
+  return buffer_file_size (&syslog_buffer) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    end_output_action (true, syslog_bd, -1);
+  }
+  else {
+    end_output_action (false, -1, -1);
+  }
 }
 
 BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, ano_t ano, int param, bd_t bda, bd_t bdb)
@@ -378,8 +471,9 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
       }
 
       if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
-	syslog ("tmpfs: error: Could not enqueue readfile response");
-	exit ();
+	bfprintf (&syslog_buffer, ERROR "could not enqueue readfile response\n");
+	state = STOP;
+	end_input_action (bda, bdb);
       }
       end_input_action (bda, bdb);
     }
@@ -406,8 +500,9 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
 
   if (response_precondition ()) {
     if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
-      syslog ("tmpfs: error: Could not write output buffer");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not enqueue response\n");
+      state = STOP;
+      end_output_action (false, -1, -1);
     }
     end_output_action (true, response_bda, response_bdb);
   }
@@ -419,6 +514,12 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
 void
 schedule (void)
 {
+  if (stop_precondition ()) {
+    scheduler_add (STOP_NO, 0);
+  }
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
+  }
   if (response_precondition ()) {
     scheduler_add (TMPFS_RESPONSE_NO, 0);
   }

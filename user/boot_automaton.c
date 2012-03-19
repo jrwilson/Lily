@@ -7,6 +7,7 @@
 #include "cpio.h"
 #include "vfs_msg.h"
 #include "argv.h"
+#include "syslog.h"
 
 /*
   The Boot Automaton
@@ -28,13 +29,11 @@
 #define VFS_REQUEST_NO 4
 #define VFS_RESPONSE_NO 5
 
-#define NAME "boot_automaton"
+#define ERROR "boot_automaton: error: "
+#define WARNING "boot_automaton: warning: "
 
 /* Names for registration. */
-#define SYSLOG_NAME "syslog"
 #define VFS_NAME "vfs"
-
-#define SYSLOG_STDIN "stdin"
 
 /* Paths in the cpio archive. */
 #define SYSLOG_PATH "bin/syslog"
@@ -77,13 +76,13 @@ readfile_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, "%s: error: vfs provided bad readfile response\n", NAME);
+    bfprintf (&syslog_buffer, ERROR "vfs provided bad readfile response\n");
     state = STOP;
     return;
   }
 
   if (error != VFS_SUCCESS) {
-    bfprintf (&syslog_buffer, "%s: error: could not read %s\n", NAME, SHELL_PATH);
+    bfprintf (&syslog_buffer, ERROR "could not read %s\n", SHELL_PATH);
     state = STOP;
     return;
   }
@@ -93,25 +92,25 @@ readfile_callback (void* data,
 
   argv_t argv;
   if (argv_initw (&argv, &bd1, &bd2) != 0) {
-    bfprintf (&syslog_buffer, "%s: error: could not initialize argv\n", NAME);
+    bfprintf (&syslog_buffer, ERROR "could not initialize argv\n");
     state = STOP;
     return;
   }
 
   if (argv_append (&argv, SHELL_PATH, strlen (SHELL_PATH) + 1) != 0) {
-    bfprintf (&syslog_buffer, "%s: error: could not write to argv\n", NAME);
+    bfprintf (&syslog_buffer, ERROR "could not write to argv\n");
     state = STOP;
     return;
   }
 
   if (argv_append (&argv, SHELL_CMDLINE, strlen (SHELL_CMDLINE) + 1) != 0) {
-    bfprintf (&syslog_buffer, "%s: error: could not write to argv\n", NAME);
+    bfprintf (&syslog_buffer, ERROR "could not write to argv\n");
     state = STOP;
     return;
   }
 
   if (create (bdb, size, bd1, bd2, 0, 0, true) == -1) {
-    bfprintf (&syslog_buffer, "%s: error: could not create %s\n", NAME, SHELL_PATH);
+    bfprintf (&syslog_buffer, ERROR "could not create %s\n", SHELL_PATH);
     state = STOP;
     return;
   }
@@ -126,13 +125,13 @@ mount_callback (void* data,
 {
   vfs_error_t error;
   if (read_vfs_mount_response (bda, bdb, &error) != 0) {
-    bfprintf (&syslog_buffer, "%s: error: vfs provided bad mount response\n", NAME);
+    bfprintf (&syslog_buffer, ERROR "vfs provided bad mount response\n");
     state = STOP;
     return;
   }
 
   if (error != VFS_SUCCESS) {
-    bfprintf (&syslog_buffer, "%s: error: mounting tmpfs on %s failed\n", NAME, ROOT_PATH);
+    bfprintf (&syslog_buffer, ERROR "mounting tmpfs on %s failed\n", ROOT_PATH);
     state = STOP;
     return;
   }
@@ -162,7 +161,7 @@ initialize (void)
     vfs_request_bdb = buffer_create (0);
     if (vfs_request_bda == -1 ||
 	vfs_request_bdb == -1) {
-      bfprintf (&syslog_buffer, "%s: error: could not create vfs request buffers\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not create vfs request buffers\n");
       state = STOP;
       return;
     }
@@ -176,7 +175,7 @@ initialize (void)
 
     cpio_archive_t archive;
     if (cpio_archive_init (&archive, bda) != 0) {
-      bfprintf (&syslog_buffer, "%s: error: could not initialize cpio archive\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not initialize cpio archive\n");
       state = STOP;
       return;
     }
@@ -227,14 +226,14 @@ initialize (void)
 
     /* Create the vfs. */
     if (vfs_file == 0) {
-      bfprintf (&syslog_buffer, "%s: error: no vfs file\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "no vfs file\n");
       state = STOP;
       return;
     }
     aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false);
     cpio_file_destroy (vfs_file);
     if (vfs == -1) {
-      bfprintf (&syslog_buffer, "%s: error: could not create vfs\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not create vfs\n");
       state = STOP;
       return;
     }
@@ -242,7 +241,7 @@ initialize (void)
     /* Bind to the vfs so we can mount the tmpfs. */
     description_t vfs_description;
     if (description_init (&vfs_description, vfs) != 0) {
-      bfprintf (&syslog_buffer, "%s: error: could not describe vfs\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not describe vfs\n");
       state = STOP;
       return;
     }
@@ -256,14 +255,14 @@ initialize (void)
     /* We bind the response first so they don't get lost. */
     if (bind (vfs, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
 	bind (aid, VFS_REQUEST_NO, 0, vfs, vfs_request, 0) == -1) {
-      bfprintf (&syslog_buffer, "%s: error: could not bind to vfs\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
       state = STOP;
       return;
     }
     
     /* Create the tmpfs. */
     if (tmpfs_file == 0) {
-      bfprintf (&syslog_buffer, "%s: error: no tmpfs file\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "no tmpfs file\n");
       state = STOP;
       return;
     }
@@ -271,7 +270,7 @@ initialize (void)
     aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false);
     cpio_file_destroy (tmpfs_file);
     if (tmpfs == -1) {
-      bfprintf (&syslog_buffer, "%s: error: could not create tmpfs\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not create tmpfs\n");
       state = STOP;
       return;
     }
@@ -374,7 +373,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
 
   if (vfs_request_precondition ()) {
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      bfprintf (&syslog_buffer, "%s: error: could not write vfs request\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not write vfs request\n");
       state = STOP;
       end_output_action (false, -1, -1);
     }
@@ -396,7 +395,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
   initialize ();
 
   if (callback_queue_empty (&vfs_response_queue)) {
-    bfprintf (&syslog_buffer, "%s: warning: vfs produced spurious response\n", NAME);
+    bfprintf (&syslog_buffer, WARNING "vfs produced spurious response\n");
     end_input_action (bda, bdb);
   }
 
@@ -415,6 +414,9 @@ schedule (void)
 {
   if (stop_precondition ()) {
     scheduler_add (STOP_NO, 0);
+  }
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
   }
   if (vfs_request_precondition ()) {
     scheduler_add (VFS_REQUEST_NO, 0);

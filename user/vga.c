@@ -5,6 +5,7 @@
 #include <fifo_scheduler.h>
 #include <description.h>
 #include "vga_msg.h"
+#include "syslog.h"
 
 #define INIT_NO 1
 #define STOP_NO 2
@@ -323,9 +324,7 @@
 /* Initialization flag. */
 static bool initialized = false;
 
-#define NAME "vga"
-#define SYSLOG_NAME "syslog"
-#define SYSLOG_STDIN "stdin"
+#define ERROR "vga: error: "
 
 typedef enum {
   RUN,
@@ -401,14 +400,14 @@ initialize (void)
 	reserve_port (CRT_DATA_PORT) != 0 ||
 	reserve_port (GRAPHICS_ADDRESS_PORT) != 0 ||
 	reserve_port (GRAPHICS_DATA_PORT) != 0) {
-      bfprintf (&syslog_buffer, "%s: error: could not reserve I/O ports\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
     }
 
     /* Map in the video memory. */
     if (map ((const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
-      bfprintf (&syslog_buffer, "%s: error: could not map vga video memory\n", NAME);
+      bfprintf (&syslog_buffer, ERROR "could not map vga video memory\n");
       state = STOP;
       return;
     }
