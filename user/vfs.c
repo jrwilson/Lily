@@ -1,7 +1,6 @@
 #include "vfs_msg.h"
 #include <automaton.h>
 #include <string.h>
-#include <fifo_scheduler.h>
 #include <buffer_file.h>
 #include <description.h>
 #include <dymem.h>
@@ -755,7 +754,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -774,12 +773,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -798,14 +796,13 @@ syslog_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -823,11 +820,11 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
     client = create_client (aid);
     if (client == 0) {
       bfprintf (&syslog_buffer, WARNING "could not create client\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
   }
   client_push_request (client, bda, bdb);
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* client_response
@@ -840,17 +837,16 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, ano_t ano, aid_t aid)
 {
   initialize ();
-  scheduler_remove (VFS_RESPONSE_NO, aid);
 
   /* Find the client on the response queue. */
   client_t** c = find_client_response (aid);
   client_t* client = *c;
   if (client != 0) {
     client_pop_response (c);
-    end_output_action (true, client->response_bda, client->response_bdb);
+    finish_output (true, client->response_bda, client->response_bdb);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -864,17 +860,16 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
 BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ano_t ano, aid_t aid)
 {
   initialize ();
-  scheduler_remove (VFS_FS_REQUEST_NO, aid);
 
   /* Find the file system on the request queue. */
   file_system_t** f = find_file_system_request (aid);
   file_system_t* fs = *f;
   if (fs != 0) {
     file_system_pop_request (f);
-    end_output_action (true, fs->request_bda, fs->request_bdb);
+    finish_output (true, fs->request_bda, fs->request_bdb);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -892,7 +887,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
 
   if (callback_queue_empty (&fs->callback_queue)) {
     /* The file system produced a response when one was not requested. */
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
 
   const callback_queue_item_t* item = callback_queue_front (&fs->callback_queue);
@@ -902,22 +897,22 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
 
   callback (data, bda, bdb);
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
   if (response_head != 0) {
-    scheduler_add (VFS_RESPONSE_NO, response_head->aid);
+    schedule (VFS_RESPONSE_NO, response_head->aid);
   }
   if (request_head != 0) {
-    scheduler_add (VFS_FS_REQUEST_NO, request_head->aid);
+    schedule (VFS_FS_REQUEST_NO, request_head->aid);
   }
 }

@@ -139,6 +139,18 @@ public:
     
     ready_queue_.push_back (c);
   }
+
+  static inline void
+  schedule_irq (const caction& ad)
+  {
+    context_map_type::iterator pos = context_map_.find (ad.automaton);
+    kassert (pos != context_map_.end ());
+    
+    automaton_context* c = pos->second;
+    c->push_front (ad);
+    
+    ready_queue_.push_front (c);
+  }
   
   static inline void
   finish (bool output_fired,

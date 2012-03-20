@@ -651,21 +651,10 @@ public:
 	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
   }
 
-  // The automaton has finished the current action.
-  //
-  // action_number and parameter can be used to schedule another action.
-  // These are ignored if the action does not exist.
-  //
-  // output_fired indicates that an output action fired.
-  // bda and bdb are buffers that will be be passed to input actions from an output action.
-  // These are passed to the scheduler which ignores them if the action that called finish is not an output action.
-  void
-  finish (const shared_ptr<automaton>& ths,
-	  ano_t action_number,
-  	  int parameter,
-  	  bool output_fired,
-  	  bd_t bda,
-  	  bd_t bdb);
+  pair<int, int>
+  schedule (const shared_ptr<automaton>& ths,
+	    ano_t action_number,
+	    int parameter);
 
   // The automaton would like to no longer exist.
   void

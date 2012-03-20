@@ -7,6 +7,13 @@ automatonerrno:
 
 	.section .text
 
+	.global schedule
+schedule:
+	mov $LILY_SYSCALL_SCHEDULE, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
 	.global finish
 finish:
 	mov $LILY_SYSCALL_FINISH, %eax

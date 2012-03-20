@@ -2,8 +2,9 @@
 #define LILY_SYSCALL_H
 
 /* Unprivileged system calls. */
-#define LILY_SYSCALL_FINISH                0x00
-#define LILY_SYSCALL_EXIT                  0x01
+#define LILY_SYSCALL_SCHEDULE              0x00
+#define LILY_SYSCALL_FINISH                0x01
+#define LILY_SYSCALL_EXIT                  0x02
 
 #define LILY_SYSCALL_CREATE                0x10
 #define LILY_SYSCALL_BIND                  0x11

@@ -2,7 +2,6 @@
 #include <string.h>
 #include <buffer_queue.h>
 #include <callback_queue.h>
-#include <fifo_scheduler.h>
 #include <description.h>
 #include <dymem.h>
 #include "vfs_msg.h"
@@ -1201,7 +1200,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -1220,12 +1219,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -1244,14 +1242,13 @@ syslog_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -1271,18 +1268,17 @@ vfs_request_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
       state = STOP;
-      end_output_action (false, -1, -1);
+      finish_output (false, -1, -1);
     }
-    end_output_action (true, vfs_request_bda, vfs_request_bdb);
+    finish_output (true, vfs_request_bda, vfs_request_bdb);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -1298,7 +1294,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
 
   if (callback_queue_empty (&vfs_response_queue)) {
     bfprintf (&syslog_buffer, WARNING "vfs produced spurious response\n");
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
 
   const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
@@ -1308,7 +1304,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
 
   callback (data, bda, bdb);
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* load_text
@@ -1327,7 +1323,6 @@ load_text_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (LOAD_TEXT_NO, param);
 
   if (load_text_precondition ()) {
     const buffer_queue_item_t* item = buffer_queue_front (&interpret_queue);
@@ -1340,19 +1335,19 @@ BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, ano_t ano, int pa
     buffer_queue_pop (&interpret_queue);
 
     if (bdb == -1) {
-      end_internal_action ();
+      finish_internal ();
     }
 
     size_t bdb_bd_size = buffer_size (bdb);
     if (bdb_bd_size == -1) {
-      end_internal_action ();
+      finish_internal ();
     }
 
     if (sizeb > bdb_bd_size * pagesize ()) {
       if (bdb != -1) {
 	buffer_destroy (bdb);
       }
-      end_internal_action ();
+      finish_internal ();
     }
 
     const char* s = buffer_map (bdb);
@@ -1360,7 +1355,7 @@ BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, ano_t ano, int pa
       if (bdb != -1) {
 	buffer_destroy (bdb);
       }
-      end_internal_action ();
+      finish_internal ();
     }
 
     interpret_bd = bdb;
@@ -1369,7 +1364,7 @@ BEGIN_INTERNAL (NO_PARAMETER, LOAD_TEXT_NO, "", "", load_text, ano_t ano, int pa
     interpret_string_idx = 0;
   }
 
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* process_text
@@ -1388,7 +1383,6 @@ process_text_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (PROCESS_TEXT_NO, param);
 
   if (process_text_precondition ()) {
     while (!evaluating && interpret_string_idx != interpret_string_size) {
@@ -1402,7 +1396,7 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_TEXT_NO, "", "", process_text, ano_t ano, 
     }
   }
 
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stdin
@@ -1417,7 +1411,7 @@ BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano,
 
   /* TODO */
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* stdout
@@ -1436,14 +1430,13 @@ stdout_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (STDOUT_NO, param);
 
   if (stdout_precondition ()) {
     buffer_file_truncate (&stdout_bf);
-    end_output_action (true, stdout_bd, -1);
+    finish_output (true, stdout_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -1457,15 +1450,14 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t 
 BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, ano_t ano, aid_t aid)
 {
   initialize ();
-  scheduler_remove (START_NO, aid);
 
   start_queue_item_t** item = start_queue_find (aid);
   if (*item != 0) {
     start_queue_erase (item);
-    end_output_action (true, -1, -1);
+    finish_output (true, -1, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -1481,43 +1473,43 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file_t", stdin_c
 
   buffer_file_t bf;
   if (buffer_file_initr (&bf, bda) != 0) {
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
 
   size_t size = buffer_file_size (&bf);
   const char* data = buffer_file_readp (&bf, size);
   if (data == 0) {
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
 
   buffer_file_write (&stdout_bf, data, size);
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
   if (vfs_request_precondition ()) {
-    scheduler_add (VFS_REQUEST_NO, 0);
+    schedule (VFS_REQUEST_NO, 0);
   }
   if (load_text_precondition ()) {
-    scheduler_add (LOAD_TEXT_NO, 0);
+    schedule (LOAD_TEXT_NO, 0);
   }
   if (process_text_precondition ()) {
-    scheduler_add (PROCESS_TEXT_NO, 0);
+    schedule (PROCESS_TEXT_NO, 0);
   }
   if (stdout_precondition ()) {
-    scheduler_add (STDOUT_NO, 0);
+    schedule (STDOUT_NO, 0);
   }
   if (!start_queue_empty ()) {
-    scheduler_add (START_NO, start_queue_front ());
+    schedule (START_NO, start_queue_front ());
   }
 }
 

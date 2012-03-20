@@ -12,49 +12,41 @@ automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 bitset<ONE_MEGABYTE / PAGE_SIZE> automaton::mmapped_frames_;
 bitset<65536> automaton::reserved_ports_;
 
-void
-automaton::finish (const shared_ptr<automaton>& ths,
-		   ano_t action_number,
-		   int parameter,
-		   bool output_fired,
-		   bd_t bda,
-		   bd_t bdb)
+pair<int, int>
+automaton::schedule (const shared_ptr<automaton>& ths,
+		     ano_t action_number,
+		     int parameter)
 {
   kassert (ths.get () == this);
 
-  if (action_number > LILY_ACTION_NO_ACTION) {
-    const paction* action = find_action (action_number);
-    if (action != 0) {
-      /* Correct the parameter. */
-      switch (action->parameter_mode) {
-      case NO_PARAMETER:
-	parameter = 0;
-	break;
-      case PARAMETER:
-      case AUTO_PARAMETER:
-	/* No correction necessary. */
-	break;
-      }
-      
-      switch (action->type) {
-      case OUTPUT:
-      case INTERNAL:
-	scheduler::schedule (caction (ths, action, parameter));
-	break;
-      case INPUT:
-      case SYSTEM_INPUT:
-	// BUG:  Can't schedule non-local actions.
-	kassert (0);
-	break;
-      }
+  const paction* action = find_action (action_number);
+  if (action != 0) {
+    /* Correct the parameter. */
+    switch (action->parameter_mode) {
+    case NO_PARAMETER:
+      parameter = 0;
+      break;
+    case PARAMETER:
+    case AUTO_PARAMETER:
+      /* No correction necessary. */
+      break;
     }
-    else {
-      // BUG:  Scheduled an action that doesn't exist.
-      kassert (0);
+    
+    switch (action->type) {
+    case OUTPUT:
+    case INTERNAL:
+      scheduler::schedule (caction (ths, action, parameter));
+      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+      break;
+    case INPUT:
+    case SYSTEM_INPUT:
+      return make_pair (-1, LILY_SYSCALL_EBADANO);
+      break;
     }
   }
-  
-  scheduler::finish (output_fired, bda, bdb);
+  else {
+    return make_pair (-1, LILY_SYSCALL_EBADANO);
+  }
 }
 
 // The automaton would like to no longer exist.

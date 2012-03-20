@@ -1,6 +1,5 @@
 #include <automaton.h>
 #include <string.h>
-#include <fifo_scheduler.h>
 #include <callback_queue.h>
 #include <description.h>
 #include <dymem.h>
@@ -290,7 +289,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -309,12 +308,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -330,17 +328,16 @@ syslog_precondition (void)
   return buffer_file_size (&syslog_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslog, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -360,18 +357,17 @@ vfs_request_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (VFS_REQUEST_NO, param);
 
   if (vfs_request_precondition ()) {
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not write vfs request\n");
       state = STOP;
-      end_output_action (false, -1, -1);
+      finish_output (false, -1, -1);
     }
-    end_output_action (true, vfs_request_bda, vfs_request_bdb);
+    finish_output (true, vfs_request_bda, vfs_request_bdb);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -388,7 +384,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
   if (state == RUN) {
     if (callback_queue_empty (&vfs_response_queue)) {
       bfprintf (&syslog_buffer, WARNING "vfs produced spurious response\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     
     const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
@@ -399,19 +395,19 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
     callback (data, bda, bdb);
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
   if (vfs_request_precondition ()) {
-    scheduler_add (VFS_REQUEST_NO, 0);
+    schedule (VFS_REQUEST_NO, 0);
   }
 }

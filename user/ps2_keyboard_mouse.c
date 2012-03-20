@@ -1,6 +1,5 @@
 #include <automaton.h>
 #include <io.h>
-#include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
 #include <description.h>
@@ -484,7 +483,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -503,12 +502,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -527,14 +525,13 @@ syslog_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -553,7 +550,7 @@ BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano
       state = STOP;
     }
   }
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* scan_code
@@ -572,14 +569,13 @@ scan_codes_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes", "buffer_file_t", scan_codes, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (scan_codes_precondition ()) {
     buffer_file_truncate (&scan_codes_buffer);
-    end_output_action (true, scan_codes_bd, -1);
+    finish_output (true, scan_codes_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -619,10 +615,10 @@ BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int 
     default:
       bfprintf (&syslog_buffer, ERROR "unrecognized packet byte state\n");
       state = STOP;
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
   }
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* mouse_packets
@@ -641,34 +637,33 @@ mouse_packets_out_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (mouse_packets_out_precondition ()) {
     if (mouse_packet_list_reset (&mouse_packet_list) != 0) {
       bfprintf (&syslog_buffer, ERROR "mouse packet list reset failed\n");
       state = STOP;
-      end_output_action (false, -1, -1);
+      finish_output (false, -1, -1);
     }
-    end_output_action (true, mouse_packets_bd, -1);
+    finish_output (true, mouse_packets_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
   if (scan_codes_precondition ()) {
-    scheduler_add (SCAN_CODES_NO, 0);
+    schedule (SCAN_CODES_NO, 0);
   }
   if (mouse_packets_out_precondition ()) {
-    scheduler_add (MOUSE_PACKETS_OUT_NO, 0);
+    schedule (MOUSE_PACKETS_OUT_NO, 0);
   }
 }

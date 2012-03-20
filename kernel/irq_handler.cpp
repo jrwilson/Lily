@@ -315,8 +315,7 @@ irq_handler::process_interrupts ()
 	for (subscriber_list_type::const_iterator pos = subscribers_[irq].begin ();
 	     pos != subscribers_[irq].end ();
 	     ++pos) {
-	  // TODO:  Put this at the front of the queue.
-	  scheduler::schedule (*pos);
+	  scheduler::schedule_irq (*pos);
 	}
       }
     }

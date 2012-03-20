@@ -32,10 +32,14 @@ trap_handler::install ()
   idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
 }
 
-struct finish_args {
+struct schedule_args {
   uint32_t eip;
   ano_t action_number;
   int parameter;
+};
+
+struct finish_args {
+  uint32_t eip;
   bool output_fired;
   bd_t bda;
   bd_t bdb;
@@ -226,6 +230,19 @@ trap_dispatch (volatile registers regs)
      Please keep it that way.
   */
   switch (regs.eax) {
+  case LILY_SYSCALL_SCHEDULE:
+    {
+      schedule_args* ptr = reinterpret_cast<schedule_args*> (regs.useresp);
+      if (!a->verify_stack (ptr, sizeof (schedule_args))) {
+	// BUG:  Can't get the arguments from the stack.
+	kassert (0);
+      }
+      pair<aid_t, int> r = a->schedule (a, ptr->action_number, ptr->parameter);
+      regs.eax = r.first;
+      regs.ecx = r.second;
+      return;
+    }
+    break;
   case LILY_SYSCALL_FINISH:
     {
       finish_args* ptr = reinterpret_cast<finish_args*> (regs.useresp);
@@ -233,7 +250,7 @@ trap_dispatch (volatile registers regs)
 	// BUG:  Can't get the arguments from the stack.
 	kassert (0);
       }
-      a->finish (a, ptr->action_number, ptr->parameter, ptr->output_fired, ptr->bda, ptr->bdb);
+      scheduler::finish (ptr->output_fired, ptr->bda, ptr->bdb);
       return;
     }
     break;

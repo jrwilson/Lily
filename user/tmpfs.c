@@ -1,6 +1,5 @@
 #include <automaton.h>
 #include <string.h>
-#include <fifo_scheduler.h>
 #include <dymem.h>
 #include <buffer_file.h>
 #include "cpio.h"
@@ -337,7 +336,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -356,12 +355,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -380,14 +378,13 @@ syslog_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -398,7 +395,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
   vfs_fs_type_t type;
   if (read_vfs_fs_request_type (bda, bdb, &type) != 0) {
     vfs_fs_response_queue_push_bad_request (&response_queue, type);
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
   
   switch (type) {
@@ -410,24 +407,24 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
       vfs_fs_node_t no_node;
       if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) != 0) {
   	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       if (id >= nodes_size) {
   	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
   	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       if (inode->node.type != DIRECTORY) {
   	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_NOT_DIRECTORY, &no_node);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       inode_t* child;
@@ -436,13 +433,13 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
   	    memcmp (child->name, name, name_size) == 0) {
   	  /* Found the child with the correct name. */
   	  vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_SUCCESS, &child->node);
-  	  end_input_action (bda, bdb);
+  	  finish_input (bda, bdb);
   	}
       }
 
       /* Didn't find it. */
       vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_CHILD_DNE, &no_node);
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     break;
   case VFS_FS_READFILE:
@@ -450,41 +447,41 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
       size_t id;
       if (read_vfs_fs_readfile_request (bda, bdb, &id) != 0) {
   	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       if (id >= nodes_size) {
   	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
   	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       if (inode->node.type != FILE) {
   	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_NOT_FILE, 0, -1);
-  	end_input_action (bda, bdb);
+  	finish_input (bda, bdb);
       }
 
       if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not enqueue readfile response\n");
 	state = STOP;
-	end_input_action (bda, bdb);
+	finish_input (bda, bdb);
       }
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     break;
   default:
     vfs_fs_response_queue_push_bad_request (&response_queue, VFS_UNKNOWN);
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
     break;
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 static bool
@@ -496,31 +493,30 @@ response_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (TMPFS_RESPONSE_NO, 0);
 
   if (response_precondition ()) {
     if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not enqueue response\n");
       state = STOP;
-      end_output_action (false, -1, -1);
+      finish_output (false, -1, -1);
     }
-    end_output_action (true, response_bda, response_bdb);
+    finish_output (true, response_bda, response_bdb);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
   if (response_precondition ()) {
-    scheduler_add (TMPFS_RESPONSE_NO, 0);
+    schedule (TMPFS_RESPONSE_NO, 0);
   }
 }

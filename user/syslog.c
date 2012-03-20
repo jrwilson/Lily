@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <fifo_scheduler.h>
 #include <string.h>
 #include <buffer_file.h>
 #include <dymem.h>
@@ -52,7 +51,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* start
@@ -70,7 +69,7 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
     state = RUN;
   }
     
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* stdin
@@ -85,13 +84,13 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano
 
   buffer_file_t stdin_buffer;
   if (buffer_file_initr (&stdin_buffer, bda) != 0) {
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
 
   size_t size = buffer_file_size (&stdin_buffer);
   const char* str = buffer_file_readp (&stdin_buffer, size);
   if (str == 0) {
-    end_input_action (bda, bdb);
+    finish_input (bda, bdb);
   }
 
   if (bfprintf (&stdout_buffer, "(%d) ", aid) != 0 ||
@@ -106,7 +105,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano
     }
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* stdout
@@ -125,21 +124,20 @@ stdout_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stdout_precondition ()) {
     buffer_file_truncate (&stdout_buffer);
-    end_output_action (true, stdout_bd, -1);
+    finish_output (true, stdout_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stdout_precondition ()) {
-    scheduler_add (STDOUT_NO, 0);
+    schedule (STDOUT_NO, 0);
   }
 }

@@ -2,7 +2,6 @@
 #include <automaton.h>
 #include <dymem.h>
 #include <string.h>
-#include <fifo_scheduler.h>
 #include <buffer_file.h>
 #include "vga_msg.h"
 #include "mouse_msg.h"
@@ -1790,7 +1789,7 @@ process_control (client_t* client,
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -1809,12 +1808,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -1833,14 +1831,13 @@ syslog_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -1862,21 +1859,21 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
     buffer_file_t input_buffer;
     if (buffer_file_initr (&input_buffer, bda) != 0) {
       bfprintf (&syslog_buffer, WARNING "could not initialize scan code buffer for reading\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     
     size_t size = buffer_file_size (&input_buffer);
     const unsigned char* codes = buffer_file_readp (&input_buffer, size);
     if (codes == 0) {
       bfprintf (&syslog_buffer, WARNING "could not read the scan code buffer\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     
     if (active_client != 0) {
       if (buffer_file_write (&active_client->scan_codes_buffer, codes, size) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not write the scan code buffer\n");
 	state = STOP;
-	end_input_action (bda, bdb);
+	finish_input (bda, bdb);
       }
     }
     
@@ -1924,7 +1921,7 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
     }
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* mouse_packets_in
@@ -1943,24 +1940,24 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
     mouse_packet_list_t mouse_packet_list;
     if (mouse_packet_list_initr (&mouse_packet_list, bda, &count) != 0) {
       bfprintf (&syslog_buffer, WARNING "could not initialize mouse packet list for reading\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     
     for (size_t idx = 0; idx != count; ++idx) {
       if (mouse_packet_list_read (&mouse_packet_list, &mouse_packet) != 0) {
 	bfprintf (&syslog_buffer, WARNING "could not read mouse packet\n");
-	end_input_action (bda, bdb);
+	finish_input (bda, bdb);
       }
       
       if (mouse_packet_list_write (&active_client->mouse_packet_list, &mouse_packet) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not write mouse packet\n");
 	state = STOP;
-	end_input_action (bda, bdb);
+	finish_input (bda, bdb);
       }
     }
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /*
@@ -1970,7 +1967,6 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 BEGIN_OUTPUT (AUTO_PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_t", scan_codes_out, ano_t ano, aid_t aid)
 {
   initialize ();
-  scheduler_remove (ano, aid);
 
   if (state == RUN) {
     /* Find the client. */
@@ -1982,17 +1978,16 @@ BEGIN_OUTPUT (AUTO_PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_
 
     if (buffer_file_size (&client->scan_codes_buffer) != 0) {
       buffer_file_truncate (&client->scan_codes_buffer);
-      end_output_action (true, client->scan_codes_bd, -1);
+      finish_output (true, client->scan_codes_bd, -1);
     }
   }
 
-  end_output_action (false, -1, -1);
+  finish_output (false, -1, -1);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, aid_t aid)
 {
   initialize ();
-  scheduler_remove (ano, aid);
 
   if (state == RUN) {
     /* Find the client. */
@@ -2004,17 +1999,16 @@ BEGIN_OUTPUT (AUTO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_
     
     if (buffer_file_size (&client->ascii_buffer) != 0) {
       buffer_file_truncate (&client->ascii_buffer);
-      end_output_action (true, client->ascii_bd, -1);
+      finish_output (true, client->ascii_bd, -1);
     }
   }
 
-  end_output_action (false, -1, -1);
+  finish_output (false, -1, -1);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, aid_t aid)
 {
   initialize ();
-  scheduler_remove (ano, aid);
 
   if (state == RUN) {
     /* Find the client. */
@@ -2028,13 +2022,13 @@ BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_
       if (mouse_packet_list_reset (&client->mouse_packet_list) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not reset mouse packet list\n");
 	state = STOP;
-	end_output_action (false, -1, -1);
+	finish_output (false, -1, -1);
       }
-      end_output_action (true, client->mouse_packets_bd, -1);
+      finish_output (true, client->mouse_packets_bd, -1);
     }
   }
 
-  end_output_action (false, -1, -1);
+  finish_output (false, -1, -1);
 }
 
 /*
@@ -2049,14 +2043,14 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
     buffer_file_t input_buffer;
     if (buffer_file_initr (&input_buffer, bda) != 0) {
       bfprintf (&syslog_buffer, WARNING "could not initialize stdin buffer for reading\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     
     size_t size = buffer_file_size (&input_buffer);
     const char* begin = buffer_file_readp (&input_buffer, size);
     if (begin == 0) {
       bfprintf (&syslog_buffer, WARNING "could not read stdin buffer\n");
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
         
     /* Find or create the client. */
@@ -2096,7 +2090,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
 	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
 	  bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
 	  state = STOP;
-	  end_input_action (bda, bdb);
+	  finish_input (bda, bdb);
 	}
       }
       
@@ -2106,13 +2100,13 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
 	if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
 	  bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
 	  state = STOP;
-	  end_input_action (bda, bdb);
+	  finish_input (bda, bdb);
 	}
       }
     }
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /*
@@ -2135,14 +2129,13 @@ vga_op_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (VGA_OP_NO, param);
 
   if (vga_op_precondition ()) {
     vga_op_list_reset (&vga_op_list);
-    end_output_action (true, vga_op_list_bda, vga_op_list_bdb);
+    finish_output (true, vga_op_list_bda, vga_op_list_bdb);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -2159,30 +2152,30 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t 
     destroy_client (temp);
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
   if (state == RUN) {
     if (active_client != 0 && buffer_file_size (&active_client->scan_codes_buffer) != 0) {
-      scheduler_add (SCAN_CODES_OUT_NO, active_client->aid);
+      schedule (SCAN_CODES_OUT_NO, active_client->aid);
     }
     if (active_client != 0 && buffer_file_size (&active_client->ascii_buffer) != 0) {
-      scheduler_add (STDOUT_NO, active_client->aid);
+      schedule (STDOUT_NO, active_client->aid);
     }
     if (active_client != 0 && active_client->mouse_packet_list.count != 0) {
-      scheduler_add (MOUSE_PACKETS_OUT_NO, active_client->aid);
+      schedule (MOUSE_PACKETS_OUT_NO, active_client->aid);
     }
     if (vga_op_precondition ()) {
-      scheduler_add (VGA_OP_NO, 0);
+      schedule (VGA_OP_NO, 0);
     }
   }
 }

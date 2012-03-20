@@ -244,17 +244,20 @@ public:
   }
 
 private:
-  bucket_type* find_ (const key_type& key) const
+  bucket_type*
+  find_ (const key_type& key,
+	 size_t* hash_ptr,
+	 size_type* lookup_key_ptr) const
   {
     // Compute the hash.
-    size_t hash = Hash::operator() (key);
+    *hash_ptr = Hash::operator() (key);
     // Compute the key into the lookup table.
-    size_type lookup_key = hash % lookup_size_;
+    *lookup_key_ptr = *hash_ptr % lookup_size_;
     // Begin a search.
-    for (bucket_type* bucket = lookup_[lookup_key];
+    for (bucket_type* bucket = lookup_[*lookup_key_ptr];
 	 bucket != 0;
 	 bucket = bucket->hash_next) {
-      if (bucket->hash == hash && Equal::operator() (Selector::operator () (bucket->value), key)) {
+      if (bucket->hash == *hash_ptr && Equal::operator() (Selector::operator () (bucket->value), key)) {
 	// Found it.
 	return bucket;
       }
@@ -334,46 +337,24 @@ public:
     }
   }
 
-  bool
-  push_back (const value_type& value)
+private:
+  bucket_type*
+  insert_into_hash (const value_type& value,
+		    size_t hash,
+		    size_type lookup_key)
   {
-    // First, insert into the hash.
-
-    // Compute the hash.
-    size_t hash = Hash::operator() (Selector::operator () (value));
-    // Compute the key into the lookup table.
-    size_type lookup_key = hash % lookup_size_;
-    // Begin a search.
-    for (bucket_type* bucket = lookup_[lookup_key];
-	 bucket != 0;
-	 bucket = bucket->hash_next) {
-      if (bucket->hash == hash && Equal::operator() (Selector::operator () (bucket->value), Selector::operator () (value))) {
-	// Found it.  Do nothing.
-	return false;
-      }
-    }
-    
     bucket_type* bucket = bucket_allocator::allocate (1);
     Allocator::construct (&bucket->value, value);
     ++size_;
     bucket->hash = hash;
     bucket->hash_next = lookup_[lookup_key];
     lookup_[lookup_key] = bucket;
+    return bucket;
+  }
 
-    // Second, insert into the list.
-    if (back_ != 0) {
-      back_->list_next = bucket;
-      bucket->list_prev = back_;
-      bucket->list_next = 0;
-      back_ = bucket;
-    }
-    else {
-      bucket->list_next = 0;
-      bucket->list_prev = 0;
-      front_ = bucket;
-      back_ = bucket;
-    }
-    
+  void
+  rehash (void)
+  {
     // Rehash when size_ / lookup_size_ > .80
     // Rehash when size_ / lookup_size_ > 80 / 100
     // Rehash when 100 * size_ > 80 * lookup_size_
@@ -401,6 +382,69 @@ public:
       lookup_ = new_lookup;
       lookup_size_ = new_lookup_size;
     }
+  }
+
+public:
+  bool
+  push_front (const value_type& value)
+  {
+    // First, insert into the hash.
+
+    size_t hash;
+    size_type lookup_key;
+    if (find_ (value, &hash, &lookup_key) != 0) {
+      return false;
+    }
+    
+    bucket_type* bucket = insert_into_hash (value, hash, lookup_key);
+
+    // Second, insert into the list.
+    if (front_ != 0) {
+      front_->list_prev = bucket;
+      bucket->list_next = front_;
+      bucket->list_prev = 0;
+      front_ = bucket;
+    }
+    else {
+      bucket->list_next = 0;
+      bucket->list_prev = 0;
+      front_ = bucket;
+      back_ = bucket;
+    }
+
+    rehash ();
+
+    return true;
+  }
+
+  bool
+  push_back (const value_type& value)
+  {
+    // First, insert into the hash.
+
+    size_t hash;
+    size_type lookup_key;
+    if (find_ (value, &hash, &lookup_key) != 0) {
+      return false;
+    }
+    
+    bucket_type* bucket = insert_into_hash (value, hash, lookup_key);
+
+    // Second, insert into the list.
+    if (back_ != 0) {
+      back_->list_next = bucket;
+      bucket->list_prev = back_;
+      bucket->list_next = 0;
+      back_ = bucket;
+    }
+    else {
+      bucket->list_next = 0;
+      bucket->list_prev = 0;
+      front_ = bucket;
+      back_ = bucket;
+    }
+
+    rehash ();
 
     return true;
   }

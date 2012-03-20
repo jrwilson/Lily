@@ -2,7 +2,6 @@
 #include <io.h>
 #include <dymem.h>
 #include <string.h>
-#include <fifo_scheduler.h>
 #include <description.h>
 #include "vga_msg.h"
 #include "syslog.h"
@@ -419,7 +418,7 @@ initialize (void)
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* stop
@@ -438,12 +437,11 @@ stop_precondition (void)
 BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (stop_precondition ()) {
     exit ();
   }
-  end_internal_action ();
+  finish_internal ();
 }
 
 /* syslog
@@ -462,14 +460,13 @@ syslog_precondition (void)
 BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 {
   initialize ();
-  scheduler_remove (ano, param);
 
   if (syslog_precondition ()) {
     buffer_file_truncate (&syslog_buffer);
-    end_output_action (true, syslog_bd, -1);
+    finish_output (true, syslog_bd, -1);
   }
   else {
-    end_output_action (false, -1, -1);
+    finish_output (false, -1, -1);
   }
 }
 
@@ -481,13 +478,13 @@ BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano
     vga_op_list_t vol;
     size_t count;
     if (vga_op_list_initr (&vol, bda, bdb, &count) != 0) {
-      end_input_action (bda, bdb);
+      finish_input (bda, bdb);
     }
     
     for (size_t i = 0; i != count; ++i) {
       vga_op_type_t type;
       if (vga_op_list_next_op_type (&vol, &type) != 0) {
-	end_input_action (bda, bdb);
+	finish_input (bda, bdb);
       }
       
       switch (type) {
@@ -495,7 +492,7 @@ BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano
 	{
 	  size_t location;
 	  if (vga_op_list_read_set_cursor_location (&vol, &location) != 0) {
-	    end_input_action (bda, bdb);
+	    finish_input (bda, bdb);
 	  }
 	  set_cursor_location (location);
 	}
@@ -506,7 +503,7 @@ BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano
 	  const void* data;
 	  size_t size;
 	  if (vga_op_list_read_assign (&vol, &address, &data, &size) != 0) {
-	    end_input_action (bda, bdb);
+	    finish_input (bda, bdb);
 	  }
 	  assign (address, data, size);
 	}
@@ -517,27 +514,27 @@ BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano
 	  const void* data;
 	  size_t size;
 	  if (vga_op_list_read_bassign (&vol, &address, &data, &size) != 0) {
-	    end_input_action (bda, bdb);
+	    finish_input (bda, bdb);
 	  }
 	  assign (address, data, size);
 	}
 	break;
       default:
-	end_input_action (bda, bdb);
+	finish_input (bda, bdb);
       }
     }
   }
 
-  end_input_action (bda, bdb);
+  finish_input (bda, bdb);
 }
 
 void
-schedule (void)
+do_schedule (void)
 {
   if (stop_precondition ()) {
-    scheduler_add (STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    scheduler_add (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
 }

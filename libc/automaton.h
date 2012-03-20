@@ -57,12 +57,26 @@ void func (ano, param)
 
 extern int automatonerrno;
 
+int
+schedule (ano_t action_number,
+	  int parameter);
+
 void
-finish (ano_t action_number,
-	int parameter,
-	bool output_fired,
+finish (bool output_fired,
 	bd_t bda,
 	bd_t bdb);
+
+void
+finish_input (bd_t bda,
+	      bd_t bdb);
+
+void
+finish_output (bool output_fired,
+	       bd_t bda,
+	       bd_t bdb);
+
+void
+finish_internal (void);
 
 void
 exit (void);
