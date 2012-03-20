@@ -252,6 +252,21 @@
   VTS  - LINE TABULATION SET
 */
 
+#define INIT_NO 1
+#define STOP_NO 2
+#define SYSLOG_NO 3
+#define SCAN_CODES_IN_NO 4
+#define MOUSE_PACKETS_IN_NO 5
+#define SCAN_CODES_OUT_NO 6
+#define STDOUT_NO 7
+#define MOUSE_PACKETS_OUT_NO 8
+#define STDIN_NO 9
+#define VGA_OP_NO 10
+#define DESTROYED_NO 11
+
+#define WARNING "terminal: warning: "
+#define ERROR "terminal: error: "
+
 #define PARAMETER_SIZE 2
 
 typedef enum {
@@ -297,6 +312,19 @@ static client_t* client_list_head = 0;
 /* The active client. */
 static client_t* active_client = 0;
 
+/* Initialization flag. */
+static bool initialized = false;
+
+typedef enum {
+  RUN,
+  STOP,
+} state_t;
+static state_t state = RUN;
+
+/* Syslog buffer. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
+
 /* Buffers to drive the vga. */
 static bd_t vga_op_list_bda = -1;
 static bd_t vga_op_list_bdb = -1;
@@ -322,33 +350,20 @@ switch_to_client (client_t* client)
     if (active_client != 0) {
       /* Send the data. */
       if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-      	syslog ("terminal: Could not write vga op list");
-      	exit ();
+	bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
+	state = STOP;
+	return;
       }
 
       /* Send the cursor. */
       if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-      	syslog ("terminal: Could not write vga op list");
-      	exit ();
+	bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
+	state = STOP;
+	return;
       }
     }
   }
 }
-
-#define INIT_NO 1
-#define STOP_NO 2
-#define SYSLOG_NO 3
-#define SCAN_CODES_IN_NO 4
-#define MOUSE_PACKETS_IN_NO 5
-#define SCAN_CODES_OUT_NO 6
-#define STDOUT_NO 7
-#define MOUSE_PACKETS_OUT_NO 8
-#define STDIN_NO 9
-#define VGA_OP_NO 10
-#define DESTROYED_NO 11
-
-#define WARNING "terminal: warning: "
-#define ERROR "terminal: error: "
 
 /*********************************
  * SCAN CODE TRANSLATION SECTION *
@@ -915,8 +930,9 @@ static void
 insert_modifier_group (unsigned int modifier)
 {
   if (modifier_state_to_symbols[modifier] != 0) {
-    syslog ("kb_us_104: error: modifier group exists");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "modifier group exists\n");
+    state = STOP;
+    return;
   }
   /* TODO:  If these are sparse, it might be better to use a list. */
   modifier_state_to_symbols[modifier] = malloc (TOTAL_KEYS * sizeof (symbol_t));
@@ -932,8 +948,9 @@ insert_symbol (unsigned int modifier,
 	       symbol_t symbol)
 {
   if (modifier_state_to_symbols[modifier] == 0) {
-    syslog ("kb_us_104: error: modifier group does not exist");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "modifier group does not exist\n");
+    state = STOP;
+    return;
   }
   modifier_state_to_symbols[modifier][key] = symbol;
 }
@@ -995,7 +1012,9 @@ process_key_code (unsigned char key_code,
 		  bool make)
 {
   if (key_code == 0) {
-    syslog ("kb_us_104: warning: null key code");
+    bfprintf (&syslog_buffer, ERROR "null key code\n");
+    state = STOP;
+    return;
   }
 
   symbol_t symbol = lookup_symbol (key_code);
@@ -1057,8 +1076,9 @@ ascii_func (symbol_t symbol,
 
     if (active_client != 0) {
       if (buffer_file_put (&active_client->ascii_buffer, c) != 0) {
-	syslog ("kb_us_104: errro: Could not write to output buffer");
-	exit ();
+	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+	state = STOP;
+	return;
       }
     }
   }
@@ -1089,8 +1109,9 @@ up_func (symbol_t symbol,
   if (make) {
     if (active_client != 0) {
       if (buffer_file_puts (&active_client->ascii_buffer, "\e[A") != 0) {
-	syslog ("kb_us_104: errro: Could not write to output buffer");
-	exit ();
+	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+	state = STOP;
+	return;
       }
     }
   }
@@ -1103,8 +1124,9 @@ down_func (symbol_t symbol,
   if (make) {
     if (active_client != 0) {
       if (buffer_file_puts (&active_client->ascii_buffer, "\e[B") != 0) {
-	syslog ("kb_us_104: errro: Could not write to output buffer");
-	exit ();
+	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+	state = STOP;
+	return;
       }
     }
   }
@@ -1117,8 +1139,9 @@ left_func (symbol_t symbol,
   if (make) {
     if (active_client != 0) {
       if (buffer_file_puts (&active_client->ascii_buffer, "\e[D") != 0) {
-	syslog ("kb_us_104: errro: Could not write to output buffer");
-	exit ();
+	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+	state = STOP;
+	return;
       }
     }
   }
@@ -1131,8 +1154,9 @@ right_func (symbol_t symbol,
   if (make) {
     if (active_client != 0) {
       if (buffer_file_puts (&active_client->ascii_buffer, "\e[C") != 0) {
-	syslog ("kb_us_104: errro: Could not write to output buffer");
-	exit ();
+	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+	state = STOP;
+	return;
       }
     }
   }
@@ -1156,18 +1180,8 @@ next_client_func (symbol_t symbol,
 /* White on black for VGA. */
 #define ATTRIBUTE 0x0F00
 
-/* Initialization flag. */
-static bool initialized = false;
-
-typedef enum {
-  RUN,
-  STOP,
-} state_t;
-static state_t state = RUN;
-
-/* Syslog buffer. */
-static bd_t syslog_bd = -1;
-static buffer_file_t syslog_buffer;
+/* Flag indicating that the screen changed. */
+static bool screen_buffer_changed = false;
 
 static client_t*
 find_client (aid_t aid)
@@ -1185,50 +1199,49 @@ create_client (aid_t aid)
 
   client->scan_codes_bd = buffer_create (0);
   if (client->scan_codes_bd == -1) {
-    syslog ("terminal: Could not create scan codes buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not create scan codes buffer\n");
+    state = STOP;
   }
   if (buffer_file_initw (&client->scan_codes_buffer, client->scan_codes_bd) != 0) {
-    syslog ("terminal: Could not initialize scan codes buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not initialize scan codes buffer\n");
+    state = STOP;
   }
 
   client->ascii_bd = buffer_create (0);
   if (client->ascii_bd == -1) {
-    syslog ("terminal: Could not create ascii buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not create ascii buffer\n");
+    state = STOP;
   }
   if (buffer_file_initw (&client->ascii_buffer, client->ascii_bd) != 0) {
-    syslog ("terminal: Could not initialize ascii buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not initialize ascii buffer\n");
+    state = STOP;
   }
 
   client->mouse_packets_bd = buffer_create (0);
   if (client->mouse_packets_bd == -1) {
-    syslog ("terminal: Could not create mouse packet buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not create mouse packets buffer\n");
+    state = STOP;
   }
   if (mouse_packet_list_initw (&client->mouse_packet_list, client->mouse_packets_bd) != 0) {
-    syslog ("terminal: Could not initialize mouse packet buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not initialize mouse packets buffer\n");
+    state = STOP;
   }
 
   client->screen_bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
   if (client->screen_bd == -1) {
-    syslog ("terminal: Could not create client buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not create screen buffer\n");
+    state = STOP;
   }
   client->screen_buffer = buffer_map (client->screen_bd);
   if (client->screen_buffer == 0) {
-    syslog ("terminal: Could not map client buffer");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not map screen buffer\n");
+    state = STOP;
   }
   /* ECMA-48 states that the initial state of the characters must be "erased."
      We use spaces. */
-  unsigned short* data = client->screen_buffer;
   for (size_t y = 0; y != PAGE_LIMIT_POSITION; ++y) {
     for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
-      data[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+      client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
     }
   }
   /* I don't recall ECMA-48 specifying the initial state of the active position but this seems reasonable. */
@@ -1245,8 +1258,8 @@ create_client (aid_t aid)
   }
 
   if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
-    syslog ("terminal: Could not subscribe");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could subscribe to client\n");
+    state = STOP;
   }
 
   return client;
@@ -1272,6 +1285,7 @@ scroll (client_t* client)
   for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
     client->screen_buffer[(PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
   }
+  screen_buffer_changed = true;
   /* Change the active y. */
   --client->active_position_y;
 }
@@ -1543,11 +1557,13 @@ process_normal (client_t* client,
   case DEL:
     /* Rub-out the character under the cursor. */
     client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x] = ATTRIBUTE | ' ';
+    screen_buffer_changed = true;
     break;
   default:
     /* ASCII character that can be displayed. */
     if (c >= ' ' && c <= '~') {
       client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x++] = ATTRIBUTE | c;
+      screen_buffer_changed = true;
       
       if (client->active_position_x == LINE_LIMIT_POSITION) {
 	/* Active position is at the end of the line.
@@ -1625,10 +1641,10 @@ process_control (client_t* client,
       for (unsigned short dest_x = client->active_position_x; dest_x != LINE_LIMIT_POSITION && count != 0; ++dest_x, --count) {
 	client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] = ATTRIBUTE | ' ';
       }
+      screen_buffer_changed = true;
 
       /* Move to line home. */
       client->active_position_x = LINE_HOME_POSITION;
-
 
       /* Reset. */
       client->mode = NORMAL;
@@ -1739,6 +1755,7 @@ process_control (client_t* client,
 	    client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	  }
 	}
+	screen_buffer_changed = true;
 	break;
       case ERASE_TO_PAGE_HOME:
 	/* Erase the preceding lines. */
@@ -1751,6 +1768,7 @@ process_control (client_t* client,
 	for (unsigned short x = 0; x != client->active_position_x + 1; ++x) {
 	  client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	}
+	screen_buffer_changed = true;
 	break;
       case ERASE_ALL:
 	/* Erase the entire page. */
@@ -1759,6 +1777,7 @@ process_control (client_t* client,
 	    client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	  }
 	}
+	screen_buffer_changed = true;
 	break;
       }
 
@@ -1833,69 +1852,74 @@ BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
    -------------
    Receive scan codes from the keyboard.
    
-   Post: active client scan coodes buffer is not empty
+   Post: active client scan codes buffer is not empty
  */
 BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", scan_codes_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
-    end_input_action (bda, bdb);
-  }
-  
-  size_t size = buffer_file_size (&input_buffer);
-  const unsigned char* codes = buffer_file_readp (&input_buffer, size);
-  if (codes == 0) {
-    end_input_action (bda, bdb);
-  }
-  
-  if (active_client != 0) {
-    if (buffer_file_write (&active_client->scan_codes_buffer, codes, size) != 0) {
-      syslog ("TODO:  Handle the error");
+  if (state == RUN) {
+    buffer_file_t input_buffer;
+    if (buffer_file_initr (&input_buffer, bda) != 0) {
+      bfprintf (&syslog_buffer, WARNING "could not initialize scan code buffer for reading\n");
       end_input_action (bda, bdb);
     }
-  }
-  
-  for (size_t idx = 0; idx != size; ++idx) {
-    if (consume != 0) {
-      --consume;
-      continue;
+    
+    size_t size = buffer_file_size (&input_buffer);
+    const unsigned char* codes = buffer_file_readp (&input_buffer, size);
+    if (codes == 0) {
+      bfprintf (&syslog_buffer, WARNING "could not read the scan code buffer\n");
+      end_input_action (bda, bdb);
     }
     
-    unsigned char scan = codes[idx];
-    if (scan < BREAK_MASK) {
-      if (!escaped) {
-  	process_key_code (scan_to_key[scan], true);
+    if (active_client != 0) {
+      if (buffer_file_write (&active_client->scan_codes_buffer, codes, size) != 0) {
+	bfprintf (&syslog_buffer, ERROR "could not write the scan code buffer\n");
+	state = STOP;
+	end_input_action (bda, bdb);
+      }
+    }
+    
+    for (size_t idx = 0; idx != size; ++idx) {
+      if (consume != 0) {
+	--consume;
+	continue;
+      }
+      
+      unsigned char scan = codes[idx];
+      if (scan < BREAK_MASK) {
+	if (!escaped) {
+	  process_key_code (scan_to_key[scan], true);
+	}
+	else {
+	  escaped = false;
+	  /* Ignore fake shifts. */
+	  if (scan != SCAN_LSHIFT) {
+	    process_key_code (escaped_scan_to_key[scan], true);
+	  }
+	}
+      }
+      else if (scan == 0xE0) {
+	escaped = true;
+      }
+      else if (scan == 0xE1) {
+	process_key_code (KEY_PAUSE, true);
+	process_key_code (KEY_PAUSE, false);
+	consume = 5;
       }
       else {
-  	escaped = false;
-  	/* Ignore fake shifts. */
-  	if (scan != SCAN_LSHIFT) {
-  	  process_key_code (escaped_scan_to_key[scan], true);
-  	}
-      }
-    }
-    else if (scan == 0xE0) {
-      escaped = true;
-    }
-    else if (scan == 0xE1) {
-      process_key_code (KEY_PAUSE, true);
-      process_key_code (KEY_PAUSE, false);
-      consume = 5;
-    }
-    else {
-      /* Break. */
-      scan -= BREAK_MASK;
-      if (!escaped) {
-  	process_key_code (scan_to_key[scan], false);
-      }
-      else {
-  	escaped = false;
+	/* Break. */
+	scan -= BREAK_MASK;
+	if (!escaped) {
+	  process_key_code (scan_to_key[scan], false);
+	}
+	else {
+	  escaped = false;
   	  /* Ignore fake shifts. */
-  	if (scan != SCAN_LSHIFT) {
-  	  process_key_code (escaped_scan_to_key[scan], false);
-  	}
+	  if (scan != SCAN_LSHIFT) {
+	    process_key_code (escaped_scan_to_key[scan], false);
+	  }
+	}
       }
     }
   }
@@ -1913,21 +1937,24 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 {
   initialize ();
 
-  if (active_client != 0) {
+  if (state == RUN && active_client != 0) {
     size_t count = 0;
     mouse_packet_t mouse_packet;
     mouse_packet_list_t mouse_packet_list;
     if (mouse_packet_list_initr (&mouse_packet_list, bda, &count) != 0) {
+      bfprintf (&syslog_buffer, WARNING "could not initialize mouse packet list for reading\n");
       end_input_action (bda, bdb);
     }
     
     for (size_t idx = 0; idx != count; ++idx) {
       if (mouse_packet_list_read (&mouse_packet_list, &mouse_packet) != 0) {
+	bfprintf (&syslog_buffer, WARNING "could not read mouse packet\n");
 	end_input_action (bda, bdb);
       }
       
       if (mouse_packet_list_write (&active_client->mouse_packet_list, &mouse_packet) != 0) {
-	syslog ("TODO:  Handle the error.");
+	bfprintf (&syslog_buffer, ERROR "could not write mouse packet\n");
+	state = STOP;
 	end_input_action (bda, bdb);
       }
     }
@@ -1945,20 +1972,21 @@ BEGIN_OUTPUT (AUTO_PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_
   initialize ();
   scheduler_remove (ano, aid);
 
-  /* Find the client. */
-  client_t* client = find_client (aid);
-  if (client == 0) {
-    /* The client does not exist.  Create it. */
-    client = create_client (aid);
+  if (state == RUN) {
+    /* Find the client. */
+    client_t* client = find_client (aid);
+    if (client == 0) {
+      /* The client does not exist.  Create it. */
+      client = create_client (aid);
+    }
+
+    if (buffer_file_size (&client->scan_codes_buffer) != 0) {
+      buffer_file_truncate (&client->scan_codes_buffer);
+      end_output_action (true, client->scan_codes_bd, -1);
+    }
   }
 
-  if (buffer_file_size (&client->scan_codes_buffer) != 0) {
-    buffer_file_truncate (&client->scan_codes_buffer);
-    end_output_action (true, client->scan_codes_bd, -1);
-  }
-  else {
-    end_output_action (false, -1, -1);
-  }
+  end_output_action (false, -1, -1);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, aid_t aid)
@@ -1966,20 +1994,21 @@ BEGIN_OUTPUT (AUTO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_
   initialize ();
   scheduler_remove (ano, aid);
 
-  /* Find the client. */
-  client_t* client = find_client (aid);
-  if (client == 0) {
-    /* The client does not exist.  Create it. */
-    client = create_client (aid);
+  if (state == RUN) {
+    /* Find the client. */
+    client_t* client = find_client (aid);
+    if (client == 0) {
+      /* The client does not exist.  Create it. */
+      client = create_client (aid);
+    }
+    
+    if (buffer_file_size (&client->ascii_buffer) != 0) {
+      buffer_file_truncate (&client->ascii_buffer);
+      end_output_action (true, client->ascii_bd, -1);
+    }
   }
 
-  if (buffer_file_size (&client->ascii_buffer) != 0) {
-    buffer_file_truncate (&client->ascii_buffer);
-    end_output_action (true, client->ascii_bd, -1);
-  }
-  else {
-    end_output_action (false, -1, -1);
-  }
+  end_output_action (false, -1, -1);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, aid_t aid)
@@ -1987,23 +2016,25 @@ BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_
   initialize ();
   scheduler_remove (ano, aid);
 
-  /* Find the client. */
-  client_t* client = find_client (aid);
-  if (client == 0) {
-    /* The client does not exist.  Create it. */
-    client = create_client (aid);
+  if (state == RUN) {
+    /* Find the client. */
+    client_t* client = find_client (aid);
+    if (client == 0) {
+      /* The client does not exist.  Create it. */
+      client = create_client (aid);
+    }
+    
+    if (client->mouse_packet_list.count != 0) {
+      if (mouse_packet_list_reset (&client->mouse_packet_list) != 0) {
+	bfprintf (&syslog_buffer, ERROR "could not reset mouse packet list\n");
+	state = STOP;
+	end_output_action (false, -1, -1);
+      }
+      end_output_action (true, client->mouse_packets_bd, -1);
+    }
   }
 
-  if (client->mouse_packet_list.count != 0) {
-    if (mouse_packet_list_reset (&client->mouse_packet_list) != 0) {
-      syslog ("TODO:  Handle error.");
-      end_output_action (false, -1, -1);
-    }
-    end_output_action (true, client->mouse_packets_bd, -1);
-  }
-  else {
-    end_output_action (false, -1, -1);
-  }
+  end_output_action (false, -1, -1);
 }
 
 /*
@@ -2014,66 +2045,72 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
 {
   initialize ();
 
-  buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
-    end_input_action (bda, bdb);
-  }
-
-  size_t size = buffer_file_size (&input_buffer);
-  const char* begin = buffer_file_readp (&input_buffer, size);
-  if (begin == 0) {
-    end_input_action (bda, bdb);
-  }
-
-
-  /* Find or create the client. */
-  client_t* client = find_client (aid);
-  if (client == 0) {
-    client = create_client (aid);
-  }
-
-  size_t old_cursor_location = 0;
-  if (client == active_client) {
-    old_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
-  }
-
-  /* Process the string. */
-  const char* end = begin + size;
-  for (; begin != end; ++begin) {
-    const char c = *begin;
-    if ((c & 0x80) == 0) {
-      switch (client->mode) {
-      case NORMAL:
-  	process_normal (client, c);
-  	break;
-      case ESCAPED:
-  	process_escaped (client, c);
-  	break;
-      case CONTROL:
-  	process_control (client, c);
-  	break;
+  if (state == RUN) {
+    buffer_file_t input_buffer;
+    if (buffer_file_initr (&input_buffer, bda) != 0) {
+      bfprintf (&syslog_buffer, WARNING "could not initialize stdin buffer for reading\n");
+      end_input_action (bda, bdb);
+    }
+    
+    size_t size = buffer_file_size (&input_buffer);
+    const char* begin = buffer_file_readp (&input_buffer, size);
+    if (begin == 0) {
+      bfprintf (&syslog_buffer, WARNING "could not read stdin buffer\n");
+      end_input_action (bda, bdb);
+    }
+        
+    /* Find or create the client. */
+    client_t* client = find_client (aid);
+    if (client == 0) {
+      client = create_client (aid);
+    }
+    
+    screen_buffer_changed = false;
+    size_t old_cursor_location = 0;
+    if (client == active_client) {
+      old_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+    }
+    
+    /* Process the string. */
+    const char* end = begin + size;
+    for (; begin != end; ++begin) {
+      const char c = *begin;
+      if ((c & 0x80) == 0) {
+	switch (client->mode) {
+	case NORMAL:
+	  process_normal (client, c);
+	  break;
+	case ESCAPED:
+	  process_escaped (client, c);
+	  break;
+	case CONTROL:
+	  process_control (client, c);
+	  break;
+	}
+      }
+    }
+    
+    if (client == active_client) {
+      if (screen_buffer_changed) {
+	/* Send the data. */
+	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
+	  bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
+	  state = STOP;
+	  end_input_action (bda, bdb);
+	}
+      }
+      
+      size_t new_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+      if (new_cursor_location != old_cursor_location) {
+	/* Send the cursor. */
+	if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
+	  bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
+	  state = STOP;
+	  end_input_action (bda, bdb);
+	}
       }
     }
   }
-
-  if (client == active_client) {
-    /* TODO:  Check that this is necessary. */
-    /* Send the data. */
-    if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-      syslog ("terminal: Could not write vga op list");
-      exit ();
-    }
-
-    size_t new_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
-    if (new_cursor_location != old_cursor_location) {
-      /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
-      	syslog ("terminal: Could not write vga op list");
-      	exit ();
-      }
-    }
-  }
-  
 
   end_input_action (bda, bdb);
 }
@@ -2092,7 +2129,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
 static bool
 vga_op_precondition (void)
 {
-  return vga_op_list.count != 0;
+  return state == RUN && vga_op_list.count != 0;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t ano, int param)
@@ -2134,16 +2171,18 @@ schedule (void)
   if (syslog_precondition ()) {
     scheduler_add (SYSLOG_NO, 0);
   }
-  if (active_client != 0 && buffer_file_size (&active_client->scan_codes_buffer) != 0) {
-    scheduler_add (SCAN_CODES_OUT_NO, active_client->aid);
-  }
-  if (active_client != 0 && buffer_file_size (&active_client->ascii_buffer) != 0) {
-    scheduler_add (STDOUT_NO, active_client->aid);
-  }
-  if (active_client != 0 && active_client->mouse_packet_list.count != 0) {
-    scheduler_add (MOUSE_PACKETS_OUT_NO, active_client->aid);
-  }
-  if (vga_op_precondition ()) {
-    scheduler_add (VGA_OP_NO, 0);
+  if (state == RUN) {
+    if (active_client != 0 && buffer_file_size (&active_client->scan_codes_buffer) != 0) {
+      scheduler_add (SCAN_CODES_OUT_NO, active_client->aid);
+    }
+    if (active_client != 0 && buffer_file_size (&active_client->ascii_buffer) != 0) {
+      scheduler_add (STDOUT_NO, active_client->aid);
+    }
+    if (active_client != 0 && active_client->mouse_packet_list.count != 0) {
+      scheduler_add (MOUSE_PACKETS_OUT_NO, active_client->aid);
+    }
+    if (vga_op_precondition ()) {
+      scheduler_add (VGA_OP_NO, 0);
+    }
   }
 }

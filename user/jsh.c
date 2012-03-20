@@ -7,6 +7,36 @@
 #include <dymem.h>
 #include "vfs_msg.h"
 #include "argv.h"
+#include "syslog.h"
+
+/* Initialization flag. */
+static bool initialized = false;
+
+typedef enum {
+  RUN,
+  STOP,
+} state_t;
+static state_t state = RUN;
+
+/* Syslog buffer. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
+
+/* The aid of the vfs. */
+static aid_t vfs_aid = -1;
+
+/* Buffers to interpret. */
+static buffer_queue_t interpret_queue;
+
+/* Text to interpret. */
+static bd_t interpret_bd = -1;
+static const char* interpret_string;
+static size_t interpret_string_size;
+static size_t interpret_string_idx;
+
+/* Text to output. */
+static bd_t stdout_bd;
+static buffer_file_t stdout_bf;
 
 /* Messages to the vfs. */
 static bd_t vfs_request_bda = -1;
@@ -15,6 +45,10 @@ static vfs_request_queue_t vfs_request_queue;
 
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
+
+#define INFO "jsh: info: "
+#define WARNING "jsh: warning: "
+#define ERROR "jsh: error: "
 
 /*
   Begin Model Section
@@ -224,8 +258,8 @@ create_create_context (const char* name,
   memcpy (cc->name, name, name_size);
   cc->name_size = name_size;
   if (argv_initw (&cc->argv, &cc->bda, &cc->bdb) != 0) {
-    syslog ("jsh: error: could create argv");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could create argv\n");
+    state = STOP;
   }
   cc->retain_privilege = retain_privilege;
   cc->registry_name = malloc (registry_name_size);
@@ -257,23 +291,24 @@ create_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    syslog ("jsh: error: vfs provide bad readfile response");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "vfs provide bad readfile response\n");
+    state = STOP;
+    return;
   }
 
   if (error == VFS_SUCCESS) {
     aid_t aid = create (bdb, size, cc->bda, cc->bdb, cc->registry_name, cc->registry_name_size, cc->retain_privilege);
     if (aid != -1) {
-      syslog ("TODO:  Subscribe to created automaton");
+      bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to created automaton\n");
       /* Assign the result to a variable. */
       create_automaton (aid, cc->name, cc->name_size);
     }
     else {
-      syslog ("TODO:  create create failed");
+      bfprintf (&syslog_buffer, INFO "TODO:  create create failed\n");
     }
   }
   else {
-    syslog ("TODO:  create:  couldn't read file");
+    bfprintf (&syslog_buffer, INFO "TODO:  create couldn't read file\n");
   }
 
   destroy_create_context (cc);
@@ -360,7 +395,7 @@ create_ (token_list_item_t* var)
   token_list_item_t* filename;
   
   if (find_automaton (var->string, var->size) != 0) {
-    syslog ("TODO:  Automaton variable already assigned");
+    bfprintf (&syslog_buffer, INFO "TODO: automaton variable already assigned\n");
     return;
   }
 
@@ -374,7 +409,7 @@ create_ (token_list_item_t* var)
       accept (STRING);
       token_list_item_t* reg_name;
       if ((reg_name = accept (STRING)) == 0) {
-	syslog ("TODO:  Expected a name");
+	bfprintf (&syslog_buffer, INFO "TODO: expected a name\n");
 	return;
       }
       registry_name = reg_name->string;
@@ -386,14 +421,14 @@ create_ (token_list_item_t* var)
   }
 
   if ((filename = accept (STRING)) == 0) {
-    syslog ("TODO:  Expected a filename or argument");
+    bfprintf (&syslog_buffer, INFO "TODO: expected a filename or argument\n");
     return;
   }
 
   token_list_item_t* string;
   for (string = current_token; string != 0; string = string->next) {
     if (string->type != STRING) {
-      syslog ("TODO:  Expected a string");
+      bfprintf (&syslog_buffer, INFO "TODO: expected a string\n");
       return;
     }
   }
@@ -417,7 +452,7 @@ static void
 bind_ (token_list_item_t* var)
 {
   if (var != 0 && find_binding (var->string, var->size) != 0) {
-    syslog ("TODO:  Binding variable already assigned");
+    bfprintf (&syslog_buffer, INFO "TODO: binding variable already assigned\n");
     return;
   }
 
@@ -427,39 +462,39 @@ bind_ (token_list_item_t* var)
   token_list_item_t* input_automaton_token;
   token_list_item_t* input_action_token;
   if ((output_automaton_token = accept (AUTOMATON_VAR)) == 0) {
-    syslog ("TODO:  Expected an automaton variable");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n");
     return;
   }
 
   if ((output_action_token = accept (STRING)) == 0) {
-    syslog ("TODO:  Expected a string");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected a string\n");
     return;
   }
 
   if ((input_automaton_token = accept (AUTOMATON_VAR)) == 0) {
-    syslog ("TODO:  Expected an automaton variable");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n");
     return;
   }
 
   if ((input_action_token = accept (STRING)) == 0) {
-    syslog ("TODO:  Expected a string");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected a string\n");
     return;
   }
 
   if (current_token != 0) {
-    syslog ("TODO:  Expected no more tokens");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n");
     return;
   }
 
   /* Look up the variables for the output and input automaton. */
   automaton_t* output_automaton = find_automaton (output_automaton_token->string, output_automaton_token->size);
   if (output_automaton == 0) {
-    syslog ("TODO:  Output automaton is not defined");
+    bfprintf (&syslog_buffer, INFO "TODO:  Output automaton is not defined\n");
     return;
   }
   automaton_t* input_automaton = find_automaton (input_automaton_token->string, input_automaton_token->size);
   if (input_automaton == 0) {
-    syslog ("TODO:  Input automaton is not defined");
+    bfprintf (&syslog_buffer, INFO "TODO:  Input automaton is not defined\n");
     return;
   }
 
@@ -467,11 +502,11 @@ bind_ (token_list_item_t* var)
   description_t output_description;
   description_t input_description;
   if (description_init (&output_description, output_automaton->aid) != 0) {
-    syslog ("TODO:  Could not describe output");
+    bfprintf (&syslog_buffer, INFO "TODO:  Could not describe output\n");
     return;
   }
   if (description_init (&input_description, input_automaton->aid) != 0) {
-    syslog ("TODO:  Could not describe input");
+    bfprintf (&syslog_buffer, INFO "TODO:  Could not describe input\n");
     return;
   }
 
@@ -483,23 +518,23 @@ bind_ (token_list_item_t* var)
   description_fini (&input_description);
 
   if (output_action == NO_ACTION) {
-    syslog ("TODO:  Output action does not exist");
+    bfprintf (&syslog_buffer, INFO "TODO:  Output action does not exist\n");
     return;
   }
 
   if (input_action == NO_ACTION) {
-    syslog ("TODO:  Input action does not exist");
+    bfprintf (&syslog_buffer, INFO "TODO:  Input action does not exist\n");
     return;
   }
 
   bid_t bid = bind (output_automaton->aid, output_action, 0, input_automaton->aid, input_action, 0);
   if (bid == -1) {
-    syslog ("TODO:  Bind failed");
+    bfprintf (&syslog_buffer, INFO "TODO:  Bind failed\n");
     return;
   }
 
   if (var == 0) {
-    syslog ("TODO:  Create binding");
+    bfprintf (&syslog_buffer, INFO "TODO:  Create binding\n");
     /* char buffer[sizeof (bid_t) * 8]; */
     /* size_t sz = snprintf (buffer, sizeof (bid_t) * 8, "&b%d", bid); */
     /* create_binding (bid, buffer, sz + 1); */
@@ -508,7 +543,7 @@ bind_ (token_list_item_t* var)
     create_binding (bid, var->string, var->size);
   }
   
-  syslog ("TODO:  Subscribe to binding??");
+  bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to binding??\n");
 }
 
 static void
@@ -517,26 +552,26 @@ unbind_ ()
   /* Get the argument tokens. */
   token_list_item_t* binding_token;
   if ((binding_token = accept (BINDING_VAR)) == 0) {
-    syslog ("TODO:  Expected a binding variable");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected a binding variable\n");
     return;
   }
 
   if (current_token != 0) {
-    syslog ("TODO:  Expected no more tokens");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n");
     return;
   }
 
   /* Look up the binding variable. */
   binding_t* binding = find_binding (binding_token->string, binding_token->size);
   if (binding == 0) {
-    syslog ("TODO:  Binding is not defined");
+    bfprintf (&syslog_buffer, INFO "TODO:  Binding is not defined\n");
     return;
   }
 
-  syslog ("TODO:  Unsubscribe from binding??");
+  bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from binding??\n");
 
   if (unbind (binding->bid) != 0) {
-    syslog ("TODO:  unbind failed");
+    bfprintf (&syslog_buffer, INFO "TODO:  unbind failed\n");
   }
 
   destroy_binding (binding);
@@ -548,26 +583,26 @@ destroy_ ()
   /* Get the argument tokens. */
   token_list_item_t* automaton_token;
   if ((automaton_token = accept (AUTOMATON_VAR)) == 0) {
-    syslog ("TODO:  Expected an automaton variable");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n");
     return;
   }
 
   if (current_token != 0) {
-    syslog ("TODO:  Expected no more tokens");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n");
     return;
   }
 
   /* Look up the automaton variable. */
   automaton_t* automaton = find_automaton (automaton_token->string, automaton_token->size);
   if (automaton == 0) {
-    syslog ("TODO:  Automaton is not defined");
+    bfprintf (&syslog_buffer, INFO "TODO:  Automaton is not defined\n");
     return;
   }
 
-  syslog ("TODO:  Unsubscribe from automaton??");
+  bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from automaton??\n");
 
   if (destroy (automaton->aid) != 0) {
-    syslog ("TODO:  destroy failed");
+    bfprintf (&syslog_buffer, INFO "TODO:  destroy failed\n");
   }
 
   destroy_automaton (automaton);
@@ -579,19 +614,19 @@ start_ (void)
   /* Get the argument token. */
   token_list_item_t* automaton_token;
   if ((automaton_token = accept (AUTOMATON_VAR)) == 0) {
-    syslog ("TODO:  Expected an automaton variable");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n");
     return;
   }
 
   if (current_token != 0) {
-    syslog ("TODO:  Expected no more tokens");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n");
     return;
   }
 
   /* Look up the variables for the automaton. */
   automaton_t* automaton = find_automaton (automaton_token->string, automaton_token->size);
   if (automaton == 0) {
-    syslog ("TODO:  Automaton is not defined");
+    bfprintf (&syslog_buffer, INFO "TODO:  Automaton is not defined\n");
     return;
   }
 
@@ -606,11 +641,11 @@ lookup_ (token_list_item_t* var)
   /* Get the name. */
   token_list_item_t* name_token;
   if ((name_token = accept (STRING)) == 0) {
-    syslog ("TODO:  Expected a name");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected a name\n");
   }
 
   if (current_token != 0) {
-    syslog ("TODO:  Expected no more tokens");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n");
     return;
   }
 
@@ -628,7 +663,7 @@ static void
 automaton_assignment (token_list_item_t* var)
 {
   if (accept (ASSIGN) == 0) {
-    syslog ("TODO:  Expected =");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected =\n");
     return;
   }
   
@@ -641,11 +676,11 @@ automaton_assignment (token_list_item_t* var)
       lookup_ (var);
     }
     else {
-      syslog ("TODO:  syntax error");
+      bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n");
     }
   }
   else {
-    syslog ("TODO:  syntax error");
+    bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n");
   }
 }
 
@@ -653,7 +688,7 @@ static void
 binding_assignment (token_list_item_t* var)
 {
   if (accept (ASSIGN) == 0) {
-    syslog ("TODO:  Expected =");
+    bfprintf (&syslog_buffer, INFO "TODO:  Expected =\n");
     return;
   }
   
@@ -662,7 +697,7 @@ binding_assignment (token_list_item_t* var)
     bind_ (var);
   }
   else {
-    syslog ("TODO:  syntax error");
+    bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n");
   }
 }
 
@@ -698,7 +733,7 @@ statement (void)
     }
   }
 
-  syslog ("TODO:  syntax error");
+  bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n");
 }
 
 static void
@@ -974,8 +1009,8 @@ put (char c)
 	char* string;
 	size_t size;
 	scan_string_steal (&string, &size);
-	syslog ("syntax error near: ");
-	syslogn (string, size);
+	bfprintf (&syslog_buffer, INFO "syntax error near: ");
+	buffer_file_write (&syslog_buffer, string, size);
 	free (string);
 	scan_state = SCAN_START;
       }
@@ -998,37 +1033,20 @@ put (char c)
   =======================
 */
 
-#define DESTROY_BUFFERS_NO 1
-#define VFS_RESPONSE_NO 2
-#define VFS_REQUEST_NO 3
-#define LOAD_TEXT_NO 4
-#define PROCESS_TEXT_NO 5
-#define STDIN_NO 6
-#define STDOUT_NO 7
-#define START_NO 8
-#define STDIN_COL_NO 9
-#define INIT_NO 10
+#define INIT_NO 1
+#define STOP_NO 2
+#define SYSLOG_NO 3
+#define DESTROY_BUFFERS_NO 4
+#define VFS_RESPONSE_NO 5
+#define VFS_REQUEST_NO 6
+#define LOAD_TEXT_NO 7
+#define PROCESS_TEXT_NO 8
+#define STDIN_NO 9
+#define STDOUT_NO 10
+#define START_NO 11
+#define STDIN_COL_NO 12
 
 #define VFS_NAME "vfs"
-
-/* Initialization flag. */
-static bool initialized = false;
-
-/* The aid of the vfs. */
-static aid_t vfs_aid = -1;
-
-/* Buffers to interpret. */
-static buffer_queue_t interpret_queue;
-
-/* Text to interpret. */
-static bd_t interpret_bd = -1;
-static const char* interpret_string;
-static size_t interpret_string_size;
-static size_t interpret_string_idx;
-
-/* Text to output. */
-static bd_t stdout_bd;
-static buffer_file_t stdout_bf;
 
 static void
 readscript_callback (void* data,
@@ -1038,13 +1056,15 @@ readscript_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    syslog ("jsh: error: vfs provide bad readfile response");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "vfs provide bad readfile response\n");
+    state = STOP;
+    return;
   }
 
   if (error != VFS_SUCCESS) {
-    syslog ("jsh: error: readfile failed");
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "readfile failed\n");
+    state = STOP;
+    return;
   }
 
   /* Put the file on the interpret queue. */
@@ -1057,18 +1077,45 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
+      /* Nothing we can do. */
+      exit ();
+    }
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+      /* Nothing we can do. */
+      exit ();
+    }
+
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
+      
+      description_fini (&syslog_description);
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	exit ();
+      }
+    }
+
     /* Create an automaton to represent the shell. */
     create_automaton (getaid (), "@this", 6);
 
     vfs_request_bda = buffer_create (0);
-    if (vfs_request_bda == -1) {
-      syslog ("jsh: error: Could not create vfs output buffer");
-      exit ();
-    }
     vfs_request_bdb = buffer_create (0);
-    if (vfs_request_bdb == -1) {
-      syslog ("jsh: error: Could not create vfs output buffer");
-      exit ();
+    if (vfs_request_bda == -1 ||
+	vfs_request_bdb == -1) {
+      bfprintf (&syslog_buffer, ERROR "could not create vfs output buffer\n");
+      state = STOP;
+      return;
     }
     vfs_request_queue_init (&vfs_request_queue);
     callback_queue_init (&vfs_response_queue);
@@ -1077,12 +1124,14 @@ initialize (void)
 
     stdout_bd = buffer_create (0);
     if (stdout_bd == -1) {
-      syslog ("jsh: error: Could not create stdout buffer");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not create stdout buffer\n");
+      state = STOP;
+      return;
     }
     if (buffer_file_initw (&stdout_bf, stdout_bd) != 0) {
-      syslog ("jsh: error: Could not initialize stdout buffer");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not initialize stdout buffer\n");
+      state = STOP;
+      return;
     }
 
     aid_t aid = getaid ();
@@ -1092,14 +1141,16 @@ initialize (void)
     /* Bind to the vfs. */
     vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
     if (vfs_aid == -1) {
-      syslog ("jsh: error: no vfs");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "no vfs\n");
+      state = STOP;
+      return;
     }
     
     description_t vfs_description;
     if (description_init (&vfs_description, vfs_aid) != 0) {
-      syslog ("jsh: error: couldn't describe vfs");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "couldn't describe vfs\n");
+      state = STOP;
+      return;
     }
     const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
     const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
@@ -1107,15 +1158,17 @@ initialize (void)
     
     if (vfs_request == NO_ACTION ||
 	vfs_response == NO_ACTION) {
-      syslog ("jsh: error: the vfs does not appear to be a vfs");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "vfs does not appear to be a vfs\n");
+      state = STOP;
+      return;
     }
     
     /* We bind the response first so they don't get lost. */
     if (bind (vfs_aid, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
 	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) {
-      syslog ("jsh: error: Couldn't bind to vfs");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "couldn't bind to vfs\n");
+      state = STOP;
+      return;
     }
     
     argv_t argv;
@@ -1126,8 +1179,9 @@ initialize (void)
 	const char* filename;
 	size_t size;
 	if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
-	  syslog ("jsh: error: Couldn't read filename argument");
-	  exit ();
+	  bfprintf (&syslog_buffer, ERROR "couldn't read filename argument\n");
+	  state = STOP;
+	  return;
 	}
 	
 	vfs_request_queue_push_readfile (&vfs_request_queue, filename);
@@ -1150,6 +1204,57 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   end_internal_action ();
 }
 
+/* stop
+   ----
+   Stop the automaton.
+   
+   Pre:  state == STOP and syslog_buffer is empty
+   Post: 
+*/
+static bool
+stop_precondition (void)
+{
+  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (stop_precondition ()) {
+    exit ();
+  }
+  end_internal_action ();
+}
+
+/* syslog
+   ------
+   Output error messages.
+   
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
+*/
+static bool
+syslog_precondition (void)
+{
+  return buffer_file_size (&syslog_buffer) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
+{
+  initialize ();
+  scheduler_remove (ano, param);
+
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    end_output_action (true, syslog_bd, -1);
+  }
+  else {
+    end_output_action (false, -1, -1);
+  }
+}
+
 /* vfs_request
    -------------
    Send a request to the vfs.
@@ -1170,8 +1275,9 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
 
   if (vfs_request_precondition ()) {
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      syslog ("jsh: error: Could not write to output buffer");
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
+      state = STOP;
+      end_output_action (false, -1, -1);
     }
     end_output_action (true, vfs_request_bda, vfs_request_bdb);
   }
@@ -1191,8 +1297,8 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
   initialize ();
 
   if (callback_queue_empty (&vfs_response_queue)) {
-    syslog ("jsh: error: vfs produced spurious response");
-    exit ();
+    bfprintf (&syslog_buffer, WARNING "vfs produced spurious response\n");
+    end_input_action (bda, bdb);
   }
 
   const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
@@ -1392,6 +1498,12 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_COL_NO, "stdin_col", "buffer_file_t", stdin_c
 void
 schedule (void)
 {
+  if (stop_precondition ()) {
+    scheduler_add (STOP_NO, 0);
+  }
+  if (syslog_precondition ()) {
+    scheduler_add (SYSLOG_NO, 0);
+  }
   if (vfs_request_precondition ()) {
     scheduler_add (VFS_REQUEST_NO, 0);
   }

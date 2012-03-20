@@ -151,13 +151,6 @@ pagesize (void);
 size_t
 size_to_pages (size_t size);
 
-int
-syslog (const char* msg);
-
-int
-syslogn (const char* msg,
-	 size_t size);
-
 aid_t
 lookup (const char* name,
 	size_t size);

@@ -287,14 +287,6 @@ initialize (void)
   }
 }
 
-/* init
-   ----
-   Init receives a buffer containing a cpio archive.
-   It looks for the files registry, vfs, tmpfs, and init and creates automata from them except for init.
-   It passes the cpio archive to tmpfs.
-   
-   Post: mount_state == MOUNT && tmpfs != -1 && init_file != 0
- */
 BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
@@ -356,13 +348,13 @@ BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
    -------------
    Send a request to the vfs.
 
-   Pre:  vfs_bd != -1
-   Post: vfs_bd == -1
+   Pre:  state == RUN && vfs request queue is not empty
+   Post: vfs request queue is empty
  */
 static bool
 vfs_request_precondition (void)
 {
-  return !vfs_request_queue_empty (&vfs_request_queue);
+  return state == RUN && !vfs_request_queue_empty (&vfs_request_queue);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param)
@@ -393,17 +385,19 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
 {
   initialize ();
 
-  if (callback_queue_empty (&vfs_response_queue)) {
-    bfprintf (&syslog_buffer, WARNING "vfs produced spurious response\n");
-    end_input_action (bda, bdb);
+  if (state == RUN) {
+    if (callback_queue_empty (&vfs_response_queue)) {
+      bfprintf (&syslog_buffer, WARNING "vfs produced spurious response\n");
+      end_input_action (bda, bdb);
+    }
+    
+    const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
+    callback_t callback = callback_queue_item_callback (item);
+    void* data = callback_queue_item_data (item);
+    callback_queue_pop (&vfs_response_queue);
+    
+    callback (data, bda, bdb);
   }
-
-  const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
-  callback_t callback = callback_queue_item_callback (item);
-  void* data = callback_queue_item_data (item);
-  callback_queue_pop (&vfs_response_queue);
-
-  callback (data, bda, bdb);
 
   end_input_action (bda, bdb);
 }

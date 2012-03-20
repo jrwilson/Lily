@@ -547,9 +547,11 @@ BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  if (buffer_file_put (&scan_codes_buffer, read_byte ()) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
-    state = STOP;
+  if (byte_ready ()) {
+    if (buffer_file_put (&scan_codes_buffer, read_byte ()) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
+      state = STOP;
+    }
   }
   end_input_action (bda, bdb);
 }

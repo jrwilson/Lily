@@ -499,19 +499,6 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_SYSLOG:
-    {
-      syslog_args* ptr = reinterpret_cast<syslog_args*> (regs.useresp);
-      if (!a->verify_stack (ptr, sizeof (syslog_args))) {
-	// BUG:  Can't get the arguments from the stack.
-	kassert (0);
-      }
-      pair<int, int> r = a->syslog (ptr->string, ptr->size);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-    break;
   case LILY_SYSCALL_LOOKUP:
     {
       lookup_args* ptr = reinterpret_cast<lookup_args*> (regs.useresp);

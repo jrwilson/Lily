@@ -1494,25 +1494,6 @@ public:
     
     return make_pair (0, LILY_SYSCALL_ESUCCESS);
   }
-  
-  inline pair<int, int>
-  syslog (const char* string,
-	  size_t size)
-  {
-    if (!verify_span (string, size)) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
-    }
-
-    kout << aid_ << ": ";
-    while (size != 0) {
-      kout.put (*string);
-      ++string;
-      --size;
-    }
-    kout << endl;
-
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
-  }
 
   /*
    * SUBSCRIPTIONS

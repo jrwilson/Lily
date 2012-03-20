@@ -129,13 +129,6 @@ sysconf:
 	mov %ecx, automatonerrno
 	ret
 
-	.global syslogn
-syslogn:
-	mov $LILY_SYSCALL_SYSLOG, %eax
-	int $0x80
-	mov %ecx, automatonerrno
-	ret
-
 	.global lookup
 lookup:
 	mov $LILY_SYSCALL_LOOKUP, %eax
