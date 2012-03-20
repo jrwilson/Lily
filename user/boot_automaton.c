@@ -15,9 +15,8 @@
   The goal of the boot automaton is to create an environment that allows automata to load other automata from a store.
   The boot automaton receives a buffer containing a cpio archive containing programs for a vfs, tmpfs, and shell from which is tries to create automata.
   The buffer supplied to the boot automaton is passed to the tmpfs automaton.
-  Any failures cause the boot automaton to exit.
-
-  TODO:  Should we subscribe to the automata to make sure they don't die?
+  The boot automaton also attempts to create a logging automaton.
+  Any failures cause the boot automaton to log a message and exit.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
@@ -157,7 +156,7 @@ initialize (void)
       exit ();
     }
 
-    vfs_request_bda = buffer_create (1);
+    vfs_request_bda = buffer_create (0);
     vfs_request_bdb = buffer_create (0);
     if (vfs_request_bda == -1 ||
 	vfs_request_bdb == -1) {

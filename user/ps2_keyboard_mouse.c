@@ -152,15 +152,21 @@ controller_status (void)
 }
 
 static void
-wait_to_send ()
+wait_to_send (void)
 {
   while (controller_status () & CONTROLLER_WRITE_BUFFER_FULL_BIT) ;;
 }
 
-static unsigned char
-read_byte ()
+static bool
+byte_ready (void)
 {
-  while ((controller_status () & CONTROLLER_READ_READY_BIT) == 0) ;;
+  return (controller_status () & CONTROLLER_READ_READY_BIT) != 0;
+}
+
+static unsigned char
+read_byte (void)
+{
+  while (!byte_ready ()) ;;
   return inb (DATA_PORT);
 }
 
@@ -585,34 +591,35 @@ BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int 
 {
   initialize ();
 
-  mouse_packet_data [mouse_byte] = read_byte ();
-
-  switch (mouse_byte) {
-  case STATUS_BYTE:
-    mouse_byte = DELTA_X_BYTE;
-    break;
-  case DELTA_X_BYTE:
-    mouse_byte = DELTA_Y_BYTE;
-    break;
-  case DELTA_Y_BYTE:
-    if (mouse_id == BASIC_MOUSE) {
+  if (byte_ready ()) {
+    mouse_packet_data [mouse_byte] = read_byte ();
+    
+    switch (mouse_byte) {
+    case STATUS_BYTE:
+      mouse_byte = DELTA_X_BYTE;
+      break;
+    case DELTA_X_BYTE:
+      mouse_byte = DELTA_Y_BYTE;
+      break;
+    case DELTA_Y_BYTE:
+      if (mouse_id == BASIC_MOUSE) {
+	mouse_byte = STATUS_BYTE;
+	write_mouse_packet ();
+      }
+      else {
+	mouse_byte = BONUS_BYTE;
+      }
+      break;
+    case BONUS_BYTE:
       mouse_byte = STATUS_BYTE;
       write_mouse_packet ();
+      break;
+    default:
+      bfprintf (&syslog_buffer, ERROR "unrecognized packet byte state\n");
+      state = STOP;
+      end_input_action (bda, bdb);
     }
-    else {
-      mouse_byte = BONUS_BYTE;
-    }
-    break;
-  case BONUS_BYTE:
-    mouse_byte = STATUS_BYTE;
-    write_mouse_packet ();
-    break;
-  default:
-    bfprintf (&syslog_buffer, ERROR "unrecognized packet byte state\n");
-    state = STOP;
-    end_input_action (bda, bdb);
   }
-
   end_input_action (bda, bdb);
 }
 
