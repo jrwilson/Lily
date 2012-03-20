@@ -3,6 +3,7 @@
 #include <string.h>
 #include <buffer_file.h>
 #include <dymem.h>
+#include "syslog.h"
 
 /*
   Syslog
@@ -78,7 +79,7 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
    
    Post: if successful, then stdout_buffer is not empty
  */
-BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 

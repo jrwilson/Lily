@@ -145,20 +145,10 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t 
   }
 }
 
-#define HELLO_NO 10
-BEGIN_INTERNAL (NO_PARAMETER, HELLO_NO, "", "", hello, ano_t ano, int param)
-{
-  initialize ();
-  scheduler_remove (ano, param);
-  bfprintf (&stdout_buffer, "Hello, world!\n");
-  end_internal_action ();
-}
-
 void
 schedule (void)
 {
   if (stdout_precondition ()) {
     scheduler_add (STDOUT_NO, 0);
   }
-  scheduler_add (HELLO_NO, 0);
 }

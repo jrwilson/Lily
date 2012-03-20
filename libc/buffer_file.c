@@ -395,6 +395,15 @@ bfprintf (buffer_file_t* bf,
 	  ++format;
 	}
 	break;
+      case 'c':
+	{
+	  char c = va_arg (ap, int);
+	  if (buffer_file_put (bf, c) != 0) {
+	    return -1;
+	  }
+	  ++format;
+	}
+	break;
       case 's':
 	{
 	  char* str = va_arg (ap, char*);

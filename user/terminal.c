@@ -1274,21 +1274,6 @@ scroll (client_t* client)
   }
   /* Change the active y. */
   --client->active_position_y;
-
-  if (client == active_client) {
-    // TODO:  Make this more efficient.
-    /* Send the data. */
-    if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-      syslog ("terminal: Could not write vga op list");
-      exit ();
-    }
-    
-    /* Send the cursor. */
-    if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-      syslog ("terminal: Could not write vga op list");
-      exit ();
-    }
-  }
 }
 
 static void
@@ -1531,27 +1516,11 @@ process_normal (client_t* client,
     /* Backspace. */
     if (client->active_position_x != 0) {
       --client->active_position_x;
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
-      }
     }
     break;
   case HT:
     /* Horizontal tab. */
     client->active_position_x = (client->active_position_x + 8) & ~(8-1);
-    if (client == active_client) {
-      // TODO:  Make this more efficient.
-      /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	syslog ("terminal: Could not write vga op list");
-	exit ();
-      }
-    }
     break;
   case LF:
     /* Line feed.  (NOT STANDARD!) */
@@ -1562,26 +1531,10 @@ process_normal (client_t* client,
     if (client->active_position_y == PAGE_LIMIT_POSITION) {
       scroll (client);
     }
-    if (client == active_client) {
-      // TODO:  Make this more efficient.
-      /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	syslog ("terminal: Could not write vga op list");
-	exit ();
-      }
-    }
     break;
   case CR:
     /* Carriage return. */
     client->active_position_x = 0;
-    if (client == active_client) {
-      // TODO:  Make this more efficient.
-      /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	syslog ("terminal: Could not write vga op list");
-	exit ();
-      }
-    }
     break;
   case ESC:
     /* Begin of escaped sequence. */
@@ -1590,14 +1543,6 @@ process_normal (client_t* client,
   case DEL:
     /* Rub-out the character under the cursor. */
     client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x] = ATTRIBUTE | ' ';
-    if (client == active_client) {
-      // TODO:  Make this more efficient.
-      /* Send the data. */
-      if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-	syslog ("terminal: Could not write vga op list");
-	exit ();
-      }
-    }
     break;
   default:
     /* ASCII character that can be displayed. */
@@ -1616,21 +1561,6 @@ process_normal (client_t* client,
       if (client->active_position_y == PAGE_LIMIT_POSITION) {
 	/* Same idea. */
 	scroll (client);
-      }
-
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the data. */
-	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
-	
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
       }
     }
     break;
@@ -1699,20 +1629,6 @@ process_control (client_t* client,
       /* Move to line home. */
       client->active_position_x = LINE_HOME_POSITION;
 
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the data. */
-	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
-	
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
-      }
 
       /* Reset. */
       client->mode = NORMAL;
@@ -1728,15 +1644,6 @@ process_control (client_t* client,
       /* Set the position if in bounds. */
       if (offset <= client->active_position_y) {
 	client->active_position_y -= offset;
-      }
-
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
       }
 
       /* Reset. */
@@ -1755,15 +1662,6 @@ process_control (client_t* client,
 	client->active_position_y += offset;
       }
 
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
-      }
-
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -1780,15 +1678,6 @@ process_control (client_t* client,
 	client->active_position_x += offset;
       }
 
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
-      }
-
       /* Reset. */
       client->mode = NORMAL;
     }
@@ -1803,15 +1692,6 @@ process_control (client_t* client,
       /* Set the position if in bounds. */
       if (offset <= client->active_position_x) {
 	client->active_position_x -= offset;
-      }
-
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
       }
 
       /* Reset. */
@@ -1834,15 +1714,6 @@ process_control (client_t* client,
 	  new_x <= LINE_LIMIT_POSITION) {
 	client->active_position_y = new_y - 1;
 	client->active_position_x = new_x - 1;
-      }
-
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
       }
 
       /* Reset. */
@@ -1889,15 +1760,6 @@ process_control (client_t* client,
 	  }
 	}
 	break;
-      }
-
-      if (client == active_client) {
-	// TODO:  Make this more efficient.
-	/* Send the data. */
-	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-	  syslog ("terminal: Could not write vga op list");
-	  exit ();
-	}
       }
 
       client->mode = NORMAL;
@@ -1977,8 +1839,6 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
 {
   initialize ();
 
-  syslog ("terminal scan_codes_in");
-
   buffer_file_t input_buffer;
   if (buffer_file_initr (&input_buffer, bda) != 0) {
     end_input_action (bda, bdb);
@@ -2006,14 +1866,14 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
     unsigned char scan = codes[idx];
     if (scan < BREAK_MASK) {
       if (!escaped) {
-	process_key_code (scan_to_key[scan], true);
+  	process_key_code (scan_to_key[scan], true);
       }
       else {
-	escaped = false;
-	/* Ignore fake shifts. */
-	if (scan != SCAN_LSHIFT) {
-	  process_key_code (escaped_scan_to_key[scan], true);
-	}
+  	escaped = false;
+  	/* Ignore fake shifts. */
+  	if (scan != SCAN_LSHIFT) {
+  	  process_key_code (escaped_scan_to_key[scan], true);
+  	}
       }
     }
     else if (scan == 0xE0) {
@@ -2028,14 +1888,14 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
       /* Break. */
       scan -= BREAK_MASK;
       if (!escaped) {
-	process_key_code (scan_to_key[scan], false);
+  	process_key_code (scan_to_key[scan], false);
       }
       else {
-	escaped = false;
-	  /* Ignore fake shifts. */
-	if (scan != SCAN_LSHIFT) {
-	  process_key_code (escaped_scan_to_key[scan], false);
-	}
+  	escaped = false;
+  	  /* Ignore fake shifts. */
+  	if (scan != SCAN_LSHIFT) {
+  	  process_key_code (escaped_scan_to_key[scan], false);
+  	}
       }
     }
   }
@@ -2052,8 +1912,6 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
 BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packet_list_t", mouse_packets_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
-
-  syslog ("terminal mouse_packets_in");
 
   if (active_client != 0) {
     size_t count = 0;
@@ -2096,7 +1954,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_
 
   if (buffer_file_size (&client->scan_codes_buffer) != 0) {
     buffer_file_truncate (&client->scan_codes_buffer);
-    syslog ("terminal scan_codes_out");
     end_output_action (true, client->scan_codes_bd, -1);
   }
   else {
@@ -2116,10 +1973,9 @@ BEGIN_OUTPUT (AUTO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_
     client = create_client (aid);
   }
 
-  if (buffer_file_size (&client->scan_codes_buffer) != 0) {
-    buffer_file_truncate (&client->scan_codes_buffer);
-    syslog ("terminal stdout");
-    end_output_action (true, client->scan_codes_bd, -1);
+  if (buffer_file_size (&client->ascii_buffer) != 0) {
+    buffer_file_truncate (&client->ascii_buffer);
+    end_output_action (true, client->ascii_bd, -1);
   }
   else {
     end_output_action (false, -1, -1);
@@ -2143,7 +1999,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_
       syslog ("TODO:  Handle error.");
       end_output_action (false, -1, -1);
     }
-    syslog ("terminal mouse_packets_out");
     end_output_action (true, client->mouse_packets_bd, -1);
   }
   else {
@@ -2177,6 +2032,11 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
     client = create_client (aid);
   }
 
+  size_t old_cursor_location = 0;
+  if (client == active_client) {
+    old_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+  }
+
   /* Process the string. */
   const char* end = begin + size;
   for (; begin != end; ++begin) {
@@ -2195,6 +2055,25 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t an
       }
     }
   }
+
+  if (client == active_client) {
+    /* TODO:  Check that this is necessary. */
+    /* Send the data. */
+    if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
+      syslog ("terminal: Could not write vga op list");
+      exit ();
+    }
+
+    size_t new_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+    if (new_cursor_location != old_cursor_location) {
+      /* Send the cursor. */
+      if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
+      	syslog ("terminal: Could not write vga op list");
+      	exit ();
+      }
+    }
+  }
+  
 
   end_input_action (bda, bdb);
 }
