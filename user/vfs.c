@@ -459,8 +459,8 @@ client_path_lookup_done (client_t* client,
 
     description_fini (&desc);
 
-    if (request == NO_ACTION ||
-    	response == NO_ACTION) {
+    if (request == -1 ||
+    	response == -1) {
       /* Answer. */
       vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
       client_answer (client);

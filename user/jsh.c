@@ -516,12 +516,12 @@ bind_ (token_list_item_t* var)
   description_fini (&output_description);
   description_fini (&input_description);
 
-  if (output_action == NO_ACTION) {
+  if (output_action == -1) {
     bfprintf (&syslog_buffer, INFO "TODO:  Output action does not exist\n");
     return;
   }
 
-  if (input_action == NO_ACTION) {
+  if (input_action == -1) {
     bfprintf (&syslog_buffer, INFO "TODO:  Input action does not exist\n");
     return;
   }
@@ -1155,8 +1155,8 @@ initialize (void)
     const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
     description_fini (&vfs_description);
     
-    if (vfs_request == NO_ACTION ||
-	vfs_response == NO_ACTION) {
+    if (vfs_request == -1 ||
+	vfs_response == -1) {
       bfprintf (&syslog_buffer, ERROR "vfs does not appear to be a vfs\n");
       state = STOP;
       return;

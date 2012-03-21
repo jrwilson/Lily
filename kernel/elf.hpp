@@ -393,19 +393,15 @@ namespace elf {
 		      return -1;
 		    }
 		    
-		    switch (d->action_number) {
-		    case LILY_ACTION_NO_ACTION:
-		      // The action number LILY_ACTION_NO_ACTION is reserved.
+		    if (static_cast<ano_t> (d->action_number) < 0) {
+		      // Negative action number.
 		      return -1;
-		      break;
-		    default:
-		      if (!a->add_action (static_cast<action_type_t> (d->action_type), static_cast<parameter_mode_t> (d->parameter_mode), reinterpret_cast<const void*> (d->action_entry_point), d->action_number, kstring (action_name, d->action_name_size), kstring (action_description, d->action_description_size))) {
-			// Action conflicts.
-			return -1;
-		      }
-		      break;
 		    }
 
+		    if (!a->add_action (static_cast<action_type_t> (d->action_type), static_cast<parameter_mode_t> (d->parameter_mode), reinterpret_cast<const void*> (d->action_entry_point), d->action_number, kstring (action_name, d->action_name_size), kstring (action_description, d->action_description_size))) {
+		      // Action conflicts.
+		      return -1;
+		    }
 		  }
 		  break;
 		default:

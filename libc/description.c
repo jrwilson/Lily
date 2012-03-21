@@ -30,28 +30,28 @@ description_name_to_number (description_t* d,
 			    size_t size)
 {
   if (buffer_file_seek (&d->bf, 0) != 0) {
-    return NO_ACTION;
+    return -1;
   }
 
   const size_t* count = buffer_file_readp (&d->bf, sizeof (size_t));
   if (count == 0) {
-    return NO_ACTION;
+    return -1;
   }
 
   for (size_t idx = 0; idx != *count; ++idx) {
     const action_descriptor_t* ad = buffer_file_readp (&d->bf, sizeof (action_descriptor_t));
     if (ad == 0) {
-      return NO_ACTION;
+      return -1;
     }
 
     const char* name = buffer_file_readp (&d->bf, ad->name_size);
     if (name == 0) {
-      return NO_ACTION;
+      return -1;
     }
 
     const char* description = buffer_file_readp (&d->bf, ad->description_size);
     if (description == 0) {
-      return NO_ACTION;
+      return -1;
     }
 
     if (size == ad->name_size && memcmp (name, action_name, size) == 0) {
@@ -59,5 +59,5 @@ description_name_to_number (description_t* d,
     }
   }
 
-  return NO_ACTION;
+  return -1;
 }

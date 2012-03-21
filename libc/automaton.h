@@ -12,8 +12,6 @@
 #define PARAMETER LILY_ACTION_PARAMETER
 #define AUTO_PARAMETER LILY_ACTION_AUTO_PARAMETER
 
-#define NO_ACTION LILY_ACTION_NO_ACTION
-
 /* A macro for embedding the action information. */
 #define EMBED_ACTION_DESCRIPTOR(action_type, parameter_mode, func_name, action_number, action_name, action_description) \
   __asm__ (".pushsection .action_info, \"\", @note\n"		   \
