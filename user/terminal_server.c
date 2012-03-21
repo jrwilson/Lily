@@ -8,18 +8,18 @@
 #include "syslog.h"
 
 /*
-  Terminal
-  ========
+  Terminal Server
+  ===============
   
-  The terminal allows physical input and output devices to be shared among multiple clients.
-  One client is designated as the active client, i.e., the one with the "focus."
-  The terminal routes keyboard and mouse data to the active client and routes output from the active client to the VGA hardware.
+  The terminal server allows physical input and output devices to be shared among multiple clients called terminals.
+  One terminal is designated as the active terminal, i.e., the one with the "focus."
+  The terminal server routes keyboard and mouse data to the active terminal and routes output from the active terminal to the VGA hardware.
   Other devices can be supported if there is interest.
   The focus is changed by interpretting special sequences from the keyboard.
 
   Scan Code Translation
   ---------------------
-  The terminal delivers both the raw scan codes and ASCII text from the keyboard.
+  The terminal server delivers both the raw scan codes and ASCII text from the keyboard.
   The ultimate goal should be to support different mappings and characters sets like the Linux keyboard driver.
 
   The design was inspired by the Linux keyboard driver.
@@ -56,7 +56,7 @@
 
   VGA Terminal
   ------------
-  The server interprets a stream of a data and control sequences and renders them to a VGA.
+  The terminal server interprets a stream of a data and control sequences and renders them to a VGA.
   The goal is that the terminal server will conform to the ECMA-48 Standard.
   ECMA-48 specifies how control functions are encoded and interpretted.
   Conforming to this standard does not mean implementing every control function.
@@ -261,7 +261,6 @@
 #define MOUSE_PACKETS_OUT_NO 8
 #define STDIN_T_NO 9
 #define VGA_OP_NO 10
-#define DESTROYED_NO 11
 
 #define WARNING "terminal: warning: "
 #define ERROR "terminal: error: "
@@ -274,11 +273,7 @@ typedef enum {
   CONTROL
 } mode_t;
 
-typedef struct client client_t;
-struct client {
-  /* Associated aid. */
-  aid_t aid;
-
+typedef struct {
   /* Keyboard. */
   bd_t scan_codes_bd;
   buffer_file_t scan_codes_buffer;
@@ -301,15 +296,13 @@ struct client {
   mode_t mode;
   int parameter[PARAMETER_SIZE];
   size_t parameter_count;
+} terminal_t;
 
-  /* Next on the list. */
-  client_t* next;
-};
+#define TERMINAL_COUNT 12
 
-/* The list of clients. */
-static client_t* client_list_head = 0;
-/* The active client. */
-static client_t* active_client = 0;
+/* The list of terminals. */
+static terminal_t terminals[TERMINAL_COUNT];
+static size_t active_terminal = 0;
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -342,24 +335,22 @@ static vga_op_list_t vga_op_list;
 #define CELL_SIZE 2
 
 static void
-switch_to_client (client_t* client)
+switch_to_terminal (size_t terminal)
 {
-  if (client != active_client) {
-    active_client = client;
-    if (active_client != 0) {
-      /* Send the data. */
-      if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
-	bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
-	state = STOP;
-	return;
-      }
-
-      /* Send the cursor. */
-      if (vga_op_list_write_set_cursor_location (&vga_op_list, active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x) != 0) {
-	bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
-	state = STOP;
-	return;
-      }
+  if (terminal != active_terminal && terminal < TERMINAL_COUNT) {
+    active_terminal = terminal;
+    /* Send the data. */
+    if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, terminals[active_terminal].screen_bd) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
+      state = STOP;
+      return;
+    }
+    
+    /* Send the cursor. */
+    if (vga_op_list_write_set_cursor_location (&vga_op_list, terminals[active_terminal].active_position_y * LINE_LIMIT_POSITION + terminals[active_terminal].active_position_x) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
+      state = STOP;
+      return;
     }
   }
 }
@@ -451,8 +442,8 @@ switch_to_client (client_t* client)
 
 #define SCAN_NUMLOCK 0x45
 #define SCAN_KP_MULTIPLY 0x37
-#define SCAN_KP_SUBTRACT 0x4a
-#define SCAN_KP_ADD 0x4e
+#define SCAN_KP_MINUS 0x4a
+#define SCAN_KP_PLUS 0x4e
 #define SCAN_KP_DECIMAL 0x53
 #define SCAN_KP_0 0x52
 #define SCAN_KP_1 0x4f
@@ -564,11 +555,11 @@ switch_to_client (client_t* client)
 #define KEY_NUMLOCK	0x3e
 #define KEY_KP_DIVIDE	0x3f
 #define KEY_KP_MULTIPLY	0x40
-#define KEY_KP_SUBTRACT	0x41
+#define KEY_KP_MINUS	0x41
 #define KEY_KP_7	0x42
 #define KEY_KP_8	0x43
 #define KEY_KP_9	0x44
-#define KEY_KP_ADD	0x45
+#define KEY_KP_PLUS	0x45
 #define KEY_KP_4	0x46
 #define KEY_KP_5	0x47
 #define KEY_KP_6	0x48
@@ -693,8 +684,8 @@ static unsigned char scan_to_key[BREAK_MASK] = {
 
   [SCAN_NUMLOCK] = KEY_NUMLOCK,
   [SCAN_KP_MULTIPLY] = KEY_KP_MULTIPLY,
-  [SCAN_KP_SUBTRACT] = KEY_KP_SUBTRACT,
-  [SCAN_KP_ADD] = KEY_KP_ADD,
+  [SCAN_KP_MINUS] = KEY_KP_MINUS,
+  [SCAN_KP_PLUS] = KEY_KP_PLUS,
   [SCAN_KP_DECIMAL] = KEY_KP_DECIMAL,
 
   [SCAN_KP_0] = KEY_KP_0,
@@ -913,7 +904,21 @@ typedef enum {
   SYMBOL_LEFT,
   SYMBOL_RIGHT,
 
-  SYMBOL_NEXT_CLIENT,
+  SYMBOL_SWITCH_TO_TERMINAL1,
+  SYMBOL_SWITCH_TO_TERMINAL2,
+  SYMBOL_SWITCH_TO_TERMINAL3,
+  SYMBOL_SWITCH_TO_TERMINAL4,
+  SYMBOL_SWITCH_TO_TERMINAL5,
+  SYMBOL_SWITCH_TO_TERMINAL6,
+  SYMBOL_SWITCH_TO_TERMINAL7,
+  SYMBOL_SWITCH_TO_TERMINAL8,
+  SYMBOL_SWITCH_TO_TERMINAL9,
+  SYMBOL_SWITCH_TO_TERMINAL10,
+  SYMBOL_SWITCH_TO_TERMINAL11,
+  SYMBOL_SWITCH_TO_TERMINAL12,
+
+  SYMBOL_SWITCH_TO_NEXT_TERMINAL,
+  SYMBOL_SWITCH_TO_PREVIOUS_TERMINAL,
 
   SYMBOL_COUNT,
 } symbol_t;
@@ -1073,12 +1078,10 @@ ascii_func (symbol_t symbol,
       }
     }
 
-    if (active_client != 0) {
-      if (buffer_file_put (&active_client->stdout_t_buffer, c) != 0) {
-	bfprintf (&syslog_buffer, ERROR "Could not write to stdout buffer\n");
-	state = STOP;
-	return;
-      }
+    if (buffer_file_put (&terminals[active_terminal].stdout_t_buffer, c) != 0) {
+      bfprintf (&syslog_buffer, ERROR "Could not write to stdout buffer\n");
+      state = STOP;
+      return;
     }
   }
 }
@@ -1106,12 +1109,10 @@ up_func (symbol_t symbol,
 	 bool make)
 {
   if (make) {
-    if (active_client != 0) {
-      if (buffer_file_puts (&active_client->stdout_t_buffer, "\e[A") != 0) {
-	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-	state = STOP;
-	return;
-      }
+    if (buffer_file_puts (&terminals[active_terminal].stdout_t_buffer, "\e[A") != 0) {
+      bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+      state = STOP;
+      return;
     }
   }
 }
@@ -1121,12 +1122,10 @@ down_func (symbol_t symbol,
 	   bool make)
 {
   if (make) {
-    if (active_client != 0) {
-      if (buffer_file_puts (&active_client->stdout_t_buffer, "\e[B") != 0) {
-	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-	state = STOP;
-	return;
-      }
+    if (buffer_file_puts (&terminals[active_terminal].stdout_t_buffer, "\e[B") != 0) {
+      bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+      state = STOP;
+      return;
     }
   }
 }
@@ -1136,12 +1135,10 @@ left_func (symbol_t symbol,
 	   bool make)
 {
   if (make) {
-    if (active_client != 0) {
-      if (buffer_file_puts (&active_client->stdout_t_buffer, "\e[D") != 0) {
-	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-	state = STOP;
-	return;
-      }
+    if (buffer_file_puts (&terminals[active_terminal].stdout_t_buffer, "\e[D") != 0) {
+      bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+      state = STOP;
+      return;
     }
   }
 }
@@ -1151,143 +1148,145 @@ right_func (symbol_t symbol,
 	    bool make)
 {
   if (make) {
-    if (active_client != 0) {
-      if (buffer_file_puts (&active_client->stdout_t_buffer, "\e[C") != 0) {
-	bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-	state = STOP;
-	return;
-      }
+    if (buffer_file_puts (&terminals[active_terminal].stdout_t_buffer, "\e[C") != 0) {
+      bfprintf (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
+      state = STOP;
+      return;
     }
   }
 }
 
 static void
-next_client_func (symbol_t symbol,
-		  bool make)
+switch_to_terminal1_func (symbol_t symbol,
+			  bool make)
 {
   if (make) {
-    if (active_client != 0 && active_client->next != 0) {
-      switch_to_client (active_client->next);
-    }
-    else {
-      switch_to_client (client_list_head);
-    }
+    switch_to_terminal (0);
   }
 }
 
+static void
+switch_to_terminal2_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (1);
+  }
+}
+
+static void
+switch_to_terminal3_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (2);
+  }
+}
+
+static void
+switch_to_terminal4_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (3);
+  }
+}
+
+static void
+switch_to_terminal5_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (4);
+  }
+}
+
+static void
+switch_to_terminal6_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (5);
+  }
+}
+
+static void
+switch_to_terminal7_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (6);
+  }
+}
+
+static void
+switch_to_terminal8_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (7);
+  }
+}
+
+static void
+switch_to_terminal9_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (8);
+  }
+}
+
+static void
+switch_to_terminal10_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (9);
+  }
+}
+
+static void
+switch_to_terminal11_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (10);
+  }
+}
+
+static void
+switch_to_terminal12_func (symbol_t symbol,
+			  bool make)
+{
+  if (make) {
+    switch_to_terminal (11);
+  }
+}
+
+static void
+switch_to_next_terminal_func (symbol_t symbol,
+			      bool make)
+{
+  if (make) {
+    switch_to_terminal ((active_terminal + 1) % TERMINAL_COUNT);
+  }
+}
+
+static void
+switch_to_previous_terminal_func (symbol_t symbol,
+				  bool make)
+{
+  if (make) {
+    switch_to_terminal ((active_terminal + TERMINAL_COUNT - 1) % TERMINAL_COUNT);
+  }
+}
 
 /* White on black for VGA. */
 #define ATTRIBUTE 0x0F00
 
 /* Flag indicating that the screen changed. */
 static bool screen_buffer_changed = false;
-
-static client_t*
-find_client (aid_t aid)
-{
-  client_t* ptr;
-  for (ptr = client_list_head; ptr != 0 && ptr->aid != aid; ptr = ptr->next) ;;
-  return ptr;
-}
-
-static client_t*
-create_client (aid_t aid)
-{
-  client_t* client = malloc (sizeof (client_t));
-  client->aid = aid;
-
-  client->scan_codes_bd = buffer_create (0);
-  if (client->scan_codes_bd == -1) {
-    bfprintf (&syslog_buffer, ERROR "could not create scan codes buffer\n");
-    state = STOP;
-  }
-  if (buffer_file_initw (&client->scan_codes_buffer, client->scan_codes_bd) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could not initialize scan codes buffer\n");
-    state = STOP;
-  }
-
-  client->stdout_t_bd = buffer_create (0);
-  if (client->stdout_t_bd == -1) {
-    bfprintf (&syslog_buffer, ERROR "could not create ascii buffer\n");
-    state = STOP;
-  }
-  if (buffer_file_initw (&client->stdout_t_buffer, client->stdout_t_bd) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could not initialize ascii buffer\n");
-    state = STOP;
-  }
-
-  client->mouse_packets_bd = buffer_create (0);
-  if (client->mouse_packets_bd == -1) {
-    bfprintf (&syslog_buffer, ERROR "could not create mouse packets buffer\n");
-    state = STOP;
-  }
-  if (mouse_packet_list_initw (&client->mouse_packet_list, client->mouse_packets_bd) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could not initialize mouse packets buffer\n");
-    state = STOP;
-  }
-
-  client->screen_bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
-  if (client->screen_bd == -1) {
-    bfprintf (&syslog_buffer, ERROR "could not create screen buffer\n");
-    state = STOP;
-  }
-  client->screen_buffer = buffer_map (client->screen_bd);
-  if (client->screen_buffer == 0) {
-    bfprintf (&syslog_buffer, ERROR "could not map screen buffer\n");
-    state = STOP;
-  }
-  /* ECMA-48 states that the initial state of the characters must be "erased."
-     We use spaces. */
-  for (size_t y = 0; y != PAGE_LIMIT_POSITION; ++y) {
-    for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
-      client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
-    }
-  }
-  /* I don't recall ECMA-48 specifying the initial state of the active position but this seems reasonable. */
-  client->active_position_x = LINE_HOME_POSITION;
-  client->active_position_y = PAGE_HOME_POSITION;
-
-  client->mode = NORMAL;
-
-  client->next = client_list_head;
-  client_list_head = client;
-
-  if (active_client == 0) {
-    switch_to_client (client);
-  }
-
-  if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could subscribe to client\n");
-    state = STOP;
-  }
-
-  return client;
-}
-
-static void
-destroy_client (client_t* client)
-{
-  if (client == active_client) {
-    /* Switch to the null client. */
-    switch_to_client (0);
-  }
-  buffer_destroy (client->screen_bd);
-  free (client);
-}
-
-static void
-scroll (client_t* client)
-{
-  /* Move the data up one line. */
-  memmove (client->screen_buffer, &client->screen_buffer[LINE_LIMIT_POSITION], (PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION * CELL_SIZE);
-  /* Clear the last line. */
-  for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
-    client->screen_buffer[(PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
-  }
-  screen_buffer_changed = true;
-  /* Change the active y. */
-  --client->active_position_y;
-}
 
 static void
 initialize (void)
@@ -1485,8 +1484,21 @@ initialize (void)
     insert_symbol (0, KEY_LEFT, SYMBOL_LEFT);
     insert_symbol (0, KEY_RIGHT, SYMBOL_RIGHT);
 
-    /* Previous and next client. */
-    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_EQUAL, SYMBOL_NEXT_CLIENT);
+    /* Terminal switching. */
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F1, SYMBOL_SWITCH_TO_TERMINAL1);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F2, SYMBOL_SWITCH_TO_TERMINAL2);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F3, SYMBOL_SWITCH_TO_TERMINAL3);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F4, SYMBOL_SWITCH_TO_TERMINAL4);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F5, SYMBOL_SWITCH_TO_TERMINAL5);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F6, SYMBOL_SWITCH_TO_TERMINAL6);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F7, SYMBOL_SWITCH_TO_TERMINAL7);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F8, SYMBOL_SWITCH_TO_TERMINAL8);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F9, SYMBOL_SWITCH_TO_TERMINAL9);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F10, SYMBOL_SWITCH_TO_TERMINAL10);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F11, SYMBOL_SWITCH_TO_TERMINAL11);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_F12, SYMBOL_SWITCH_TO_TERMINAL12);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_EQUAL, SYMBOL_SWITCH_TO_NEXT_TERMINAL);
+    insert_symbol (CTRL_WEIGHT | ALT_WEIGHT, KEY_MINUS, SYMBOL_SWITCH_TO_PREVIOUS_TERMINAL);
     
     /* Create a character set. */
     
@@ -1512,12 +1524,103 @@ initialize (void)
     charset[SYMBOL_LEFT] = left_func;
     charset[SYMBOL_RIGHT] = right_func;
 
-    charset[SYMBOL_NEXT_CLIENT] = next_client_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL1] = switch_to_terminal1_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL2] = switch_to_terminal2_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL3] = switch_to_terminal3_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL4] = switch_to_terminal4_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL5] = switch_to_terminal5_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL6] = switch_to_terminal6_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL7] = switch_to_terminal7_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL8] = switch_to_terminal8_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL9] = switch_to_terminal9_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL10] = switch_to_terminal10_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL11] = switch_to_terminal11_func;
+    charset[SYMBOL_SWITCH_TO_TERMINAL12] = switch_to_terminal12_func;
+    charset[SYMBOL_SWITCH_TO_NEXT_TERMINAL] = switch_to_next_terminal_func;
+    charset[SYMBOL_SWITCH_TO_PREVIOUS_TERMINAL] = switch_to_previous_terminal_func;
+
+    /* Set up the terminal. */
+    for (size_t terminal = 0; terminal != TERMINAL_COUNT; ++terminal) {
+      terminals[terminal].scan_codes_bd = buffer_create (0);
+      if (terminals[terminal].scan_codes_bd == -1) {
+	bfprintf (&syslog_buffer, ERROR "could not create scan codes buffer\n");
+	state = STOP;
+	return;
+      }
+      if (buffer_file_initw (&terminals[terminal].scan_codes_buffer, terminals[terminal].scan_codes_bd) != 0) {
+	bfprintf (&syslog_buffer, ERROR "could not initialize scan codes buffer\n");
+	state = STOP;
+	return;
+      }
+
+      terminals[terminal].stdout_t_bd = buffer_create (0);
+      if (terminals[terminal].stdout_t_bd == -1) {
+	bfprintf (&syslog_buffer, ERROR "could not create ascii buffer\n");
+	state = STOP;
+	return;
+      }
+      if (buffer_file_initw (&terminals[terminal].stdout_t_buffer, terminals[terminal].stdout_t_bd) != 0) {
+	bfprintf (&syslog_buffer, ERROR "could not initialize ascii buffer\n");
+	state = STOP;
+	return;
+      }
+      
+      terminals[terminal].mouse_packets_bd = buffer_create (0);
+      if (terminals[terminal].mouse_packets_bd == -1) {
+	bfprintf (&syslog_buffer, ERROR "could not create mouse packets buffer\n");
+	state = STOP;
+	return;
+      }
+      if (mouse_packet_list_initw (&terminals[terminal].mouse_packet_list, terminals[terminal].mouse_packets_bd) != 0) {
+	bfprintf (&syslog_buffer, ERROR "could not initialize mouse packets buffer\n");
+	state = STOP;
+	return;
+      }
+      
+      terminals[terminal].screen_bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
+      if (terminals[terminal].screen_bd == -1) {
+	bfprintf (&syslog_buffer, ERROR "could not create screen buffer\n");
+	state = STOP;
+	return;
+      }
+      terminals[terminal].screen_buffer = buffer_map (terminals[terminal].screen_bd);
+      if (terminals[terminal].screen_buffer == 0) {
+	bfprintf (&syslog_buffer, ERROR "could not map screen buffer\n");
+	state = STOP;
+	return;
+      }
+      /* ECMA-48 states that the initial state of the characters must be "erased."
+	 We use spaces. */
+      for (size_t y = 0; y != PAGE_LIMIT_POSITION; ++y) {
+	for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
+	  terminals[terminal].screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	}
+      }
+      /* I don't recall ECMA-48 specifying the initial state of the active position but this seems reasonable. */
+      terminals[terminal].active_position_x = LINE_HOME_POSITION;
+      terminals[terminal].active_position_y = PAGE_HOME_POSITION;
+      
+      terminals[terminal].mode = NORMAL;
+    }
   }
 }
 
 static void
-process_normal (client_t* client,
+scroll (size_t terminal)
+{
+  /* Move the data up one line. */
+  memmove (terminals[terminal].screen_buffer, &terminals[terminal].screen_buffer[LINE_LIMIT_POSITION], (PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION * CELL_SIZE);
+  /* Clear the last line. */
+  for (size_t x = 0; x != LINE_LIMIT_POSITION; ++x) {
+    terminals[terminal].screen_buffer[(PAGE_LIMIT_POSITION - 1) * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+  }
+  screen_buffer_changed = true;
+  /* Change the active y. */
+  --terminals[terminal].active_position_y;
+}
+
+static void
+process_normal (size_t terminal,
 		char c)
 {
   /* Process a 7-bit ASCII character. */
@@ -1527,55 +1630,55 @@ process_normal (client_t* client,
     break;
   case BS:
     /* Backspace. */
-    if (client->active_position_x != 0) {
-      --client->active_position_x;
+    if (terminals[terminal].active_position_x != 0) {
+      --terminals[terminal].active_position_x;
     }
     break;
   case HT:
     /* Horizontal tab. */
-    client->active_position_x = (client->active_position_x + 8) & ~(8-1);
+    terminals[terminal].active_position_x = (terminals[terminal].active_position_x + 8) & ~(8-1);
     break;
   case LF:
     /* Line feed.  (NOT STANDARD!) */
     /* Perform a carriage return. */
-    client->active_position_x = 0;
+    terminals[terminal].active_position_x = 0;
     /* Then the line feed. */
-    ++client->active_position_y;
-    if (client->active_position_y == PAGE_LIMIT_POSITION) {
-      scroll (client);
+    ++terminals[terminal].active_position_y;
+    if (terminals[terminal].active_position_y == PAGE_LIMIT_POSITION) {
+      scroll (terminal);
     }
     break;
   case CR:
     /* Carriage return. */
-    client->active_position_x = 0;
+    terminals[terminal].active_position_x = 0;
     break;
   case ESC:
     /* Begin of escaped sequence. */
-    client->mode = ESCAPED;
+    terminals[terminal].mode = ESCAPED;
     break;
   case DEL:
     /* Rub-out the character under the cursor. */
-    client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x] = ATTRIBUTE | ' ';
+    terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + terminals[terminal].active_position_x] = ATTRIBUTE | ' ';
     screen_buffer_changed = true;
     break;
   default:
     /* ASCII character that can be displayed. */
     if (c >= ' ' && c <= '~') {
-      client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + client->active_position_x++] = ATTRIBUTE | c;
+      terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + terminals[terminal].active_position_x++] = ATTRIBUTE | c;
       screen_buffer_changed = true;
       
-      if (client->active_position_x == LINE_LIMIT_POSITION) {
+      if (terminals[terminal].active_position_x == LINE_LIMIT_POSITION) {
 	/* Active position is at the end of the line.
 	   ECMA-48 does not define behavior in this circumstance.
 	   We will move to home and scroll.
 	*/
-	client->active_position_x = LINE_HOME_POSITION;
-	++client->active_position_y;
+	terminals[terminal].active_position_x = LINE_HOME_POSITION;
+	++terminals[terminal].active_position_y;
       }
       
-      if (client->active_position_y == PAGE_LIMIT_POSITION) {
+      if (terminals[terminal].active_position_y == PAGE_LIMIT_POSITION) {
 	/* Same idea. */
-	scroll (client);
+	scroll (terminal);
       }
     }
     break;
@@ -1583,23 +1686,23 @@ process_normal (client_t* client,
 }
 
 static void
-process_escaped (client_t* client,
+process_escaped (size_t terminal,
 		 char c)
 {
   switch (c) {
   case CSI:
     /* Prepare for parameters. */
     for (size_t idx = 0; idx != PARAMETER_SIZE; ++idx) {
-      client->parameter[idx] = 0;
+      terminals[terminal].parameter[idx] = 0;
     }
-    client->parameter_count = 0;
-    client->mode = CONTROL;
+    terminals[terminal].parameter_count = 0;
+    terminals[terminal].mode = CONTROL;
     break;
   }
 }
 
 static void
-process_control (client_t* client,
+process_control (size_t terminal,
 		 char c)
 {
   switch (c) {
@@ -1613,104 +1716,104 @@ process_control (client_t* client,
   case '7':
   case '8':
   case '9':
-    if (client->parameter_count == 0) {
-      client->parameter_count = 1;
+    if (terminals[terminal].parameter_count == 0) {
+      terminals[terminal].parameter_count = 1;
     }
-    if (client->parameter_count <= PARAMETER_SIZE) {
-      client->parameter[client->parameter_count - 1] *= 10;
-      client->parameter[client->parameter_count - 1] += (c - '0');
+    if (terminals[terminal].parameter_count <= PARAMETER_SIZE) {
+      terminals[terminal].parameter[terminals[terminal].parameter_count - 1] *= 10;
+      terminals[terminal].parameter[terminals[terminal].parameter_count - 1] += (c - '0');
     }
     break;
   case ';':
-    ++client->parameter_count;
+    ++terminals[terminal].parameter_count;
     break;
   case ICH:
     {
       /* Parse the parameters. */
       unsigned short count = 1;
-      if (client->parameter_count >= 1) {
-      	count = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+      	count = terminals[terminal].parameter[0];
       }
       /* Shift the line. */
-      for (unsigned short dest_x = LINE_LIMIT_POSITION - 1; dest_x != client->active_position_x && dest_x >= count; --dest_x) {
-	client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] =
-	  client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x - count];
+      for (unsigned short dest_x = LINE_LIMIT_POSITION - 1; dest_x != terminals[terminal].active_position_x && dest_x >= count; --dest_x) {
+	terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + dest_x] =
+	  terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + dest_x - count];
       }
       /* Replace with spaces. */
-      for (unsigned short dest_x = client->active_position_x; dest_x != LINE_LIMIT_POSITION && count != 0; ++dest_x, --count) {
-	client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + dest_x] = ATTRIBUTE | ' ';
+      for (unsigned short dest_x = terminals[terminal].active_position_x; dest_x != LINE_LIMIT_POSITION && count != 0; ++dest_x, --count) {
+	terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + dest_x] = ATTRIBUTE | ' ';
       }
       screen_buffer_changed = true;
 
       /* Move to line home. */
-      client->active_position_x = LINE_HOME_POSITION;
+      terminals[terminal].active_position_x = LINE_HOME_POSITION;
 
       /* Reset. */
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   case CUU:
     {
       /* Parse the parameters. */
       unsigned short offset = 1;
-      if (client->parameter_count >= 1) {
-	offset = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+	offset = terminals[terminal].parameter[0];
       }
       /* Set the position if in bounds. */
-      if (offset <= client->active_position_y) {
-	client->active_position_y -= offset;
+      if (offset <= terminals[terminal].active_position_y) {
+	terminals[terminal].active_position_y -= offset;
       }
 
       /* Reset. */
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   case CUD:
     {
       /* Parse the parameters. */
       unsigned short offset = 1;
-      if (client->parameter_count >= 1) {
-	offset = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+	offset = terminals[terminal].parameter[0];
       }
       /* Set the position if in bounds. */
-      if (client->active_position_y + offset < PAGE_LIMIT_POSITION) {
-	client->active_position_y += offset;
+      if (terminals[terminal].active_position_y + offset < PAGE_LIMIT_POSITION) {
+	terminals[terminal].active_position_y += offset;
       }
 
       /* Reset. */
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   case CUF:
     {
       /* Parse the parameters. */
       unsigned short offset = 1;
-      if (client->parameter_count >= 1) {
-	offset = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+	offset = terminals[terminal].parameter[0];
       }
       /* Set the position if in bounds. */
-      if (client->active_position_x + offset < LINE_LIMIT_POSITION) {
-	client->active_position_x += offset;
+      if (terminals[terminal].active_position_x + offset < LINE_LIMIT_POSITION) {
+	terminals[terminal].active_position_x += offset;
       }
 
       /* Reset. */
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   case CUB:
     {
       /* Parse the parameters. */
       unsigned short offset = 1;
-      if (client->parameter_count >= 1) {
-	offset = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+	offset = terminals[terminal].parameter[0];
       }
       /* Set the position if in bounds. */
-      if (offset <= client->active_position_x) {
-	client->active_position_x -= offset;
+      if (offset <= terminals[terminal].active_position_x) {
+	terminals[terminal].active_position_x -= offset;
       }
 
       /* Reset. */
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   case CUP:
@@ -1718,54 +1821,54 @@ process_control (client_t* client,
       /* Parse the parameters. */
       unsigned short new_y = 1;
       unsigned short new_x = 1;
-      if (client->parameter_count >= 1) {
-	new_y = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+	new_y = terminals[terminal].parameter[0];
       }
-      if (client->parameter_count >= 2) {
-	new_x = client->parameter[1];
+      if (terminals[terminal].parameter_count >= 2) {
+	new_x = terminals[terminal].parameter[1];
       }
       /* Set the position if in bounds. */
       if (new_y <= PAGE_LIMIT_POSITION &&
 	  new_x <= LINE_LIMIT_POSITION) {
-	client->active_position_y = new_y - 1;
-	client->active_position_x = new_x - 1;
+	terminals[terminal].active_position_y = new_y - 1;
+	terminals[terminal].active_position_x = new_x - 1;
       }
 
       /* Reset. */
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   case ED:
     {
       /* Parse the parameters. */
       unsigned short choice = 0;
-      if (client->parameter_count >= 1) {
-	choice = client->parameter[0];
+      if (terminals[terminal].parameter_count >= 1) {
+	choice = terminals[terminal].parameter[0];
       }
       switch (choice) {
       case ERASE_TO_PAGE_LIMIT:
 	/* Erase the current line. */
-	for (unsigned short x = client->active_position_x; x != LINE_LIMIT_POSITION; ++x) {
-	  client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	for (unsigned short x = terminals[terminal].active_position_x; x != LINE_LIMIT_POSITION; ++x) {
+	  terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	}
 	/* Erase the subsequent lines. */
-	for (unsigned short y = client->active_position_y + 1; y != PAGE_LIMIT_POSITION; ++y) {
+	for (unsigned short y = terminals[terminal].active_position_y + 1; y != PAGE_LIMIT_POSITION; ++y) {
 	  for (unsigned short x = 0; x != LINE_LIMIT_POSITION; ++x) {
-	    client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	    terminals[terminal].screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	  }
 	}
 	screen_buffer_changed = true;
 	break;
       case ERASE_TO_PAGE_HOME:
 	/* Erase the preceding lines. */
-	for (unsigned short y = 0; y != client->active_position_y; ++y) {
+	for (unsigned short y = 0; y != terminals[terminal].active_position_y; ++y) {
 	  for (unsigned short x = 0; x != LINE_LIMIT_POSITION; ++x) {
-	    client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	    terminals[terminal].screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	  }
 	}
 	/* Erase the current line. */
-	for (unsigned short x = 0; x != client->active_position_x + 1; ++x) {
-	  client->screen_buffer[client->active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	for (unsigned short x = 0; x != terminals[terminal].active_position_x + 1; ++x) {
+	  terminals[terminal].screen_buffer[terminals[terminal].active_position_y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	}
 	screen_buffer_changed = true;
 	break;
@@ -1773,14 +1876,14 @@ process_control (client_t* client,
 	/* Erase the entire page. */
 	for (unsigned short y = 0; y != PAGE_LIMIT_POSITION; ++y) {
 	  for (unsigned short x = 0; x != LINE_LIMIT_POSITION; ++x) {
-	    client->screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
+	    terminals[terminal].screen_buffer[y * LINE_LIMIT_POSITION + x] = ATTRIBUTE | ' ';
 	  }
 	}
 	screen_buffer_changed = true;
 	break;
       }
 
-      client->mode = NORMAL;
+      terminals[terminal].mode = NORMAL;
     }
     break;
   }
@@ -1842,7 +1945,7 @@ BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
 }
 
 /*
-  INPUT DEVICES -> TERMINAL
+  INPUT DEVICES -> TERMINAL SERVER
 */
 
 /* scan_codes_in
@@ -1869,12 +1972,10 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
       finish_input (bda, bdb);
     }
     
-    if (active_client != 0) {
-      if (buffer_file_write (&active_client->scan_codes_buffer, codes, size) != 0) {
-	bfprintf (&syslog_buffer, ERROR "could not write the scan code buffer\n");
-	state = STOP;
-	finish_input (bda, bdb);
-      }
+    if (buffer_file_write (&terminals[active_terminal].scan_codes_buffer, codes, size) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not write the scan code buffer\n");
+      state = STOP;
+      finish_input (bda, bdb);
     }
     
     for (size_t idx = 0; idx != size; ++idx) {
@@ -1934,7 +2035,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 {
   initialize ();
 
-  if (state == RUN && active_client != 0) {
+  if (state == RUN) {
     size_t count = 0;
     mouse_packet_t mouse_packet;
     mouse_packet_list_t mouse_packet_list;
@@ -1949,7 +2050,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 	finish_input (bda, bdb);
       }
       
-      if (mouse_packet_list_write (&active_client->mouse_packet_list, &mouse_packet) != 0) {
+      if (mouse_packet_list_write (&terminals[active_terminal].mouse_packet_list, &mouse_packet) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not write mouse packet\n");
 	state = STOP;
 	finish_input (bda, bdb);
@@ -1961,70 +2062,58 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 }
 
 /*
-  TERMINAL -> CLIENT
+  TERMINAL SERVER -> TERMINAL
 */
 
-BEGIN_OUTPUT (AUTO_PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_t", scan_codes_out, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_t", scan_codes_out, ano_t ano, int terminal)
 {
   initialize ();
 
-  if (state == RUN) {
-    /* Find the client. */
-    client_t* client = find_client (aid);
-    if (client == 0) {
-      /* The client does not exist.  Create it. */
-      client = create_client (aid);
-    }
+  /* Adjust the terminal number. */
+  --terminal;
 
-    if (buffer_file_size (&client->scan_codes_buffer) != 0) {
-      buffer_file_truncate (&client->scan_codes_buffer);
-      finish_output (true, client->scan_codes_bd, -1);
+  if (state == RUN && terminal >= 0 && terminal < TERMINAL_COUNT) {
+    if (buffer_file_size (&terminals[terminal].scan_codes_buffer) != 0) {
+      buffer_file_truncate (&terminals[terminal].scan_codes_buffer);
+      finish_output (true, terminals[terminal].scan_codes_bd, -1);
     }
   }
 
   finish_output (false, -1, -1);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, STDOUT_T_NO, "stdout_t", "buffer_file_t", stdout_t, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (PARAMETER, STDOUT_T_NO, "stdout_t", "buffer_file_t", stdout_t, ano_t ano, int terminal)
 {
   initialize ();
 
-  if (state == RUN) {
-    /* Find the client. */
-    client_t* client = find_client (aid);
-    if (client == 0) {
-      /* The client does not exist.  Create it. */
-      client = create_client (aid);
-    }
-    
-    if (buffer_file_size (&client->stdout_t_buffer) != 0) {
-      buffer_file_truncate (&client->stdout_t_buffer);
-      finish_output (true, client->stdout_t_bd, -1);
+  /* Adjust the terminal number. */
+  --terminal;
+
+  if (state == RUN && terminal >= 0 && terminal < TERMINAL_COUNT) {
+    if (buffer_file_size (&terminals[terminal].stdout_t_buffer) != 0) {
+      buffer_file_truncate (&terminals[terminal].stdout_t_buffer);
+      finish_output (true, terminals[terminal].stdout_t_bd, -1);
     }
   }
 
   finish_output (false, -1, -1);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int terminal)
 {
   initialize ();
 
-  if (state == RUN) {
-    /* Find the client. */
-    client_t* client = find_client (aid);
-    if (client == 0) {
-      /* The client does not exist.  Create it. */
-      client = create_client (aid);
-    }
-    
-    if (client->mouse_packet_list.count != 0) {
-      if (mouse_packet_list_reset (&client->mouse_packet_list) != 0) {
+  /* Adjust the terminal number. */
+  --terminal;
+
+  if (state == RUN && terminal >= 0 && terminal < TERMINAL_COUNT) {
+    if (terminals[terminal].mouse_packet_list.count != 0) {
+      if (mouse_packet_list_reset (&terminals[terminal].mouse_packet_list) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not reset mouse packet list\n");
 	state = STOP;
 	finish_output (false, -1, -1);
       }
-      finish_output (true, client->mouse_packets_bd, -1);
+      finish_output (true, terminals[terminal].mouse_packets_bd, -1);
     }
   }
 
@@ -2032,14 +2121,17 @@ BEGIN_OUTPUT (AUTO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_
 }
 
 /*
-  CLIENT -> TERMINAL
+  TERMINAL -> TERMINAL SERVER
 */
 
-BEGIN_INPUT (AUTO_PARAMETER, STDIN_T_NO, "stdin_t", "buffer_file_t", stdin_t, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (PARAMETER, STDIN_T_NO, "stdin_t", "buffer_file_t", stdin_t, ano_t ano, int terminal, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  if (state == RUN) {
+  /* Adjust the terminal number. */
+  --terminal;
+
+  if (state == RUN && terminal >= 0 && terminal < TERMINAL_COUNT) {
     buffer_file_t input_buffer;
     if (buffer_file_initr (&input_buffer, bda) != 0) {
       bfprintf (&syslog_buffer, WARNING "could not initialize stdin buffer for reading\n");
@@ -2052,49 +2144,40 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_T_NO, "stdin_t", "buffer_file_t", stdin_t, an
       bfprintf (&syslog_buffer, WARNING "could not read stdin buffer\n");
       finish_input (bda, bdb);
     }
-        
-    /* Find or create the client. */
-    client_t* client = find_client (aid);
-    if (client == 0) {
-      client = create_client (aid);
-    }
     
     screen_buffer_changed = false;
-    size_t old_cursor_location = 0;
-    if (client == active_client) {
-      old_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
-    }
+    size_t old_cursor_location = terminals[active_terminal].active_position_y * LINE_LIMIT_POSITION + terminals[active_terminal].active_position_x;
     
     /* Process the string. */
     const char* end = begin + size;
     for (; begin != end; ++begin) {
       const char c = *begin;
       if ((c & 0x80) == 0) {
-	switch (client->mode) {
+	switch (terminals[terminal].mode) {
 	case NORMAL:
-	  process_normal (client, c);
+	  process_normal (terminal, c);
 	  break;
 	case ESCAPED:
-	  process_escaped (client, c);
+	  process_escaped (terminal, c);
 	  break;
 	case CONTROL:
-	  process_control (client, c);
+	  process_control (terminal, c);
 	  break;
 	}
       }
     }
     
-    if (client == active_client) {
+    if (terminal == active_terminal) {
       if (screen_buffer_changed) {
 	/* Send the data. */
-	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, active_client->screen_bd) != 0) {
+	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, terminals[active_terminal].screen_bd) != 0) {
 	  bfprintf (&syslog_buffer, ERROR "could not write vga op list\n");
 	  state = STOP;
 	  finish_input (bda, bdb);
 	}
       }
       
-      size_t new_cursor_location = active_client->active_position_y * LINE_LIMIT_POSITION + active_client->active_position_x;
+      size_t new_cursor_location = terminals[active_terminal].active_position_y * LINE_LIMIT_POSITION + terminals[active_terminal].active_position_x;
       if (new_cursor_location != old_cursor_location) {
 	/* Send the cursor. */
 	if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
@@ -2110,7 +2193,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_T_NO, "stdin_t", "buffer_file_t", stdin_t, an
 }
 
 /*
-  TERMINAL -> OUTPUT DEVICES
+  TERMINAL SERVER -> OUTPUT DEVICES
 */
 
 /* vga_op
@@ -2139,22 +2222,6 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op", "vga_op_list", vga_op, ano_t an
   }
 }
 
-BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  /* Destroy the client. */
-  client_t** ptr = &client_list_head;
-  for (; *ptr != 0 && (*ptr)->aid != aid; ptr = &(*ptr)->next) ;;
-  if (*ptr != 0) {
-    client_t* temp = *ptr;
-    *ptr = temp->next;
-    destroy_client (temp);
-  }
-
-  finish_input (bda, bdb);
-}
-
 void
 do_schedule (void)
 {
@@ -2165,14 +2232,16 @@ do_schedule (void)
     schedule (SYSLOG_NO, 0);
   }
   if (state == RUN) {
-    if (active_client != 0 && buffer_file_size (&active_client->scan_codes_buffer) != 0) {
-      schedule (SCAN_CODES_OUT_NO, active_client->aid);
-    }
-    if (active_client != 0 && buffer_file_size (&active_client->stdout_t_buffer) != 0) {
-      schedule (STDOUT_T_NO, active_client->aid);
-    }
-    if (active_client != 0 && active_client->mouse_packet_list.count != 0) {
-      schedule (MOUSE_PACKETS_OUT_NO, active_client->aid);
+    for (size_t terminal = 0; terminal != TERMINAL_COUNT; ++terminal) {
+      if (buffer_file_size (&terminals[terminal].scan_codes_buffer) != 0) {
+	schedule (SCAN_CODES_OUT_NO, terminal + 1);
+      }
+      if (buffer_file_size (&terminals[terminal].stdout_t_buffer) != 0) {
+	schedule (STDOUT_T_NO, terminal + 1);
+      }
+      if (terminals[terminal].mouse_packet_list.count != 0) {
+	schedule (MOUSE_PACKETS_OUT_NO, terminal + 1);
+      }
     }
     if (vga_op_precondition ()) {
       schedule (VGA_OP_NO, 0);

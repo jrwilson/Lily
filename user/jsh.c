@@ -8,6 +8,38 @@
 #include "argv.h"
 #include "syslog.h"
 
+/* TODO:  This is wrong on multiple levels. */
+static int
+atoi (const char* s)
+{
+  int retval = 0;
+
+  while (*s != 0) {
+    switch (*s) {
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+      retval *= 10;
+      retval += (*s - '0');
+      break;
+    default:
+      goto out;
+    }
+    ++s;
+  }
+
+ out:
+
+  return retval;
+}
+
 /* Initialization flag. */
 static bool initialized = false;
 
@@ -455,6 +487,35 @@ bind_ (token_list_item_t* var)
     return;
   }
 
+  int output_parameter = 0;
+  int input_parameter = 0;
+
+  /* Get the parameter tokens. */
+  while (current_token != 0 &&
+	 current_token->type == STRING) {
+    if (strcmp (current_token->string, "-p") == 0) {
+      accept (STRING);
+      token_list_item_t* parameter_token;
+      if ((parameter_token = accept (STRING)) == 0) {
+	bfprintf (&syslog_buffer, INFO "TODO: expected a parameter\n");
+	return;
+      }
+      output_parameter = atoi (parameter_token->string);
+    }
+    else if (strcmp (current_token->string, "-q") == 0) {
+      accept (STRING);
+      token_list_item_t* parameter_token;
+      if ((parameter_token = accept (STRING)) == 0) {
+	bfprintf (&syslog_buffer, INFO "TODO: expected a parameter\n");
+	return;
+      }
+      input_parameter = atoi (parameter_token->string);
+    }
+    else {
+      break;
+    }
+  }
+
   /* Get the argument tokens. */
   token_list_item_t* output_automaton_token;
   token_list_item_t* output_action_token;
@@ -526,7 +587,7 @@ bind_ (token_list_item_t* var)
     return;
   }
 
-  bid_t bid = bind (output_automaton->aid, output_action, 0, input_automaton->aid, input_action, 0);
+  bid_t bid = bind (output_automaton->aid, output_action, output_parameter, input_automaton->aid, input_action, input_parameter);
   if (bid == -1) {
     bfprintf (&syslog_buffer, INFO "TODO:  Bind failed\n");
     return;
