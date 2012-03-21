@@ -392,22 +392,12 @@ public:
 
     const kstring& desc = subject->description_;
     const size_t total_size = sizeof (size_t) + desc.size ();
+    size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
 
     // Create a buffer for the description.
-    // We create an empty buffer and then manually add frames to it.
-    // This avoids using the zero_frame which is important because the copy-on-write system won't be triggered since we are in supervisor mode.
-    pair<bd_t, int> r = buffer_create (0);
+    pair<bd_t, int> r = buffer_create (page_count);
     if (r.first == -1) {
       return r;
-    }
-    shared_ptr<buffer> b = lookup_buffer (r.first);
-    size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
-    for (size_t idx = 0; idx != page_count; ++idx) {
-      frame_t frame = frame_manager::alloc ();
-      kassert (frame != vm::zero_frame ());
-      b->append_frame (frame);
-      /* Drop the reference count. */
-      frame_manager::decref (frame);
     }
 
     pair<void*, int> s = buffer_map (r.first);
@@ -419,7 +409,6 @@ public:
 
     memcpy (s.first, &total_size, sizeof (size_t));
     memcpy (reinterpret_cast<char*> (s.first) + sizeof (size_t), desc.c_str (), desc.size ());
-    memset (reinterpret_cast<char*> (s.first) + total_size, 0, page_count * PAGE_SIZE - total_size);
 
     return make_pair (r.first, LILY_SYSCALL_ESUCCESS);
   }
@@ -636,6 +625,8 @@ public:
     // Push the instruction pointer.
     *--stack_pointer = reinterpret_cast<uint32_t> (action.action_entry_point);
     
+    //kout << "aid = " << aid_ << " ip = " << hexformat (action.action_entry_point) << endl;
+
     asm ("mov %0, %%ds\n"	// Load the data segments.
 	 "mov %0, %%es\n"	// Load the data segments.
 	 "mov %0, %%fs\n"	// Load the data segments.
@@ -792,11 +783,8 @@ public:
     }
 
     // Map the stack.
-    // We do not try to copy-on-write the zero page because copy-on-write only works in user mode and we write to the stack in supervisor mode.
     for (logical_address_t address = stack_area_->begin (); address != stack_area_->end (); address += PAGE_SIZE) {
-      frame_t frame = frame_manager::alloc ();
-      kassert (frame != vm::zero_frame ());
-      vm::map (address, frame, vm::USER, vm::MAP_READ_WRITE);
+      vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
     }
   }
 

@@ -27,6 +27,9 @@
 	.long MULTIBOOT_HEADER_FLAGS
 	.long MULTIBOOT_CHECKSUM
 
+	.set ENABLE_PAGING, (1 << 31)
+	.set ENABLE_WRITE_PROTECT, (1 << 16)
+	
 	.set PAGE_PRESENT, (1 << 0)
 	.set PAGE_WRITABLE, (1 << 1)
 	.set PAGE_USER, (1 << 2)
@@ -91,7 +94,7 @@ loop2:
 	mov $kernel_page_directory, %eax
 	mov %eax, %cr3
 	mov %cr0, %eax
-	or $0x80000000, %eax
+	or $(ENABLE_PAGING | ENABLE_WRITE_PROTECT), %eax
 	mov %eax, %cr0
 	jmp highhalf
 

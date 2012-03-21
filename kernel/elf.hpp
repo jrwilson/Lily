@@ -254,7 +254,15 @@ namespace elf {
 	    return -1;
 	  }
 
-	  vm::map_mode_t map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
+	  vm::map_mode_t map_mode;
+	  if ((e->permissions & elf::EXECUTE) != 0) {
+	    // Executable sections are read-only.
+	    map_mode = vm::MAP_READ_ONLY;
+	  }
+	  else {
+	    // All other sections are read-only  or copy-on-write if write is requested.
+	    map_mode = ((e->permissions & elf::WRITE) != 0) ? vm::MAP_COPY_ON_WRITE : vm::MAP_READ_ONLY;
+	  }
 	  
 	  size_t s;
 	  // Initialized data.

@@ -121,64 +121,69 @@ automaton::create_automaton (const kstring& name,
   text->map_begin (text_begin);
 
   // Parse the file.
-  if (elf::parse (child, text_begin, text_end) == -1) {
-    return make_pair (shared_ptr<automaton> (), LILY_SYSCALL_EBADTEXT);
+  int parse_result = elf::parse (child, text_begin, text_end);
+
+  if (parse_result == 0) {
+    // Generate an id and insert into the aid to automaton map.
+    aid_t child_aid = current_aid_;
+    while (aid_to_automaton_map_.find (child_aid) != aid_to_automaton_map_.end ()) {
+      child_aid = max (child_aid + 1, 0); // Handles overflow.
+    }
+    current_aid_ = max (child_aid + 1, 0);
+    
+    aid_to_automaton_map_.insert (make_pair (child_aid, child));
+    
+    // Insert into the name map if necessary.
+    if (name.size () != 0) {
+      pair<registry_map_type::iterator, bool> r = registry_map_.insert (make_pair (name, child));
+      kassert (r.second);
+    }
+    
+    // Add the child to the parent.
+    if (parent.get () != 0) {
+      parent->children_.insert (child);
+    }
+
+    child->aid_ = child_aid;
+    child->name_ = name;
+    child->parent_ = parent;
+    child->privileged_ = privileged;
+    
+    // Add to the scheduler.
+    scheduler::add_automaton (child);
+    
+    if (buffer_a_.get () != 0) {
+      child->init_buffer_a_ = child->buffer_create (buffer_a_);
+    }
+    if (buffer_b_.get () != 0) {
+      child->init_buffer_b_ = child->buffer_create (buffer_b_);
+    }
+    
+    // Schedule the init action.
+    const kstring init_name ("init");
+    for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
+	 pos != child->ano_to_action_map_.end ();
+	 ++pos) {
+      if (pos->second->name == init_name && pos->second->type == INTERNAL) {
+	scheduler::schedule (caction (child, pos->second, child_aid));
+      }
+    }
   }
 
   // Unmap the text.
   text->unmap ();
 
-  // Generate an id and insert into the aid to automaton map.
-  aid_t child_aid = current_aid_;
-  while (aid_to_automaton_map_.find (child_aid) != aid_to_automaton_map_.end ()) {
-    child_aid = max (child_aid + 1, 0); // Handles overflow.
-  }
-  current_aid_ = max (child_aid + 1, 0);
-
-  aid_to_automaton_map_.insert (make_pair (child_aid, child));
-
-  // Insert into the name map if necessary.
-  if (name.size () != 0) {
-    pair<registry_map_type::iterator, bool> r = registry_map_.insert (make_pair (name, child));
-    kassert (r.second);
-  }
-
-  // Add the child to the parent.
-  if (parent.get () != 0) {
-    parent->children_.insert (child);
-  }
-
   // Switch back.
   vm::switch_to_directory (original_directory);
-  
+
   text->override (begin, end);
 
-  child->aid_ = child_aid;
-  child->name_ = name;
-  child->parent_ = parent;
-  child->privileged_ = privileged;
-
-  // Add to the scheduler.
-  scheduler::add_automaton (child);
-
-  if (buffer_a_.get () != 0) {
-    child->init_buffer_a_ = child->buffer_create (buffer_a_);
+  if (parse_result == 0) {
+    return make_pair (child, LILY_SYSCALL_ESUCCESS);
   }
-  if (buffer_b_.get () != 0) {
-    child->init_buffer_b_ = child->buffer_create (buffer_b_);
+  else {
+    return make_pair (shared_ptr<automaton> (), LILY_SYSCALL_EBADTEXT);
   }
-
-  // Schedule the init action.
-  const kstring init_name ("init");
-  for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
-       pos != child->ano_to_action_map_.end ();
-       ++pos) {
-    if (pos->second->name == init_name && pos->second->type == INTERNAL) {
-      scheduler::schedule (caction (child, pos->second, child_aid));
-    }
-  }
-
-  return make_pair (child, LILY_SYSCALL_ESUCCESS);    
 }
 
 pair<bid_t, int>

@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal vga pci ps2_keyboard_mouse_test
+PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test
 # shell
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -24,10 +24,10 @@ to_buffer_file : to_buffer_file.c
 	gcc -o $@ $^
 
 # registry : registry.o registry_msg.o
-# 	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue -ldymem
+# 	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue
 
 # shell : shell.o
-# 	$(CC) -o $@ $^_buffer -lbuffer_heap -ldymem
+# 	$(CC) -o $@ $^_buffer -lbuffer_heap
 
 # File systems
 vfs : vfs.o vfs_msg.o
@@ -37,16 +37,19 @@ tmpfs : tmpfs.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
-	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file
 
 ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
+
+terminal_server : terminal_server.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
-terminal : terminal.o vga_msg.o mouse_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -ldymem
+terminal : terminal.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
 
 vga : vga.o vga_msg.o
-	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file
 
 pci : pci.o 
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -ldymem
@@ -55,7 +58,7 @@ jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lbuffer_queue -lcallback_queue -ldymem
 
 syslog : syslog.o 
-	$(CC) -o $@ $^ -lio -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -lbuffer_file
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

@@ -1299,6 +1299,11 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
 
   const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
   callback_t callback = callback_queue_item_callback (item);
+  if (!(callback == readscript_callback || callback == create_callback)) {
+    bfprintf (&syslog_buffer, ERROR "not an appropriate callback\n");
+    state = STOP;
+    finish_input (bda, bdb);
+  }
   void* data = callback_queue_item_data (item);
   callback_queue_pop (&vfs_response_queue);
 
