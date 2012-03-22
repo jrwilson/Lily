@@ -363,6 +363,10 @@ typedef enum {
   BINDING_VAR,
   STRING,
   ASSIGN,
+  LPAREN,
+  RPAREN,
+  PIPE,
+  TAG,
 } token_type_t;
 
 typedef struct token_list_item token_list_item_t;
@@ -389,6 +393,13 @@ push_token (token_type_t type,
   item->size = size;
   *token_list_tail = item;
   token_list_tail = &item->next;
+
+  /* Correct the type. */
+  if (type == STRING) {
+    if (strncmp ("tag", string, size) == 0) {
+      item->type = TAG;
+    }
+  }
 }
 
 static void
@@ -414,6 +425,18 @@ accept (token_type_t type)
   }
   else {
     return 0;
+  }
+}
+
+static bool
+match (token_type_t type)
+{
+  if (current_token != 0 && current_token->type == type) {
+    current_token = current_token->next;
+    return true;
+  }
+  else {
+    return false;
   }
 }
 
@@ -761,39 +784,87 @@ binding_assignment (token_list_item_t* var)
   }
 }
 
-static void
-statement (void)
+/* static void */
+/* tag (void) */
+/* { */
+/*   match (TAG); */
+/*   expression (); */
+  
+/* } */
+
+static bool
+expression0 (void)
 {
+  /* if (current_token->type == TAG) { */
+  /*   tag (); */
+  /*   return; */
+  /* } */
+
   token_list_item_t* t;
 
   if ((t = accept (AUTOMATON_VAR)) != 0) {
     automaton_assignment (t);
-    return;
+    return true;
   }
   else if ((t = accept (BINDING_VAR)) != 0) {
     binding_assignment (t);
-    return;
+    return true;
   }
   else if ((t = accept (STRING)) != 0) {
     if (strncmp ("bind", t->string, t->size) == 0) {
       bind_ (0);
-      return;
+      return true;
     }
     else if (strncmp ("unbind", t->string, t->size) == 0) {
       unbind_ ();
-      return;
+      return true;
     }
     else if (strncmp ("destroy", t->string, t->size) == 0) {
       destroy_ ();
-      return;
+      return true;
     }
     else if (strncmp ("start", t->string, t->size) == 0) {
       start_ ();
-      return;
+      return true;
     }
   }
 
   bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n");
+  return false;
+}
+
+static void
+expression1_alpha (void)
+{
+  expression0 ();
+}
+
+static bool
+expression1_beta (void)
+{
+  if (current_token == 0) {
+    return true;
+  }
+
+  if (!match (PIPE)) {
+    bfprintf (&syslog_buffer, INFO "TODO:  expected |\n");
+    return false;
+  }
+  if (!expression0 ()) {
+    return false;
+  }
+  if (!expression1_beta ()) {
+    return false;
+  }
+
+  return true;
+}
+
+static void
+expression1 (void)
+{
+  expression1_alpha ();
+  expression1_beta ();
 }
 
 static void
@@ -802,7 +873,7 @@ evaluate (void)
   if (token_list_head != 0) {
     /* Try to evaluate a statement. */
     current_token = token_list_head;
-    statement ();
+    expression1 ();
     clean_tokens ();
   }
 }
@@ -895,6 +966,12 @@ put (char c)
     }
 
     switch (c) {
+    case '(':
+      push_token (LPAREN, 0, 0);
+      break;
+    case ')':
+      push_token (RPAREN, 0, 0);
+      break;
     case '@':
       scan_string_append (c);
       scan_state = SCAN_AUTOMATON_VAR;
@@ -946,6 +1023,14 @@ put (char c)
     }
     
     switch (c) {
+    case '(':
+      push_token (LPAREN, 0, 0);
+      scan_state = SCAN_START;
+      break;
+    case ')':
+      push_token (RPAREN, 0, 0);
+      scan_state = SCAN_START;
+      break;
     case '=':
       push_token (ASSIGN, 0, 0);
       scan_state = SCAN_START;
@@ -988,6 +1073,14 @@ put (char c)
     }
     
     switch (c) {
+    case '(':
+      push_token (LPAREN, 0, 0);
+      scan_state = SCAN_START;
+      break;
+    case ')':
+      push_token (RPAREN, 0, 0);
+      scan_state = SCAN_START;
+      break;
     case '=':
       push_token (ASSIGN, 0, 0);
       scan_state = SCAN_START;
@@ -1030,6 +1123,14 @@ put (char c)
     }
     
     switch (c) {
+    case '(':
+      push_token (LPAREN, 0, 0);
+      scan_state = SCAN_START;
+      break;
+    case ')':
+      push_token (RPAREN, 0, 0);
+      scan_state = SCAN_START;
+      break;
     case '=':
       push_token (ASSIGN, 0, 0);
       scan_state = SCAN_START;
