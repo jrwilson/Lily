@@ -68,15 +68,14 @@ typedef enum {
 typedef enum {
   LPAREN,
   RPAREN,
-  COMMA,
   SEMICOLON,
   PIPE,
 
   CREATE,
   LOOKUP,
   BIND,
-  TAG,
-  UNTAG,
+  LABEL,
+  UNLABEL,
   DESTROY,
   UNBIND,
   START,
@@ -84,22 +83,245 @@ typedef enum {
   AID,
   BID,
   STRING,
+
+  ARGSTART,
 } token_type_t;
+
+typedef enum {
+  OPERAND_STRING,
+  OPERAND_CONSTELLATION,
+  OPERAND_ARGSTART,
+} operand_type_t;
+
+typedef struct token token_t;
+struct token {
+  token_type_t type;
+  union {
+    const char* string;
+    int val;
+  } u;
+  token_t* next;
+};
+
+typedef struct operand operand_t;
+struct operand {
+  operand_type_t type;
+  union {
+    const char* string;
+    struct {
+      aid_t* aids;
+      size_t aids_size;
+      size_t aids_capacity;
+      bid_t* bids;
+      size_t bids_size;
+      size_t bids_capacity;
+    } constellation;
+  } u;
+  operand_t* next;
+};
 
 typedef struct interpretter interpretter_t;
 struct interpretter {
+  char* line_original;
   char* line_str;
   size_t line_size;
 
+  /* Scanner state. */
   scan_state_t scan_state;
+
+  /* Semantic values. */
   char* scan_string;
   size_t scan_string_size;
+
+  /* Railyard shunt algorithm.  Queue is also used during evaluation. */
+  token_t* token_queue_head;
+  token_t** token_queue_tail;
+  token_t* token_stack;
+
+  operand_t* operand_stack;
+  size_t operand_stack_size;
 
   interpretter_t* next;
 };
 
 static interpretter_t* interpretter_head = 0;
 static interpretter_t** interpretter_tail = &interpretter_head;
+
+static token_t*
+token_create (token_type_t type)
+{
+  token_t* token = malloc (sizeof (token_t));
+  memset (token, 0, sizeof (token_t));
+
+  token->type = type;
+
+  return token;
+}
+
+static void
+token_destroy (token_t* token)
+{
+  free (token);
+}
+
+static operand_t*
+operand_create (operand_type_t type)
+{
+  operand_t* operand = malloc (sizeof (operand_t));
+  memset (operand, 0, sizeof (operand_t));
+  
+  operand->type = type;
+
+  return operand;
+}
+
+static void
+operand_destroy (operand_t* operand)
+{
+  if (operand->type == OPERAND_CONSTELLATION) {
+    free (operand->u.constellation.aids);
+    free (operand->u.constellation.bids);
+  }
+  free (operand);
+}
+
+static void
+operand_insert_aid (operand_t* operand,
+		    aid_t aid)
+{
+  for (size_t idx = 0; idx != operand->u.constellation.aids_size; ++idx) {
+    if (operand->u.constellation.aids[idx] == aid) {
+      return;
+    }
+  }
+
+  if (operand->u.constellation.aids_size == operand->u.constellation.aids_capacity) {
+    operand->u.constellation.aids_capacity = operand->u.constellation.aids_capacity * 2 + 1;
+    operand->u.constellation.aids = realloc (operand->u.constellation.aids, operand->u.constellation.aids_capacity * sizeof (aid_t));
+  }
+  operand->u.constellation.aids[operand->u.constellation.aids_size++] = aid;
+}
+
+static void
+operand_insert_bid (operand_t* operand,
+		    bid_t bid)
+{
+  for (size_t idx = 0; idx != operand->u.constellation.bids_size; ++idx) {
+    if (operand->u.constellation.bids[idx] == bid) {
+      return;
+    }
+  }
+
+  if (operand->u.constellation.bids_size == operand->u.constellation.bids_capacity) {
+    operand->u.constellation.bids_capacity = operand->u.constellation.bids_capacity * 2 + 1;
+    operand->u.constellation.bids = realloc (operand->u.constellation.bids, operand->u.constellation.bids_capacity * sizeof (bid_t));
+  }
+  operand->u.constellation.bids[operand->u.constellation.bids_size++] = bid;
+}
+
+static operand_t*
+operand_to_constellation (operand_t* operand)
+{
+  /* TODO */
+  switch (operand->type) {
+  case OPERAND_STRING:
+    /* Treat it as a label. */
+    operand->type = OPERAND_CONSTELLATION;
+    break;
+  case OPERAND_CONSTELLATION:
+    /* Do nothing. */
+    break;
+  case OPERAND_ARGSTART:
+    /* Do nothing. */
+    break;
+  }
+  return operand;
+}
+
+static int
+priority (const token_t* token)
+{
+  switch (token->type) {
+  case LPAREN:
+    /* If an LPAREN is on the operator stack, any operator can be pushed. */
+    return -3;
+  case PIPE:
+    return -2;
+  case CREATE:
+  case LOOKUP:
+  case BIND:
+  case LABEL:
+  case UNLABEL:
+  case DESTROY:
+  case UNBIND:
+  case START:
+    return -1;
+  case RPAREN:
+  case SEMICOLON:
+  case AID:
+  case BID:
+  case STRING:
+  case ARGSTART:
+    /* These should never appear on the stack. */
+    return 0;
+  }
+
+  return 0;
+}
+
+static void
+interpretter_push_queue (interpretter_t* i,
+			 token_t* token)
+{
+  *(i->token_queue_tail) = token;
+  i->token_queue_tail = &token->next;
+  token->next = 0;
+}
+
+static token_t*
+interpretter_pop_queue (interpretter_t* i)
+{
+  token_t* t = i->token_queue_head;
+  i->token_queue_head = t->next;
+  if (i->token_queue_head == 0) {
+    i->token_queue_tail = &i->token_queue_head;
+  }
+  return t;
+}
+
+static void
+interpretter_push_stack (interpretter_t* i,
+			 token_t* token)
+{
+  token->next = i->token_stack;
+  i->token_stack = token;
+}
+
+static token_t*
+interpretter_pop_stack (interpretter_t* i)
+{
+  token_t* token = i->token_stack;
+  i->token_stack = token->next;
+  return token;
+}
+
+static void
+interpretter_push_operand (interpretter_t* i,
+			   operand_t* operand)
+{
+  operand->next = i->operand_stack;
+  i->operand_stack = operand;
+  ++i->operand_stack_size;
+}
+
+static operand_t*
+interpretter_pop_operand (interpretter_t* i)
+{
+  operand_t* operand = i->operand_stack;
+  i->operand_stack = operand->next;
+  --i->operand_stack_size;
+  return operand;
+}
 
 static void
 interpretter_push_token (interpretter_t* i,
@@ -117,11 +339,11 @@ interpretter_push_token (interpretter_t* i,
     else if (strcmp ("bind", string) == 0) {
       type = BIND;
     }
-    else if (strcmp ("tag", string) == 0) {
-      type = TAG;
+    else if (strcmp ("label", string) == 0) {
+      type = LABEL;
     }
-    else if (strcmp ("untag", string) == 0) {
-      type = UNTAG;
+    else if (strcmp ("unlabel", string) == 0) {
+      type = UNLABEL;
     }
     else if (strcmp ("destroy", string) == 0) {
       type = DESTROY;
@@ -134,54 +356,67 @@ interpretter_push_token (interpretter_t* i,
     }
   }
 
+  token_t* token = token_create (type);
+
   switch (type) {
   case LPAREN:
-    bfprintf (&stdout_buffer, "LPAREN\n");
+    interpretter_push_queue (i, token);
     break;
   case RPAREN:
-    bfprintf (&stdout_buffer, "RPAREN\n");
-    break;
-  case COMMA:
-    bfprintf (&stdout_buffer, "COMMA\n");
+    while (i->token_stack != 0 && i->token_stack->type != LPAREN) {
+      interpretter_push_queue (i, interpretter_pop_stack (i));
+    }
+    if (i->token_stack == 0) {
+      /* TODO:  Mismatched parentheses. */
+    }
+    /* Destroy the left. */
+    token_destroy (interpretter_pop_stack (i));
+    /* Destroy the right. */
+    token_destroy (token);
     break;
   case SEMICOLON:
-    bfprintf (&stdout_buffer, "SEMICOLON\n");
-    break;
-  case PIPE:
-    bfprintf (&stdout_buffer, "PIPE\n");
+    /* Drain the stack. */
+    while (i->token_stack != 0) {
+      token_t* t = interpretter_pop_stack (i);
+      if (t->type == LPAREN) {
+	/* TODO:  Mismatched parentheses. */
+      }
+      interpretter_push_queue (i, t);
+    }
+    interpretter_push_queue (i, token);
     break;
   case CREATE:
-    bfprintf (&stdout_buffer, "CREATE\n");
-    break;
-  case LOOKUP:
-    bfprintf (&stdout_buffer, "LOOKUP\n");
-    break;
   case BIND:
-    bfprintf (&stdout_buffer, "BIND\n");
-    break;
-  case TAG:
-    bfprintf (&stdout_buffer, "TAG\n");
-    break;
-  case UNTAG:
-    bfprintf (&stdout_buffer, "UNTAG\n");
-    break;
+    /* Variable number of arguments. */
+    interpretter_push_queue (i, token_create (ARGSTART));
+    /* Fall through. */
+  case PIPE:
+  case LOOKUP:
+  case LABEL:
+  case UNLABEL:
   case DESTROY:
-    bfprintf (&stdout_buffer, "DESTROY\n");
-    break;
   case UNBIND:
-    bfprintf (&stdout_buffer, "UNBIND\n");
-    break;
   case START:
-    bfprintf (&stdout_buffer, "START\n");
+    while (i->token_stack != 0 && priority (i->token_stack) > priority (token)) {
+      token_t* t = interpretter_pop_stack (i);
+      interpretter_push_queue (i, t);
+    }
+    interpretter_push_stack (i, token);      
     break;
   case AID:
-    bfprintf (&stdout_buffer, "AID: %d\n", atoi (string));
+    token->u.val = atoi (string);
+    interpretter_push_queue (i, token);
     break;
   case BID:
-    bfprintf (&stdout_buffer, "BID: %d\n", atoi (string));
+    token->u.val = atoi (string);
+    interpretter_push_queue (i, token);
     break;
   case STRING:
-    bfprintf (&stdout_buffer, "STRING: %s\n", string);
+    token->u.string = string;
+    interpretter_push_queue (i, token);
+    break;
+  case ARGSTART:
+    /* TODO:  Should never appear. */
     break;
   }
 }
@@ -233,9 +468,6 @@ interpretter_put (interpretter_t* in,
       break;
     case ')':
       interpretter_push_token (in, RPAREN, 0);
-      break;
-    case ',':
-      interpretter_push_token (in, COMMA, 0);
       break;
     case ';':
       interpretter_push_token (in, SEMICOLON, 0);
@@ -350,836 +582,295 @@ interpretter_put (interpretter_t* in,
 }
 
 static void
-interpretter_create (char* line_str,
-		     size_t line_size)
+interpret (char* line_str,
+	   size_t line_size)
 {
   interpretter_t* i = malloc (sizeof (interpretter_t));
   memset (i, 0, sizeof (interpretter_t));
 
-  i->line_str = line_str;
+  i->line_original = line_str;
+  i->line_str = malloc (line_size);
+  memcpy (i->line_str, line_str, line_size);
   i->line_size = line_size;
 
   i->scan_state = SCAN_START;
 
-  *interpretter_tail = i;
-  interpretter_tail = &i->next;
+  i->token_queue_tail = &i->token_queue_head;
 
   bfprintf (&stdout_buffer, "interpretting: %s\n", line_str);
 
   /* Process the line. */
-  for (size_t idx = 0; idx != line_size; ++idx, ++line_str) {
-    interpretter_put (i, *line_str, line_str);
+  for (size_t idx = 0; idx != line_size; ++idx) {
+    interpretter_put (i, i->line_str[idx], i->line_str + idx);
   }
+
+  /* Move tokens on the stack to the queue. */
+  while (i->token_stack != 0) {
+    token_t* t = interpretter_pop_stack (i);
+    interpretter_push_queue (i, t);
+  }
+
+  /* *interpretter_tail = i; */
+  /* interpretter_tail = &i->next; */
+
+  /* while (i->token_queue_head) { */
+  /*   token_t* token = interpretter_pop_queue (i); */
+  /*   switch (token->type) { */
+  /*   case LPAREN: */
+  /*   case RPAREN: */
+  /*     /\* TODO:  These should not appear. *\/ */
+  /*     break; */
+  /*   case SEMICOLON: */
+  /*     if (i->operand_stack != 0) { */
+  /* 	/\* The operand stack contains a value.  Destroy it. *\/ */
+  /* 	operand_destroy (interpretter_pop_operand (i)); */
+  /*     } */
+  /*     if (i->operand_stack != 0) { */
+  /* 	/\* TODO:  Error the stack should be clear. *\/ */
+  /*     } */
+  /*     break; */
+  /*   case PIPE: */
+  /*     { */
+  /* 	if (i->operand_stack_size >= 2) { */
+  /* 	  operand_t* input = operand_to_constellation (interpretter_pop_operand (i)); */
+  /* 	  operand_t* output = operand_to_constellation (interpretter_pop_operand (i)); */
+
+  /* 	  if (output->type == OPERAND_CONSTELLATION && input->type == OPERAND_CONSTELLATION) { */
+  /* 	    bfprintf (&stdout_buffer, "autobind\n"); */
+  /* 	  } */
+  /* 	  else { */
+  /* 	    /\* TODO:  Probably not enough arguments. *\/ */
+  /* 	  } */
+
+  /* 	  operand_destroy (output); */
+  /* 	  interpretter_push_operand (i, input); */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO:  Underflow. *\/ */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case CREATE: */
+  /*     { */
+  /* 	operand_t* top = 0; */
+	
+  /* 	/\* Pop the operand stack until we find an arg start. *\/ */
+  /* 	while (i->operand_stack != 0 && */
+  /* 	       (i->operand_stack->type == OPERAND_STRING || i->operand_stack->type == OPERAND_ARGSTART)) { */
+  /* 	  operand_t* o = interpretter_pop_operand (i); */
+  /* 	  o->next = top; */
+  /* 	  top = o; */
+  /* 	  if (o->type == OPERAND_ARGSTART) { */
+  /* 	    break; */
+  /* 	  } */
+  /* 	} */
+
+  /* 	if (top == 0 || top->type != OPERAND_ARGSTART) { */
+  /* 	  /\* TODO:  Error. *\/ */
+  /* 	} */
+
+  /* 	bfprintf (&stdout_buffer, "executing: create\n"); */
+  /* 	while (top != 0) { */
+  /* 	  bfprintf (&stdout_buffer, "\t%s\n", top->u.string); */
+  /* 	  operand_t* o = top; */
+  /* 	  top = top->next; */
+  /* 	  operand_destroy (o); */
+  /* 	} */
+
+  /* 	operand_t* result = operand_create (OPERAND_CONSTELLATION); */
+  /* 	operand_insert_aid (result, -1); */
+  /* 	interpretter_push_operand (i, result); */
+  /*     } */
+  /*     break; */
+  /*   case LOOKUP: */
+  /*     { */
+  /* 	if (i->operand_stack != 0 && i->operand_stack->type == OPERAND_STRING) { */
+  /* 	  operand_t* o = interpretter_pop_operand (i); */
+  /* 	  bfprintf (&stdout_buffer, "executing: lookup %s\n", o->u.string); */
+  /* 	  operand_destroy (o); */
+	  
+  /* 	  o = operand_create (OPERAND_CONSTELLATION); */
+  /* 	  operand_insert_aid (o, -1); */
+  /* 	  interpretter_push_operand (i, o); */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO *\/ */
+  /* 	  bfprintf (&stdout_buffer, "error: lookup takes exactly one string\n"); */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case BIND: */
+  /*     { */
+  /* 	operand_t* top = 0; */
+	
+  /* 	/\* Pop the operand stack until we find an arg start. *\/ */
+  /* 	while (i->operand_stack != 0 && */
+  /* 	       (i->operand_stack->type == OPERAND_STRING || i->operand_stack->type == OPERAND_ARGSTART)) { */
+  /* 	  operand_t* o = interpretter_pop_operand (i); */
+  /* 	  o->next = top; */
+  /* 	  top = o; */
+  /* 	  if (o->type == OPERAND_ARGSTART) { */
+  /* 	    break; */
+  /* 	  } */
+  /* 	} */
+
+  /* 	if (top == 0 || top->type != OPERAND_ARGSTART) { */
+  /* 	  /\* TODO:  Error. *\/ */
+  /* 	} */
+
+  /* 	bfprintf (&stdout_buffer, "executing: bind\n"); */
+  /* 	while (top != 0) { */
+  /* 	  bfprintf (&stdout_buffer, "\t%s\n", top->u.string); */
+  /* 	  operand_t* o = top; */
+  /* 	  top = top->next; */
+  /* 	  operand_destroy (o); */
+  /* 	} */
+
+  /* 	operand_t* result = operand_create (OPERAND_CONSTELLATION); */
+  /* 	operand_insert_aid (result, -1); */
+  /* 	interpretter_push_operand (i, result); */
+  /*     } */
+  /*     break; */
+  /*   case LABEL: */
+  /*     { */
+  /* 	if (i->operand_stack_size >= 2) { */
+  /* 	  operand_t* label = interpretter_pop_operand (i); */
+  /* 	  operand_t* constellation = operand_to_constellation (interpretter_pop_operand (i)); */
+
+  /* 	  if (label->type == OPERAND_STRING && constellation->type == OPERAND_CONSTELLATION) { */
+  /* 	    bfprintf (&stdout_buffer, "label [constellation] %s\n", label->u.string); */
+  /* 	  } */
+  /* 	  else { */
+  /* 	    /\* TODO:  Probably not enough arguments. *\/ */
+  /* 	  } */
+
+  /* 	  operand_destroy (label); */
+  /* 	  interpretter_push_operand (i, constellation); */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO:  Underflow. *\/ */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case UNLABEL: */
+  /*     { */
+  /* 	if (i->operand_stack_size >= 2) { */
+  /* 	  operand_t* label = interpretter_pop_operand (i); */
+  /* 	  operand_t* constellation = operand_to_constellation (interpretter_pop_operand (i)); */
+
+  /* 	  if (label->type == OPERAND_STRING && constellation->type == OPERAND_CONSTELLATION) { */
+  /* 	    bfprintf (&stdout_buffer, "unlabel [constellation] %s\n", label->u.string); */
+  /* 	  } */
+  /* 	  else { */
+  /* 	    /\* TODO:  Probably not enough arguments. *\/ */
+  /* 	  } */
+
+  /* 	  operand_destroy (label); */
+  /* 	  interpretter_push_operand (i, constellation); */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO:  Underflow. *\/ */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case DESTROY: */
+  /*     { */
+  /* 	if (i->operand_stack != 0) { */
+  /* 	  operand_t* constellation = operand_to_constellation (i->operand_stack); */
+  /* 	  if (constellation->type == OPERAND_CONSTELLATION) { */
+  /* 	    for (size_t idx = 0; idx != i->operand_stack->u.constellation.aids_size; ++idx) { */
+  /* 	      bfprintf (&stdout_buffer, "executing: destroy %d\n", i->operand_stack->u.constellation.aids[idx]); */
+  /* 	    } */
+  /* 	    i->operand_stack->u.constellation.aids_size = 0; */
+  /* 	  } */
+  /* 	  else { */
+  /* 	    /\* TODO *\/ */
+  /* 	    bfprintf (&stdout_buffer, "error: couldn't convert argument to constellation\n"); */
+  /* 	  } */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO *\/ */
+  /* 	  bfprintf (&stdout_buffer, "error: start takes exactly one constellation\n"); */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case UNBIND: */
+  /*     { */
+  /* 	if (i->operand_stack != 0) { */
+  /* 	  operand_t* constellation = operand_to_constellation (i->operand_stack); */
+  /* 	  if (constellation->type == OPERAND_CONSTELLATION) { */
+  /* 	    for (size_t idx = 0; idx != i->operand_stack->u.constellation.bids_size; ++idx) { */
+  /* 	      bfprintf (&stdout_buffer, "executing: unbind %d\n", i->operand_stack->u.constellation.bids[idx]); */
+  /* 	    } */
+  /* 	    i->operand_stack->u.constellation.bids_size = 0; */
+  /* 	  } */
+  /* 	  else { */
+  /* 	    /\* TODO *\/ */
+  /* 	    bfprintf (&stdout_buffer, "error: couldn't convert argument to constellation\n"); */
+  /* 	  } */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO *\/ */
+  /* 	  bfprintf (&stdout_buffer, "error: start takes exactly one constellation\n"); */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case START: */
+  /*     { */
+  /* 	if (i->operand_stack != 0) { */
+  /* 	  operand_t* constellation = operand_to_constellation (i->operand_stack); */
+  /* 	  if (constellation->type == OPERAND_CONSTELLATION) { */
+  /* 	    for (size_t idx = 0; idx != i->operand_stack->u.constellation.aids_size; ++idx) { */
+  /* 	      bfprintf (&stdout_buffer, "executing: start %d\n", i->operand_stack->u.constellation.aids[idx]); */
+  /* 	    } */
+  /* 	  } */
+  /* 	  else { */
+  /* 	    /\* TODO *\/ */
+  /* 	    bfprintf (&stdout_buffer, "error: couldn't convert argument to constellation\n"); */
+  /* 	  } */
+  /* 	} */
+  /* 	else { */
+  /* 	  /\* TODO *\/ */
+  /* 	  bfprintf (&stdout_buffer, "error: start takes exactly one constellation\n"); */
+  /* 	} */
+  /*     } */
+  /*     break; */
+  /*   case AID: */
+  /*     { */
+  /* 	operand_t* operand = operand_create (OPERAND_CONSTELLATION); */
+  /* 	operand_insert_aid (operand, token->u.val); */
+  /* 	interpretter_push_operand (i, operand); */
+  /*     } */
+  /*     break; */
+  /*   case BID: */
+  /*     { */
+  /* 	operand_t* operand = operand_create (OPERAND_CONSTELLATION); */
+  /* 	operand_insert_bid (operand, token->u.val); */
+  /* 	interpretter_push_operand (i, operand); */
+  /*     } */
+  /*     break; */
+  /*   case STRING: */
+  /*     { */
+  /* 	operand_t* operand = operand_create (OPERAND_STRING); */
+  /* 	operand->u.string = token->u.string; */
+  /* 	interpretter_push_operand (i, operand); */
+  /*     } */
+  /*     break; */
+  /*   case ARGSTART: */
+  /*     { */
+  /* 	interpretter_push_operand (i, operand_create (OPERAND_ARGSTART)); */
+  /*     } */
+  /*     break; */
+  /*   } */
+
+  /*   /\* Destroy the token. *\/ */
+  /*   token_destroy (token); */
+  /* } */
 }
 
 /*
   End Interpretter Section
   ========================
-*/
-
-/*
-  Begin Parser Section
-  ====================
-*/
-
-
-/* typedef struct token_list_item token_list_item_t; */
-/* struct token_list_item { */
-/*   token_type_t type; */
-/*   char* string; */
-/*   size_t size; */
-/*   int val; */
-/*   token_list_item_t* next; */
-/* }; */
-
-/* static token_list_item_t* token_list_head = 0; */
-/* static token_list_item_t** token_list_tail = &token_list_head; */
-/* static token_list_item_t* current_token; */
-
-/* static void */
-/* push_token (token_type_t type, */
-/* 	    char* string, */
-/* 	    size_t size, */
-/* 	    int val) */
-/* { */
-/*   token_list_item_t* item = malloc (sizeof (token_list_item_t)); */
-/*   memset (item, 0, sizeof (token_list_item_t)); */
-/*   item->type = type; */
-/*   item->string = string; */
-/*   item->size = size; */
-/*   item->val = val; */
-/*   *token_list_tail = item; */
-/*   token_list_tail = &item->next; */
-
-/*   /\* Find keywords. *\/ */
-/*   if (type == STRING) { */
-/*     if (strncmp ("create", string, size) == 0) { */
-/*       item->type = CREATE; */
-/*     } */
-/*     else if (strncmp ("lookup", string, size) == 0) { */
-/*       item->type = LOOKUP; */
-/*     } */
-/*     else if (strncmp ("bind", string, size) == 0) { */
-/*       item->type = BIND; */
-/*     } */
-/*     else if (strncmp ("tag", string, size) == 0) { */
-/*       item->type = TAG; */
-/*     } */
-/*     else if (strncmp ("untag", string, size) == 0) { */
-/*       item->type = UNTAG; */
-/*     } */
-/*     else if (strncmp ("destroy", string, size) == 0) { */
-/*       item->type = DESTROY; */
-/*     } */
-/*     else if (strncmp ("unbind", string, size) == 0) { */
-/*       item->type = UNBIND; */
-/*     } */
-/*     else if (strncmp ("start", string, size) == 0) { */
-/*       item->type = START; */
-/*     } */
-/*   } */
-/* } */
-
-/* static void */
-/* clean_tokens (void) */
-/* { */
-/*   /\* Cleanup the list of token. *\/ */
-/*   while (token_list_head != 0) { */
-/*     token_list_item_t* item = token_list_head; */
-/*     token_list_head = item->next; */
-/*     free (item->string); */
-/*     free (item); */
-/*   } */
-/*   token_list_tail = &token_list_head; */
-/* } */
-
-/* static bool */
-/* match (token_type_t type) */
-/* { */
-/*   if (current_token != 0 && current_token->type == type) { */
-/*     current_token = current_token->next; */
-/*     return true; */
-/*   } */
-/*   else { */
-/*     return false; */
-/*   } */
-/* } */
-
-/* static void */
-/* create_ (token_list_item_t* var) */
-/* { */
-/*   bool retain_privilege = false; */
-/*   const char* registry_name = 0; */
-/*   size_t registry_name_size = 0; */
-/*   token_list_item_t* filename; */
-  
-/*   if (find_automaton (var->string, var->size) != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO: automaton variable already assigned\n"); */
-/*     return; */
-/*   } */
-
-/*   while (current_token != 0 && */
-/* 	 current_token->type == STRING) { */
-/*     if (strcmp (current_token->string, "-p") == 0) { */
-/*       retain_privilege = true; */
-/*       accept (STRING); */
-/*     } */
-/*     else if (strcmp (current_token->string, "-n") == 0) { */
-/*       accept (STRING); */
-/*       token_list_item_t* reg_name; */
-/*       if ((reg_name = accept (STRING)) == 0) { */
-/* 	bfprintf (&syslog_buffer, INFO "TODO: expected a name\n"); */
-/* 	return; */
-/*       } */
-/*       registry_name = reg_name->string; */
-/*       registry_name_size = reg_name->size; */
-/*     } */
-/*     else { */
-/*       break; */
-/*     } */
-/*   } */
-
-/*   if ((filename = accept (STRING)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO: expected a filename or argument\n"); */
-/*     return; */
-/*   } */
-
-/*   token_list_item_t* string; */
-/*   for (string = current_token; string != 0; string = string->next) { */
-/*     if (string->type != STRING) { */
-/*       bfprintf (&syslog_buffer, INFO "TODO: expected a string\n"); */
-/*       return; */
-/*     } */
-/*   } */
-
-/*   /\* Create context for the create callback. *\/ */
-/*   create_context_t* cc = create_create_context (var->string, var->size, retain_privilege, registry_name, registry_name_size); */
-  
-/*   while ((string = accept (STRING)) != 0) { */
-/*     /\* Add the string to argv. *\/ */
-/*     argv_append (&cc->argv, string->string, string->size); */
-/*   } */
-  
-/*   /\* Request the text of the automaton. *\/ */
-/*   vfs_request_queue_push_readfile (&vfs_request_queue, filename->string); */
-/*   callback_queue_push (&vfs_response_queue, create_callback, cc); */
-/*   /\* Set the flag so we stop trying to evaluate. *\/ */
-/*   evaluating = true; */
-/* } */
-
-/* static void */
-/* bind_ (token_list_item_t* var) */
-/* { */
-/*   if (var != 0 && find_binding (var->string, var->size) != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO: binding variable already assigned\n"); */
-/*     return; */
-/*   } */
-
-/*   int output_parameter = 0; */
-/*   int input_parameter = 0; */
-
-/*   /\* Get the parameter tokens. *\/ */
-/*   while (current_token != 0 && */
-/* 	 current_token->type == STRING) { */
-/*     if (strcmp (current_token->string, "-p") == 0) { */
-/*       accept (STRING); */
-/*       token_list_item_t* parameter_token; */
-/*       if ((parameter_token = accept (STRING)) == 0) { */
-/* 	bfprintf (&syslog_buffer, INFO "TODO: expected a parameter\n"); */
-/* 	return; */
-/*       } */
-/*       output_parameter = atoi (parameter_token->string); */
-/*     } */
-/*     else if (strcmp (current_token->string, "-q") == 0) { */
-/*       accept (STRING); */
-/*       token_list_item_t* parameter_token; */
-/*       if ((parameter_token = accept (STRING)) == 0) { */
-/* 	bfprintf (&syslog_buffer, INFO "TODO: expected a parameter\n"); */
-/* 	return; */
-/*       } */
-/*       input_parameter = atoi (parameter_token->string); */
-/*     } */
-/*     else { */
-/*       break; */
-/*     } */
-/*   } */
-
-/*   /\* Get the argument tokens. *\/ */
-/*   token_list_item_t* output_automaton_token; */
-/*   token_list_item_t* output_action_token; */
-/*   token_list_item_t* input_automaton_token; */
-/*   token_list_item_t* input_action_token; */
-/*   if ((output_automaton_token = accept (AUTOMATON_VAR)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n"); */
-/*     return; */
-/*   } */
-
-/*   if ((output_action_token = accept (STRING)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected a string\n"); */
-/*     return; */
-/*   } */
-
-/*   if ((input_automaton_token = accept (AUTOMATON_VAR)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n"); */
-/*     return; */
-/*   } */
-
-/*   if ((input_action_token = accept (STRING)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected a string\n"); */
-/*     return; */
-/*   } */
-
-/*   if (current_token != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Look up the variables for the output and input automaton. *\/ */
-/*   automaton_t* output_automaton = find_automaton (output_automaton_token->string, output_automaton_token->size); */
-/*   if (output_automaton == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Output automaton is not defined\n"); */
-/*     return; */
-/*   } */
-/*   automaton_t* input_automaton = find_automaton (input_automaton_token->string, input_automaton_token->size); */
-/*   if (input_automaton == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Input automaton is not defined\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Describe the output and input automaton. *\/ */
-/*   description_t output_description; */
-/*   description_t input_description; */
-/*   if (description_init (&output_description, output_automaton->aid) != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Could not describe output\n"); */
-/*     return; */
-/*   } */
-/*   if (description_init (&input_description, input_automaton->aid) != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Could not describe input\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Look up the actions. *\/ */
-/*   const ano_t output_action = description_name_to_number (&output_description, output_action_token->string, output_action_token->size); */
-/*   const ano_t input_action = description_name_to_number (&input_description, input_action_token->string, input_action_token->size); */
-
-/*   description_fini (&output_description); */
-/*   description_fini (&input_description); */
-
-/*   if (output_action == -1) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Output action does not exist\n"); */
-/*     return; */
-/*   } */
-
-/*   if (input_action == -1) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Input action does not exist\n"); */
-/*     return; */
-/*   } */
-
-/*   bid_t bid = bind (output_automaton->aid, output_action, output_parameter, input_automaton->aid, input_action, input_parameter); */
-/*   if (bid == -1) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Bind failed\n"); */
-/*     return; */
-/*   } */
-
-/*   if (var == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Create binding\n"); */
-/*     /\* char buffer[sizeof (bid_t) * 8]; *\/ */
-/*     /\* size_t sz = snprintf (buffer, sizeof (bid_t) * 8, "&b%d", bid); *\/ */
-/*     /\* create_binding (bid, buffer, sz + 1); *\/ */
-/*   } */
-/*   else { */
-/*     create_binding (bid, var->string, var->size); */
-/*   } */
-  
-/*   bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to binding??\n"); */
-/* } */
-
-/* static void */
-/* unbind_ () */
-/* { */
-/*   /\* Get the argument tokens. *\/ */
-/*   token_list_item_t* binding_token; */
-/*   if ((binding_token = accept (BINDING_VAR)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected a binding variable\n"); */
-/*     return; */
-/*   } */
-
-/*   if (current_token != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Look up the binding variable. *\/ */
-/*   binding_t* binding = find_binding (binding_token->string, binding_token->size); */
-/*   if (binding == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Binding is not defined\n"); */
-/*     return; */
-/*   } */
-
-/*   bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from binding??\n"); */
-
-/*   if (unbind (binding->bid) != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  unbind failed\n"); */
-/*   } */
-
-/*   destroy_binding (binding); */
-/* } */
-
-/* static void */
-/* destroy_ () */
-/* { */
-/*   /\* Get the argument tokens. *\/ */
-/*   token_list_item_t* automaton_token; */
-/*   if ((automaton_token = accept (AUTOMATON_VAR)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n"); */
-/*     return; */
-/*   } */
-
-/*   if (current_token != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Look up the automaton variable. *\/ */
-/*   automaton_t* automaton = find_automaton (automaton_token->string, automaton_token->size); */
-/*   if (automaton == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Automaton is not defined\n"); */
-/*     return; */
-/*   } */
-
-/*   bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from automaton??\n"); */
-
-/*   if (destroy (automaton->aid) != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  destroy failed\n"); */
-/*   } */
-
-/*   destroy_automaton (automaton); */
-/* } */
-
-/* static void */
-/* start_ (void) */
-/* { */
-/*   /\* Get the argument token. *\/ */
-/*   token_list_item_t* automaton_token; */
-/*   if ((automaton_token = accept (AUTOMATON_VAR)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected an automaton variable\n"); */
-/*     return; */
-/*   } */
-
-/*   if (current_token != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Look up the variables for the automaton. *\/ */
-/*   automaton_t* automaton = find_automaton (automaton_token->string, automaton_token->size); */
-/*   if (automaton == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Automaton is not defined\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* TODO:  If we are not bound to it, then we should probably warn them. *\/ */
-
-/*   start_queue_push (automaton->aid); */
-/* } */
-
-/* static void */
-/* lookup_ (token_list_item_t* var) */
-/* { */
-/*   /\* Get the name. *\/ */
-/*   token_list_item_t* name_token; */
-/*   if ((name_token = accept (STRING)) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected a name\n"); */
-/*   } */
-
-/*   if (current_token != 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected no more tokens\n"); */
-/*     return; */
-/*   } */
-
-/*   aid_t aid = lookup (name_token->string, name_token->size); */
-/*   if (aid != -1) { */
-/*     /\* Assign the result to a variable. *\/ */
-/*     create_automaton (aid, var->string, var->size); */
-/*   } */
-/*   else { */
-/*     // TODO:  Automaton does not exist. */
-/*   } */
-/* } */
-
-/* static void */
-/* automaton_assignment (token_list_item_t* var) */
-/* { */
-/*   if (accept (ASSIGN) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected =\n"); */
-/*     return; */
-/*   } */
-  
-/*   token_list_item_t* t; */
-/*   if ((t = accept (STRING)) != 0) { */
-/*     if (strncmp ("create", t->string, t->size) == 0) { */
-/*       create_ (var); */
-/*     } */
-/*     else if (strncmp ("lookup", t->string, t->size) == 0) { */
-/*       lookup_ (var); */
-/*     } */
-/*     else { */
-/*       bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n"); */
-/*     } */
-/*   } */
-/*   else { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n"); */
-/*   } */
-/* } */
-
-/* static void */
-/* binding_assignment (token_list_item_t* var) */
-/* { */
-/*   if (accept (ASSIGN) == 0) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  Expected =\n"); */
-/*     return; */
-/*   } */
-  
-/*   token_list_item_t* t; */
-/*   if ((t = accept (STRING)) != 0 && strncmp ("bind", t->string, t->size) == 0) { */
-/*     bind_ (var); */
-/*   } */
-/*   else { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n"); */
-/*   } */
-/* } */
-
-/* /\* static void *\/ */
-/* /\* tag (void) *\/ */
-/* /\* { *\/ */
-/* /\*   match (TAG); *\/ */
-/* /\*   expression (); *\/ */
-  
-/* /\* } *\/ */
-
-/* static bool */
-/* expression0 (void) */
-/* { */
-/*   /\* if (current_token->type == TAG) { *\/ */
-/*   /\*   tag (); *\/ */
-/*   /\*   return; *\/ */
-/*   /\* } *\/ */
-
-/*   token_list_item_t* t; */
-
-/*   if ((t = accept (AUTOMATON_VAR)) != 0) { */
-/*     automaton_assignment (t); */
-/*     return true; */
-/*   } */
-/*   else if ((t = accept (BINDING_VAR)) != 0) { */
-/*     binding_assignment (t); */
-/*     return true; */
-/*   } */
-/*   else if ((t = accept (STRING)) != 0) { */
-/*     if (strncmp ("bind", t->string, t->size) == 0) { */
-/*       bind_ (0); */
-/*       return true; */
-/*     } */
-/*     else if (strncmp ("unbind", t->string, t->size) == 0) { */
-/*       unbind_ (); */
-/*       return true; */
-/*     } */
-/*     else if (strncmp ("destroy", t->string, t->size) == 0) { */
-/*       destroy_ (); */
-/*       return true; */
-/*     } */
-/*     else if (strncmp ("start", t->string, t->size) == 0) { */
-/*       start_ (); */
-/*       return true; */
-/*     } */
-/*   } */
-
-/*   bfprintf (&syslog_buffer, INFO "TODO:  syntax error\n"); */
-/*   return false; */
-/* } */
-
-/* static void */
-/* expression1_alpha (void) */
-/* { */
-/*   expression0 (); */
-/* } */
-
-/* static bool */
-/* expression1_beta (void) */
-/* { */
-/*   if (current_token == 0) { */
-/*     return true; */
-/*   } */
-
-/*   if (!match (PIPE)) { */
-/*     bfprintf (&syslog_buffer, INFO "TODO:  expected |\n"); */
-/*     return false; */
-/*   } */
-/*   if (!expression0 ()) { */
-/*     return false; */
-/*   } */
-/*   if (!expression1_beta ()) { */
-/*     return false; */
-/*   } */
-
-/*   return true; */
-/* } */
-
-/* static void */
-/* expression1 (void) */
-/* { */
-/*   expression1_alpha (); */
-/*   expression1_beta (); */
-/* } */
-
-/* static void */
-/* evaluate (void) */
-/* { */
-/*   if (token_list_head != 0) { */
-/*     /\* Try to evaluate a statement. *\/ */
-/*     current_token = token_list_head; */
-/*     expression1 (); */
-/*     clean_tokens (); */
-/*   } */
-/* } */
-
-/*
-  Grammar
-
-  program      -> trailer1 $
-               -> expression1 trailer1 $
-  trailer1     -> lambda
-               -> ; trailer2
-  trailer2     -> expression1 trailer1
-               -> trailer1
-  expression1  -> expression0 expression1b
-  expression1b -> | expression0 expression1b
-               -> lambda
- */
-
-/* static bool */
-/* trailer1 (void); */
-
-/* static bool */
-/* expression1 (void); */
-
-/* static bool */
-/* expression0 (void) */
-/* { */
-/*   bfprintf (&stdout_buffer, "expression0\n"); */
-/*   switch (current_token->type) { */
-/*   case LPAREN: */
-/*     match (LPAREN); */
-/*     if (!expression1 ()) { */
-/*       return false; */
-/*     } */
-/*     if (!match (RPAREN)) { */
-/*       return false; */
-/*     } */
-/*     return true; */
-/*   case CREATE: */
-/*     match (CREATE); */
-/*     bfprintf (&stdout_buffer, "CREATE\n"); */
-/*     return true; */
-/*   case LOOKUP: */
-/*     match (LOOKUP); */
-/*     bfprintf (&stdout_buffer, "LOOKUP\n"); */
-/*     return true; */
-/*   case BIND: */
-/*     match (BIND); */
-/*     bfprintf (&stdout_buffer, "BIND\n"); */
-/*     return true; */
-/*   case TAG: */
-/*     match (TAG); */
-/*     if (!expression1 ()) { */
-/*       return false; */
-/*     } */
-/*     bfprintf (&stdout_buffer, "TAG\n"); */
-/*     return true; */
-/*   case UNTAG: */
-/*     match (UNTAG); */
-/*     bfprintf (&stdout_buffer, "UNTAG\n"); */
-/*     return true; */
-/*   case DESTROY: */
-/*     match (DESTROY); */
-/*     bfprintf (&stdout_buffer, "DESTROY\n"); */
-/*     return true; */
-/*   case UNBIND: */
-/*     match (UNBIND); */
-/*     bfprintf (&stdout_buffer, "UNBIND\n"); */
-/*     return true; */
-/*   case START: */
-/*     match (START); */
-/*     bfprintf (&stdout_buffer, "START\n"); */
-/*     return true; */
-/*   case AID: */
-/*     match (AID); */
-/*     bfprintf (&stdout_buffer, "AID\n"); */
-/*     return true; */
-/*   case BID: */
-/*     match (BID); */
-/*     bfprintf (&stdout_buffer, "BID\n"); */
-/*     return true; */
-/*   case STRING: */
-/*     match (STRING); */
-/*     bfprintf (&stdout_buffer, "STRING\n"); */
-/*     return true; */
-/*   case END: */
-/*   case RPAREN: */
-/*   case COMMA: */
-/*   case SEMICOLON: */
-/*   case PIPE: */
-/*     return false; */
-/*   } */
-
-/*   return false; */
-/* } */
-
-/* static bool */
-/* expression1b (void) */
-/* { */
-/*   bfprintf (&stdout_buffer, "expression1b\n"); */
-/*   switch (current_token->type) { */
-/*   case PIPE: */
-/*     match (PIPE); */
-/*     if (!expression0 ()) { */
-/*       return false; */
-/*     } */
-/*     return expression1b (); */
-/*   case END: */
-/*   case SEMICOLON: */
-/*   case RPAREN: */
-/*     /\* lambda *\/ */
-/*     return true; */
-
-/*   case LPAREN: */
-/*   case COMMA: */
-/*   case CREATE: */
-/*   case LOOKUP: */
-/*   case BIND: */
-/*   case TAG: */
-/*   case UNTAG: */
-/*   case DESTROY: */
-/*   case UNBIND: */
-/*   case START: */
-/*   case AID: */
-/*   case BID: */
-/*   case STRING: */
-/*     return false; */
-/*   } */
-
-/*   return false; */
-/* } */
-
-/* static bool */
-/* expression1 (void) */
-/* { */
-/*   bfprintf (&stdout_buffer, "expression1\n"); */
-/*   switch (current_token->type) { */
-/*   case LPAREN: */
-/*   case CREATE: */
-/*   case LOOKUP: */
-/*   case BIND: */
-/*   case TAG: */
-/*   case UNTAG: */
-/*   case DESTROY: */
-/*   case UNBIND: */
-/*   case START: */
-/*   case AID: */
-/*   case BID: */
-/*   case STRING: */
-/*     if (!expression0 ()) { */
-/*       return false; */
-/*     } */
-/*     if (!expression1b ()) { */
-/*       return false; */
-/*     } */
-/*     return true; */
-/*   case END: */
-/*   case RPAREN: */
-/*   case COMMA: */
-/*   case SEMICOLON: */
-/*   case PIPE: */
-/*     return false; */
-/*   } */
-
-/*   return false; */
-/* } */
-
-/* static bool */
-/* trailer2 (void) */
-/* { */
-/*   bfprintf (&stdout_buffer, "trailer2\n"); */
-/*   switch (current_token->type) { */
-/*   case END: */
-/*   case SEMICOLON: */
-/*     return trailer1 (); */
-/*   case LPAREN: */
-/*   case CREATE: */
-/*   case LOOKUP: */
-/*   case BIND: */
-/*   case TAG: */
-/*   case UNTAG: */
-/*   case DESTROY: */
-/*   case UNBIND: */
-/*   case START: */
-/*   case AID: */
-/*   case BID: */
-/*   case STRING: */
-/*     if (!expression1 ()) { */
-/*       return false; */
-/*     } */
-/*     return trailer1 (); */
-/*   case RPAREN: */
-/*   case COMMA: */
-/*   case PIPE: */
-/*     return false; */
-/*   } */
-
-/*   return false; */
-/* } */
-
-/* static bool */
-/* trailer1 (void) */
-/* { */
-/*   bfprintf (&stdout_buffer, "trailer1\n"); */
-/*   switch (current_token->type) { */
-/*   case END: */
-/*     /\* lambda *\/ */
-/*     return true; */
-/*   case SEMICOLON: */
-/*     match (SEMICOLON); */
-/*     return trailer2 (); */
-/*   case LPAREN: */
-/*   case RPAREN: */
-/*   case COMMA: */
-/*   case PIPE: */
-/*   case CREATE: */
-/*   case LOOKUP: */
-/*   case BIND: */
-/*   case TAG: */
-/*   case UNTAG: */
-/*   case DESTROY: */
-/*   case UNBIND: */
-/*   case START: */
-/*   case AID: */
-/*   case BID: */
-/*   case STRING: */
-/*     return false; */
-/*   } */
-
-/*   return false; */
-/* } */
-
-/* static bool */
-/* program (void) */
-/* { */
-/*   bfprintf (&stdout_buffer, "program\n"); */
-/*   switch (current_token->type) { */
-/*   case END: */
-/*   case SEMICOLON: */
-/*     if (!trailer1 ()) { */
-/*       return false; */
-/*     } */
-/*     if (!match (END)) { */
-/*       return false; */
-/*     } */
-/*     return true; */
-/*   case LPAREN: */
-/*   case CREATE: */
-/*   case LOOKUP: */
-/*   case BIND: */
-/*   case TAG: */
-/*   case UNTAG: */
-/*   case DESTROY: */
-/*   case UNBIND: */
-/*   case START: */
-/*   case AID: */
-/*   case BID: */
-/*   case STRING: */
-/*     if (!expression1 ()) { */
-/*       return false; */
-/*     } */
-/*     if (!trailer1 ()) { */
-/*       return false; */
-/*     } */
-/*     if (!match (END)) { */
-/*       return false; */
-/*     } */
-/*     return true; */
-/*   case RPAREN: */
-/*   case COMMA: */
-/*   case PIPE: */
-/*     /\* Error. *\/ */
-/*     return false; */
-/*   } */
-
-/*   return false; */
-/* } */
-
-/*
-  End Parser Section
-  ============================
 */
 
 /*
@@ -1226,7 +917,7 @@ line_update (const char* str,
 	}
 
 	/* Create a new interpretter. */
-	interpretter_create (line_str, line_size);
+	interpret (line_str, line_size);
 	
 	/* Reset. */
 	line_str = 0;
