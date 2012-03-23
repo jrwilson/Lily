@@ -52,17 +52,24 @@ static buffer_file_t stdout_buffer;
 #define PROMPT "$ "
 
 /*
-  Begin Parser Section
-  ==============================
+  Begin Interpretter Section
+  ==========================
 */
 
 typedef enum {
-  END,
+  SCAN_START,
+  SCAN_AID,
+  SCAN_BID,
+  SCAN_STRING,
+  SCAN_COMMENT,
+  SCAN_ERROR,
+} scan_state_t;
 
+typedef enum {
   LPAREN,
   RPAREN,
   COMMA,
- SEMICOLON,
+  SEMICOLON,
   PIPE,
 
   CREATE,
@@ -79,87 +86,384 @@ typedef enum {
   STRING,
 } token_type_t;
 
-typedef struct token_list_item token_list_item_t;
-struct token_list_item {
-  token_type_t type;
-  char* string;
-  size_t size;
-  int val;
-  token_list_item_t* next;
+typedef struct interpretter interpretter_t;
+struct interpretter {
+  char* line_str;
+  size_t line_size;
+
+  scan_state_t scan_state;
+  char* scan_string;
+  size_t scan_string_size;
+
+  interpretter_t* next;
 };
 
-static token_list_item_t* token_list_head = 0;
-static token_list_item_t** token_list_tail = &token_list_head;
-static token_list_item_t* current_token;
+static interpretter_t* interpretter_head = 0;
+static interpretter_t** interpretter_tail = &interpretter_head;
 
 static void
-push_token (token_type_t type,
-	    char* string,
-	    size_t size,
-	    int val)
+interpretter_push_token (interpretter_t* i,
+			 token_type_t type,
+			 char* string)
 {
-  token_list_item_t* item = malloc (sizeof (token_list_item_t));
-  memset (item, 0, sizeof (token_list_item_t));
-  item->type = type;
-  item->string = string;
-  item->size = size;
-  item->val = val;
-  *token_list_tail = item;
-  token_list_tail = &item->next;
-
   /* Find keywords. */
   if (type == STRING) {
-    if (strncmp ("create", string, size) == 0) {
-      item->type = CREATE;
+    if (strcmp ("create", string) == 0) {
+      type = CREATE;
     }
-    else if (strncmp ("lookup", string, size) == 0) {
-      item->type = LOOKUP;
+    else if (strcmp ("lookup", string) == 0) {
+      type = LOOKUP;
     }
-    else if (strncmp ("bind", string, size) == 0) {
-      item->type = BIND;
+    else if (strcmp ("bind", string) == 0) {
+      type = BIND;
     }
-    else if (strncmp ("tag", string, size) == 0) {
-      item->type = TAG;
+    else if (strcmp ("tag", string) == 0) {
+      type = TAG;
     }
-    else if (strncmp ("untag", string, size) == 0) {
-      item->type = UNTAG;
+    else if (strcmp ("untag", string) == 0) {
+      type = UNTAG;
     }
-    else if (strncmp ("destroy", string, size) == 0) {
-      item->type = DESTROY;
+    else if (strcmp ("destroy", string) == 0) {
+      type = DESTROY;
     }
-    else if (strncmp ("unbind", string, size) == 0) {
-      item->type = UNBIND;
+    else if (strcmp ("unbind", string) == 0) {
+      type = UNBIND;
     }
-    else if (strncmp ("start", string, size) == 0) {
-      item->type = START;
+    else if (strcmp ("start", string) == 0) {
+      type = START;
     }
   }
+
+  switch (type) {
+  case LPAREN:
+    bfprintf (&stdout_buffer, "LPAREN\n");
+    break;
+  case RPAREN:
+    bfprintf (&stdout_buffer, "RPAREN\n");
+    break;
+  case COMMA:
+    bfprintf (&stdout_buffer, "COMMA\n");
+    break;
+  case SEMICOLON:
+    bfprintf (&stdout_buffer, "SEMICOLON\n");
+    break;
+  case PIPE:
+    bfprintf (&stdout_buffer, "PIPE\n");
+    break;
+  case CREATE:
+    bfprintf (&stdout_buffer, "CREATE\n");
+    break;
+  case LOOKUP:
+    bfprintf (&stdout_buffer, "LOOKUP\n");
+    break;
+  case BIND:
+    bfprintf (&stdout_buffer, "BIND\n");
+    break;
+  case TAG:
+    bfprintf (&stdout_buffer, "TAG\n");
+    break;
+  case UNTAG:
+    bfprintf (&stdout_buffer, "UNTAG\n");
+    break;
+  case DESTROY:
+    bfprintf (&stdout_buffer, "DESTROY\n");
+    break;
+  case UNBIND:
+    bfprintf (&stdout_buffer, "UNBIND\n");
+    break;
+  case START:
+    bfprintf (&stdout_buffer, "START\n");
+    break;
+  case AID:
+    bfprintf (&stdout_buffer, "AID: %d\n", atoi (string));
+    break;
+  case BID:
+    bfprintf (&stdout_buffer, "BID: %d\n", atoi (string));
+    break;
+  case STRING:
+    bfprintf (&stdout_buffer, "STRING: %s\n", string);
+    break;
+  }
+}
+
+/* Tokens
+
+   string - [a-zA-Z0-9_/-]+
+
+   whitespace - [ \t]
+
+   comment - #[^\n]*
+
+   left paren - (
+
+   right paren - )
+
+   comma - ,
+
+   semicolon - ;
+
+   evaluation symbol - [;\n]
+
+   automaton id - @[0-9]+
+
+   binding id - &[0-9]+
+ */
+static void
+interpretter_put (interpretter_t* in,
+		  char c,
+		  char* str)
+{
+  switch (in->scan_state) {
+  case SCAN_START:
+    if ((c >= 'a' && c <= 'z') ||
+	(c >= 'A' && c <= 'Z') ||
+	(c >= '0' && c <= '9') ||
+	c == '_' ||
+	c == '/' ||
+	c == '-') {
+      in->scan_string = str;
+      in->scan_string_size = 1;
+      in->scan_state = SCAN_STRING;
+      break;
+    }
+
+    switch (c) {
+    case '(':
+      interpretter_push_token (in, LPAREN, 0);
+      break;
+    case ')':
+      interpretter_push_token (in, RPAREN, 0);
+      break;
+    case ',':
+      interpretter_push_token (in, COMMA, 0);
+      break;
+    case ';':
+      interpretter_push_token (in, SEMICOLON, 0);
+      break;
+    case '|':
+      interpretter_push_token (in, PIPE, 0);
+      break;
+    case '@':
+      in->scan_string = str + 1;
+      in->scan_string_size = 0;
+      in->scan_state = SCAN_AID;
+      break;
+    case '&':
+      in->scan_string = str + 1;
+      in->scan_string_size = 0;
+      in->scan_state = SCAN_BID;
+      break;
+    case '#':
+      in->scan_state = SCAN_COMMENT;
+      break;
+    case ' ':
+    case '\t':
+    case '\n':
+      /* Eat whitespace. */
+      break;
+    case 0:
+      /* Do nothing. */
+      break;
+    default:
+      if (*str != 0) {
+	bfprintf (&stdout_buffer, "syntax error near %s\n", str);
+      }
+      else {
+	bfprintf (&stdout_buffer, "syntax error\n", str);
+      }
+      in->scan_state = SCAN_ERROR;
+      return;
+      break;
+    }
+    break;
+
+  case SCAN_STRING:
+    if ((c >= 'a' && c <= 'z') ||
+	(c >= 'A' && c <= 'Z') ||
+	(c >= '0' && c <= '9') ||
+	c == '_' ||
+	c == '/' ||
+	c == '-') {
+      /* Continue. */
+      ++in->scan_string_size;
+      break;
+    }
+
+    // Not a valid string character.
+    {
+      /* Terminate with null. */
+      in->scan_string[in->scan_string_size] = 0;
+      interpretter_push_token (in, STRING, in->scan_string);
+      in->scan_state = SCAN_START;
+      // Recur.
+      return interpretter_put (in, c, str);
+    }
+
+  case SCAN_AID:
+    if (c >= '0' && c <= '9') {
+      /* Continue. */
+      ++in->scan_string_size;
+      break;
+    }
+
+    // Not a valid aid character.
+    {
+      /* Terminate with null. */
+      in->scan_string[in->scan_string_size] = 0;
+      interpretter_push_token (in, AID, in->scan_string);
+      in->scan_state = SCAN_START;
+      // Recur.
+      return interpretter_put (in, c, str);
+    }
+    
+  case SCAN_BID:
+    if (c >= '0' && c <= '9') {
+      /* Continue. */
+      ++in->scan_string_size;
+      break;
+    }
+
+    // Not a valid bid character.
+    {
+      /* Terminate with null. */
+      in->scan_string[in->scan_string_size] = 0;
+      interpretter_push_token (in, BID, in->scan_string);
+      in->scan_state = SCAN_START;
+      // Recur.
+      return interpretter_put (in, c, str);
+    }
+
+  case SCAN_COMMENT:
+    switch (c) {
+    case 0:
+      in->scan_state = SCAN_START;
+      break;
+    }
+    break;
+
+  case SCAN_ERROR:
+    /* Do nothing. */
+    return;
+  }
+
+  return;
 }
 
 static void
-clean_tokens (void)
+interpretter_create (char* line_str,
+		     size_t line_size)
 {
-  /* Cleanup the list of token. */
-  while (token_list_head != 0) {
-    token_list_item_t* item = token_list_head;
-    token_list_head = item->next;
-    free (item->string);
-    free (item);
+  interpretter_t* i = malloc (sizeof (interpretter_t));
+  memset (i, 0, sizeof (interpretter_t));
+
+  i->line_str = line_str;
+  i->line_size = line_size;
+
+  i->scan_state = SCAN_START;
+
+  *interpretter_tail = i;
+  interpretter_tail = &i->next;
+
+  bfprintf (&stdout_buffer, "interpretting: %s\n", line_str);
+
+  /* Process the line. */
+  for (size_t idx = 0; idx != line_size; ++idx, ++line_str) {
+    interpretter_put (i, *line_str, line_str);
   }
-  token_list_tail = &token_list_head;
 }
 
-static bool
-match (token_type_t type)
-{
-  if (current_token != 0 && current_token->type == type) {
-    current_token = current_token->next;
-    return true;
-  }
-  else {
-    return false;
-  }
-}
+/*
+  End Interpretter Section
+  ========================
+*/
+
+/*
+  Begin Parser Section
+  ====================
+*/
+
+
+/* typedef struct token_list_item token_list_item_t; */
+/* struct token_list_item { */
+/*   token_type_t type; */
+/*   char* string; */
+/*   size_t size; */
+/*   int val; */
+/*   token_list_item_t* next; */
+/* }; */
+
+/* static token_list_item_t* token_list_head = 0; */
+/* static token_list_item_t** token_list_tail = &token_list_head; */
+/* static token_list_item_t* current_token; */
+
+/* static void */
+/* push_token (token_type_t type, */
+/* 	    char* string, */
+/* 	    size_t size, */
+/* 	    int val) */
+/* { */
+/*   token_list_item_t* item = malloc (sizeof (token_list_item_t)); */
+/*   memset (item, 0, sizeof (token_list_item_t)); */
+/*   item->type = type; */
+/*   item->string = string; */
+/*   item->size = size; */
+/*   item->val = val; */
+/*   *token_list_tail = item; */
+/*   token_list_tail = &item->next; */
+
+/*   /\* Find keywords. *\/ */
+/*   if (type == STRING) { */
+/*     if (strncmp ("create", string, size) == 0) { */
+/*       item->type = CREATE; */
+/*     } */
+/*     else if (strncmp ("lookup", string, size) == 0) { */
+/*       item->type = LOOKUP; */
+/*     } */
+/*     else if (strncmp ("bind", string, size) == 0) { */
+/*       item->type = BIND; */
+/*     } */
+/*     else if (strncmp ("tag", string, size) == 0) { */
+/*       item->type = TAG; */
+/*     } */
+/*     else if (strncmp ("untag", string, size) == 0) { */
+/*       item->type = UNTAG; */
+/*     } */
+/*     else if (strncmp ("destroy", string, size) == 0) { */
+/*       item->type = DESTROY; */
+/*     } */
+/*     else if (strncmp ("unbind", string, size) == 0) { */
+/*       item->type = UNBIND; */
+/*     } */
+/*     else if (strncmp ("start", string, size) == 0) { */
+/*       item->type = START; */
+/*     } */
+/*   } */
+/* } */
+
+/* static void */
+/* clean_tokens (void) */
+/* { */
+/*   /\* Cleanup the list of token. *\/ */
+/*   while (token_list_head != 0) { */
+/*     token_list_item_t* item = token_list_head; */
+/*     token_list_head = item->next; */
+/*     free (item->string); */
+/*     free (item); */
+/*   } */
+/*   token_list_tail = &token_list_head; */
+/* } */
+
+/* static bool */
+/* match (token_type_t type) */
+/* { */
+/*   if (current_token != 0 && current_token->type == type) { */
+/*     current_token = current_token->next; */
+/*     return true; */
+/*   } */
+/*   else { */
+/*     return false; */
+/*   } */
+/* } */
 
 /* static void */
 /* create_ (token_list_item_t* var) */
@@ -613,477 +917,269 @@ match (token_type_t type)
                -> lambda
  */
 
-static bool
-trailer1 (void);
+/* static bool */
+/* trailer1 (void); */
 
-static bool
-expression1 (void);
+/* static bool */
+/* expression1 (void); */
 
-static bool
-expression0 (void)
-{
-  bfprintf (&stdout_buffer, "expression0\n");
-  switch (current_token->type) {
-  case LPAREN:
-    match (LPAREN);
-    if (!expression1 ()) {
-      return false;
-    }
-    if (!match (RPAREN)) {
-      return false;
-    }
-    return true;
-  case CREATE:
-    match (CREATE);
-    bfprintf (&stdout_buffer, "CREATE\n");
-    return true;
-  case LOOKUP:
-    match (LOOKUP);
-    bfprintf (&stdout_buffer, "LOOKUP\n");
-    return true;
-  case BIND:
-    match (BIND);
-    bfprintf (&stdout_buffer, "BIND\n");
-    return true;
-  case TAG:
-    match (TAG);
-    bfprintf (&stdout_buffer, "TAG\n");
-    if (!expression1 ()) {
-      return false;
-    }
-    return true;
-  case UNTAG:
-    match (UNTAG);
-    bfprintf (&stdout_buffer, "UNTAG\n");
-    return true;
-  case DESTROY:
-    match (DESTROY);
-    bfprintf (&stdout_buffer, "DESTROY\n");
-    return true;
-  case UNBIND:
-    match (UNBIND);
-    bfprintf (&stdout_buffer, "UNBIND\n");
-    return true;
-  case START:
-    match (START);
-    bfprintf (&stdout_buffer, "START\n");
-    return true;
-  case AID:
-    match (AID);
-    bfprintf (&stdout_buffer, "AID\n");
-    return true;
-  case BID:
-    match (BID);
-    bfprintf (&stdout_buffer, "BID\n");
-    return true;
-  case STRING:
-    match (STRING);
-    bfprintf (&stdout_buffer, "STRING\n");
-    return true;
-  case END:
-  case RPAREN:
-  case COMMA:
-  case SEMICOLON:
-  case PIPE:
-    return false;
-  }
+/* static bool */
+/* expression0 (void) */
+/* { */
+/*   bfprintf (&stdout_buffer, "expression0\n"); */
+/*   switch (current_token->type) { */
+/*   case LPAREN: */
+/*     match (LPAREN); */
+/*     if (!expression1 ()) { */
+/*       return false; */
+/*     } */
+/*     if (!match (RPAREN)) { */
+/*       return false; */
+/*     } */
+/*     return true; */
+/*   case CREATE: */
+/*     match (CREATE); */
+/*     bfprintf (&stdout_buffer, "CREATE\n"); */
+/*     return true; */
+/*   case LOOKUP: */
+/*     match (LOOKUP); */
+/*     bfprintf (&stdout_buffer, "LOOKUP\n"); */
+/*     return true; */
+/*   case BIND: */
+/*     match (BIND); */
+/*     bfprintf (&stdout_buffer, "BIND\n"); */
+/*     return true; */
+/*   case TAG: */
+/*     match (TAG); */
+/*     if (!expression1 ()) { */
+/*       return false; */
+/*     } */
+/*     bfprintf (&stdout_buffer, "TAG\n"); */
+/*     return true; */
+/*   case UNTAG: */
+/*     match (UNTAG); */
+/*     bfprintf (&stdout_buffer, "UNTAG\n"); */
+/*     return true; */
+/*   case DESTROY: */
+/*     match (DESTROY); */
+/*     bfprintf (&stdout_buffer, "DESTROY\n"); */
+/*     return true; */
+/*   case UNBIND: */
+/*     match (UNBIND); */
+/*     bfprintf (&stdout_buffer, "UNBIND\n"); */
+/*     return true; */
+/*   case START: */
+/*     match (START); */
+/*     bfprintf (&stdout_buffer, "START\n"); */
+/*     return true; */
+/*   case AID: */
+/*     match (AID); */
+/*     bfprintf (&stdout_buffer, "AID\n"); */
+/*     return true; */
+/*   case BID: */
+/*     match (BID); */
+/*     bfprintf (&stdout_buffer, "BID\n"); */
+/*     return true; */
+/*   case STRING: */
+/*     match (STRING); */
+/*     bfprintf (&stdout_buffer, "STRING\n"); */
+/*     return true; */
+/*   case END: */
+/*   case RPAREN: */
+/*   case COMMA: */
+/*   case SEMICOLON: */
+/*   case PIPE: */
+/*     return false; */
+/*   } */
 
-  return false;
-}
+/*   return false; */
+/* } */
 
-static bool
-expression1b (void)
-{
-  bfprintf (&stdout_buffer, "expression1b\n");
-  switch (current_token->type) {
-  case PIPE:
-    bfprintf (&stdout_buffer, "PIPE\n");
-    match (PIPE);
-    if (!expression0 ()) {
-      return false;
-    }
-    return expression1b ();
-  case END:
-  case SEMICOLON:
-  case RPAREN:
-    /* lambda */
-    return true;
+/* static bool */
+/* expression1b (void) */
+/* { */
+/*   bfprintf (&stdout_buffer, "expression1b\n"); */
+/*   switch (current_token->type) { */
+/*   case PIPE: */
+/*     match (PIPE); */
+/*     if (!expression0 ()) { */
+/*       return false; */
+/*     } */
+/*     return expression1b (); */
+/*   case END: */
+/*   case SEMICOLON: */
+/*   case RPAREN: */
+/*     /\* lambda *\/ */
+/*     return true; */
 
-  case LPAREN:
-  case COMMA:
-  case CREATE:
-  case LOOKUP:
-  case BIND:
-  case TAG:
-  case UNTAG:
-  case DESTROY:
-  case UNBIND:
-  case START:
-  case AID:
-  case BID:
-  case STRING:
-    return false;
-  }
+/*   case LPAREN: */
+/*   case COMMA: */
+/*   case CREATE: */
+/*   case LOOKUP: */
+/*   case BIND: */
+/*   case TAG: */
+/*   case UNTAG: */
+/*   case DESTROY: */
+/*   case UNBIND: */
+/*   case START: */
+/*   case AID: */
+/*   case BID: */
+/*   case STRING: */
+/*     return false; */
+/*   } */
 
-  return false;
-}
+/*   return false; */
+/* } */
 
-static bool
-expression1 (void)
-{
-  bfprintf (&stdout_buffer, "expression1\n");
-  switch (current_token->type) {
-  case LPAREN:
-  case CREATE:
-  case LOOKUP:
-  case BIND:
-  case TAG:
-  case UNTAG:
-  case DESTROY:
-  case UNBIND:
-  case START:
-  case AID:
-  case BID:
-  case STRING:
-    if (!expression0 ()) {
-      return false;
-    }
-    if (!expression1b ()) {
-      return false;
-    }
-    return true;
-  case END:
-  case RPAREN:
-  case COMMA:
-  case SEMICOLON:
-  case PIPE:
-    return false;
-  }
+/* static bool */
+/* expression1 (void) */
+/* { */
+/*   bfprintf (&stdout_buffer, "expression1\n"); */
+/*   switch (current_token->type) { */
+/*   case LPAREN: */
+/*   case CREATE: */
+/*   case LOOKUP: */
+/*   case BIND: */
+/*   case TAG: */
+/*   case UNTAG: */
+/*   case DESTROY: */
+/*   case UNBIND: */
+/*   case START: */
+/*   case AID: */
+/*   case BID: */
+/*   case STRING: */
+/*     if (!expression0 ()) { */
+/*       return false; */
+/*     } */
+/*     if (!expression1b ()) { */
+/*       return false; */
+/*     } */
+/*     return true; */
+/*   case END: */
+/*   case RPAREN: */
+/*   case COMMA: */
+/*   case SEMICOLON: */
+/*   case PIPE: */
+/*     return false; */
+/*   } */
 
-  return false;
-}
+/*   return false; */
+/* } */
 
-static bool
-trailer2 (void)
-{
-  bfprintf (&stdout_buffer, "trailer2\n");
-  switch (current_token->type) {
-  case END:
-  case SEMICOLON:
-    return trailer1 ();
-  case LPAREN:
-  case CREATE:
-  case LOOKUP:
-  case BIND:
-  case TAG:
-  case UNTAG:
-  case DESTROY:
-  case UNBIND:
-  case START:
-  case AID:
-  case BID:
-  case STRING:
-    if (!expression1 ()) {
-      return false;
-    }
-    return trailer1 ();
-  case RPAREN:
-  case COMMA:
-  case PIPE:
-    return false;
-  }
+/* static bool */
+/* trailer2 (void) */
+/* { */
+/*   bfprintf (&stdout_buffer, "trailer2\n"); */
+/*   switch (current_token->type) { */
+/*   case END: */
+/*   case SEMICOLON: */
+/*     return trailer1 (); */
+/*   case LPAREN: */
+/*   case CREATE: */
+/*   case LOOKUP: */
+/*   case BIND: */
+/*   case TAG: */
+/*   case UNTAG: */
+/*   case DESTROY: */
+/*   case UNBIND: */
+/*   case START: */
+/*   case AID: */
+/*   case BID: */
+/*   case STRING: */
+/*     if (!expression1 ()) { */
+/*       return false; */
+/*     } */
+/*     return trailer1 (); */
+/*   case RPAREN: */
+/*   case COMMA: */
+/*   case PIPE: */
+/*     return false; */
+/*   } */
 
-  return false;
-}
+/*   return false; */
+/* } */
 
-static bool
-trailer1 (void)
-{
-  bfprintf (&stdout_buffer, "trailer1\n");
-  switch (current_token->type) {
-  case END:
-    /* lambda */
-    return true;
-  case SEMICOLON:
-    match (SEMICOLON);
-    return trailer2 ();
-  case LPAREN:
-  case RPAREN:
-  case COMMA:
-  case PIPE:
-  case CREATE:
-  case LOOKUP:
-  case BIND:
-  case TAG:
-  case UNTAG:
-  case DESTROY:
-  case UNBIND:
-  case START:
-  case AID:
-  case BID:
-  case STRING:
-    return false;
-  }
+/* static bool */
+/* trailer1 (void) */
+/* { */
+/*   bfprintf (&stdout_buffer, "trailer1\n"); */
+/*   switch (current_token->type) { */
+/*   case END: */
+/*     /\* lambda *\/ */
+/*     return true; */
+/*   case SEMICOLON: */
+/*     match (SEMICOLON); */
+/*     return trailer2 (); */
+/*   case LPAREN: */
+/*   case RPAREN: */
+/*   case COMMA: */
+/*   case PIPE: */
+/*   case CREATE: */
+/*   case LOOKUP: */
+/*   case BIND: */
+/*   case TAG: */
+/*   case UNTAG: */
+/*   case DESTROY: */
+/*   case UNBIND: */
+/*   case START: */
+/*   case AID: */
+/*   case BID: */
+/*   case STRING: */
+/*     return false; */
+/*   } */
 
-  return false;
-}
+/*   return false; */
+/* } */
 
-static bool
-program (void)
-{
-  bfprintf (&stdout_buffer, "program\n");
-  switch (current_token->type) {
-  case END:
-  case SEMICOLON:
-    if (!trailer1 ()) {
-      return false;
-    }
-    if (!match (END)) {
-      return false;
-    }
-    return true;
-  case LPAREN:
-  case CREATE:
-  case LOOKUP:
-  case BIND:
-  case TAG:
-  case UNTAG:
-  case DESTROY:
-  case UNBIND:
-  case START:
-  case AID:
-  case BID:
-  case STRING:
-    if (!expression1 ()) {
-      return false;
-    }
-    if (!trailer1 ()) {
-      return false;
-    }
-    if (!match (END)) {
-      return false;
-    }
-    return true;
-  case RPAREN:
-  case COMMA:
-  case PIPE:
-    /* Error. */
-    return false;
-  }
+/* static bool */
+/* program (void) */
+/* { */
+/*   bfprintf (&stdout_buffer, "program\n"); */
+/*   switch (current_token->type) { */
+/*   case END: */
+/*   case SEMICOLON: */
+/*     if (!trailer1 ()) { */
+/*       return false; */
+/*     } */
+/*     if (!match (END)) { */
+/*       return false; */
+/*     } */
+/*     return true; */
+/*   case LPAREN: */
+/*   case CREATE: */
+/*   case LOOKUP: */
+/*   case BIND: */
+/*   case TAG: */
+/*   case UNTAG: */
+/*   case DESTROY: */
+/*   case UNBIND: */
+/*   case START: */
+/*   case AID: */
+/*   case BID: */
+/*   case STRING: */
+/*     if (!expression1 ()) { */
+/*       return false; */
+/*     } */
+/*     if (!trailer1 ()) { */
+/*       return false; */
+/*     } */
+/*     if (!match (END)) { */
+/*       return false; */
+/*     } */
+/*     return true; */
+/*   case RPAREN: */
+/*   case COMMA: */
+/*   case PIPE: */
+/*     /\* Error. *\/ */
+/*     return false; */
+/*   } */
 
-  return false;
-}
+/*   return false; */
+/* } */
 
 /*
   End Parser Section
   ============================
-*/
-
-/*
-  Begin Scanner Section
-  =====================
-*/
-
-typedef enum {
-  SCAN_START,
-  SCAN_AID,
-  SCAN_BID,
-  SCAN_STRING,
-  SCAN_COMMENT,
-} scan_state_t;
-
-static scan_state_t scan_state = SCAN_START;
-static char* scan_string = 0;
-static size_t scan_string_size = 0;
-static size_t scan_string_capacity = 0;
-
-static void
-scan_string_init (void)
-{
-  /* Potentially make this the average size of a string. */
-  scan_string_capacity = 1;
-  scan_string = malloc (scan_string_capacity);
-  scan_string_size = 0;
-}
-
-static void
-scan_string_append (char c)
-{
-  if (scan_string_size == scan_string_capacity) {
-    scan_string_capacity = 2 * scan_string_size;
-    scan_string = realloc (scan_string, scan_string_capacity);
-  }
-  scan_string[scan_string_size++] = c;
-}
-
-static void
-scan_string_steal (char** string,
-		   size_t* size)
-{
-  *string = scan_string;
-  *size = scan_string_size;
-  scan_string_init ();
-}
-
-/* Tokens
-
-   string - [a-zA-Z0-9_/-]+
-
-   whitespace - [ \t]
-
-   comment - #[^\n]*
-
-   left paren - (
-
-   right paren - )
-
-   comma - ,
-
-   semicolon - ;
-
-   evaluation symbol - [;\n]
-
-   automaton id - @[0-9]+
-
-   binding id - &[0-9]+
- */
-static bool
-put (int c)
-{
-  switch (scan_state) {
-  case SCAN_START:
-    if ((c >= 'a' && c <= 'z') ||
-	(c >= 'A' && c <= 'Z') ||
-	(c >= '0' && c <= '9') ||
-	c == '_' ||
-	c == '/' ||
-	c == '-') {
-      scan_string_append (c);
-      scan_state = SCAN_STRING;
-      break;
-    }
-
-    switch (c) {
-    case '(':
-      push_token (LPAREN, 0, 0, 0);
-      break;
-    case ')':
-      push_token (RPAREN, 0, 0, 0);
-      break;
-    case ',':
-      push_token (COMMA, 0, 0, 0);
-      break;
-    case ';':
-      push_token (SEMICOLON, 0, 0, 0);
-      break;
-    case '|':
-      push_token (PIPE, 0, 0, 0);
-      break;
-    case '@':
-      scan_state = SCAN_AID;
-      break;
-    case '&':
-      scan_state = SCAN_BID;
-      break;
-    case '#':
-      scan_state = SCAN_COMMENT;
-      break;
-    case ' ':
-    case '\t':
-    case '\n':
-      /* Eat whitespace. */
-      break;
-    case -1:
-      /* Used to force a finish if in the middle of a token. */
-      break;
-    default:
-      return false;
-      break;
-    }
-    break;
-
-  case SCAN_STRING:
-    if ((c >= 'a' && c <= 'z') ||
-	(c >= 'A' && c <= 'Z') ||
-	(c >= '0' && c <= '9') ||
-	c == '_' ||
-	c == '/' ||
-	c == '-') {
-      /* Continue. */
-      scan_string_append (c);
-      break;
-    }
-
-    // Not a valid string character.
-    {
-      /* Terminate with null. */
-      scan_string_append (0);
-      char* string;
-      size_t size;
-      scan_string_steal (&string, &size);
-      push_token (STRING, string, size, 0);
-      scan_state = SCAN_START;
-      // Recur.
-      return put (c);
-    }
-
-  case SCAN_AID:
-    if (c >= '0' && c <= '9') {
-      /* Continue. */
-      scan_string_append (c);
-      break;
-    }
-
-    // Not a valid aid character.
-    {
-      /* Terminate with null. */
-      scan_string_append (0);
-      char* string;
-      size_t size;
-      scan_string_steal (&string, &size);
-      push_token (AID, 0, 0, atoi (string));
-      free (string);
-      scan_state = SCAN_START;
-      // Recur.
-      return put (c);
-    }
-    
-  case SCAN_BID:
-    if (c >= '0' && c <= '9') {
-      /* Continue. */
-      scan_string_append (c);
-      break;
-    }
-
-    // Not a valid bid character.
-    {
-      /* Terminate with null. */
-      scan_string_append (0);
-      char* string;
-      size_t size;
-      scan_string_steal (&string, &size);
-      push_token (BID, 0, 0, atoi (string));
-      free (string);
-      scan_state = SCAN_START;
-      // Recur.
-      return put (c);
-    }
-
-  case SCAN_COMMENT:
-    switch (c) {
-    case -1:
-      scan_state = SCAN_START;
-      break;
-    }
-    break;
-  }
-
-  return true;
-}
-
-/*
-  End Scanner Section
-  ===================
 */
 
 /*
@@ -1095,6 +1191,16 @@ static char* line_str = 0;
 static size_t line_size = 0;
 static size_t line_capacity = 0;
 
+static void
+line_append (char c)
+{
+  if (line_size == line_capacity) {
+    line_capacity = 2 * line_capacity + 1;
+    line_str = realloc (line_str, line_capacity);
+  }
+  line_str[line_size++] = c;
+}
+
 /* Update the line of text. */
 static void
 line_update (const char* str,
@@ -1104,11 +1210,7 @@ line_update (const char* str,
     char c = *str;
     if (c >= ' ' && c < 127) {
       /* Printable character. */
-      if (line_size == line_capacity) {
-	line_capacity = 2 * line_capacity + 1;
-	line_str = realloc (line_str, line_capacity);
-      }
-      line_str[line_size++] = c;
+      line_append (c);
       if (buffer_file_put (&stdout_buffer, c) != 0) {
 	exit ();
       }
@@ -1117,41 +1219,19 @@ line_update (const char* str,
       /* Control character. */
       switch (c) {
       case '\n':
+	/* Terminate. */
+	line_append (0);
 	if (buffer_file_put (&stdout_buffer, '\n') != 0) {
 	  exit ();
 	}
-	/* Send the line to the scanner. */
-	bool syntax_error = false;
-	size_t i;
-	for (i = 0; i != line_size; ++i) {
-	  if (!put (line_str[i])) {
-	    syntax_error = true;
-	    break;
-	  }
-	}
 
-	if (!syntax_error) {
-	  /* Finish the current token. */
-	  put (-1);
-	  /* Push the end of input token. */
-	  push_token (END, 0, 0, 0);
-	  /* Try to evaluate a statement. */
-	  current_token = token_list_head;
-	  if (!program ()) {
-	    bfprintf (&stdout_buffer, "parse error\n");
-	  }
-	  clean_tokens ();
-	}
-	else {
-	  if (buffer_file_puts (&stdout_buffer, "syntax error near: ") != 0 ||
-	      buffer_file_write (&stdout_buffer, line_str + i, line_size - i) != 0 ||
-	      buffer_file_put (&stdout_buffer, '\n') != 0) {
-	    exit ();
-	  }
-	}
+	/* Create a new interpretter. */
+	interpretter_create (line_str, line_size);
+	
 	/* Reset. */
+	line_str = 0;
 	line_size = 0;
-	clean_tokens ();
+	line_capacity = 0;
 	break;
       }
     }
@@ -1176,8 +1256,6 @@ initialize (void)
     if (buffer_file_initw (&stdout_buffer, stdout_bd) != 0) {
       exit ();
     }
-
-    scan_string_init ();
   }
 }
 
