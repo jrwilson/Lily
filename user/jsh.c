@@ -330,7 +330,7 @@ create_callback (void* data,
   if (error == VFS_SUCCESS) {
     aid_t aid = create (bdb, size, cc->bda, cc->bdb, cc->registry_name, cc->registry_name_size, cc->retain_privilege);
     if (aid != -1) {
-      bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to created automaton\n");
+      /*      bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to created automaton\n"); */
       /* Assign the result to a variable. */
       create_automaton (aid, cc->name, cc->name_size);
     }
@@ -617,7 +617,7 @@ bind_ (token_list_item_t* var)
   }
 
   if (var == 0) {
-    bfprintf (&syslog_buffer, INFO "TODO:  Create binding\n");
+    /*    bfprintf (&syslog_buffer, INFO "TODO:  Create binding\n"); */
     /* char buffer[sizeof (bid_t) * 8]; */
     /* size_t sz = snprintf (buffer, sizeof (bid_t) * 8, "&b%d", bid); */
     /* create_binding (bid, buffer, sz + 1); */
@@ -626,7 +626,7 @@ bind_ (token_list_item_t* var)
     create_binding (bid, var->string, var->size);
   }
   
-  bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to binding??\n");
+  /*  bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to binding??\n"); */
 }
 
 static void
@@ -651,7 +651,7 @@ unbind_ ()
     return;
   }
 
-  bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from binding??\n");
+  /*  bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from binding??\n"); */
 
   if (unbind (binding->bid) != 0) {
     bfprintf (&syslog_buffer, INFO "TODO:  unbind failed\n");
@@ -682,7 +682,7 @@ destroy_ ()
     return;
   }
 
-  bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from automaton??\n");
+  /*  bfprintf (&syslog_buffer, INFO "TODO:  Unsubscribe from automaton??\n"); */
 
   if (destroy (automaton->aid) != 0) {
     bfprintf (&syslog_buffer, INFO "TODO:  destroy failed\n");

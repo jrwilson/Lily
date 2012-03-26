@@ -104,23 +104,23 @@ bind -p 12 @terminal_server stdout_t @terminal12 stdin_t
 bind -p 12 @terminal_server mouse_packets_out @terminal12 mouse_packets_in
 bind -q 12 @terminal12 stdout_t @terminal_server stdin_t
 
-# Put a new shell on terminal1.
+# Put a new shell on terminal2.
 @jsh2 = create /bin/jsh2
-bind @terminal1 stdout @jsh2 stdin
-bind @jsh2 stdout @terminal1 stdin
+bind @terminal2 stdout @jsh2 stdin
+bind @jsh2 stdout @terminal2 stdin
 bind @this start @jsh2 start
 start @jsh2
 
-# Put the PS2 keyboard/mouse test on terminal2.
+# Put the PS2 keyboard/mouse test on terminal3.
 @ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
-bind @terminal2 scan_codes_out @ps2_keyboard_mouse_test scan_codes_in
-bind @terminal2 mouse_packets_out @ps2_keyboard_mouse_test mouse_packets_in
-bind @terminal2 stdout @ps2_keyboard_mouse_test stdin
-bind @ps2_keyboard_mouse_test stdout @terminal2 stdin
+bind @terminal3 scan_codes_out @ps2_keyboard_mouse_test scan_codes_in
+bind @terminal3 mouse_packets_out @ps2_keyboard_mouse_test mouse_packets_in
+bind @terminal3 stdout @ps2_keyboard_mouse_test stdin
+bind @ps2_keyboard_mouse_test stdout @terminal3 stdin
 
-# Put the syslog on terminal12.
+# Put the syslog on terminal1.
 @syslog = lookup syslog
-bind @syslog stdout @terminal12 stdin
+bind @syslog stdout @terminal1 stdin
 bind @this start @syslog start
 start @syslog
 
