@@ -2,12 +2,18 @@
 #include <buffer_file.h>
 #include <dymem.h>
 #include <string.h>
+#include <description.h>
 
 /* TODO:  This is wrong on multiple levels. */
 static int
 atoi (const char* s)
 {
+  bool negate = false;
   int retval = 0;
+
+  if (*s == '-') {
+    negate = true;
+  }
 
   while (*s != 0) {
     switch (*s) {
@@ -32,7 +38,12 @@ atoi (const char* s)
 
  out:
 
-  return retval;
+  if (negate) {
+    return -retval;
+  }
+  else {
+    return retval;
+  }
 }
 
 #define INIT_NO 1
@@ -787,60 +798,112 @@ static buffer_file_t stdout_buffer;
   ========================
 */
 
-/* Begin Variable Section
-   ======================
-*/
+typedef struct var var_t;
+typedef struct label label_t;
+typedef struct label_item label_item_t;
+typedef struct automaton automaton_t;
+typedef struct automaton_item automaton_item_t;
+typedef struct binding binding_t;
+typedef struct binding_item binding_item_t;
 
 typedef enum {
   VAR_UNKNOWN,
   VAR_AID,
-  VAR_CONSTELLATION,
-} variable_type_t;
+  VAR_BID,
+} var_type_t;
 
-typedef struct variable variable_t;
-struct variable {
+struct var {
   char* name;
-  variable_type_t type;
+  var_type_t type;
   union {
     aid_t aid;
+    bid_t bid;
   } u;
-  variable_t* next;
+  var_t* next;
 };
 
-static variable_t* variable_list_head = 0;
+struct label {
+  char* string;
+  automaton_item_t* automata_head;
+  binding_item_t* bindings_head;
+  label_t* next;
+};
 
-static variable_t*
-variable_create (const char* name)
+struct label_item {
+  label_t* label;
+  label_item_t* next;
+};
+
+struct automaton {
+  aid_t aid;
+  char* path;
+  label_item_t* labels_head;
+  automaton_t* next;
+};
+
+struct automaton_item {
+  automaton_t* automaton;
+  automaton_item_t* next;
+};
+
+struct binding {
+  bid_t bid;
+  automaton_t* output_automaton;
+  ano_t output_action;
+  int output_parameter;
+  automaton_t* input_automaton;
+  ano_t input_action;
+  int input_parameter;
+  label_item_t* labels_head;
+  binding_t* next;
+};
+
+struct binding_item {
+  binding_t* binding;
+  binding_item_t* next;
+};
+
+static var_t* vars_head = 0;
+static label_t* labels_head = 0;
+static automaton_t* automata_head = 0;
+
+static var_t*
+create_var (const char* name)
 {
-  variable_t* var = malloc (sizeof (variable_t));
-  memset (var, 0, sizeof (variable_t));
+  var_t* var = malloc (sizeof (var_t));
+  memset (var, 0, sizeof (var_t));
 
   size_t size = strlen (name) + 1;
   var->name = malloc (size);
   memcpy (var->name, name, size);
   var->type = VAR_UNKNOWN;
 
-  var->next = variable_list_head;
-  variable_list_head = var;
+  var->next = vars_head;
+  vars_head = var;
 
   return var;
 }
 
 static void
-variable_destroy (variable_t** ptr)
+destroy_var (const char* name)
 {
-  variable_t* var = *ptr;
-  *ptr = var->next;
+  for (var_t** ptr = &vars_head; *ptr != 0; ptr = &(*ptr)->next) {
+    if (strcmp ((*ptr)->name, name) == 0) {
+      var_t* var = *ptr;
+      *ptr = var->next;
 
-  free (var->name);
-  free (var);
+      free (var->name);
+      free (var);
+      break;
+    }
+  }
 }
 
-static variable_t*
-variable_find (const char* name)
+static var_t*
+find_var (const char* name)
 {
-  variable_t* var;
-  for (var = variable_list_head; var != 0; var = var->next) {
+  var_t* var;
+  for (var = vars_head; var != 0; var = var->next) {
     if (strcmp (var->name, name) == 0) {
       break;
     }
@@ -849,17 +912,60 @@ variable_find (const char* name)
 }
 
 static void
-variable_assign_aid (variable_t* var,
-		     aid_t aid)
+var_assign_aid (var_t* var,
+		aid_t aid)
 {
   var->type = VAR_AID;
   var->u.aid = aid;
 }
 
-/*
-  End Variable Section
-  ====================
-*/
+static void
+var_assign_bid (var_t* var,
+		bid_t bid)
+{
+  var->type = VAR_BID;
+  var->u.bid = bid;
+}
+
+static label_t*
+find_label (const char* string)
+{
+  label_t* label;
+  for (label = labels_head; label != 0; label = label->next) {
+    if (strcmp (label->string, string) == 0) {
+      break;
+    }
+  }
+  return label;
+}
+
+static automaton_t*
+create_automaton (aid_t aid,
+		  const char* path)
+{
+  automaton_t* automaton = malloc (sizeof (automaton_t));
+  memset (automaton, 0, sizeof (automaton_t));
+  automaton->aid = aid;
+  size_t size = strlen (path) + 1;
+  automaton->path = malloc (size);
+  memcpy (automaton->path, path, size);
+
+  automaton->next = automata_head;
+  automata_head = automaton;
+  return automaton;
+}
+
+static automaton_t*
+find_automaton (aid_t aid)
+{
+  automaton_t* automaton;
+  for (automaton = automata_head; automaton != 0; automaton = automaton->next) {
+    if (automaton->aid == aid) {
+      break;
+    }
+  }
+  return automaton;
+}
 
 /*
   Begin Line Editing Section
@@ -1077,15 +1183,13 @@ scanner_process (char* string,
   size_t idx;
   for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) {
     scanner_put (scan_string_copy + idx);
+    if (scan_state == SCAN_ERROR) {
+      bfprintf (&stdout_buffer, "error near: %s\n", scan_string_original + idx);
+      return -1;
+    }
   }
 
-  if (scan_state != SCAN_ERROR) {
-    return 0;
-  }
-  else {
-    bfprintf (&stdout_buffer, "error near: %s\n", scan_string_original + idx);
-    return -1;
-  }
+  return 0;
 }
 
 /*
@@ -1098,27 +1202,151 @@ scanner_process (char* string,
   ======================
 */
 
-static bool
-create_ (void)
+static void
+bind_usage (void)
 {
-  return false;
+  bfprintf (&stdout_buffer, "usage: BID = bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n");
+}
+
+static automaton_t*
+lookup_automaton (const char* string)
+{
+  /* Is it a variable? */
+  var_t* var = find_var (string);
+  if (var != 0 && var->type == VAR_AID) {
+    return find_automaton (var->u.aid);
+  }
+  /* Is it a number? */
+  return find_automaton (atoi (string));
 }
 
 static bool
 bind_ (void)
 {
-  return false;
-}
+  if (scan_strings_size >= 1) {
+    if (strcmp (scan_strings[0], "bind") == 0) {
+      bind_usage ();
+      return true;
+    }
 
-static bool
-unbind_ (void)
-{
-  return false;
-}
+    if (scan_strings_size >= 3) {
+      if (strcmp ("=", scan_strings[1]) == 0 &&
+	  strcmp ("bind", scan_strings[2]) == 0) {
+	/* Parse the parameters. */
+	int output_parameter = 0;
+	int input_parameter = 0;
+	size_t idx = 3;
 
-static bool
-destroy_ (void)
-{
+	for (;;) {
+	  if (idx >= scan_strings_size) {
+	    bind_usage ();
+	    return true;
+	  }
+
+	  if (strcmp (scan_strings[idx], "-o") == 0) {
+	    ++idx;
+	    if (idx >= scan_strings_size) {
+	      bind_usage ();
+	      return true;
+	    }
+	    
+	    output_parameter = atoi (scan_strings[idx]);
+	    ++idx;
+	    continue;
+	  }
+
+	  if (strcmp (scan_strings[idx], "-i") == 0) {
+	    ++idx;
+	    if (idx >= scan_strings_size) {
+	      bind_usage ();
+	      return true;
+	    }
+	    
+	    input_parameter = atoi (scan_strings[idx]);
+	    ++idx;
+	  }
+
+	  break;
+	}
+
+	if (idx + 4 != scan_strings_size) {
+	  bind_usage ();
+	  return true;
+	}
+
+	automaton_t* output_automaton = lookup_automaton (scan_strings[idx]);
+	if (output_automaton == 0) {
+	  bfprintf (&stdout_buffer, "error: %s does not refer to a known automaton\n", scan_strings[idx]);
+	  return true;
+	}
+	++idx;
+
+	const char* output_action_name = scan_strings[idx++];
+
+	automaton_t* input_automaton = lookup_automaton (scan_strings[idx]);
+	if (input_automaton == 0) {
+	  bfprintf (&stdout_buffer, "error: %s does not refer to a known automaton\n", scan_strings[idx]);
+	  return true;
+	}
+	++idx;
+
+	const char* input_action_name = scan_strings[idx++];
+
+	/* Describe the output and input automaton. */
+	description_t output_description;
+	description_t input_description;
+	if (description_init (&output_description, output_automaton->aid) != 0) {
+	  bfprintf (&stdout_buffer, "TODO:  Could not describe output\n");
+	  return true;
+	}
+	if (description_init (&input_description, input_automaton->aid) != 0) {
+	  bfprintf (&stdout_buffer, "TODO:  Could not describe input\n");
+	  return true;
+	}
+
+	/* Look up the actions. */
+	const ano_t output_action = description_name_to_number (&output_description, output_action_name, strlen (output_action_name) + 1);
+	const ano_t input_action = description_name_to_number (&input_description, input_action_name, strlen (input_action_name) + 1);
+
+	description_fini (&output_description);
+	description_fini (&input_description);
+
+	if (output_action == -1) {
+	  bfprintf (&stdout_buffer, "TODO:  Output action does not exist\n");
+	  return true;
+	}
+	
+	if (input_action == -1) {
+	  bfprintf (&stdout_buffer, "TODO:  Input action does not exist\n");
+	  return true;
+	}
+
+	bid_t bid = bind (output_automaton->aid, output_action, output_parameter, input_automaton->aid, input_action, input_parameter);
+	if (bid == -1) {
+	  bfprintf (&stdout_buffer, "TODO:  Bind failed\n");
+	  return true;
+	}
+
+	bfprintf (&stdout_buffer, "TODO:  bind\n");
+
+	/* /\* Add to the list of automata we know about. *\/ */
+	/* if (find_automaton (aid) == 0) { */
+	/*   create_automaton (aid, scan_strings[3]); */
+	/* } */
+
+	/* Assign to variable. */
+	var_t* var = find_var (scan_strings[0]);
+	if (var == 0) {
+	  var = create_var (scan_strings[0]);
+	}
+	var_assign_bid (var, bid);
+
+	bfprintf (&stdout_buffer, "%s = %d\n", scan_strings[0], bid);
+
+	return true;
+      }
+    }
+  }
   return false;
 }
 
@@ -1127,34 +1355,86 @@ lookup_ (void)
 {
   if (scan_strings_size >= 1) {
     if (strcmp ("lookup", scan_strings[0]) == 0) {
-      if (scan_strings_size == 2) {
-	bfprintf (&stdout_buffer, "%d\n", lookup (scan_strings[1], strlen (scan_strings[1]) + 1));
-	return true;
-      }
-      else {
-	bfprintf (&stdout_buffer, "usage: [var = ] lookup NAME\n");
-	return true;
-      }
+      bfprintf (&stdout_buffer, "usage: AID = lookup NAME\n");
+      return true;
     }
   }
   if (scan_strings_size >= 3) {
     if (strcmp ("=", scan_strings[1]) == 0 &&
 	strcmp ("lookup", scan_strings[2]) == 0) {
       if (scan_strings_size == 4) {
+	/* Variables and labels are disjoint. */
+	if (find_label (scan_strings[0]) != 0) {
+	  bfprintf (&stdout_buffer, "error: %s is already a label\n", scan_strings[0]);
+	  return true;
+	}
+
 	/* Perform the lookup. */
 	aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1);
 
-	/* Find the variable or create it. */
-	variable_t* var = variable_find (scan_strings[0]);
-	if (var == 0) {
-	  var = variable_create (scan_strings[0]);
+	/* Add to the list of automata we know about. */
+	if (find_automaton (aid) == 0) {
+	  create_automaton (aid, scan_strings[3]);
 	}
-	variable_assign_aid (var, aid);
+
+	/* Assign to variable. */
+	var_t* var = find_var (scan_strings[0]);
+	if (var == 0) {
+	  var = create_var (scan_strings[0]);
+	}
+	var_assign_aid (var, aid);
+
 	bfprintf (&stdout_buffer, "%s = %d\n", scan_strings[0], aid);
 	return true;
       }
       else {
-	bfprintf (&stdout_buffer, "usage: [var = ] lookup NAME\n");
+	bfprintf (&stdout_buffer, "usage: AID = lookup NAME\n");
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool
+show_ (void)
+{
+  if (scan_strings_size >= 1) {
+    if (strcmp ("show", scan_strings[0]) == 0) {
+      if (scan_strings_size == 1) {
+	bfprintf (&stdout_buffer, "variables:\n");
+	if (vars_head != 0) {
+	  for (var_t* var = vars_head; var != 0; var = var->next) {
+	    switch (var->type) {
+	    case VAR_UNKNOWN:
+	      bfprintf (&stdout_buffer, "\t%s\n", var->name);
+	      break;
+	    case VAR_AID:
+	      bfprintf (&stdout_buffer, "\t%s = %d (aid)\n", var->name, var->u.aid);
+	      break;
+	    case VAR_BID:
+	      bfprintf (&stdout_buffer, "\t%s = %d (bid)\n", var->name, var->u.bid);
+	      break;
+	    }
+	  }
+	}
+	else {
+	  bfprintf (&stdout_buffer, "\t[empty]\n");
+	}
+
+	bfprintf (&stdout_buffer, "automata:\n");
+	if (automata_head != 0) {
+	  for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) {
+	    bfprintf (&stdout_buffer, "\t%d\t%s\n", automaton->aid, automaton->path);
+	  }
+	}
+	else {
+	  bfprintf (&stdout_buffer, "\t[empty]\n");
+	}
+	return true;
+      }
+      else {
+	bfprintf (&stdout_buffer, "usage: show\n");
 	return true;
       }
     }
@@ -1165,29 +1445,60 @@ lookup_ (void)
 static bool
 start_ (void)
 {
-  if (scan_strings_size >= 1) {
-    if (strcmp ("start", scan_strings[0]) == 0) {
-      if (scan_strings_size == 2) {
-	/* What are we trying to start? */
-	variable_t* var = variable_find (scan_strings[1]);
-	if (var == 0) {
-	  bfprintf (&stdout_buffer, "variable %s does not exist\n", scan_strings[1]);
-	  return true;
-	}
-	if (var->type != VAR_AID) {
-	  bfprintf (&stdout_buffer, "variable %s does not name an automaton\n", scan_strings[1]);
-	  return true;
-	}
-
-
-	bfprintf (&stdout_buffer, "START\n");
-	return true;
-      }
-      else {
-	bfprintf (&stdout_buffer, "usage: start VAR\n");
-	return true;
-      }
+  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "start") == 0) {
+    if (scan_strings_size == 1) {
+      bfprintf (&stdout_buffer, "usage: start ID...\n");
+      return true;
     }
+
+    for (size_t idx = 1; idx != scan_strings_size; ++idx) {
+      label_t* label = find_label (scan_strings[idx]);
+      if (label != 0) {
+	bfprintf (&stdout_buffer, "TODO start label %s\n", scan_strings[idx]);
+	break;
+      }
+      var_t* var = find_var (scan_strings[idx]);
+      if (var != 0) {
+	switch (var->type) {
+	case VAR_AID:
+	  {
+	    /* Lookup the automaton. */
+	    automaton_t* automaton = find_automaton (var->u.aid);
+	    if (automaton == 0) {
+	      bfprintf (&stdout_buffer, "warning: %s refers to a non-existent automaton\n", scan_strings[idx]);
+	      break;
+	    }
+
+	    /* Find its start action. */
+
+
+	    /* Bind to it if necessary. */
+	    
+	    bfprintf (&stdout_buffer, "TODO start aid %s\n", scan_strings[idx]);
+	  }
+	  break;
+	case VAR_BID:
+	case VAR_UNKNOWN:
+	  bfprintf (&stdout_buffer, "warning: refusing to start %s\n", scan_strings[idx]);
+	  /* Do nothing. */
+	  break;
+	}
+	break;
+      }
+      
+    }
+
+    return true;
+  }
+  return false;
+}
+
+static bool
+clear_ (void)
+{
+  if (scan_strings_size == 2 && strcmp (scan_strings[1], "=") == 0) {
+    destroy_var (scan_strings[0]);
+    return true;
   }
   return false;
 }
@@ -1203,12 +1514,11 @@ error_ (void)
 typedef bool (*dispatch_func_t) (void);
 
 static dispatch_func_t dispatch[] = {
-  create_,
   bind_,
-  unbind_,
-  destroy_,
   lookup_,
+  show_,
   start_,
+  clear_,
   /* Catch errors. */
   error_,
   0
@@ -1234,6 +1544,11 @@ initialize (void)
     }
 
     line_reset ();
+
+    aid_t aid = getaid ();
+    create_automaton (getaid (), "this");
+    var_t* var = create_var ("this");
+    var_assign_aid (var, aid);
   }
 }
 
@@ -1327,10 +1642,6 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
 	break;
       }
     }
-
-    /* for (size_t idx = 0; idx != scan_strings_size; ++idx) { */
-    /*   bfprintf (&stdout_buffer, "idx = %d string = %s\n", idx, scan_strings[idx]); */
-    /* } */
   }
   finish_internal ();
 }

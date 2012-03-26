@@ -31,7 +31,7 @@ bind @ps2_keyboard_mouse scan_codes @terminal_server scan_codes_in
 bind @ps2_keyboard_mouse mouse_packets_out @terminal_server mouse_packets_in
 bind @terminal_server vga_op @vga vga_op
 
-@terminal1 = create /bin/terminal
+@terminal1 = create -n terminal1 /bin/terminal
 @terminal2 = create /bin/terminal
 @terminal3 = create /bin/terminal
 @terminal4 = create /bin/terminal
@@ -119,10 +119,10 @@ bind @terminal3 stdout @ps2_keyboard_mouse_test stdin
 bind @ps2_keyboard_mouse_test stdout @terminal3 stdin
 
 # Put the syslog on terminal1.
-@syslog = lookup syslog
-bind @syslog stdout @terminal1 stdin
-bind @this start @syslog start
-start @syslog
+#@syslog = lookup syslog
+#bind @syslog stdout @terminal1 stdin
+#bind @this start @syslog start
+#start @syslog
 
 #@pci = create -p /bin/pci
 
