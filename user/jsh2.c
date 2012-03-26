@@ -787,6 +787,80 @@ static buffer_file_t stdout_buffer;
   ========================
 */
 
+/* Begin Variable Section
+   ======================
+*/
+
+typedef enum {
+  VAR_UNKNOWN,
+  VAR_AID,
+  VAR_CONSTELLATION,
+} variable_type_t;
+
+typedef struct variable variable_t;
+struct variable {
+  char* name;
+  variable_type_t type;
+  union {
+    aid_t aid;
+  } u;
+  variable_t* next;
+};
+
+static variable_t* variable_list_head = 0;
+
+static variable_t*
+variable_create (const char* name)
+{
+  variable_t* var = malloc (sizeof (variable_t));
+  memset (var, 0, sizeof (variable_t));
+
+  size_t size = strlen (name) + 1;
+  var->name = malloc (size);
+  memcpy (var->name, name, size);
+  var->type = VAR_UNKNOWN;
+
+  var->next = variable_list_head;
+  variable_list_head = var;
+
+  return var;
+}
+
+static void
+variable_destroy (variable_t** ptr)
+{
+  variable_t* var = *ptr;
+  *ptr = var->next;
+
+  free (var->name);
+  free (var);
+}
+
+static variable_t*
+variable_find (const char* name)
+{
+  variable_t* var;
+  for (var = variable_list_head; var != 0; var = var->next) {
+    if (strcmp (var->name, name) == 0) {
+      break;
+    }
+  }
+  return var;
+}
+
+static void
+variable_assign_aid (variable_t* var,
+		     aid_t aid)
+{
+  var->type = VAR_AID;
+  var->u.aid = aid;
+}
+
+/*
+  End Variable Section
+  ====================
+*/
+
 /*
   Begin Line Editing Section
   ==========================
@@ -887,16 +961,15 @@ typedef enum {
 } scan_state_t;
 
 static scan_state_t scan_state = SCAN_START;
-
-static void
-scanner_reset (void)
-{
-  scan_state= SCAN_START;
-}
+static char* scan_string_original = 0;
+static char* scan_string_copy = 0;
+static char** scan_strings = 0;
+static size_t scan_strings_size = 0;
+static size_t scan_strings_capacity = 0;
 
 /* Tokens
 
-   string - [a-zA-Z0-9_/-]+
+   string - [a-zA-Z0-9_/-=]+
 
    whitespace - [ \t\0]
 
@@ -904,8 +977,20 @@ scanner_reset (void)
  */
 
 static void
-scanner_put (const char c)
+scanner_enter_string (char* str)
 {
+  if (scan_strings_size == scan_strings_capacity) {
+    scan_strings_capacity = scan_strings_capacity * 2 + 1;
+    scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (char*));
+  }
+  scan_strings[scan_strings_size++] = str;
+}
+
+static void
+scanner_put (char* ptr)
+{
+  const char c = *ptr;
+
   switch (scan_state) {
   case SCAN_START:
     if ((c >= 'a' && c <= 'z') ||
@@ -913,8 +998,9 @@ scanner_put (const char c)
 	(c >= '0' && c <= '9') ||
 	(c == '_') ||
 	(c == '/') ||
-	(c == '-')) {
-      bfprintf (&stdout_buffer, "start string\n");
+	(c == '-') ||
+	(c == '=')) {
+      scanner_enter_string (ptr);
       scan_state = SCAN_STRING;
       break;
     }
@@ -940,7 +1026,8 @@ scanner_put (const char c)
 	(c >= '0' && c <= '9') ||
 	(c == '_') ||
 	(c == '/') ||
-	(c == '-')) {
+	(c == '-') ||
+	(c == '=')) {
       /* Still scanning a string. */
       scan_state = SCAN_STRING;
       break;
@@ -948,13 +1035,15 @@ scanner_put (const char c)
 
     switch (c) {
     case '#':
-      bfprintf (&stdout_buffer, "end string\n");
+      /* Terminate the string. */
+      *ptr = 0;
       scan_state = SCAN_COMMENT;
       break;
     case ' ':
     case '\t':
     case 0:
-      bfprintf (&stdout_buffer, "end string\n");
+      /* Terminate the string. */
+      *ptr = 0;
       scan_state = SCAN_START;
       break;
     default:
@@ -972,121 +1061,162 @@ scanner_put (const char c)
   }
 }
 
-/* static void */
-/* interpreter_put (interpreter_t* in, */
-/* 		 size_t location) */
-/* { */
-/*   const char c = in->line_original[location]; */
+static int
+scanner_process (char* string,
+		 size_t size)
+{
+  scan_state= SCAN_START;
+  free (scan_string_original);
+  free (scan_string_copy);
+  scan_string_original = string;
+  scan_string_copy = malloc (size);
+  memcpy (scan_string_copy, string, size);
 
-/*   switch (in->scan_state) { */
-/*   case SCAN_START: */
-/*     if ((c >= 'a' && c <= 'z') || */
-/* 	(c >= 'A' && c <= 'Z') || */
-/* 	c == '_' || */
-/* 	c == '/' || */
-/* 	c == '-') { */
-/*       in->scan_string = in->line_str + location; */
-/*       in->scan_string_size = 1; */
-/*       in->scan_state = SCAN_STRING; */
-/*       break; */
-/*     } */
+  scan_strings_size = 0;
 
-/*     if (c >= '0' && c <= '9') { */
-/*       in->scan_string = in->line_str + location; */
-/*       in->scan_string_size = 1; */
-/*       in->scan_state = SCAN_INTEGER; */
-/*       break; */
-/*     } */
+  size_t idx;
+  for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) {
+    scanner_put (scan_string_copy + idx);
+  }
 
-/*     switch (c) { */
-/*     case '(': */
-/*       interpreter_push_token (in, TOK_LPAREN, location, 0); */
-/*       break; */
-/*     case ')': */
-/*       interpreter_push_token (in, TOK_RPAREN, location, 0); */
-/*       break; */
-/*     case '#': */
-/*       in->scan_state = SCAN_COMMENT; */
-/*       break; */
-/*     case ' ': */
-/*     case '\t': */
-/*       /\* Eat whitespace. *\/ */
-/*       break; */
-/*     case 0: */
-/*       interpreter_push_token (in, TOK_END, location, 0); */
-/*       in->scan_state = SCAN_DONE; */
-/*       break; */
-/*     default: */
-/*       in->scan_state = SCAN_ERROR; */
-/*       in->scan_error_location = location; */
-/*       return; */
-/*       break; */
-/*     } */
-/*     break; */
-
-/*   case SCAN_STRING: */
-/*     if ((c >= 'a' && c <= 'z') || */
-/* 	(c >= 'A' && c <= 'Z') || */
-/* 	(c >= '0' && c <= '9') || */
-/* 	c == '_' || */
-/* 	c == '/' || */
-/* 	c == '-') { */
-/*       /\* Continue. *\/ */
-/*       ++in->scan_string_size; */
-/*       break; */
-/*     } */
-
-/*     { */
-/*       /\* Terminate with null. *\/ */
-/*       in->scan_string[in->scan_string_size] = 0; */
-/*       interpreter_push_token (in, TOK_STRING, location, in->scan_string); */
-/*       in->scan_state = SCAN_START; */
-/*       /\* Recur. *\/ */
-/*       interpreter_put (in, location); */
-/*       return; */
-/*     } */
-
-/*   case SCAN_INTEGER: */
-/*     if (c >= '0' && c <= '9') { */
-/*       /\* Continue. *\/ */
-/*       ++in->scan_string_size; */
-/*       break; */
-/*     } */
-
-/*     { */
-/*       /\* Terminate with null. *\/ */
-/*       in->scan_string[in->scan_string_size] = 0; */
-/*       interpreter_push_token (in, TOK_INTEGER, location, in->scan_string); */
-/*       in->scan_state = SCAN_START; */
-/*       /\* Recur. *\/ */
-/*       interpreter_put (in, location); */
-/*       return; */
-/*     } */
-
-/*   case SCAN_COMMENT: */
-/*     switch (c) { */
-/*     case 0: */
-/*       in->scan_state = SCAN_DONE; */
-/*       break; */
-/*     } */
-/*     break; */
-
-/*   case SCAN_ERROR: */
-/*     /\* Do nothing. *\/ */
-/*     return; */
-
-/*   case SCAN_DONE: */
-/*     /\* Do nothing. *\/ */
-/*     return; */
-/*   } */
-
-/*   return; */
-/* } */
-
+  if (scan_state != SCAN_ERROR) {
+    return 0;
+  }
+  else {
+    bfprintf (&stdout_buffer, "error near: %s\n", scan_string_original + idx);
+    return -1;
+  }
+}
 
 /*
   End Scanner Section
   ===================
+*/
+
+/*
+  Begin Dispatch Section
+  ======================
+*/
+
+static bool
+create_ (void)
+{
+  return false;
+}
+
+static bool
+bind_ (void)
+{
+  return false;
+}
+
+static bool
+unbind_ (void)
+{
+  return false;
+}
+
+static bool
+destroy_ (void)
+{
+  return false;
+}
+
+static bool
+lookup_ (void)
+{
+  if (scan_strings_size >= 1) {
+    if (strcmp ("lookup", scan_strings[0]) == 0) {
+      if (scan_strings_size == 2) {
+	bfprintf (&stdout_buffer, "%d\n", lookup (scan_strings[1], strlen (scan_strings[1]) + 1));
+	return true;
+      }
+      else {
+	bfprintf (&stdout_buffer, "usage: [var = ] lookup NAME\n");
+	return true;
+      }
+    }
+  }
+  if (scan_strings_size >= 3) {
+    if (strcmp ("=", scan_strings[1]) == 0 &&
+	strcmp ("lookup", scan_strings[2]) == 0) {
+      if (scan_strings_size == 4) {
+	/* Perform the lookup. */
+	aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1);
+
+	/* Find the variable or create it. */
+	variable_t* var = variable_find (scan_strings[0]);
+	if (var == 0) {
+	  var = variable_create (scan_strings[0]);
+	}
+	variable_assign_aid (var, aid);
+	bfprintf (&stdout_buffer, "%s = %d\n", scan_strings[0], aid);
+	return true;
+      }
+      else {
+	bfprintf (&stdout_buffer, "usage: [var = ] lookup NAME\n");
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool
+start_ (void)
+{
+  if (scan_strings_size >= 1) {
+    if (strcmp ("start", scan_strings[0]) == 0) {
+      if (scan_strings_size == 2) {
+	/* What are we trying to start? */
+	variable_t* var = variable_find (scan_strings[1]);
+	if (var == 0) {
+	  bfprintf (&stdout_buffer, "variable %s does not exist\n", scan_strings[1]);
+	  return true;
+	}
+	if (var->type != VAR_AID) {
+	  bfprintf (&stdout_buffer, "variable %s does not name an automaton\n", scan_strings[1]);
+	  return true;
+	}
+
+
+	bfprintf (&stdout_buffer, "START\n");
+	return true;
+      }
+      else {
+	bfprintf (&stdout_buffer, "usage: start VAR\n");
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool
+error_ (void)
+{
+  /* Catch all. */
+  bfprintf (&stdout_buffer, "error:  unknown command\n");
+  return true;
+}
+
+typedef bool (*dispatch_func_t) (void);
+
+static dispatch_func_t dispatch[] = {
+  create_,
+  bind_,
+  unbind_,
+  destroy_,
+  lookup_,
+  start_,
+  /* Catch errors. */
+  error_,
+  0
+};
+
+/*
+  End Dispatch Section
+  ====================
 */
 
 static void
@@ -1184,20 +1314,23 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
   initialize ();
 
   if (process_line_precondition ()) {
-    char* string;
+    char* string_original;
     size_t size;
-    pop_line (&string, &size);
+    pop_line (&string_original, &size);
 
-    scanner_reset ();
-    for (size_t idx = 0; idx != size; ++idx) {
-      scanner_put (string[idx]);
-      if (scan_state == SCAN_ERROR) {
-	bfprintf (&stdout_buffer, "error near: %s\n", string + idx);
+    if (scanner_process (string_original, size) == -1) {
+      finish_internal ();
+    }
+
+    for (size_t idx = 0; dispatch[idx] != 0; ++idx) {
+      if (dispatch[idx] ()) {
 	break;
       }
     }
 
-    free (string);
+    /* for (size_t idx = 0; idx != scan_strings_size; ++idx) { */
+    /*   bfprintf (&stdout_buffer, "idx = %d string = %s\n", idx, scan_strings[idx]); */
+    /* } */
   }
   finish_internal ();
 }
