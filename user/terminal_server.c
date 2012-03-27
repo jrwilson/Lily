@@ -2065,7 +2065,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
   TERMINAL SERVER -> TERMINAL
 */
 
-BEGIN_OUTPUT (PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out", "buffer_file_t", scan_codes_out, ano_t ano, int terminal)
+BEGIN_OUTPUT (PARAMETER, SCAN_CODES_OUT_NO, "scan_codes_out_t", "buffer_file_t", scan_codes_out, ano_t ano, int terminal)
 {
   initialize ();
 
@@ -2099,7 +2099,7 @@ BEGIN_OUTPUT (PARAMETER, STDOUT_T_NO, "stdout_t", "buffer_file_t", stdout_t, ano
   finish_output (false, -1, -1);
 }
 
-BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int terminal)
+BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out_t", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int terminal)
 {
   initialize ();
 

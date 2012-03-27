@@ -40,77 +40,53 @@ bind ps2_keyboard_mouse mouse_packets_out terminal_server mouse_packets_in
 bind terminal_server vga_op vga vga_op
 
 terminal1 = create /bin/terminal
+bind -o 1 terminal_server *out_t terminal1 *in_t
+bind -i 1 terminal1 *out_t terminal_server *in_t
+
 terminal2 = create /bin/terminal
+bind -o 2 terminal_server *out_t terminal2 *in_t
+bind -i 2 terminal2 *out_t terminal_server *in_t
+
 terminal3 = create /bin/terminal
+bind -o 3 terminal_server *out_t terminal3 *in_t
+bind -i 3 terminal3 *out_t terminal_server *in_t
+
 terminal4 = create /bin/terminal
+bind -o 4 terminal_server *out_t terminal4 *in_t
+bind -i 4 terminal4 *out_t terminal_server *in_t
+
 terminal5 = create /bin/terminal
+bind -o 5 terminal_server *out_t terminal5 *in_t
+bind -i 5 terminal5 *out_t terminal_server *in_t
+
 terminal6 = create /bin/terminal
+bind -o 6 terminal_server *out_t terminal6 *in_t
+bind -i 6 terminal6 *out_t terminal_server *in_t
+
 terminal7 = create /bin/terminal
+bind -o 7 terminal_server *out_t terminal7 *in_t
+bind -i 7 terminal7 *out_t terminal_server *in_t
+
 terminal8 = create /bin/terminal
+bind -o 8 terminal_server *out_t terminal8 *in_t
+bind -i 8 terminal8 *out_t terminal_server *in_t
+
 terminal9 = create /bin/terminal
+bind -o 9 terminal_server *out_t terminal9 *in_t
+bind -i 9 terminal9 *out_t terminal_server *in_t
+
 terminal10 = create /bin/terminal
+bind -o 10 terminal_server *out_t terminal10 *in_t
+bind -i 10 terminal10 *out_t terminal_server *in_t
+
 terminal11 = create /bin/terminal
+bind -o 11 terminal_server *out_t terminal11 *in_t
+bind -i 11 terminal11 *out_t terminal_server *in_t
+
 terminal12 = create /bin/terminal
+bind -o 12 terminal_server *out_t terminal12 *in_t
+bind -i 12 terminal12 *out_t terminal_server *in_t
 
-bind -o 1 terminal_server scan_codes_out terminal1 scan_codes_in
-bind -o 1 terminal_server stdout_t terminal1 stdin_t
-bind -o 1 terminal_server mouse_packets_out terminal1 mouse_packets_in
-bind -i 1 terminal1 stdout_t terminal_server stdin_t
-
-bind -o 2 terminal_server scan_codes_out terminal2 scan_codes_in
-bind -o 2 terminal_server stdout_t terminal2 stdin_t
-bind -o 2 terminal_server mouse_packets_out terminal2 mouse_packets_in
-bind -i 2 terminal2 stdout_t terminal_server stdin_t
-
-bind -o 3 terminal_server scan_codes_out terminal3 scan_codes_in
-bind -o 3 terminal_server stdout_t terminal3 stdin_t
-bind -o 3 terminal_server mouse_packets_out terminal3 mouse_packets_in
-bind -i 3 terminal3 stdout_t terminal_server stdin_t
-
-bind -o 4 terminal_server scan_codes_out terminal4 scan_codes_in
-bind -o 4 terminal_server stdout_t terminal4 stdin_t
-bind -o 4 terminal_server mouse_packets_out terminal4 mouse_packets_in
-bind -i 4 terminal4 stdout_t terminal_server stdin_t
-
-bind -o 5 terminal_server scan_codes_out terminal5 scan_codes_in
-bind -o 5 terminal_server stdout_t terminal5 stdin_t
-bind -o 5 terminal_server mouse_packets_out terminal5 mouse_packets_in
-bind -i 5 terminal5 stdout_t terminal_server stdin_t
-
-bind -o 6 terminal_server scan_codes_out terminal6 scan_codes_in
-bind -o 6 terminal_server stdout_t terminal6 stdin_t
-bind -o 6 terminal_server mouse_packets_out terminal6 mouse_packets_in
-bind -i 6 terminal6 stdout_t terminal_server stdin_t
-
-bind -o 7 terminal_server scan_codes_out terminal7 scan_codes_in
-bind -o 7 terminal_server stdout_t terminal7 stdin_t
-bind -o 7 terminal_server mouse_packets_out terminal7 mouse_packets_in
-bind -i 7 terminal7 stdout_t terminal_server stdin_t
-
-bind -o 8 terminal_server scan_codes_out terminal8 scan_codes_in
-bind -o 8 terminal_server stdout_t terminal8 stdin_t
-bind -o 8 terminal_server mouse_packets_out terminal8 mouse_packets_in
-bind -i 8 terminal8 stdout_t terminal_server stdin_t
-
-bind -o 9 terminal_server scan_codes_out terminal9 scan_codes_in
-bind -o 9 terminal_server stdout_t terminal9 stdin_t
-bind -o 9 terminal_server mouse_packets_out terminal9 mouse_packets_in
-bind -i 9 terminal9 stdout_t terminal_server stdin_t
-
-bind -o 10 terminal_server scan_codes_out terminal10 scan_codes_in
-bind -o 10 terminal_server stdout_t terminal10 stdin_t
-bind -o 10 terminal_server mouse_packets_out terminal10 mouse_packets_in
-bind -i 10 terminal10 stdout_t terminal_server stdin_t
-
-bind -o 11 terminal_server scan_codes_out terminal11 scan_codes_in
-bind -o 11 terminal_server stdout_t terminal11 stdin_t
-bind -o 11 terminal_server mouse_packets_out terminal11 mouse_packets_in
-bind -i 11 terminal11 stdout_t terminal_server stdin_t
-
-bind -o 12 terminal_server scan_codes_out terminal12 scan_codes_in
-bind -o 12 terminal_server stdout_t terminal12 stdin_t
-bind -o 12 terminal_server mouse_packets_out terminal12 mouse_packets_in
-bind -i 12 terminal12 stdout_t terminal_server stdin_t
 
 # Put the syslog on terminal1.
 syslog = lookup syslog
@@ -124,7 +100,5 @@ bind this stdout terminal2 stdin
 
 # Put the PS2 keyboard/mouse test on terminal3.
 ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
-bind terminal3 scan_codes_out ps2_keyboard_mouse_test scan_codes_in
-bind terminal3 mouse_packets_out ps2_keyboard_mouse_test mouse_packets_in
-bind terminal3 stdout ps2_keyboard_mouse_test stdin
-bind ps2_keyboard_mouse_test stdout terminal3 stdin
+bind terminal3 *out ps2_keyboard_mouse_test *in
+bind ps2_keyboard_mouse_test *out terminal3 *in

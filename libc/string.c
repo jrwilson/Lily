@@ -91,6 +91,19 @@ memset (void* s,
   return s;
 }
 
+char*
+strchr (const char* s,
+	int c)
+{
+  for (; *s != 0; ++s) {
+    if (*s == c) {
+      return (char*)s;
+    }
+  }
+
+  return 0;
+}
+
 int
 strcmp (const char* s1,
 	const char* s2)

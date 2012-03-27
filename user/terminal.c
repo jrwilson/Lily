@@ -101,7 +101,7 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
    
    Post: scan codes buffer is not empty
  */
-BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", scan_codes_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in_t", "buffer_file_t", scan_codes_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -157,7 +157,7 @@ BEGIN_INPUT (NO_PARAMETER, STDIN_T_NO, "stdin_t", "buffer_file_t", stdin_t, ano_
    
    Post: mouse packet list is not empty
  */
-BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packet_list_t", mouse_packets_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in_t", "mouse_packet_list_t", mouse_packets_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 

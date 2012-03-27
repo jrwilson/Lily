@@ -28,6 +28,10 @@ memset (void* s,
 	int c,
 	size_t n);
 
+char*
+strchr (const char* s,
+	int c);
+
 int
 strcmp (const char* s1,
 	const char* s2);
