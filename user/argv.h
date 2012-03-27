@@ -11,8 +11,8 @@ typedef struct {
 
 int
 argv_initw (argv_t* a,
-	    bd_t* bda,
-	    bd_t* bdb);
+	    bd_t bda,
+	    bd_t bdb);
 
 int
 argv_append (argv_t* a,

@@ -4,37 +4,20 @@
 
 int
 argv_initw (argv_t* a,
-	    bd_t* bda,
-	    bd_t* bdb)
+	    bd_t bda,
+	    bd_t bdb)
 {
-  size_t bd_sz = size_to_pages (sizeof (size_t));
-  *bda = buffer_create (bd_sz);
-  if (*bda == -1) {
-    return -1;
-  }
-  
-  if (buffer_file_initw (&a->argv_bf, *bda) != 0) {
-    buffer_destroy (*bda);
+  if (buffer_file_initw (&a->argv_bf, bda) != 0) {
     return -1;
   }
   
   a->argc = 0;
   
   if (buffer_file_write (&a->argv_bf, &a->argc, sizeof (size_t)) != 0) {
-    buffer_destroy (*bda);
     return -1;
   }
 
-  /* Non-empty so it can be mapped. */
-  *bdb = buffer_create (1);
-  if (*bdb == -1) {
-    buffer_destroy (*bda);
-    return -1;
-  }
-
-  if (buffer_file_initw (&a->string_bf, *bdb) != 0) {
-    buffer_destroy (*bda);
-    buffer_destroy (*bdb);
+  if (buffer_file_initw (&a->string_bf, bdb) != 0) {
     return -1;
   }
 

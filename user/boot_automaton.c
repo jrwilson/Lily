@@ -43,6 +43,7 @@
 
 /* Create a shell located here with this argument. */
 #define SHELL_PATH "/bin/jsh"
+/* The cannot contain more than one string. */
 #define SHELL_CMDLINE "/scr/start.jsh"
 
 /* Initialization flag. */
@@ -85,11 +86,16 @@ readfile_callback (void* data,
     return;
   }
 
-  bd_t bd1;
-  bd_t bd2;
+  bd_t bd1 = buffer_create (0);
+  bd_t bd2 = buffer_create (0);
+  if (bd1 == -1 || bd2 == -1) {
+    bfprintf (&syslog_buffer, ERROR "could not create argv buffers\n");
+    state = STOP;
+    return;
+  }
 
   argv_t argv;
-  if (argv_initw (&argv, &bd1, &bd2) != 0) {
+  if (argv_initw (&argv, bd1, bd2) != 0) {
     bfprintf (&syslog_buffer, ERROR "could not initialize argv\n");
     state = STOP;
     return;
@@ -112,6 +118,9 @@ readfile_callback (void* data,
     state = STOP;
     return;
   }
+
+  buffer_destroy (bd1);
+  buffer_destroy (bd2);
 
   /* The bdb buffer will be destroyed by the input action that calls this callback. */
 }

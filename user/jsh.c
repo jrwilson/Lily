@@ -483,6 +483,7 @@ static bool create_retain_privilege = false;
 static const char* create_register_name = 0;
 static size_t create_register_name_size = 0;
 static const char* create_path = 0;
+static size_t create_argv_idx = 0;
 
 static void
 create_callback (void* data,
@@ -500,15 +501,36 @@ create_callback (void* data,
     return;
   }
 
-  bfprintf (&stdout_buffer, "TODO:  argv\n");
-  aid_t aid = create (bdb, size, -1, -1, create_register_name, create_register_name_size, create_retain_privilege);
+  bd_t bd1 = buffer_create (0);
+  bd_t bd2 = buffer_create (0);
+  if (bd1 == -1 || bd2 == -1) {
+    exit ();
+  }
+
+  argv_t argv;
+  if (argv_initw (&argv, bd1, bd2) != 0) {
+    exit ();
+  }
+
+  for (; create_argv_idx != scan_strings_size; ++create_argv_idx) {
+    if (argv_append (&argv, scan_strings[create_argv_idx], strlen (scan_strings[create_argv_idx]) + 1) != 0) {
+      exit ();
+    }
+  }
+
+  aid_t aid = create (bdb, size, bd1, bd2, create_register_name, create_register_name_size, create_retain_privilege);
   if (aid == -1) {
+    buffer_destroy (bd1);
+    buffer_destroy (bd2);
     bfprintf (&stdout_buffer, "-> error: create failed\n");
     return;
   }
 
   /* Add to the list of automata we know about. */
   create_automaton (create_name, aid, create_path);
+
+  buffer_destroy (bd1);
+  buffer_destroy (bd2);
   
   bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
 }
@@ -577,7 +599,9 @@ create_ (void)
       create_usage ();
       return -1;
     }
-    create_path = scan_strings[idx++];
+    create_path = scan_strings[idx];
+    create_argv_idx = idx;
+    ++idx;
 
     /* Request the file. */
 
