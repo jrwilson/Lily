@@ -1801,7 +1801,9 @@ public:
 	 pos != bd_to_buffer_map_.end ();
 	 ++pos) {
       // Remove from the memory map.
-      remove_vm_area (pos->second.get ());
+      if (pos->second->begin () != 0) {
+	remove_vm_area (pos->second.get ());
+      }
     }
     // This removes references to the buffers.
     bd_to_buffer_map_.clear ();

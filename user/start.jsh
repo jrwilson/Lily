@@ -32,8 +32,8 @@ bind @ps2_keyboard_mouse mouse_packets_out @terminal_server mouse_packets_in
 bind @terminal_server vga_op @vga vga_op
 
 @terminal1 = create -n terminal1 /bin/terminal
-@terminal2 = create /bin/terminal
-@terminal3 = create /bin/terminal
+@terminal2 = create -n terminal2 /bin/terminal
+@terminal3 = create -n terminal3 /bin/terminal
 @terminal4 = create /bin/terminal
 @terminal5 = create /bin/terminal
 @terminal6 = create /bin/terminal
@@ -104,12 +104,7 @@ bind -p 12 @terminal_server stdout_t @terminal12 stdin_t
 bind -p 12 @terminal_server mouse_packets_out @terminal12 mouse_packets_in
 bind -q 12 @terminal12 stdout_t @terminal_server stdin_t
 
-# Put a new shell on terminal2.
-@jsh2 = create /bin/jsh2
-bind @terminal2 stdout @jsh2 stdin
-bind @jsh2 stdout @terminal2 stdin
-bind @this start @jsh2 start
-start @jsh2
+@jsh2 = create /bin/jsh2 /scr/start2.jsh
 
 # Put the PS2 keyboard/mouse test on terminal3.
 @ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
@@ -117,12 +112,6 @@ bind @terminal3 scan_codes_out @ps2_keyboard_mouse_test scan_codes_in
 bind @terminal3 mouse_packets_out @ps2_keyboard_mouse_test mouse_packets_in
 bind @terminal3 stdout @ps2_keyboard_mouse_test stdin
 bind @ps2_keyboard_mouse_test stdout @terminal3 stdin
-
-# Put the syslog on terminal1.
-#@syslog = lookup syslog
-#bind @syslog stdout @terminal1 stdin
-#bind @this start @syslog start
-#start @syslog
 
 #@pci = create -p /bin/pci
 

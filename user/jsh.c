@@ -489,7 +489,10 @@ create_ (token_list_item_t* var)
 
   /* Create context for the create callback. */
   create_context_t* cc = create_create_context (var->string, var->size, retain_privilege, registry_name, registry_name_size);
-  
+
+  /* Append the filename. */
+  argv_append (&cc->argv, filename->string, filename->size);
+
   while ((string = accept (STRING)) != 0) {
     /* Add the string to argv. */
     argv_append (&cc->argv, string->string, string->size);
@@ -935,7 +938,7 @@ scan_string_steal (char** string,
 
 /* Tokens
 
-   string - [a-zA-Z0-9_/-]+
+   string - [a-zA-Z0-9_/-.]+
 
    assign symbol - =
 
@@ -959,7 +962,8 @@ put (char c)
 	(c >= '0' && c <= '9') ||
 	c == '_' ||
 	c == '/' ||
-	c == '-') {
+	c == '-' ||
+	c == '.') {
       scan_string_append (c);
       scan_state = SCAN_STRING;
       break;
@@ -1007,7 +1011,8 @@ put (char c)
 	(c >= '0' && c <= '9') ||
 	c == '_' ||
 	c == '/' ||
-	c == '-') {
+	c == '-' ||
+	c == '.') {
       /* Continue. */
       scan_string_append (c);
       break;
