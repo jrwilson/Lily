@@ -70,7 +70,7 @@ static bd_t vfs_request_bda = -1;
 static bd_t vfs_request_bdb = -1;
 static vfs_request_queue_t vfs_request_queue;
 static callback_queue_t vfs_response_queue;
-static bool waiting_for_script = false;
+static bool process_hold = false;
 
 typedef struct label label_t;
 typedef struct label_item label_item_t;
@@ -154,7 +154,7 @@ create_automaton (const char* name,
   automaton->path = malloc (size);
   memcpy (automaton->path, path, size);
 
-  bfprintf (&stdout_buffer, "TODO:  subscribe to automaton\n");
+  bfprintf (&stdout_buffer, "TODO: subscribe to automaton\n");
   
   automaton->next = automata_head;
   automata_head = automaton;
@@ -213,7 +213,7 @@ create_binding (bid_t bid,
   memcpy (binding->input_action_name, input_action_name, size);
   binding->input_parameter = input_parameter;
 
-  bfprintf (&stdout_buffer, "TODO:  subscribe to binding\n");
+  bfprintf (&stdout_buffer, "TODO: subscribe to binding\n");
 
   binding->next = bindings_head;
   bindings_head = binding;
@@ -499,6 +499,124 @@ start_queue_pop (void)
   free (item);
 }
 
+static const char* create_name = 0;
+static bool create_retain_privilege = false;
+static const char* create_register_name = 0;
+static size_t create_register_name_size = 0;
+static const char* create_path = 0;
+
+static void
+create_callback (void* data,
+		 bd_t bda,
+		 bd_t bdb)
+{
+  vfs_error_t error;
+  size_t size;
+  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
+    exit ();
+  }
+
+  if (error == VFS_SUCCESS) {
+    bfprintf (&stdout_buffer, "TODO:  argv\n");
+    aid_t aid = create (bdb, size, -1, -1, create_register_name, create_register_name_size, create_retain_privilege);
+    if (aid != -1) {
+      bfprintf (&stdout_buffer, "TODO:  Subscribe to created automaton\n");
+
+      /* Add to the list of automata we know about. */
+      create_automaton (create_name, aid, create_path);
+      
+      bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
+    }
+    else {
+      bfprintf (&stdout_buffer, "TODO:  create create failed\n");
+    }
+  }
+  else {
+    bfprintf (&stdout_buffer, "TODO:  create couldn't read file\n");
+  }
+}
+
+static void
+create_usage (void)
+{
+  bfprintf (&stdout_buffer, "usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n");
+}
+
+static bool
+create_ (void)
+{
+  if (scan_strings_size >= 1) {
+    if (strcmp ("create", scan_strings[0]) == 0) {
+      create_usage ();
+      return true;
+    }
+  }
+  if (scan_strings_size >= 3 &&
+      strcmp ("=", scan_strings[1]) == 0 &&
+      strcmp ("create", scan_strings[2]) == 0) {
+
+    create_name = scan_strings[0];
+
+    if (find_label (create_name) != 0) {
+      bfprintf (&stdout_buffer, "error: %s is already a label\n", create_name);
+      return true;
+    }
+
+    if (find_automaton (create_name) != 0) {
+      bfprintf (&stdout_buffer, "error: name %s is taken\n", create_name);
+      return true;
+    }
+
+    size_t idx = 3;
+    
+    /* Parse the options. */
+    create_retain_privilege = false;
+    create_register_name = 0;
+    create_register_name_size = 0;
+    
+    for (;;) {
+      if (idx >= scan_strings_size) {
+	create_usage ();
+	return -1;
+      }
+      
+      if (strcmp (scan_strings[idx], "-p") == 0) {
+	create_retain_privilege = true;
+	++idx;
+	continue;
+      }
+      
+      if (strcmp (scan_strings[idx], "-n") == 0) {
+	++idx;
+	if (idx >= scan_strings_size) {
+	  create_usage ();
+	  return -1;
+	}
+	
+	create_register_name = scan_strings[idx];
+	create_register_name_size = strlen (create_register_name) + 1;
+	++idx;
+      }
+      
+      break;
+    }
+
+    if (idx >= scan_strings_size) {
+      create_usage ();
+      return -1;
+    }
+    create_path = scan_strings[idx++];
+
+    /* Request the file. */
+
+    vfs_request_queue_push_readfile (&vfs_request_queue, create_path);
+    callback_queue_push (&vfs_response_queue, create_callback, 0);
+
+    return true;
+  }
+  return false;
+}
+
 static void
 bind_usage (void)
 {
@@ -575,11 +693,11 @@ bind_ (void)
       description_t output_description;
       description_t input_description;
       if (description_init (&output_description, output_automaton->aid) != 0) {
-	bfprintf (&stdout_buffer, "TODO:  Could not describe output\n");
+	bfprintf (&stdout_buffer, "TODO: Could not describe output\n");
 	return -1;
       }
       if (description_init (&input_description, input_automaton->aid) != 0) {
-	bfprintf (&stdout_buffer, "TODO:  Could not describe input\n");
+	bfprintf (&stdout_buffer, "TODO: Could not describe input\n");
 	return -1;
       }
       
@@ -591,20 +709,20 @@ bind_ (void)
       description_fini (&input_description);
       
       if (output_action == -1) {
-	bfprintf (&stdout_buffer, "TODO:  Output action does not exist\n");
+	bfprintf (&stdout_buffer, "TODO: Output action does not exist\n");
 	return -1;
       }
       
       if (input_action == -1) {
-	bfprintf (&stdout_buffer, "TODO:  Input action does not exist\n");
+	bfprintf (&stdout_buffer, "TODO: Input action does not exist\n");
 	return -1;
       }
       
-      bfprintf (&stdout_buffer, "TODO:  Correct the parameters\n");
+      bfprintf (&stdout_buffer, "TODO: Correct the parameters\n");
       
       bid_t bid = bind (output_automaton->aid, output_action, output_parameter, input_automaton->aid, input_action, input_parameter);
       if (bid == -1) {
-	bfprintf (&stdout_buffer, "TODO:  Bind failed\n");
+	bfprintf (&stdout_buffer, "TODO: Bind failed\n");
 	return -1;
       }
       
@@ -632,40 +750,43 @@ lookup_ (void)
       return true;
     }
   }
-  if (scan_strings_size >= 3) {
-    if (strcmp ("=", scan_strings[1]) == 0 &&
-	strcmp ("lookup", scan_strings[2]) == 0) {
-      if (scan_strings_size == 4) {
-	/* Automaton names and labels are disjoint. */
-	if (find_label (scan_strings[0]) != 0) {
-	  bfprintf (&stdout_buffer, "error: %s is already a label\n", scan_strings[0]);
-	  return true;
-	}
-
-	if (find_automaton (scan_strings[0]) != 0) {
-	  bfprintf (&stdout_buffer, "error: name %s is taken\n", scan_strings[0]);
-	  return true;
-	}
-
-	/* Perform the lookup. */
-	aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1);
-
-	automaton_t* a;
-	if ((a = find_automaton_aid (aid)) != 0) {
-	  bfprintf (&stdout_buffer, "error: automaton already exists with name %s\n", a->name);
-	  return true;
-	}
-
-	/* Add to the list of automata we know about. */
-	create_automaton (scan_strings[0], aid, scan_strings[3]);
-
-	bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
+  if (scan_strings_size >= 3 && 
+      strcmp ("=", scan_strings[1]) == 0 &&
+      strcmp ("lookup", scan_strings[2]) == 0) {
+    if (scan_strings_size == 4) {
+      /* Automaton names and labels are disjoint. */
+      if (find_label (scan_strings[0]) != 0) {
+	bfprintf (&stdout_buffer, "error: %s is already a label\n", scan_strings[0]);
 	return true;
       }
-      else {
-	lookup_usage ();
+      
+      if (find_automaton (scan_strings[0]) != 0) {
+	bfprintf (&stdout_buffer, "error: name %s is taken\n", scan_strings[0]);
 	return true;
       }
+      
+      /* Perform the lookup. */
+      aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1);
+      if (aid == -1) {
+	bfprintf (&stdout_buffer, "no automaton registered under %s\n", scan_strings[3]);
+	return true;
+      }
+      
+      automaton_t* a;
+      if ((a = find_automaton_aid (aid)) != 0) {
+	bfprintf (&stdout_buffer, "error: automaton already exists with name %s\n", a->name);
+	return true;
+      }
+      
+      /* Add to the list of automata we know about. */
+      create_automaton (scan_strings[0], aid, scan_strings[3]);
+      
+      bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
+      return true;
+    }
+    else {
+      lookup_usage ();
+      return true;
     }
   }
   return false;
@@ -691,7 +812,7 @@ show_ (void)
 	bfprintf (&stdout_buffer, "bindings:\n");
 	if (bindings_head != 0) {
 	  for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
-	    bfprintf (&stdout_buffer, "\t%d:\t(%s, %s, %d)\t-> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+	    bfprintf (&stdout_buffer, "\t%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
 	  }
 	}
 	else {
@@ -747,7 +868,7 @@ error_ (void)
 {
   if (scan_strings_size != 0) {
     /* Catch all. */
-    bfprintf (&stdout_buffer, "error:  unknown command\n");
+    bfprintf (&stdout_buffer, "error: unknown command %s\n", scan_strings[0]);
   }
   return true;
 }
@@ -755,6 +876,7 @@ error_ (void)
 typedef bool (*dispatch_func_t) (void);
 
 static dispatch_func_t dispatch[] = {
+  create_,
   bind_,
   lookup_,
   show_,
@@ -829,7 +951,7 @@ readscript_callback (void* data,
   line_queue_append (&script_queue, 0);
   line_queue_push (&script_queue);
   buffer_unmap (bdb);
-  waiting_for_script = false;
+  process_hold = false;
 }
 
 static void
@@ -901,7 +1023,7 @@ initialize (void)
     	}
 
     	vfs_request_queue_push_readfile (&vfs_request_queue, filename);
-	waiting_for_script = true;
+	process_hold = true;
     	callback_queue_push (&vfs_response_queue, readscript_callback, 0);
       }
     }
@@ -944,7 +1066,7 @@ BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano,
 static bool
 process_line_precondition (void)
 {
-  return !waiting_for_script && (!line_queue_empty (&script_queue) || !line_queue_empty (&interactive_queue)) && start_queue_empty () && buffer_file_size (&stdout_buffer) == 0;
+  return !process_hold && (!line_queue_empty (&script_queue) || !line_queue_empty (&interactive_queue)) && start_queue_empty () && buffer_file_size (&stdout_buffer) == 0 && callback_queue_empty (&vfs_response_queue);
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, int param)

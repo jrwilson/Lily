@@ -42,8 +42,8 @@
 #define ROOT_PATH "/"
 
 /* Create a shell located here with this argument. */
-#define SHELL_PATH "/bin/jsh"
-#define SHELL_CMDLINE "/scr/start.jsh"
+#define SHELL_PATH "/bin/jsh2"
+#define SHELL_CMDLINE "/scr/start2.jsh"
 
 /* Initialization flag. */
 static bool initialized = false;
