@@ -74,30 +74,15 @@ static vfs_request_queue_t vfs_request_queue;
 static callback_queue_t vfs_response_queue;
 static bool process_hold = false;
 
-typedef struct label label_t;
-typedef struct label_item label_item_t;
 typedef struct automaton automaton_t;
 typedef struct automaton_item automaton_item_t;
 typedef struct binding binding_t;
 typedef struct binding_item binding_item_t;
 
-struct label {
-  char* string;
-  automaton_item_t* automata_head;
-  binding_item_t* bindings_head;
-  label_t* next;
-};
-
-struct label_item {
-  label_t* label;
-  label_item_t* next;
-};
-
 struct automaton {
   char* name;
   aid_t aid;
   char* path;
-  label_item_t* labels_head;
   automaton_t* next;
 };
 
@@ -116,7 +101,6 @@ struct binding {
   ano_t input_action;
   char* input_action_name;
   int input_parameter;
-  label_item_t* labels_head;
   binding_t* next;
 };
 
@@ -125,21 +109,9 @@ struct binding_item {
   binding_item_t* next;
 };
 
-static label_t* labels_head = 0;
+static automaton_t* this_automaton = 0;
 static automaton_t* automata_head = 0;
 static binding_t* bindings_head = 0;
-
-static label_t*
-find_label (const char* string)
-{
-  label_t* label;
-  for (label = labels_head; label != 0; label = label->next) {
-    if (strcmp (label->string, string) == 0) {
-      break;
-    }
-  }
-  return label;
-}
 
 static automaton_t*
 create_automaton (const char* name,
@@ -562,11 +534,6 @@ create_ (void)
 
     create_name = scan_strings[0];
 
-    if (find_label (create_name) != 0) {
-      bfprintf (&stdout_buffer, "-> error: %s is already a label\n", create_name);
-      return true;
-    }
-
     if (find_automaton (create_name) != 0) {
       bfprintf (&stdout_buffer, "-> error: name %s is taken\n", create_name);
       return true;
@@ -891,12 +858,6 @@ lookup_ (void)
       strcmp ("=", scan_strings[1]) == 0 &&
       strcmp ("lookup", scan_strings[2]) == 0) {
     if (scan_strings_size == 4) {
-      /* Automaton names and labels are disjoint. */
-      if (find_label (scan_strings[0]) != 0) {
-	bfprintf (&stdout_buffer, "-> error: %s is already a label\n", scan_strings[0]);
-	return true;
-      }
-      
       if (find_automaton (scan_strings[0]) != 0) {
 	bfprintf (&stdout_buffer, "-> error: name %s is taken\n", scan_strings[0]);
 	return true;
@@ -1070,15 +1031,22 @@ start_ (void)
     }
 
     for (size_t idx = 1; idx != scan_strings_size; ++idx) {
-      label_t* label = find_label (scan_strings[idx]);
-      if (label != 0) {
-	bfprintf (&stdout_buffer, "TODO start label %s\n", scan_strings[idx]);
-	continue;
-      }
       automaton_t* automaton = find_automaton (scan_strings[idx]);
       if (automaton != 0) {
-	/* Bind to its start action if necessary. */
-	bfprintf (&stdout_buffer, "TODO bind to start\n");
+	/* Check if we are already bound. */
+	binding_t* b;
+	for (b = bindings_head; b != 0; b = b->next) {
+	  if (b->output_automaton == this_automaton &&
+	      b->input_automaton == automaton &&
+	      b->output_action == START_NO) {
+	    break;
+	  }
+	}
+
+	if (b == 0) {
+	  /* Bind to start. */
+	  single_bind (this_automaton, "start", 0, automaton, "start", 0);
+	}
 	
 	/* Add to the start queue. */
 	start_queue_push (automaton->aid);
@@ -1161,7 +1129,7 @@ initialize (void)
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
 
-    create_automaton ("this", aid, "this");
+    this_automaton = create_automaton ("this", aid, "this");
 
     stdout_bd = buffer_create (0);
     if (stdout_bd == -1) {

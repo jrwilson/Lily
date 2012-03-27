@@ -87,11 +87,9 @@ terminal12 = create /bin/terminal
 bind -o 12 terminal_server *out_t terminal12 *in_t
 bind -i 12 terminal12 *out_t terminal_server *in_t
 
-
 # Put the syslog on terminal1.
 syslog = lookup syslog
 bind syslog stdout terminal1 stdin
-bind this start syslog start
 start syslog
 
 # Put this shell on terminal2.
