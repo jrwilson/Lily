@@ -1,8 +1,8 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-Wall -O2 -MD -std=c99
-PROGRAMS=syslog vfs tmpfs jsh2 ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test
+PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test
 # shell
-SCRIPTS=start2.jsh
+SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
 
 .PHONY : all
@@ -54,7 +54,7 @@ vga : vga.o vga_msg.o
 pci : pci.o 
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file -ldymem
 
-jsh2 : jsh2.o argv.o vfs_msg.o
+jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
 syslog : syslog.o 

@@ -3,10 +3,10 @@ AS=i586-elf-as
 CFLAGS=-MD -O2 -g -Wall -fno-builtin -std=c99
 
 # Headers that will be installed.
-HEADERS=automaton.h io.h string.h dymem.h buffer_queue.h buffer_file.h description.h callback_queue.h
+HEADERS=automaton.h io.h string.h dymem.h buffer_file.h description.h callback_queue.h
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=crt0.o libc.a libio.a libdymem.a libbuffer_queue.a libbuffer_file.a libdescription.a libcallback_queue.a
+OBJECTS=crt0.o libc.a libio.a libdymem.a libbuffer_file.a libdescription.a libcallback_queue.a
 
 .PHONY : all
 all : $(OBJECTS)
@@ -16,8 +16,6 @@ libc.a : automaton.o finish.o pagesize.o string.o
 libio.a : io.o
 
 libdymem.a : dymem.o
-
-libbuffer_queue.a : buffer_queue.o
 
 libbuffer_file.a : buffer_file.o
 
