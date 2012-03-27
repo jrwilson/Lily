@@ -33,7 +33,9 @@ ps2_keyboard_mouse = create -p /bin/ps2_keyboard_mouse
 terminal_server = create /bin/terminal_server
 vga = create -p /bin/vga
 
-bind ps2_keyboard_mouse scan_codes terminal_server scan_codes_in
+#bind ps2_keyboard_mouse *_out terminal_server *_in
+
+bind ps2_keyboard_mouse scan_codes_out terminal_server scan_codes_in
 bind ps2_keyboard_mouse mouse_packets_out terminal_server mouse_packets_in
 bind terminal_server vga_op vga vga_op
 

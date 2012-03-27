@@ -1,5 +1,5 @@
 CC=i586-pc-lily-gcc
-CFLAGS=-Wall -O2 -MD -std=c99
+CFLAGS=-g -Wall -O2 -MD -std=c99
 PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test
 # shell
 SCRIPTS=start.jsh

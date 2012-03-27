@@ -9,6 +9,8 @@
 
 /* TODO:  Improve the error handling. */
 
+/* TODO:  Replace bfprintf with lightweight alternatives. put puts, etc. */
+
 /* TODO:  This is wrong on multiple levels. */
 static int
 atoi (const char* s)
@@ -224,83 +226,89 @@ create_binding (bid_t bid,
   ========================
 */
 
-typedef struct line line_t;
-struct line {
-  char* string;
+typedef struct string string_t;
+struct string {
+  char* str;
   size_t size;
-  line_t* next;
+  string_t* next;
 };
 
-typedef struct line_queue line_queue_t;
-struct line_queue {
-  char* line_str;
-  size_t line_size;
-  size_t line_capacity;
-  line_t* head;
-  line_t** tail;
-};
-
-static line_queue_t script_queue;
-static line_queue_t interactive_queue;
+static string_t* string_head = 0;
+static string_t** string_tail = &string_head;
 
 static void
-line_queue_init (line_queue_t* queue)
+string_push_front (char* str,
+		   size_t size)
 {
-  queue->line_str = 0;
-  queue->line_size = 0;
-  queue->line_capacity = 0;
-  queue->head = 0;
-  queue->tail = &queue->head;
-}
+  string_t* s = malloc (sizeof (string_t));
+  s->str = str;
+  s->size = size;
+  s->next = string_head;
+  string_head = s;
 
-static void
-line_queue_append (line_queue_t* queue,
-		   char c)
-{
-  if (queue->line_size == queue->line_capacity) {
-    queue->line_capacity = 2 * queue->line_capacity + 1;
-    queue->line_str = realloc (queue->line_str, queue->line_capacity);
+  if (s->next == 0) {
+    string_tail = &s->next;
   }
-  queue->line_str[queue->line_size++] = c;
 }
 
 static void
-line_queue_push (line_queue_t* queue)
+string_push_back (char* str,
+		  size_t size)
 {
-  line_t* line = malloc (sizeof (line_t));
-  memset (line, 0, sizeof (line_t));
-  line->string = queue->line_str;
-  line->size = queue->line_size;
-  
-  queue->line_str = 0;
-  queue->line_size = 0;
-  queue->line_capacity = 0;
+  string_t* s = malloc (sizeof (string_t));
+  s->str = str;
+  s->size = size;
+  s->next = 0;
+  *string_tail = s;
+  string_tail = &s->next;
+}
 
-  *(queue->tail) = line;
-  queue->tail = &line->next;
+static void
+string_front (char** str,
+	      size_t* size)
+{
+  *str = string_head->str;
+  *size = string_head->size;
+}
+
+static void
+string_pop (void)
+{
+  string_t* s = string_head;
+  string_head = s->next;
+  if (string_head == 0) {
+    string_tail = &string_head;
+  }
+
+  free (s);
 }
 
 static bool
-line_queue_empty (line_queue_t* queue)
+string_empty (void)
 {
-  return queue->head == 0;
+  return string_head == 0;
+}
+
+static size_t current_string_idx = 0;
+
+static char* current_line = 0;
+static size_t current_line_size = 0;
+static size_t current_line_capacity = 0;
+
+static void
+line_append (char c)
+{
+  if (current_line_size == current_line_capacity) {
+    current_line_capacity = 2 * current_line_capacity + 1;
+    current_line = realloc (current_line, current_line_capacity);
+  }
+  current_line[current_line_size++] = c;
 }
 
 static void
-line_queue_pop (line_queue_t* queue,
-		char** string,
-		size_t* size)
+line_reset (void)
 {
-  line_t* line = queue->head;
-  queue->head = line->next;
-  if (queue->head == 0) {
-    queue->tail = &queue->head;
-  }
-
-  *string = line->string;
-  *size = line->size;
-
-  free (line);
+  current_line_size = 0;
 }
 
 /*
@@ -321,7 +329,6 @@ typedef enum {
 } scan_state_t;
 
 static scan_state_t scan_state = SCAN_START;
-static char* scan_string_original = 0;
 static char* scan_string_copy = 0;
 static char** scan_strings = 0;
 static size_t scan_strings_size = 0;
@@ -329,7 +336,7 @@ static size_t scan_strings_capacity = 0;
 
 /* Tokens
 
-   string - [a-zA-Z0-9_/-=]+
+   string - [a-zA-Z0-9_/-=*]+
 
    whitespace - [ \t\0]
 
@@ -359,7 +366,8 @@ scanner_put (char* ptr)
 	(c == '_') ||
 	(c == '/') ||
 	(c == '-') ||
-	(c == '=')) {
+	(c == '=') ||
+	(c == '*')) {
       scanner_enter_string (ptr);
       scan_state = SCAN_STRING;
       break;
@@ -387,7 +395,8 @@ scanner_put (char* ptr)
 	(c == '_') ||
 	(c == '/') ||
 	(c == '-') ||
-	(c == '=')) {
+	(c == '=') ||
+	(c == '*')) {
       /* Still scanning a string. */
       scan_state = SCAN_STRING;
       break;
@@ -425,10 +434,8 @@ static int
 scanner_process (char* string,
 		 size_t size)
 {
-  scan_state= SCAN_START;
-  free (scan_string_original);
+  scan_state = SCAN_START;
   free (scan_string_copy);
-  scan_string_original = string;
   scan_string_copy = malloc (size);
   memcpy (scan_string_copy, string, size);
 
@@ -438,7 +445,7 @@ scanner_process (char* string,
   for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) {
     scanner_put (scan_string_copy + idx);
     if (scan_state == SCAN_ERROR) {
-      bfprintf (&stdout_buffer, "error near: %s\n", scan_string_original + idx);
+      bfprintf (&stdout_buffer, "error near: %s\n", string + idx);
       return -1;
     }
   }
@@ -793,6 +800,99 @@ lookup_ (void)
 }
 
 static bool
+describe_ (void)
+{
+  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "describe") == 0) {
+    if (scan_strings_size == 1) {
+      bfprintf (&stdout_buffer, "usage: describe NAME...\n");
+      return true;
+    }
+
+    action_desc_t* actions = 0;
+
+    for (size_t idx = 1; idx != scan_strings_size; ++idx) {
+      bfprintf (&stdout_buffer, "%s:\n", scan_strings[idx]);
+      automaton_t* automaton = find_automaton (scan_strings[idx]);
+      if (automaton == 0) {
+	bfprintf (&stdout_buffer, "\t (name not recognized)\n");
+	continue;
+      }
+
+      description_t description;
+      if (description_init (&description, automaton->aid) != 0) {
+	bfprintf (&stdout_buffer, "\t(no description)\n");
+	continue;
+      }
+
+      size_t action_count = description_action_count (&description);
+      if (action_count == -1) {
+	bfprintf (&stdout_buffer, "\t(bad description)\n");
+	description_fini (&description);
+	continue;
+      }
+
+      if (action_count == 0) {
+	bfprintf (&stdout_buffer, "\t(empty)\n");
+	description_fini (&description);
+	continue;
+      }
+
+      actions = realloc (actions, action_count * sizeof (action_desc_t));
+
+      if (description_read (&description, actions) != 0) {
+	bfprintf (&stdout_buffer, "\t(bad description)\n");
+	description_fini (&description);
+	continue;
+      }
+
+      for (size_t action = 0; action != action_count; ++action) {
+	switch (actions[action].type) {
+	case LILY_ACTION_INPUT:
+	  bfprintf (&stdout_buffer, "\t IN ");
+	  break;
+	case LILY_ACTION_OUTPUT:
+	  bfprintf (&stdout_buffer, "\tOUT ");
+	  break;
+	case LILY_ACTION_INTERNAL:
+	  bfprintf (&stdout_buffer, "\tINT ");
+	  break;
+	case LILY_ACTION_SYSTEM_INPUT:
+	  bfprintf (&stdout_buffer, "\tSYS ");
+	  break;
+	default:
+	  bfprintf (&stdout_buffer, "\t??? ");
+	  break;
+	}
+
+	switch (actions[action].parameter_mode) {
+	case NO_PARAMETER:
+	  bfprintf (&stdout_buffer, "  ");
+	  break;
+	case PARAMETER:
+	  bfprintf (&stdout_buffer, "* ");
+	  break;
+	case AUTO_PARAMETER:
+	  bfprintf (&stdout_buffer, "@ ");
+	  break;
+	default:
+	  bfprintf (&stdout_buffer, "? ");
+	  break;
+	}
+
+	bfprintf (&stdout_buffer, "%d\t\t%s\t\t%s\n", actions[action].number, actions[action].name, actions[action].description);
+      }
+
+      description_fini (&description);
+    }
+
+    free (actions);
+
+    return true;
+  }
+  return false;
+}
+
+static bool
 show_ (void)
 {
   if (scan_strings_size >= 1) {
@@ -879,6 +979,7 @@ static dispatch_func_t dispatch[] = {
   create_,
   bind_,
   lookup_,
+  describe_,
   show_,
   start_,
   /* Catch errors. */
@@ -890,42 +991,6 @@ static dispatch_func_t dispatch[] = {
   End Dispatch Section
   ====================
 */
-
-static void
-enqueue_lines (line_queue_t* queue,
-	       const char* str,
-	       size_t size,
-	       bool echo)
-{
-  for (size_t idx = 0; idx != size; ++idx, ++str) {
-    const char c = *str;
-    if (c >= ' ' && c < 127) {
-      /* Printable character. */
-      line_queue_append (queue, c);
-      if (echo) {
-	if (buffer_file_put (&stdout_buffer, c) != 0) {
-	  exit ();
-	}
-      }
-    }
-    else {
-      /* Control character. */
-      switch (c) {
-      case '\n':
-	/* Terminate. */
-	line_queue_append (queue, 0);
-	if (echo) {
-	  if (buffer_file_put (&stdout_buffer, '\n') != 0) {
-	    exit ();
-	  }
-	}
-
-	line_queue_push (queue);
-	break;
-      }
-    }
-  }
-}
 
 static void
 readscript_callback (void* data,
@@ -946,10 +1011,12 @@ readscript_callback (void* data,
   if (str == 0) {
     exit ();
   }
-  enqueue_lines (&script_queue, str, size, false);
-  /* In case there is no end of line. */
-  line_queue_append (&script_queue, 0);
-  line_queue_push (&script_queue);
+  
+  char* str_copy = malloc (size + 1);
+  memcpy (str_copy, str, size);
+  /* Terminate with newline. */
+  str_copy[size] = '\n';
+  string_push_front (str_copy, size + 1);
   buffer_unmap (bdb);
   process_hold = false;
 }
@@ -965,8 +1032,6 @@ initialize (void)
     bd_t bdb = getinitb ();
 
     create_automaton ("this", aid, "this");
-    line_queue_init (&script_queue);
-    line_queue_init (&interactive_queue);
 
     stdout_bd = buffer_create (0);
     if (stdout_bd == -1) {
@@ -1058,7 +1123,10 @@ BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano,
     finish_input (bda, bdb);
   }
 
-  enqueue_lines (&interactive_queue, str, size, true);
+  char* str_copy = malloc (size);
+  memcpy (str_copy, str, size);
+
+  string_push_back (str_copy, size);
 
   finish_input (bda, bdb);
 }
@@ -1066,7 +1134,7 @@ BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano,
 static bool
 process_line_precondition (void)
 {
-  return !process_hold && (!line_queue_empty (&script_queue) || !line_queue_empty (&interactive_queue)) && start_queue_empty () && buffer_file_size (&stdout_buffer) == 0 && callback_queue_empty (&vfs_response_queue);
+  return !process_hold && !string_empty () && start_queue_empty () && callback_queue_empty (&vfs_response_queue);
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, int param)
@@ -1074,24 +1142,54 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
   initialize ();
 
   if (process_line_precondition ()) {
-    char* string_original;
-    size_t size;
-    if (!line_queue_empty (&script_queue)) {
-      line_queue_pop (&script_queue, &string_original, &size);
-    }
-    else {
-      line_queue_pop (&interactive_queue, &string_original, &size);
-    }
+    char* current_string;
+    size_t current_string_size;
+    string_front (&current_string, &current_string_size);
 
-    if (scanner_process (string_original, size) == -1) {
-      finish_internal ();
-    }
+    for (; current_string_idx != current_string_size; ++current_string_idx) {
+      const char c = current_string[current_string_idx];
+      if (c >= ' ' && c < 127) {
+	/* Printable character. */
+	line_append (c);
+	if (buffer_file_put (&stdout_buffer, c) != 0) {
+	  exit ();
+	}
+      }
+      else {
+	/* Control character. */
+	switch (c) {
+	case '\n':
+	  /* Terminate. */
+	  line_append (0);
+	  if (buffer_file_put (&stdout_buffer, '\n') != 0) {
+	    exit ();
+	  }
 
-    for (size_t idx = 0; dispatch[idx] != 0; ++idx) {
-      if (dispatch[idx] ()) {
-	break;
+	  if (scanner_process (current_line, current_line_size) == 0) {
+	    /* Scanning succeeded.  Interpret. */
+	    for (size_t idx = 0; dispatch[idx] != 0; ++idx) {
+	      if (dispatch[idx] ()) {
+		break;
+	      }
+	    }
+	  }
+
+	  /* Reset the line. */
+	  line_reset ();
+
+	  ++current_string_idx;
+
+	  /* Done. */
+	  finish_internal ();
+
+	  break;
+	}
       }
     }
+
+    string_pop ();
+    free (current_string);
+    current_string_idx = 0;
   }
   finish_internal ();
 }

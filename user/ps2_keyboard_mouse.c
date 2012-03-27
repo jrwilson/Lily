@@ -609,7 +609,7 @@ scan_codes_precondition (void)
   return buffer_file_size (&scan_codes_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes", "buffer_file_t", scan_codes, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes_out", "buffer_file_t", scan_codes, ano_t ano, int param)
 {
   initialize ();
 
