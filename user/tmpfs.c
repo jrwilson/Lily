@@ -247,14 +247,17 @@ initialize (void)
 	exit ();
       }
       
-      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
-      
-      description_fini (&syslog_description);
-      
-      /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+      action_desc_t syslog_stdin;
+      if (description_read_name (&syslog_description, &syslog_stdin, SYSLOG_STDIN) != 0) {
 	exit ();
       }
+            
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin.number, 0) == -1) {
+	exit ();
+      }
+
+      description_fini (&syslog_description);
     }
 
     /* Allocate the inode vector. */

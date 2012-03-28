@@ -454,35 +454,46 @@ client_path_lookup_done (client_t* client,
       return;
     }
 
-    const ano_t request = description_name_to_number (&desc, VFS_FS_REQUEST_NAME, strlen (VFS_FS_REQUEST_NAME) + 1);
-    const ano_t response = description_name_to_number (&desc, VFS_FS_RESPONSE_NAME, strlen (VFS_FS_RESPONSE_NAME) + 1);
+    {
+      action_desc_t request;
+      if (description_read_name (&desc, &request, VFS_FS_REQUEST_NAME) != 0) {
+	/* Answer. */
+	description_fini (&desc);
+	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
+	client_answer (client);
+	return;
+      }
+      
+      action_desc_t response;
+      if (description_read_name (&desc, &response, VFS_FS_RESPONSE_NAME) != 0) {
+	/* Answer. */
+	description_fini (&desc);
+	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
+	client_answer (client);
+	return;
+      }
+      
+      /* Bind to the response first so they don't get lost. */
+      bid_t bid = bind (req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
+      if (bid == -1) {
+	/* Answer. */
+	description_fini (&desc);
+	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
+	client_answer (client);
+	return;
+      }
+      
+      if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0) == -1) {
+	unbind (bid);
+	/* Answer. */
+	description_fini (&desc);
+	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
+	client_answer (client);
+	return;
+      }
+    }
 
     description_fini (&desc);
-
-    if (request == -1 ||
-    	response == -1) {
-      /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
-      client_answer (client);
-      return;
-    }
-
-    /* Bind to the response first so they don't get lost. */
-    bid_t bid = bind (req->u.mount.aid, response, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
-    if (bid == -1) {
-      /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
-      client_answer (client);
-      return;
-    }
-
-    if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request, 0) == -1) {
-      unbind (bid);
-      /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
-      client_answer (client);
-      return;
-    }
 
     /* The mount succeeded.  Insert an entry into the list. */
     file_system_t* fs = file_system_create (req->u.mount.aid);
@@ -733,14 +744,17 @@ initialize (void)
 	exit ();
       }
       
-      const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
-      
-      description_fini (&syslog_description);
-      
-      /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+      action_desc_t syslog_stdin;
+      if (description_read_name (&syslog_description, &syslog_stdin, SYSLOG_STDIN) != 0) {
 	exit ();
       }
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin.number, 0) == -1) {
+	exit ();
+      }
+
+      description_fini (&syslog_description);
     }
 
     root.fs = 0;

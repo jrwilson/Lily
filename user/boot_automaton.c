@@ -218,14 +218,17 @@ initialize (void)
 	  exit ();
 	}
 	
-	const ano_t syslog_stdin = description_name_to_number (&syslog_description, SYSLOG_STDIN, strlen (SYSLOG_STDIN) + 1);
-	
-	description_fini (&syslog_description);
-	
-	/* We bind the response first so they don't get lost. */
-	if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin, 0) == -1) {
+	action_desc_t desc;
+	if (description_read_name (&syslog_description, &desc, SYSLOG_STDIN) != 0) {
 	  exit ();
 	}
+
+	/* We bind the response first so they don't get lost. */
+	if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, desc.number, 0) == -1) {
+	  exit ();
+	}
+	
+	description_fini (&syslog_description);
       }
 
       cpio_file_destroy (syslog_file);
@@ -253,19 +256,29 @@ initialize (void)
       return;
     }
     
-    /* If these actions don't exist, then attempts to bind below will fail. */
-    const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
-    const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
-    
-    description_fini (&vfs_description);
+    action_desc_t vfs_request;
+    if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not describe vfs\n");
+      state = STOP;
+      return;
+    }
+
+    action_desc_t vfs_response;
+    if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not describe vfs\n");
+      state = STOP;
+      return;
+    }
     
     /* We bind the response first so they don't get lost. */
-    if (bind (vfs, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-	bind (aid, VFS_REQUEST_NO, 0, vfs, vfs_request, 0) == -1) {
+    if (bind (vfs, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
+	bind (aid, VFS_REQUEST_NO, 0, vfs, vfs_request.number, 0) == -1) {
       bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
       state = STOP;
       return;
     }
+
+    description_fini (&vfs_description);
     
     /* Create the tmpfs. */
     if (tmpfs_file == 0) {

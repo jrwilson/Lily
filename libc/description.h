@@ -26,16 +26,16 @@ description_init (description_t* d,
 void
 description_fini (description_t* d);
 
-ano_t
-description_name_to_number (description_t* d,
-			    const char* action_name,
-			    size_t size);
-
 size_t
 description_action_count (description_t* d);
 
 int
-description_read (description_t* d,
-		  action_desc_t* ad);
+description_read_all (description_t* d,
+		      action_desc_t* ad);
+
+int
+description_read_name (description_t* d,
+		       action_desc_t* ad,
+		       const char* action_name);
 
 #endif /* DESCRIPTION_H */

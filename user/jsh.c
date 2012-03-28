@@ -641,31 +641,36 @@ single_bind (automaton_t* output_automaton,
   }
       
   /* Look up the actions. */
-  const ano_t output_action = description_name_to_number (&output_description, output_action_name, strlen (output_action_name) + 1);
-  const ano_t input_action = description_name_to_number (&input_description, input_action_name, strlen (input_action_name) + 1);
-      
-  description_fini (&output_description);
-  description_fini (&input_description);
-      
-  if (output_action == -1) {
+  action_desc_t output_action;
+  if (description_read_name (&output_description, &output_action, output_action_name) != 0) {
+    description_fini (&output_description);
+    description_fini (&input_description);
     bfprintf (&stdout_buffer, "-> error: output action does not exist\n");
     return;
   }
-      
-  if (input_action == -1) {
+
+  action_desc_t input_action;
+  if (description_read_name (&input_description, &input_action, input_action_name) != 0) {
+    description_fini (&output_description);
+    description_fini (&input_description);
     bfprintf (&stdout_buffer, "-> error: input action does not exist\n");
     return;
   }
       
   bfprintf (&stdout_buffer, "TODO: Correct the parameters\n");
       
-  bid_t bid = bind (output_automaton->aid, output_action, output_parameter, input_automaton->aid, input_action, input_parameter);
+  bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter);
   if (bid == -1) {
+    description_fini (&output_description);
+    description_fini (&input_description);
     bfprintf (&stdout_buffer, "-> error: bind failed\n");
     return;
   }
-      
-  create_binding (bid, output_automaton, output_action, output_action_name, output_parameter, input_automaton, input_action, input_action_name, input_parameter);
+
+  create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter);
+
+  description_fini (&output_description);
+  description_fini (&input_description);
 
   bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_action_name, output_parameter, input_automaton->name, input_action_name, input_parameter);
 }
@@ -712,7 +717,7 @@ glob_bind (automaton_t* output_automaton,
   action_desc_t* output_actions = malloc (output_action_count * sizeof (action_desc_t));
   action_desc_t* input_actions = malloc (input_action_count * sizeof (action_desc_t));
         
-  if (description_read (&output_description, output_actions) != 0) {
+  if (description_read_all (&output_description, output_actions) != 0) {
     free (output_actions);
     free (input_actions);
     description_fini (&output_description);
@@ -720,7 +725,7 @@ glob_bind (automaton_t* output_automaton,
     bfprintf (&stdout_buffer, "-> error: bad output description\n");
   }
 
-  if (description_read (&input_description, input_actions) != 0) {
+  if (description_read_all (&input_description, input_actions) != 0) {
     free (output_actions);
     free (input_actions);
     description_fini (&output_description);
@@ -954,7 +959,7 @@ describe_ (void)
 
       actions = realloc (actions, action_count * sizeof (action_desc_t));
 
-      if (description_read (&description, actions) != 0) {
+      if (description_read_all (&description, actions) != 0) {
 	bfprintf (&stdout_buffer, "\t(bad description)\n");
 	description_fini (&description);
 	continue;
@@ -1182,21 +1187,24 @@ initialize (void)
     if (description_init (&vfs_description, vfs_aid) != 0) {
       exit ();
     }
-    const ano_t vfs_request = description_name_to_number (&vfs_description, VFS_REQUEST_NAME, strlen (VFS_REQUEST_NAME) + 1);
-    const ano_t vfs_response = description_name_to_number (&vfs_description, VFS_RESPONSE_NAME, strlen (VFS_RESPONSE_NAME) + 1);
-    description_fini (&vfs_description);
-    
-    if (vfs_request == -1 ||
-    	vfs_response == -1) {
-      /* VFS does not appear to be a vfs. */
+
+    action_desc_t vfs_request;
+    if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) {
+      exit ();
+    }
+
+    action_desc_t vfs_response;
+    if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) {
       exit ();
     }
     
     /* We bind the response first so they don't get lost. */
-    if (bind (vfs_aid, vfs_response, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request, 0) == -1) {
+    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
+    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
       exit ();
     }
+
+    description_fini (&vfs_description);
     
     argv_t argv;
     size_t argc;
