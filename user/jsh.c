@@ -58,8 +58,10 @@ atoi (const char* s)
 #define STDIN_NO 3
 #define PROCESS_LINE_NO 4
 #define STDOUT_NO 5
-#define VFS_RESPONSE_NO 6
-#define VFS_REQUEST_NO 7
+#define DESTROYED_NO 6
+#define UNBOUND_NO 7
+#define VFS_RESPONSE_NO 8
+#define VFS_REQUEST_NO 9
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -127,12 +129,16 @@ create_automaton (const char* name,
   size = strlen (path) + 1;
   automaton->path = malloc (size);
   memcpy (automaton->path, path, size);
-
-  bfprintf (&stdout_buffer, "TODO: subscribe to automaton\n");
   
-  automaton->next = automata_head;
-  automata_head = automaton;
   return automaton;
+}
+
+static void
+destroy_automaton (automaton_t* automaton)
+{
+  free (automaton->name);
+  free (automaton->path);
+  free (automaton);
 }
 
 static automaton_t*
@@ -159,7 +165,7 @@ find_automaton_aid (aid_t aid)
   return automaton;
 }
 
-static void
+static binding_t*
 create_binding (bid_t bid,
 		automaton_t* output_automaton,
 		ano_t output_action,
@@ -187,10 +193,15 @@ create_binding (bid_t bid,
   memcpy (binding->input_action_name, input_action_name, size);
   binding->input_parameter = input_parameter;
 
-  bfprintf (&stdout_buffer, "TODO: subscribe to binding\n");
+  return binding;
+}
 
-  binding->next = bindings_head;
-  bindings_head = binding;
+static void
+destroy_binding (binding_t* binding)
+{
+  free (binding->output_action_name);
+  free (binding->input_action_name);
+  free (binding);
 }
 
 /*
@@ -526,8 +537,18 @@ create_callback (void* data,
     return;
   }
 
+  if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
+    buffer_destroy (bd1);
+    buffer_destroy (bd2);
+    bfprintf (&stdout_buffer, "-> error: subscribe failed\n");
+    return;
+  }
+
   /* Add to the list of automata we know about. */
-  create_automaton (create_name, aid, create_path);
+  automaton_t* automaton = create_automaton (create_name, aid, create_path);
+
+  automaton->next = automata_head;
+  automata_head = automaton;
 
   buffer_destroy (bd1);
   buffer_destroy (bd2);
@@ -656,8 +677,29 @@ single_bind (automaton_t* output_automaton,
     bfprintf (&stdout_buffer, "-> error: input action does not exist\n");
     return;
   }
-      
-  bfprintf (&stdout_buffer, "TODO: Correct the parameters\n");
+
+  /* Correct the parameters. */
+  switch (output_action.parameter_mode) {
+  case NO_PARAMETER:
+    output_parameter = 0;
+    break;
+  case PARAMETER:
+    break;
+  case AUTO_PARAMETER:
+    output_parameter = input_automaton->aid;
+    break;
+  }
+
+  switch (input_action.parameter_mode) {
+  case NO_PARAMETER:
+    input_parameter = 0;
+    break;
+  case PARAMETER:
+    break;
+  case AUTO_PARAMETER:
+    input_parameter = output_automaton->aid;
+    break;
+  }
       
   bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter);
   if (bid == -1) {
@@ -667,7 +709,17 @@ single_bind (automaton_t* output_automaton,
     return;
   }
 
-  create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter);
+  if (subscribe_unbound (bid, UNBOUND_NO) != 0) {
+    description_fini (&output_description);
+    description_fini (&input_description);
+    bfprintf (&stdout_buffer, "-> error: subscribe failed\n");
+    return;
+  }
+
+  binding_t* binding = create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter);
+
+  binding->next = bindings_head;
+  bindings_head = binding;
 
   description_fini (&output_description);
   description_fini (&input_description);
@@ -740,8 +792,6 @@ glob_bind (automaton_t* output_automaton,
   const size_t input_prefix_size = input_glob - input_action_name;
   const size_t input_suffix_size = strlen (input_action_name) - input_prefix_size - 1;
 
-  bfprintf (&stdout_buffer, "TODO: Correct the parameters (in the loop)\n");
-
   for (size_t out_idx = 0; out_idx != output_action_count; ++out_idx) {
     if (output_actions[out_idx].type == LILY_ACTION_OUTPUT &&
 	output_actions[out_idx].name_size >= (output_prefix_size + output_suffix_size + 1) &&
@@ -761,12 +811,47 @@ glob_bind (automaton_t* output_automaton,
 	  size_t input_size = input_actions[in_idx].name_size - 1 - input_suffix_size;
 
 	  if (output_size == input_size && strncmp (output_name, input_name, output_size) == 0) {
-	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_parameter, input_automaton->aid, input_actions[in_idx].number, input_parameter);
-	    if (bid != -1) {
-	      create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_parameter, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_parameter);
+	    int output_param = 0;
+	    int input_param = 0;
+
+	    switch (output_actions[out_idx].parameter_mode) {
+	    case NO_PARAMETER:
+	      output_param = 0;
+	      break;
+	    case PARAMETER:
+	      output_param = output_parameter;
+	      break;
+	    case AUTO_PARAMETER:
+	      output_param = input_automaton->aid;
+	      break;
 	    }
 
-	    bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_parameter, input_automaton->name, input_actions[in_idx].name, input_parameter);
+	    switch (input_actions[in_idx].parameter_mode) {
+	    case NO_PARAMETER:
+	      input_param = 0;
+	      break;
+	    case PARAMETER:
+	      input_param = input_parameter;
+	      break;
+	    case AUTO_PARAMETER:
+	      input_param = output_automaton->aid;
+	      break;
+	    }
+
+	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param);
+	    if (bid != -1) {
+	      if (subscribe_unbound (bid, UNBOUND_NO) == 0) {
+		binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param);
+
+		binding->next = bindings_head;
+		bindings_head = binding;
+	      }
+	      else {
+		bid = -1;
+	      }
+	    }
+
+	    bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param);
 	  }
       	}
       }
@@ -905,9 +990,17 @@ lookup_ (void)
 	return true;
       }
       
+      if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
+	bfprintf (&stdout_buffer, "-> error: subscribe failed\n");
+	return true;
+      }
+
       /* Add to the list of automata we know about. */
-      create_automaton (scan_strings[0], aid, scan_strings[3]);
+      automaton_t* automaton = create_automaton (scan_strings[0], aid, scan_strings[3]);
       
+      automaton->next = automata_head;
+      automata_head = automaton;
+
       bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
       return true;
     }
@@ -1160,6 +1253,9 @@ initialize (void)
 
     this_automaton = create_automaton ("this", aid, "this");
 
+    this_automaton->next = automata_head;
+    automata_head = this_automaton;
+
     stdout_bd = buffer_create (0);
     if (stdout_bd == -1) {
       exit ();
@@ -1352,6 +1448,69 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t 
   else {
     finish_output (false, -1, -1);
   }
+}
+
+BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  
+  automaton_t** aptr;
+  for (aptr = &automata_head; *aptr != 0; aptr = &(*aptr)->next) {
+    if ((*aptr)->aid == aid) {
+      break;
+    }
+  }
+
+  if (*aptr != 0) {
+    automaton_t* automaton = *aptr;
+    *aptr = automaton->next;
+
+    /* Remove the bindings. */
+    binding_t** bptr = &bindings_head;
+    while (*bptr != 0) {
+      if ((*bptr)->output_automaton == automaton ||
+	  (*bptr)->input_automaton == automaton) {
+	binding_t* binding = *bptr;
+	*bptr = binding->next;
+
+	bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+
+	destroy_binding (binding);
+      }
+      else {
+	bptr = &(*bptr)->next;
+      }
+    }
+
+    bfprintf (&stdout_buffer, "-> %d: destroyed\n", automaton->aid);
+
+    destroy_automaton (automaton);
+  }
+
+  finish_input (bda, bdb);
+}
+
+BEGIN_SYSTEM_INPUT (UNBOUND_NO, "", "", unbound, ano_t ano, bid_t bid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  binding_t** ptr;
+  for (ptr = &bindings_head; *ptr != 0; ptr = &(*ptr)->next) {
+    if ((*ptr)->bid == bid) {
+      break;
+    }
+  }
+
+  if (*ptr != 0) {
+    binding_t* binding = *ptr;
+    *ptr = binding->next;
+
+    bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+
+    destroy_binding (binding);
+  }
+
+  finish_input (bda, bdb);
 }
 
 /* vfs_request

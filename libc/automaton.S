@@ -52,6 +52,13 @@ destroy:
 	mov %ecx, automatonerrno
 	ret
 
+	.global subscribe_unbound
+subscribe_unbound:
+	mov $LILY_SYSCALL_SUBSCRIBE_UNBOUND, %eax
+	int $0x80
+	mov %ecx, automatonerrno
+	ret
+
 	.global subscribe_destroyed
 subscribe_destroyed:
 	mov $LILY_SYSCALL_SUBSCRIBE_DESTROYED, %eax

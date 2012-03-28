@@ -188,6 +188,9 @@ private:
   // Map from action number to action.
   typedef unordered_map<ano_t, const paction* const> ano_to_action_map_type;
   ano_to_action_map_type ano_to_action_map_;
+  // Map from action name to action.
+  typedef unordered_map<kstring, const paction* const, kstring_hash> name_to_action_map_type;
+  name_to_action_map_type name_to_action_map_;
   // Description of the actions.
   kstring description_;
   // Flag indicating the description should be regenerated from the list of actions.
@@ -332,10 +335,13 @@ public:
 	      const kstring& name,
 	      const kstring& description)
   {
-    // TODO:  What if the actions have the same name?
-    if (ano_to_action_map_.find (an) == ano_to_action_map_.end ()) {
+    if (ano_to_action_map_.find (an) == ano_to_action_map_.end () &&
+	(name.size () == 1 || name_to_action_map_.find (name) == name_to_action_map_.end ())) {
       paction* action = new paction (t, pm, aep, an, name, description);
       ano_to_action_map_.insert (make_pair (an, action));
+      if (name.size () > 1) {
+	name_to_action_map_.insert (make_pair (name, action));
+      }
       regenerate_description_ = true;
       return true;
     }
@@ -1744,6 +1750,7 @@ public:
       aid_
       name_
       ano_to_action_map_
+      name_to_action_map_
       description_
       regenerate_description_
       parent_
@@ -1777,6 +1784,7 @@ public:
     	 ++pos) {
       delete pos->second;
     }
+    // Nothing for name_to_action_map_.
     // Nothing for description_.
     // Nothing for regenerate_description_.
     kassert (parent_.get () == 0);
