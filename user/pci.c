@@ -6,283 +6,6 @@
 #include <description.h>
 #include "syslog.h"
 
-#define CONFIG_ADDRESS	0xCF8
-#define CONFIG_DATA	0xCFC
-
-typedef enum {
-  UNKNOWN = 0x00,
-  MASS_STORAGE = 0x01,
-  NETWORK = 0X02,
-  DISPLAY = 0x03,
-  MULTIMEDIA = 0x04,
-  MEMORY = 0x05,
-  BRIDGE = 0x06,
-  COMMUNICATION = 0x07,
-  PERIPHERAL= 0x08,
-  INPUT = 0x09,
-  DOCK = 0x0A,
-  PROCESSOR = 0x0B,
-  SERIAL_BUS = 0xC,
-  MISCELLANEOUS = 0xFF,
-} class_t;
-
-typedef enum {
-  NON_VGA = 0x00,
-  VGA = 0x01,
-} subclass_unknown_t;
-
-typedef enum {
-  SCSI = 0x00,
-  IDE = 0x01,
-  FLOPPY = 0x02,
-  IPI = 0x03,
-  RAID = 0x04,
-  OTHER_MASS_STORAGE = 0x80
-} subclass_mass_storage_t;
-
-typedef enum {
-  ETHERNET = 0x00,
-  TOKEN_RING = 0x01,
-  FDDI = 0x02,
-  ATM = 0x03,
-  OTHER_NETWORK = 0x80
-} subclass_network_t;
-
-typedef enum {
-  VGA_COMPATIBLE = 0x00,
-  XGA = 0x01,
-  OTHER_DISPLAY = 0x80
-} subclass_display_t;
-
-typedef enum {
-  VIDEO_DEVICE = 0x00,
-  AUTOD_DEVICE = 0x01,
-  OTHER_MULTIMEDIA = 0x80
-} subclass_multimedia_t;
-
-typedef enum {
-  RAM_CONTROLLER = 0x00,
-  FLASH_CONTROLLER = 0x01,
-  OTHER_MEMORY = 0x80
-} subclass_memory_t;
-
-typedef enum {
-  HOST_PCI_BRIDGE = 0x00,
-  PCI_ISA_BRIDGE = 0x01,
-  PCI_EISA_BRIDGE = 0x02,
-  PCI_MCA_BRIDGE = 0x03,
-  PCI_PCI_BRIDGE = 0x04,
-  PCI_PCMCIA_BRIDGE = 0x05,
-  PCI_NUBUS_BRIDGE = 0x06,
-  PCI_CARDBUS_BRIDGE = 0x07,
-  OTHER_BRIDGE = 0x80,
-} subclass_bridge_t;
-
-typedef enum {
-  PIC = 0x00,
-  DMA = 0x01,
-  TIMER = 0x02,
-  RTC = 0x03,
-  OTHER_PERIPHERAL = 0x80,
-} subclass_peripheral_t;
-
-typedef enum {
-  KEYBOARD = 0x00,
-  DIGITIZER = 0x01,
-  MOUSE = 0x02,
-  OTHER_INPUT = 0x80,
-} subclass_input_t;
-
-typedef enum {
-  GENERIC_DOCKING_STATION = 0x00,
-  OTHER_DOCKING = 0x80,
-} subclass_docking_t;
-
-typedef enum {
-  PROC_386 = 0x00,
-  PROC_486 = 0x01,
-  PROC_PENTIUM = 0x02,
-  PROC_ALPHA = 0x10,
-  PROC_POWERPC = 0x20,
-  PROC_COPROCESSOR = 0x40,
-} subclass_processor_t;
-
-typedef enum {
-  FIREWIRE = 0x00,
-  ACCESS = 0x01,
-  SSA = 0x02,
-  USB = 0x03,
-} subclass_serial_bus_t;
-
-typedef struct bus bus_t;
-struct bus_t {
-  bus_t* next;
-};
-
-typedef struct dev dev_t;
-struct dev {
-  unsigned char bus;
-  unsigned char slot;
-  unsigned char function;
-
-  unsigned short vendor;
-  unsigned short device;
-  unsigned short command;
-  unsigned short status;
-  unsigned char revision;
-  unsigned char programming_interface;
-  unsigned char subclass;
-  unsigned char class;
-  unsigned char cache_line_size;
-  unsigned char latency_timer;
-  unsigned char header_type;
-  unsigned char build_in_self_test;
-
-  union {
-    struct {
-      unsigned int bar0;
-      unsigned int bar1;
-      unsigned int bar2;
-      unsigned int bar3;
-      unsigned int bar4;
-      unsigned int bar5;
-      unsigned int cardbus_cis_ptr;
-      unsigned short subsystem_vendor_id;
-      unsigned short subsystem_id;
-      unsigned int expansion_rom_address;
-      unsigned char capabilities_ptr;
-      unsigned char interrupt_line;
-      unsigned char interrupt_pin;
-      unsigned char min_grant;
-      unsigned char max_latency;
-    } general;
-    struct {
-      unsigned int bar0;
-      unsigned int bar1;
-      unsigned char primary_bus_number;
-      unsigned char secondary_bus_number;
-      unsigned char subordinate_bus_number;
-      unsigned char secondary_latency_timer;
-      unsigned char io_base;
-      unsigned char io_limit;
-      unsigned short secondary_status;
-      unsigned short memory_base;
-      unsigned short memory_limit;
-      unsigned short prefetch_base;
-      unsigned short prefetch_limit;
-      unsigned int prefetch_base_upper;
-      unsigned short prefetch_limit_upper;
-      unsigned short io_base_upper;
-      unsigned short io_limit_upper;
-      unsigned char capabilities_ptr;
-      unsigned int expansion_rom_address;
-      unsigned char interrupt_line;
-      unsigned char interrupt_pin;
-      unsigned short bridge_control;
-    } pci_to_pci_bridge;
-    struct {
-      unsigned int carbus_socket_address;
-      unsigned char capabilities_offset;
-      unsigned short secondary_status;
-      unsigned char pci_bus_number;
-      unsigned char carbus_bus_number;
-      unsigned char subordinate_bus_number;
-      unsigned char carbus_latency_timer;
-      unsigned int base_address0;
-      unsigned int limit0;
-      unsigned int base_address1;
-      unsigned int limit1;
-      unsigned int io_address0;
-      unsigned int io_limit0;
-      unsigned int io_address1;
-      unsigned int io_limit1;
-      unsigned char interrupt_line;
-      unsigned char interrupt_pin;
-      unsigned short bridge_control;
-      unsigned short subsystem_device_id;
-      unsigned short subsystem_vendor_id;
-      unsigned int pc_card_base_address;
-    } cardbus_bridge;
-  } u;
-
-  dev_t* next;
-};
-
-/* List of all the devices. */
-static dev_t* dev_head = 0;
-
-static unsigned long
-read_config (unsigned char bus,
-	     unsigned char slot,
-	     unsigned char function,
-	     unsigned char reg)
-{
-  unsigned long address = (1 << 31) | (bus << 16) | (slot << 11) | (function << 8) | reg;
-  outl (CONFIG_ADDRESS, address);
-  return inl (CONFIG_DATA);
-}
-
-static void
-read_vendor (unsigned char bus,
-	     unsigned char slot,
-	     unsigned char function,
-	     unsigned short* vendor,
-	     unsigned short* device)
-{
-  unsigned long val = read_config (bus, slot, function, 0);
-  *vendor = val & 0xFFFF;
-  *device = val >> 16;
-}
-
-static void
-read_command (unsigned char bus,
-	      unsigned char slot,
-	      unsigned char function,
-	      unsigned short* command,
-	      unsigned short* status)
-{
-  unsigned long val = read_config (bus, slot, function, 4);
-  *command = val & 0xFFFF;
-  *status = val >> 16;
-}
-
-static void
-read_revision (unsigned char bus,
-	       unsigned char slot,
-	       unsigned char function,
-	       unsigned char* revision,
-	       unsigned char* programming_interface,
-	       unsigned char* subclass,
-	       unsigned char* class)
-{
-  unsigned long val = read_config (bus, slot, function, 8);
-  *revision = val & 0xFF;
-  *programming_interface = val >> 8;
-  *subclass = val >> 16;
-  *class = val >> 24;
-}
-
-static dev_t*
-create_device (unsigned char bus,
-	       unsigned char slot,
-	       unsigned char function)
-{
-  dev_t* dev = malloc (sizeof (dev_t));
-  memset (dev, 0, sizeof (dev_t));
-
-  dev->bus = bus;
-  dev->slot = slot;
-  dev->function = function;
-
-  read_vendor (bus, slot, function, &dev->vendor, &dev->device);
-  read_command (bus, slot, function, &dev->command, &dev->status);
-  read_revision (bus, slot, function, &dev->revision, &dev->programming_interface, &dev->subclass, &dev->class);
-  dev->next = dev_head;
-  dev_head = dev;
-
-  return dev;
-}
-
 #define INIT_NO 1
 #define STOP_NO 2
 #define SYSLOG_NO 3
@@ -302,20 +25,225 @@ static state_t state = RUN;
 static bd_t syslog_bd = -1;
 static buffer_file_t syslog_buffer;
 
+#define CONFIG_ADDRESS	0xCF8
+#define CONFIG_DATA	0xCFC
+
+#define CONFIG_ENABLE_MASK (1 << 31)
+#define BUS_SHIFT 16
+#define SLOT_SHIFT 11
+#define FUNCTION_SHIFT 8
+#define REGISTER_MASK 0xFFFFFFFC
+
+#define MAX_BUS_COUNT 256
+#define MAX_SLOT_COUNT 32
+#define MAX_FUNCTION_COUNT 8
+
+#define VENDOR_OFFSET 0x0
+#define VENDOR_SIZE 2
+
+#define DEVICE_OFFSET 0x2
+#define DEVICE_SIZE 2
+
+#define COMMAND_OFFSET 0x4
+#define COMMAND_SIZE 2
+
+#define STATUS_OFFSET 0x4
+#define STATUS_SIZE 2
+
+#define REVISION_OFFSET 0x8
+#define REVISION_SIZE 1
+
+#define PROGIF_OFFSET 0x9
+#define PROGIF_SIZE 1
+
+#define SUBCLASS_OFFSET 0xA
+#define SUBCLASS_SIZE 1
+
+#define CLASS_OFFSET 0xB
+#define CLASS_SIZE 1
+
+#define HEADER_TYPE_OFFSET 0xE
+#define HEADER_TYPE_SIZE 1
+
+#define STANDARD_HEADER 0
+#define PCI_BRIDGE_HEADER 1
+#define CARDBUS_BRIDGE_HEADER 2
+
+#define BAR0_OFFSET 0x10
+#define BAR0_SIZE 4
+
+#define BAR1_OFFSET 0x14
+#define BAR1_SIZE 4
+
+#define PRIMARY_BUS_OFFSET 0x18
+#define PRIMARY_BUS_SIZE 1
+
+#define SECONDARY_BUS_OFFSET 0x19
+#define SECONDARY_BUS_SIZE 1
+
+#define SUBORDINATE_BUS_OFFSET 0x1A
+#define SUBORDINATE_BUS_SIZE 1
+
+#define IO_BASE_OFFSET 0x1C
+#define IO_BASE_SIZE 1
+
+#define IO_LIMIT_OFFSET 0x1D
+#define IO_LIMIT_SIZE 1
+
+#define MEMORY_BASE_OFFSET 0x20
+#define MEMORY_BASE_SIZE 2
+
+#define MEMORY_LIMIT_OFFSET 0x22
+#define MEMORY_LIMIT_SIZE 2
+
+static unsigned long
+read_config (unsigned char bus,
+	     unsigned char slot,
+	     unsigned char function,
+	     unsigned int offset,
+	     unsigned int size)
+{
+  unsigned long address = CONFIG_ENABLE_MASK | (bus << BUS_SHIFT) | (slot << SLOT_SHIFT) | (function << FUNCTION_SHIFT) | (offset & REGISTER_MASK);
+  outl (CONFIG_ADDRESS, address);
+  unsigned long value = inl (CONFIG_DATA);
+  value >>= (8 * (offset & ~REGISTER_MASK));
+  switch (size) {
+  case 1:
+    return value & 0xFF;
+  case 2:
+    return value & 0xFFFF;
+  case 3:
+    return value & 0xFFFFFF;
+  }
+  return value;
+}
+
+typedef struct device device_t;
+
+struct device {
+  /* Only store immutable values. */
+  unsigned char bus;
+  unsigned char slot;
+  unsigned char function;
+
+  unsigned short vendor;
+  unsigned short device;
+
+  unsigned char revision;
+  unsigned char progif;
+  unsigned char subclass;
+  unsigned char class;
+  
+  unsigned char header_type;
+  bool multifunction;
+
+  device_t* next;
+};
+
+static device_t* devices_head = 0;
+
+static device_t*
+device_create (unsigned char bus,
+	       unsigned char slot,
+	       unsigned char function)
+{
+  device_t* device = malloc (sizeof (device_t));
+  memset (device, 0, sizeof (device_t));
+
+  device->bus = bus;
+  device->slot = slot;
+  device->function = function;
+
+  device->vendor = read_config (bus, slot, function, VENDOR_OFFSET, VENDOR_SIZE);
+  device->device = read_config (bus, slot, function, DEVICE_OFFSET, DEVICE_SIZE);
+
+  device->revision = read_config (device->bus, device->slot, device->function, REVISION_OFFSET, REVISION_SIZE);
+  device->progif = read_config (device->bus, device->slot, device->function, PROGIF_OFFSET, PROGIF_SIZE);
+  device->subclass = read_config (device->bus, device->slot, device->function, SUBCLASS_OFFSET, SUBCLASS_SIZE);
+  device->class = read_config (device->bus, device->slot, device->function, CLASS_OFFSET, CLASS_SIZE);
+
+  device->header_type = read_config (device->bus, device->slot, device->function, HEADER_TYPE_OFFSET, HEADER_TYPE_SIZE);
+  device->multifunction = (device->header_type & (1 << 7)) != 0;
+  device->header_type &= 0x7F;
+
+  device->next = devices_head;
+  devices_head = device;
+
+  return device;
+}
+
+static const char*
+device_description (const device_t* device)
+{
+  unsigned short code = (device->class << 8) | (device->subclass << 0);
+  switch (code) {
+  case 0x0101:
+    return "IDE interface";
+
+  case 0x0200:
+    return "Ethernet controller";
+
+  case 0x0300:
+    switch (device->progif) {
+    case 0x00:
+      return "VGA compatible controller";
+    }
+
+  case 0x0401:
+    return "Multimedia audio controller";
+
+  case 0x0600:
+    return "Host bridge";
+  case 0x0601:
+    return "ISA bridge";
+  case 0x0604:
+    return "PCI bridge";
+  case 0x0680:
+    return "Miscellaneous bridge";
+
+  case 0x0C03:
+    return "USB controller";
+  case 0x0C05:
+    return "SMBus";
+  }
+
+  return "Unknown device";
+}
+
+static bool
+device_is_pci_bridge (const device_t* device)
+{
+  return device->class == 0x06 && device->subclass == 0x04 && device->progif == 0x00;
+}
+
+static unsigned char
+bridge_secondary_bus (const device_t* device)
+{
+  return read_config (device->bus, device->slot, device->function, SECONDARY_BUS_OFFSET, SECONDARY_BUS_SIZE);
+}
+
 static void
-enumerate_buses (void)
-{  
-  for (int bus = 0; bus != 256; ++bus) {
-    for (int slot = 0; slot != 32; ++slot) {
-      unsigned short vendor;
-      unsigned short device;
-      read_vendor (bus, slot, 0, &vendor, &device);
-      if (vendor != 0xFFFF) {
-	create_device (bus, slot, 0);
-	for (int function = 1; function != 8; ++function) {
-	  read_vendor (bus, slot, function, &vendor, &device);
+enumerate (unsigned char bus)
+{
+  for (int slot = 0; slot != MAX_SLOT_COUNT; ++slot) {
+    unsigned short vendor = read_config (bus, slot, 0, VENDOR_OFFSET, VENDOR_SIZE);
+    if (vendor != 0xFFFF) {
+      device_t* device = device_create (bus, slot, 0);
+      
+      if (device_is_pci_bridge (device)) {
+      	enumerate (bridge_secondary_bus (device));
+      }
+
+      if (device->multifunction) {
+	for (int function = 1; function != MAX_FUNCTION_COUNT; ++function) {
+	  vendor = read_config (bus, slot, function, VENDOR_OFFSET, VENDOR_SIZE);
 	  if (vendor != 0xFFFF) {
-	    create_device (bus, slot, function);
+	    device_t* device = device_create (bus, slot, function);
+
+	    if (device_is_pci_bridge (device)) {
+	      enumerate (bridge_secondary_bus (device));
+	    }
+
 	  }
 	}
       }
@@ -368,10 +296,11 @@ initialize (void)
       return;
     }
 
-    enumerate_buses ();
+    /* Enumerate the buses. */
+    enumerate (0);
 
-    for (dev_t* dev = dev_head; dev != 0; dev = dev->next) {
-      bfprintf (&syslog_buffer, "%x:%x.%x vendor = %x device = %x command = %x status = %x revision = %x prog = %x subclass = %x class = %x\n", dev->bus, dev->slot, dev->function, dev->vendor, dev->device, dev->command, dev->status, dev->revision, dev->programming_interface, dev->subclass, dev->class);
+    for (device_t* d = devices_head; d != 0; d = d->next) {
+      bfprintf (&syslog_buffer, "%x:%x.%x %s: %x %x\n", d->bus, d->slot, d->function, device_description (d), d->class, d->subclass);
     }
   }
 }

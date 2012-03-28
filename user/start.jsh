@@ -100,3 +100,5 @@ bind this stdout terminal2 stdin
 ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
 bind terminal3 *out ps2_keyboard_mouse_test *in
 bind ps2_keyboard_mouse_test *out terminal3 *in
+
+pci = create -p /bin/pci
