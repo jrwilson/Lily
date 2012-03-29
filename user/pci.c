@@ -172,44 +172,6 @@ device_create (unsigned char bus,
   return device;
 }
 
-static const char*
-device_description (const device_t* device)
-{
-  unsigned short code = (device->class << 8) | (device->subclass << 0);
-  switch (code) {
-  case 0x0101:
-    return "IDE interface";
-
-  case 0x0200:
-    return "Ethernet controller";
-
-  case 0x0300:
-    switch (device->progif) {
-    case 0x00:
-      return "VGA compatible controller";
-    }
-
-  case 0x0401:
-    return "Multimedia audio controller";
-
-  case 0x0600:
-    return "Host bridge";
-  case 0x0601:
-    return "ISA bridge";
-  case 0x0604:
-    return "PCI bridge";
-  case 0x0680:
-    return "Miscellaneous bridge";
-
-  case 0x0C03:
-    return "USB controller";
-  case 0x0C05:
-    return "SMBus";
-  }
-
-  return "Unknown device";
-}
-
 static bool
 device_is_pci_bridge (const device_t* device)
 {
@@ -300,7 +262,7 @@ initialize (void)
     enumerate (0);
 
     for (device_t* d = devices_head; d != 0; d = d->next) {
-      bfprintf (&syslog_buffer, "%x:%x.%x %s: %x %x\n", d->bus, d->slot, d->function, device_description (d), d->class, d->subclass);
+      bfprintf (&syslog_buffer, "%x:%x.%x %x %x\n", d->bus, d->slot, d->function, d->vendor, d->device);
     }
   }
 }
