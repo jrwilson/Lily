@@ -1,6 +1,6 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
-PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test
+PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test frtimer sampler
 # shell
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -58,6 +58,12 @@ jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
 syslog : syslog.o 
+	$(CC) -o $@ $^ -lbuffer_file
+
+frtimer : frtimer.o
+	$(CC) -o $@ $^ -lbuffer_file
+
+sampler : sampler.o
 	$(CC) -o $@ $^ -lbuffer_file
 
 %.o : %.c

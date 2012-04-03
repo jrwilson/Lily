@@ -97,8 +97,15 @@ bind terminal2 stdout this stdin
 bind this stdout terminal2 stdin
 
 # Put the PS2 keyboard/mouse test on terminal3.
-ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
-bind terminal3 *out ps2_keyboard_mouse_test *in
-bind ps2_keyboard_mouse_test *out terminal3 *in
+#ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
+#bind terminal3 *out ps2_keyboard_mouse_test *in
+#bind ps2_keyboard_mouse_test *out terminal3 *in
+
+#frtimer = create /bin/frtimer
+#sampler = create /bin/sampler
+#bind sampler request frtimer request
+#bind frtimer response sampler response
+#bind sampler stdout terminal3 stdin
+#start sampler
 
 pci = create -p /bin/pci
