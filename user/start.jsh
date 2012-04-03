@@ -108,4 +108,5 @@ bind this stdout terminal2 stdin
 #bind sampler stdout terminal3 stdin
 #start sampler
 
-pci = create -p /bin/pci
+pci = create -p -n pci /bin/pci
+ne2000 = create -p /bin/ne2000

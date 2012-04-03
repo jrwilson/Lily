@@ -22,7 +22,8 @@ com3: enabled=0
 com4: enabled=0
 usb_uhci: enabled=0
 usb_ohci: enabled=0
-i440fxsupport: enabled=1
+ne2k: enabled=1, ioaddr=0x300, irq=11, mac=b0:c4:20:00:00:00, ethmod=linux, ethdev=eth0
+i440fxsupport: enabled=1, slot2=ne2k
 vga_update_interval: 50000
 vga: extension=vbe
 cpu: count=1, ips=4000000, reset_on_triple_fault=1
@@ -34,7 +35,8 @@ text_snapshot_check: enabled=0
 private_colormap: enabled=0
 clock: sync=none, time0=local
 # no cmosimage
-ne2k: enabled=0
+#ne2k: enabled=0
+#ne2k: ioaddr=0x300, irq=11, mac=b0:c4:20:00:00:00, ethmod=linux, ethdev=eth0
 pnic: enabled=0
 sb16: enabled=0
 # no loader
