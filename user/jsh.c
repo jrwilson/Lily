@@ -1384,6 +1384,7 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
       else {
 	/* Control character. */
 	switch (c) {
+	case '\r':
 	case '\n':
 	  /* Terminate. */
 	  line_append (0);

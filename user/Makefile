@@ -1,7 +1,21 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
-PROGRAMS=syslog vfs tmpfs jsh ps2_keyboard_mouse terminal_server terminal vga pci ps2_keyboard_mouse_test frtimer sampler ne2000
-# shell
+PROGRAMS=\
+syslog \
+vfs \
+tmpfs \
+jsh \
+ps2_keyboard_mouse \
+terminal_server \
+terminal \
+vga \
+pci \
+ps2_keyboard_mouse_test \
+frtimer \
+sampler \
+ne2000 \
+serial_port
+
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
 
@@ -68,6 +82,9 @@ sampler : sampler.o
 
 ne2000 : ne2000.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file
+
+serial_port : serial_port.o
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lio -ldymem
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

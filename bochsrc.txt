@@ -16,7 +16,7 @@ ata2: enabled=0
 ata3: enabled=0
 parport1: enabled=1, file=""
 parport2: enabled=0
-com1: enabled=1, mode=null, dev=""
+com1: enabled=1, mode=term, dev="/dev/tty9"
 com2: enabled=0
 com3: enabled=0
 com4: enabled=0

@@ -108,5 +108,14 @@ bind this stdout terminal2 stdin
 #bind sampler stdout terminal3 stdin
 #start sampler
 
-pci = create -p -n pci /bin/pci
-ne2000 = create -p /bin/ne2000
+s = create /bin/jsh
+
+com1 = create -p /bin/serial_port
+#bind com1 *out terminal3 *in
+#bind terminal3 *out com1 *in
+bind com1 *out s *in
+bind s *out com1 *in
+start com1
+
+#pci = create -p -n pci /bin/pci
+#ne2000 = create -p /bin/ne2000
