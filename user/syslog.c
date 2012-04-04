@@ -93,15 +93,34 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano
     finish_input (bda, bdb);
   }
 
-  if (bfprintf (&stdout_buffer, "(%d) ", aid) != 0 ||
-      buffer_file_write (&stdout_buffer, str, size) != 0) {
-    exit ();
-  }
+  if (size != 0) {
+    const char* begin = str;
+    const char* end = begin + size;
+    bool print_prefix = true;
+    
+    while (begin != end) {
+      if (print_prefix) {
+	print_prefix = false;
+	/* Print the prefix. */
+	if (bfprintf (&stdout_buffer, "(%d) ", aid) != 0) {
+	  exit ();
+	}
+      }
 
-  if (str[size - 1] != '\n') {
-    /* No new line. */
-    if (buffer_file_put (&stdout_buffer, '\n') != 0) {
-      exit ();
+      if (buffer_file_put (&stdout_buffer, *begin) != 0) {
+	exit ();
+      }
+
+      print_prefix = (*begin == '\n');
+
+      ++begin;
+    }
+    
+    if (!print_prefix) {
+      /* No new line. */
+      if (buffer_file_put (&stdout_buffer, '\n') != 0) {
+	exit ();
+      }
     }
   }
 
