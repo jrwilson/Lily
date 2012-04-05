@@ -219,7 +219,7 @@ initialize (void)
 	}
 	
 	action_desc_t desc;
-	if (description_read_name (&syslog_description, &desc, SYSLOG_STDIN) != 0) {
+	if (description_read_name (&syslog_description, &desc, SYSLOG_TEXT_IN) != 0) {
 	  exit ();
 	}
 

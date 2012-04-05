@@ -14,8 +14,8 @@
 
 #define INIT_NO 1
 #define START_NO 2
-#define STDIN_NO 3
-#define STDOUT_NO 4
+#define TEXT_IN_NO 3
+#define TEXT_OUT_NO 4
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -27,8 +27,8 @@ typedef enum {
 } state_t;
 static state_t state = START;
 
-static bd_t stdout_bd = -1;
-static buffer_file_t stdout_buffer;
+static bd_t text_out_bd = -1;
+static buffer_file_t text_out_buffer;
 
 static void
 initialize (void)
@@ -36,12 +36,12 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    stdout_bd = buffer_create (0);
-    if (stdout_bd == -1) {
+    text_out_bd = buffer_create (0);
+    if (text_out_bd == -1) {
       /* Nothing we can do. */
       exit ();
     }
-    if (buffer_file_initw (&stdout_buffer, stdout_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       /* Nothing we can do. */
       exit ();
     }
@@ -72,23 +72,23 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
   finish_input (bda, bdb);
 }
 
-/* stdin
-   -----
+/* text_in
+   -------
    Receive a line to log.
    
-   Post: if successful, then stdout_buffer is not empty
+   Post: if successful, then text_out_buffer is not empty
  */
-BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  buffer_file_t stdin_buffer;
-  if (buffer_file_initr (&stdin_buffer, bda) != 0) {
+  buffer_file_t text_in_buffer;
+  if (buffer_file_initr (&text_in_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
 
-  size_t size = buffer_file_size (&stdin_buffer);
-  const char* str = buffer_file_readp (&stdin_buffer, size);
+  size_t size = buffer_file_size (&text_in_buffer);
+  const char* str = buffer_file_readp (&text_in_buffer, size);
   if (str == 0) {
     finish_input (bda, bdb);
   }
@@ -102,12 +102,12 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano
       if (print_prefix) {
 	print_prefix = false;
 	/* Print the prefix. */
-	if (bfprintf (&stdout_buffer, "(%d) ", aid) != 0) {
+	if (bfprintf (&text_out_buffer, "(%d) ", aid) != 0) {
 	  exit ();
 	}
       }
 
-      if (buffer_file_put (&stdout_buffer, *begin) != 0) {
+      if (buffer_file_put (&text_out_buffer, *begin) != 0) {
 	exit ();
       }
 
@@ -118,7 +118,7 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano
     
     if (!print_prefix) {
       /* No new line. */
-      if (buffer_file_put (&stdout_buffer, '\n') != 0) {
+      if (buffer_file_put (&text_out_buffer, '\n') != 0) {
 	exit ();
       }
     }
@@ -127,26 +127,26 @@ BEGIN_INPUT (AUTO_PARAMETER, STDIN_NO, SYSLOG_STDIN, "buffer_file_t", stdin, ano
   finish_input (bda, bdb);
 }
 
-/* stdout
+/* text_out
    ------
    Output the contents of the log buffer.
    
-   Pre:  state == RUN && stdout_buffer is not empty
-   Post: stdout_buffer is empty
+   Pre:  state == RUN && text_out_buffer is not empty
+   Post: text_out_buffer is empty
  */
 static bool
-stdout_precondition (void)
+text_out_precondition (void)
 {
-  return state == RUN && buffer_file_size (&stdout_buffer) != 0;
+  return state == RUN && buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
   initialize ();
 
-  if (stdout_precondition ()) {
-    buffer_file_truncate (&stdout_buffer);
-    finish_output (true, stdout_bd, -1);
+  if (text_out_precondition ()) {
+    buffer_file_truncate (&text_out_buffer);
+    finish_output (true, text_out_bd, -1);
   }
   else {
     finish_output (false, -1, -1);
@@ -156,7 +156,7 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t 
 void
 do_schedule (void)
 {
-  if (stdout_precondition ()) {
-    schedule (STDOUT_NO, 0);
+  if (text_out_precondition ()) {
+    schedule (TEXT_OUT_NO, 0);
   }
 }

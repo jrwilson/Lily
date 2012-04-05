@@ -247,13 +247,13 @@ initialize (void)
 	exit ();
       }
       
-      action_desc_t syslog_stdin;
-      if (description_read_name (&syslog_description, &syslog_stdin, SYSLOG_STDIN) != 0) {
+      action_desc_t syslog_text_in;
+      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
 	exit ();
       }
             
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 

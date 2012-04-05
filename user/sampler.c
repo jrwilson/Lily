@@ -3,14 +3,14 @@
 
 #define REQUEST_NO 1
 #define RESPONSE_NO 2
-#define STDOUT_NO 3
+#define TEXT_OUT_NO 3
 #define START_NO 4
 
 static bool initialized = false;
 static bool samp = false;
 
-static bd_t stdout_bd = -1;
-static buffer_file_t stdout_buffer;
+static bd_t text_out_bd = -1;
+static buffer_file_t text_out_buffer;
 
 static void
 initialize (void)
@@ -18,11 +18,11 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    stdout_bd = buffer_create (0);
-    if (stdout_bd == -1) {
+    text_out_bd = buffer_create (0);
+    if (text_out_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&stdout_buffer, stdout_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       exit ();
     }
   }
@@ -61,17 +61,17 @@ BEGIN_INPUT (NO_PARAMETER, RESPONSE_NO, "response", "", response_, ano_t ano, in
   }
 
   //samp = (tick % 2) == 1;
-  bfprintf (&stdout_buffer, "tick = %d\n", tick);
+  bfprintf (&text_out_buffer, "tick = %d\n", tick);
 
   finish_input (bda, bdb);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
   initialize ();
-  if (buffer_file_size (&stdout_buffer) != 0) {
-    buffer_file_truncate (&stdout_buffer);
-    finish_output (true, stdout_bd, -1);
+  if (buffer_file_size (&text_out_buffer) != 0) {
+    buffer_file_truncate (&text_out_buffer);
+    finish_output (true, text_out_bd, -1);
   }
   finish_output (false, -1, -1);
 }
@@ -82,7 +82,7 @@ do_schedule (void)
   if (samp) {
     schedule (REQUEST_NO, 0);
   }
-  if (buffer_file_size (&stdout_buffer) != 0) {
-    schedule (STDOUT_NO, 0);
+  if (buffer_file_size (&text_out_buffer) != 0) {
+    schedule (TEXT_OUT_NO, 0);
   }
 }

@@ -27,6 +27,8 @@
 #define CUP_S "H"
 #define ED 0x4A
 #define ED_S "J"
+#define SGR 0x6D
+#define SGR_S "m"
 
 /* The ASCII delete character. */
 #define DEL 0x7F

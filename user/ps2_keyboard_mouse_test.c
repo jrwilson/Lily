@@ -16,16 +16,15 @@
 */
 
 #define INIT_NO 1
-#define SCAN_CODES_IN_NO 2
-#define STDIN_NO 3
+#define TEXT_IN_NO 3
 #define MOUSE_PACKETS_IN_NO 4
-#define STDOUT_NO 5
+#define TEXT_OUT_NO 5
 
 /* Initialization flag. */
 static bool initialized = false;
 
-static bd_t stdout_bd = -1;
-static buffer_file_t stdout_buffer;
+static bd_t text_out_bd = -1;
+static buffer_file_t text_out_buffer;
 
 static void
 initialize (void)
@@ -34,11 +33,11 @@ initialize (void)
     initialized = true;
 
     /* Allocate the output buffer. */
-    stdout_bd = buffer_create (0);
-    if (stdout_bd == -1) {
+    text_out_bd = buffer_create (0);
+    if (text_out_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&stdout_buffer, stdout_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       exit ();
     }
   }
@@ -50,29 +49,7 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", scan_codes_in, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
-    finish_input (bda, bdb);
-  }
-
-  size_t size = buffer_file_size (&input_buffer);
-  const unsigned char* codes = buffer_file_readp (&input_buffer, size);
-  if (codes == 0) {
-    finish_input (bda, bdb);
-  }
-
-  for (size_t idx = 0; idx != size; ++idx) {
-    bfprintf (&stdout_buffer, "scan code %x\n", codes[idx]);
-  }
-
-  finish_input (bda, bdb);
-}
-
-BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -88,7 +65,7 @@ BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano,
   }
 
   for (size_t idx = 0; idx != size; ++idx) {
-    bfprintf (&stdout_buffer, "ascii %c\n", codes[idx]);
+    bfprintf (&text_out_buffer, "ascii %c (%d)\n", codes[idx], codes[idx]);
   }
 
   finish_input (bda, bdb);
@@ -110,7 +87,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
       finish_input (bda, bdb);
     }
     
-    bfprintf (&stdout_buffer,
+    bfprintf (&text_out_buffer,
 	      "status %x dx %d dy %d dzv %d dzh %d %d %d\n",
 	      mp.button_status_bits,
 	      mp.x_delta,
@@ -125,18 +102,18 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 }
 
 static bool
-stdout_precondition (void)
+text_out_precondition (void)
 {
-  return buffer_file_size (&stdout_buffer) != 0;
+  return buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
   initialize ();
 
-  if (stdout_precondition ()) {
-    buffer_file_truncate (&stdout_buffer);
-    finish_output (true, stdout_bd, -1);
+  if (text_out_precondition ()) {
+    buffer_file_truncate (&text_out_buffer);
+    finish_output (true, text_out_bd, -1);
   }
   else {
     finish_output (false, -1, -1);
@@ -146,7 +123,7 @@ BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t 
 void
 do_schedule (void)
 {
-  if (stdout_precondition ()) {
-    schedule (STDOUT_NO, 0);
+  if (text_out_precondition ()) {
+    schedule (TEXT_OUT_NO, 0);
   }
 }

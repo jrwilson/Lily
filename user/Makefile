@@ -6,7 +6,6 @@ vfs \
 tmpfs \
 jsh \
 ps2_keyboard_mouse \
-terminal_server \
 terminal \
 vga \
 pci \
@@ -14,7 +13,9 @@ ps2_keyboard_mouse_test \
 frtimer \
 sampler \
 ne2000 \
-serial_port
+serial_port \
+byte_channel \
+ecma2unix
 
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -56,11 +57,8 @@ ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o
 ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file
 
-terminal_server : terminal_server.o vga_msg.o mouse_msg.o
+terminal : terminal.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file -ldymem
-
-terminal : terminal.o mouse_msg.o
-	$(CC) -o $@ $^ -lbuffer_file
 
 vga : vga.o vga_msg.o
 	$(CC) -o $@ $^ -lio -ldescription -lbuffer_file
@@ -85,6 +83,12 @@ ne2000 : ne2000.o
 
 serial_port : serial_port.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lio -ldymem
+
+byte_channel : byte_channel.o
+	$(CC) -o $@ $^ -lbuffer_file
+
+ecma2unix : ecma2unix.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

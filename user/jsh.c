@@ -55,9 +55,9 @@ atoi (const char* s)
 
 #define INIT_NO 1
 #define START_NO 2
-#define STDIN_NO 3
+#define TEXT_IN_NO 3
 #define PROCESS_LINE_NO 4
-#define STDOUT_NO 5
+#define TEXT_OUT_NO 5
 #define DESTROYED_NO 6
 #define UNBOUND_NO 7
 #define VFS_RESPONSE_NO 8
@@ -66,8 +66,8 @@ atoi (const char* s)
 /* Initialization flag. */
 static bool initialized = false;
 
-static bd_t stdout_bd = -1;
-static buffer_file_t stdout_buffer;
+static bd_t text_out_bd = -1;
+static buffer_file_t text_out_buffer;
 
 #define VFS_NAME "vfs"
 static bd_t vfs_request_bda = -1;
@@ -428,7 +428,7 @@ scanner_process (char* string,
   for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) {
     scanner_put (scan_string_copy + idx);
     if (scan_state == SCAN_ERROR) {
-      bfprintf (&stdout_buffer, "-> error near: %s\n", string + idx);
+      bfprintf (&text_out_buffer, "-> error near: %s\n", string + idx);
       return -1;
     }
   }
@@ -508,7 +508,7 @@ create_callback (void* data,
   }
 
   if (error != VFS_SUCCESS) {
-    bfprintf (&stdout_buffer, "-> file %s could not be read\n", create_path);
+    bfprintf (&text_out_buffer, "-> file %s could not be read\n", create_path);
     return;
   }
 
@@ -533,14 +533,14 @@ create_callback (void* data,
   if (aid == -1) {
     buffer_destroy (bd1);
     buffer_destroy (bd2);
-    bfprintf (&stdout_buffer, "-> error: create failed\n");
+    bfprintf (&text_out_buffer, "-> error: create failed\n");
     return;
   }
 
   if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
     buffer_destroy (bd1);
     buffer_destroy (bd2);
-    bfprintf (&stdout_buffer, "-> error: subscribe failed\n");
+    bfprintf (&text_out_buffer, "-> error: subscribe failed\n");
     return;
   }
 
@@ -553,13 +553,13 @@ create_callback (void* data,
   buffer_destroy (bd1);
   buffer_destroy (bd2);
   
-  bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
+  bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid);
 }
 
 static void
 create_usage (void)
 {
-  bfprintf (&stdout_buffer, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n");
+  bfprintf (&text_out_buffer, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n");
 }
 
 static bool
@@ -578,7 +578,7 @@ create_ (void)
     create_name = scan_strings[0];
 
     if (find_automaton (create_name) != 0) {
-      bfprintf (&stdout_buffer, "-> error: name %s is taken\n", create_name);
+      bfprintf (&text_out_buffer, "-> error: name %s is taken\n", create_name);
       return true;
     }
 
@@ -637,7 +637,7 @@ create_ (void)
 static void
 bind_usage (void)
 {
-  bfprintf (&stdout_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n");
+  bfprintf (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n");
 }
 
 static void
@@ -652,12 +652,12 @@ single_bind (automaton_t* output_automaton,
   description_t output_description;
   description_t input_description;
   if (description_init (&output_description, output_automaton->aid) != 0) {
-    bfprintf (&stdout_buffer, "-> error: could not describe output\n");
+    bfprintf (&text_out_buffer, "-> error: could not describe output\n");
     return;
   }
   if (description_init (&input_description, input_automaton->aid) != 0) {
     description_fini (&output_description);
-    bfprintf (&stdout_buffer, "-> error: could not describe input\n");
+    bfprintf (&text_out_buffer, "-> error: could not describe input\n");
     return;
   }
       
@@ -666,7 +666,7 @@ single_bind (automaton_t* output_automaton,
   if (description_read_name (&output_description, &output_action, output_action_name) != 0) {
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: output action does not exist\n");
+    bfprintf (&text_out_buffer, "-> error: output action does not exist\n");
     return;
   }
 
@@ -674,7 +674,7 @@ single_bind (automaton_t* output_automaton,
   if (description_read_name (&input_description, &input_action, input_action_name) != 0) {
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: input action does not exist\n");
+    bfprintf (&text_out_buffer, "-> error: input action does not exist\n");
     return;
   }
 
@@ -705,14 +705,14 @@ single_bind (automaton_t* output_automaton,
   if (bid == -1) {
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: bind failed\n");
+    bfprintf (&text_out_buffer, "-> error: bind failed\n");
     return;
   }
 
   if (subscribe_unbound (bid, UNBOUND_NO) != 0) {
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: subscribe failed\n");
+    bfprintf (&text_out_buffer, "-> error: subscribe failed\n");
     return;
   }
 
@@ -724,7 +724,7 @@ single_bind (automaton_t* output_automaton,
   description_fini (&output_description);
   description_fini (&input_description);
 
-  bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_action_name, output_parameter, input_automaton->name, input_action_name, input_parameter);
+  bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_action_name, output_parameter, input_automaton->name, input_action_name, input_parameter);
 }
 
 static void
@@ -741,12 +741,12 @@ glob_bind (automaton_t* output_automaton,
   description_t output_description;
   description_t input_description;
   if (description_init (&output_description, output_automaton->aid) != 0) {
-    bfprintf (&stdout_buffer, "-> error: could not describe output\n");
+    bfprintf (&text_out_buffer, "-> error: could not describe output\n");
     return;
   }
   if (description_init (&input_description, input_automaton->aid) != 0) {
     description_fini (&output_description);
-    bfprintf (&stdout_buffer, "-> error: could not describe input\n");
+    bfprintf (&text_out_buffer, "-> error: could not describe input\n");
     return;
   }
 
@@ -754,7 +754,7 @@ glob_bind (automaton_t* output_automaton,
   if (output_action_count == -1) {
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: bad output description\n");
+    bfprintf (&text_out_buffer, "-> error: bad output description\n");
     return;
   }
 
@@ -762,7 +762,7 @@ glob_bind (automaton_t* output_automaton,
   if (output_action_count == -1) {
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: bad input description\n");
+    bfprintf (&text_out_buffer, "-> error: bad input description\n");
     return;
   }
 
@@ -774,7 +774,7 @@ glob_bind (automaton_t* output_automaton,
     free (input_actions);
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: bad output description\n");
+    bfprintf (&text_out_buffer, "-> error: bad output description\n");
   }
 
   if (description_read_all (&input_description, input_actions) != 0) {
@@ -782,7 +782,7 @@ glob_bind (automaton_t* output_automaton,
     free (input_actions);
     description_fini (&output_description);
     description_fini (&input_description);
-    bfprintf (&stdout_buffer, "-> error: bad input description\n");
+    bfprintf (&text_out_buffer, "-> error: bad input description\n");
     return;
   }
 
@@ -851,7 +851,7 @@ glob_bind (automaton_t* output_automaton,
 	      }
 	    }
 
-	    bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param);
+	    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param);
 	  }
       	}
       }
@@ -915,7 +915,7 @@ bind_ (void)
       
       automaton_t* output_automaton = find_automaton (scan_strings[idx]);
       if (output_automaton == 0) {
-	bfprintf (&stdout_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]);
+	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]);
 	return true;
       }
       ++idx;
@@ -924,7 +924,7 @@ bind_ (void)
       
       automaton_t* input_automaton = find_automaton (scan_strings[idx]);
       if (input_automaton == 0) {
-	bfprintf (&stdout_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]);
+	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]);
 	return true;
       }
       ++idx;
@@ -937,7 +937,7 @@ bind_ (void)
 
       if (!((output_glob == 0 && input_glob == 0) ||
 	   (output_glob != 0 && input_glob != 0))) {
-	bfprintf (&stdout_buffer, "-> error: glob disagreement\n");
+	bfprintf (&text_out_buffer, "-> error: glob disagreement\n");
 	return true;
       }
 
@@ -956,7 +956,7 @@ bind_ (void)
 static void
 lookup_usage (void)
 {
-  bfprintf (&stdout_buffer, "-> usage: NAME = lookup NAME\n");
+  bfprintf (&text_out_buffer, "-> usage: NAME = lookup NAME\n");
 }
 
 static bool
@@ -973,25 +973,25 @@ lookup_ (void)
       strcmp ("lookup", scan_strings[2]) == 0) {
     if (scan_strings_size == 4) {
       if (find_automaton (scan_strings[0]) != 0) {
-	bfprintf (&stdout_buffer, "-> error: name %s is taken\n", scan_strings[0]);
+	bfprintf (&text_out_buffer, "-> error: name %s is taken\n", scan_strings[0]);
 	return true;
       }
       
       /* Perform the lookup. */
       aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1);
       if (aid == -1) {
-	bfprintf (&stdout_buffer, "-> no automaton registered under %s\n", scan_strings[3]);
+	bfprintf (&text_out_buffer, "-> no automaton registered under %s\n", scan_strings[3]);
 	return true;
       }
       
       automaton_t* a;
       if ((a = find_automaton_aid (aid)) != 0) {
-	bfprintf (&stdout_buffer, "-> error: automaton already exists with name %s\n", a->name);
+	bfprintf (&text_out_buffer, "-> error: automaton already exists with name %s\n", a->name);
 	return true;
       }
       
       if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
-	bfprintf (&stdout_buffer, "-> error: subscribe failed\n");
+	bfprintf (&text_out_buffer, "-> error: subscribe failed\n");
 	return true;
       }
 
@@ -1001,7 +1001,7 @@ lookup_ (void)
       automaton->next = automata_head;
       automata_head = automaton;
 
-      bfprintf (&stdout_buffer, "-> %s = %d\n", scan_strings[0], aid);
+      bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid);
       return true;
     }
     else {
@@ -1017,35 +1017,35 @@ describe_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "describe") == 0) {
     if (scan_strings_size == 1) {
-      bfprintf (&stdout_buffer, "-> usage: describe NAME...\n");
+      bfprintf (&text_out_buffer, "-> usage: describe NAME...\n");
       return true;
     }
 
     action_desc_t* actions = 0;
 
     for (size_t idx = 1; idx != scan_strings_size; ++idx) {
-      bfprintf (&stdout_buffer, "%s:\n", scan_strings[idx]);
+      bfprintf (&text_out_buffer, "%s:\n", scan_strings[idx]);
       automaton_t* automaton = find_automaton (scan_strings[idx]);
       if (automaton == 0) {
-	bfprintf (&stdout_buffer, "\t (name not recognized)\n");
+	bfprintf (&text_out_buffer, "\t (name not recognized)\n");
 	continue;
       }
 
       description_t description;
       if (description_init (&description, automaton->aid) != 0) {
-	bfprintf (&stdout_buffer, "\t(no description)\n");
+	bfprintf (&text_out_buffer, "\t(no description)\n");
 	continue;
       }
 
       size_t action_count = description_action_count (&description);
       if (action_count == -1) {
-	bfprintf (&stdout_buffer, "\t(bad description)\n");
+	bfprintf (&text_out_buffer, "\t(bad description)\n");
 	description_fini (&description);
 	continue;
       }
 
       if (action_count == 0) {
-	bfprintf (&stdout_buffer, "\t(empty)\n");
+	bfprintf (&text_out_buffer, "\t(empty)\n");
 	description_fini (&description);
 	continue;
       }
@@ -1053,7 +1053,7 @@ describe_ (void)
       actions = realloc (actions, action_count * sizeof (action_desc_t));
 
       if (description_read_all (&description, actions) != 0) {
-	bfprintf (&stdout_buffer, "\t(bad description)\n");
+	bfprintf (&text_out_buffer, "\t(bad description)\n");
 	description_fini (&description);
 	continue;
       }
@@ -1061,38 +1061,38 @@ describe_ (void)
       for (size_t action = 0; action != action_count; ++action) {
 	switch (actions[action].type) {
 	case LILY_ACTION_INPUT:
-	  bfprintf (&stdout_buffer, "\t IN ");
+	  bfprintf (&text_out_buffer, "\t IN ");
 	  break;
 	case LILY_ACTION_OUTPUT:
-	  bfprintf (&stdout_buffer, "\tOUT ");
+	  bfprintf (&text_out_buffer, "\tOUT ");
 	  break;
 	case LILY_ACTION_INTERNAL:
-	  bfprintf (&stdout_buffer, "\tINT ");
+	  bfprintf (&text_out_buffer, "\tINT ");
 	  break;
 	case LILY_ACTION_SYSTEM_INPUT:
-	  bfprintf (&stdout_buffer, "\tSYS ");
+	  bfprintf (&text_out_buffer, "\tSYS ");
 	  break;
 	default:
-	  bfprintf (&stdout_buffer, "\t??? ");
+	  bfprintf (&text_out_buffer, "\t??? ");
 	  break;
 	}
 
 	switch (actions[action].parameter_mode) {
 	case NO_PARAMETER:
-	  bfprintf (&stdout_buffer, "  ");
+	  bfprintf (&text_out_buffer, "  ");
 	  break;
 	case PARAMETER:
-	  bfprintf (&stdout_buffer, "* ");
+	  bfprintf (&text_out_buffer, "* ");
 	  break;
 	case AUTO_PARAMETER:
-	  bfprintf (&stdout_buffer, "@ ");
+	  bfprintf (&text_out_buffer, "@ ");
 	  break;
 	default:
-	  bfprintf (&stdout_buffer, "? ");
+	  bfprintf (&text_out_buffer, "? ");
 	  break;
 	}
 
-	bfprintf (&stdout_buffer, "%d\t\t%s\t\t%s\n", actions[action].number, actions[action].name, actions[action].description);
+	bfprintf (&text_out_buffer, "%d\t\t%s\t\t%s\n", actions[action].number, actions[action].name, actions[action].description);
       }
 
       description_fini (&description);
@@ -1112,30 +1112,30 @@ show_ (void)
     if (strcmp ("show", scan_strings[0]) == 0) {
       if (scan_strings_size == 1) {
 
-	bfprintf (&stdout_buffer, "automata:\n");
+	bfprintf (&text_out_buffer, "automata:\n");
 	if (automata_head != 0) {
 	  for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) {
-	    bfprintf (&stdout_buffer, "\t%d:\t%s\t%s\n", automaton->aid, automaton->name, automaton->path);
+	    bfprintf (&text_out_buffer, "\t%d:\t%s\t%s\n", automaton->aid, automaton->name, automaton->path);
 	  }
 	}
 	else {
-	  bfprintf (&stdout_buffer, "\t[empty]\n");
+	  bfprintf (&text_out_buffer, "\t[empty]\n");
 	}
 
-	bfprintf (&stdout_buffer, "bindings:\n");
+	bfprintf (&text_out_buffer, "bindings:\n");
 	if (bindings_head != 0) {
 	  for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
-	    bfprintf (&stdout_buffer, "\t%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+	    bfprintf (&text_out_buffer, "\t%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
 	  }
 	}
 	else {
-	  bfprintf (&stdout_buffer, "\t[empty]\n");
+	  bfprintf (&text_out_buffer, "\t[empty]\n");
 	}
 
 	return true;
       }
       else {
-	bfprintf (&stdout_buffer, "-> usage: show\n");
+	bfprintf (&text_out_buffer, "-> usage: show\n");
 	return true;
       }
     }
@@ -1148,7 +1148,7 @@ start_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "start") == 0) {
     if (scan_strings_size == 1) {
-      bfprintf (&stdout_buffer, "-> usage: start ID...\n");
+      bfprintf (&text_out_buffer, "-> usage: start ID...\n");
       return true;
     }
 
@@ -1175,7 +1175,7 @@ start_ (void)
 	continue;
       }
 
-      bfprintf (&stdout_buffer, "-> warning: label or name %s does not exist\n", scan_strings[idx]);
+      bfprintf (&text_out_buffer, "-> warning: label or name %s does not exist\n", scan_strings[idx]);
     }
 
     return true;
@@ -1188,7 +1188,7 @@ error_ (void)
 {
   if (scan_strings_size != 0) {
     /* Catch all. */
-    bfprintf (&stdout_buffer, "-> error: unknown command %s\n", scan_strings[0]);
+    bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]);
   }
   return true;
 }
@@ -1256,11 +1256,11 @@ initialize (void)
     this_automaton->next = automata_head;
     automata_head = this_automaton;
 
-    stdout_bd = buffer_create (0);
-    if (stdout_bd == -1) {
+    text_out_bd = buffer_create (0);
+    if (text_out_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&stdout_buffer, stdout_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       exit ();
     }
 
@@ -1334,7 +1334,7 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -1377,18 +1377,17 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
       if (c >= ' ' && c < 127) {
 	/* Printable character. */
 	line_append (c);
-	if (buffer_file_put (&stdout_buffer, c) != 0) {
+	if (buffer_file_put (&text_out_buffer, c) != 0) {
 	  exit ();
 	}
       }
       else {
 	/* Control character. */
 	switch (c) {
-	case '\r':
 	case '\n':
 	  /* Terminate. */
 	  line_append (0);
-	  if (buffer_file_put (&stdout_buffer, '\n') != 0) {
+	  if (buffer_file_put (&text_out_buffer, '\n') != 0) {
 	    exit ();
 	  }
 
@@ -1433,18 +1432,18 @@ BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, ano_t ano, aid_t aid
 }
 
 static bool
-stdout_precondition (void)
+text_out_precondition (void)
 {
-  return buffer_file_size (&stdout_buffer) != 0;
+  return buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
   initialize ();
 
-  if (stdout_precondition ()) {
-    buffer_file_truncate (&stdout_buffer);
-    finish_output (true, stdout_bd, -1);
+  if (text_out_precondition ()) {
+    buffer_file_truncate (&text_out_buffer);
+    finish_output (true, text_out_bd, -1);
   }
   else {
     finish_output (false, -1, -1);
@@ -1474,7 +1473,7 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t 
 	binding_t* binding = *bptr;
 	*bptr = binding->next;
 
-	bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
 
 	destroy_binding (binding);
       }
@@ -1483,7 +1482,7 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t 
       }
     }
 
-    bfprintf (&stdout_buffer, "-> %d: destroyed\n", automaton->aid);
+    bfprintf (&text_out_buffer, "-> %d: destroyed\n", automaton->aid);
 
     destroy_automaton (automaton);
   }
@@ -1506,7 +1505,7 @@ BEGIN_SYSTEM_INPUT (UNBOUND_NO, "", "", unbound, ano_t ano, bid_t bid, bd_t bda,
     binding_t* binding = *ptr;
     *ptr = binding->next;
 
-    bfprintf (&stdout_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
 
     destroy_binding (binding);
   }
@@ -1575,8 +1574,8 @@ do_schedule (void)
   if (!start_queue_empty ()) {
     schedule (START_NO, start_queue_front ());
   }
-  if (stdout_precondition ()) {
-    schedule (STDOUT_NO, 0);
+  if (text_out_precondition ()) {
+    schedule (TEXT_OUT_NO, 0);
   }
   if (vfs_request_precondition ()) {
     schedule (VFS_REQUEST_NO, 0);

@@ -15,10 +15,10 @@
 #define HALT_NO 2
 #define SYSLOG_NO 3
 #define INTERRUPT_NO 4
-#define STDOUT_NO 5
+#define TEXT_OUT_NO 5
 #define START_NO 6
 #define STOP_NO 7
-#define STDIN_NO 8
+#define TEXT_IN_NO 8
 
 #define INFO "serial_port: info: "
 #define WARNING "serial_port: warning: "
@@ -124,8 +124,8 @@ static bd_t syslog_bd = -1;
 static buffer_file_t syslog_buffer;
 
 /* Standard output buffer. */
-static bd_t stdout_bd = -1;
-static buffer_file_t stdout_buffer;
+static bd_t text_out_bd = -1;
+static buffer_file_t text_out_buffer;
 
 static unsigned short
 baud_to_divisor (unsigned short baud)
@@ -222,26 +222,26 @@ initialize (void)
 	exit ();
       }
       
-      action_desc_t syslog_stdin;
-      if (description_read_name (&syslog_description, &syslog_stdin, SYSLOG_STDIN) != 0) {
+      action_desc_t syslog_text_in;
+      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
 	exit ();
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_stdin.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
       description_fini (&syslog_description);
     }
 
-    stdout_bd = buffer_create (0);
-    if (stdout_bd == -1) {
+    text_out_bd = buffer_create (0);
+    if (text_out_bd == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create output buffer\n");
       state = HALT;
       return;
     }
-    if (buffer_file_initw (&stdout_buffer, stdout_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not initialize output buffer\n");
       state = HALT;
       return;
@@ -275,7 +275,7 @@ initialize (void)
     /* Set the frame type. */
     outb (PORT_BASE + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
     /* Reset the FIFO. */
-    outb (PORT_BASE + FIFO_CONTROL_REG, LEVEL_1 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
+    outb (PORT_BASE + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
   }
 }
 
@@ -345,7 +345,7 @@ BEGIN_SYSTEM_INPUT (INTERRUPT_NO, "", "", interrupt, ano_t ano, aid_t aid, bd_t 
     case RECEIVED_DATA_AVAILABLE_INT:
     case CHARACTER_TIMEOUT_INT:
       while (received_data_ready ()) {
-	if (buffer_file_put (&stdout_buffer, inb (PORT_BASE + RECEIVE_BUFFER_REG)) != 0) {
+	if (buffer_file_put (&text_out_buffer, inb (PORT_BASE + RECEIVE_BUFFER_REG)) != 0) {
 	  bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
 	  state = HALT;
 	  finish_input (bda, bdb);
@@ -368,18 +368,18 @@ BEGIN_SYSTEM_INPUT (INTERRUPT_NO, "", "", interrupt, ano_t ano, aid_t aid, bd_t 
 }
 
 static bool
-stdout_precondition (void)
+text_out_precondition (void)
 {
-  return buffer_file_size (&stdout_buffer) != 0;
+  return buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, STDOUT_NO, "stdout", "buffer_file_t", stdout, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
   initialize ();
 
-  if (stdout_precondition ()) {
-    buffer_file_truncate (&stdout_buffer);
-    finish_output (true, stdout_bd, -1);
+  if (text_out_precondition ()) {
+    buffer_file_truncate (&text_out_buffer);
+    finish_output (true, text_out_bd, -1);
   }
 
   finish_output (false, -1, -1);
@@ -405,7 +405,7 @@ BEGIN_INPUT (NO_PARAMETER, STOP_NO, "stop", "", stop, ano_t ano, int param, bd_t
   finish_input (bda, bdb);
 }
 
-BEGIN_INPUT (NO_PARAMETER, STDIN_NO, "stdin", "buffer_file_t", stdin, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -441,7 +441,7 @@ do_schedule (void)
   if (syslog_precondition ()) {
     schedule (SYSLOG_NO, 0);
   }
-  if (stdout_precondition ()) {
-    schedule (STDOUT_NO, 0);
+  if (text_out_precondition ()) {
+    schedule (TEXT_OUT_NO, 0);
   }
 }

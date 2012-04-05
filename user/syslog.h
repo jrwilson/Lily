@@ -2,6 +2,6 @@
 #define SYSLOG_H
 
 #define SYSLOG_NAME "syslog"
-#define SYSLOG_STDIN "stdin"
+#define SYSLOG_TEXT_IN "text_in"
 
 #endif /* SYSLOG_H */
