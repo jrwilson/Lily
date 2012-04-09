@@ -115,9 +115,9 @@ public:
     context_map_type::iterator pos = context_map_.find (a);
     kassert (pos != context_map_.end ());
     automaton_context* c = pos->second;
+    kassert (c != 0);
     context_map_.erase (pos);
     ready_queue_.erase (c);
-    c->clear ();
     delete c;
   }
 

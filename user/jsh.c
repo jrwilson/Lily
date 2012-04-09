@@ -205,7 +205,7 @@ destroy_binding (binding_t* binding)
 }
 
 static void
-destroya (automaton_t** aptr)
+destroyed_ (automaton_t** aptr)
 {
   if (*aptr != 0) {
     automaton_t* automaton = *aptr;
@@ -1012,7 +1012,8 @@ destroy_ (void)
       return true;
     }
 
-    destroya (aptr);
+    destroy ((*aptr)->aid);
+    destroyed_ (aptr);
 
     return true;
   }
@@ -1523,7 +1524,7 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t 
     }
   }
 
-  destroya (aptr);
+  destroyed_ (aptr);
 
   finish_input (bda, bdb);
 }

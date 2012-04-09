@@ -176,7 +176,7 @@ public:
   {
     bucket_type* ptr = front_;
     while (ptr != 0) {
-      bucket_type* tmp = ptr->list_next;
+      bucket_type* tmp = ptr;
       ptr = tmp->list_next;
       Allocator::destroy (&tmp->value);
       bucket_allocator::deallocate (tmp, 1);
