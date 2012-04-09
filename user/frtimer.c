@@ -1,9 +1,10 @@
 #include <automaton.h>
 #include <buffer_file.h>
 
-#define TICK_NO 1
-#define REQUEST_NO 2
-#define RESPONSE_NO 3
+#define INIT_NO 1
+#define TICK_NO 2
+#define REQUEST_NO 3
+#define RESPONSE_NO 4
 
 static bool initialized = false;
 static bd_t response_bd = -1;
@@ -27,6 +28,12 @@ initialize (void)
   }
 }
 
+BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init_, ano_t ano, int param)
+{
+  initialize ();
+  finish_internal ();
+}
+
 BEGIN_INTERNAL (NO_PARAMETER, TICK_NO, "tick", "", tick_, ano_t ano, int param)
 {
   initialize ();
@@ -41,7 +48,7 @@ BEGIN_INPUT (NO_PARAMETER, REQUEST_NO, "request", "", request_, ano_t ano, int p
   finish_input (bda, bdb);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, "response", "", response_, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing unsigned int", response_, ano_t ano, int param)
 {
   initialize ();
   if (req) {

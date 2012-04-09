@@ -43,6 +43,14 @@ terminal3 = create /bin/ecma2unix
 bind -o 3 terminal *_out terminal3 *_in_term
 bind -i 3 terminal3 *_out_term terminal *_in
 
+terminal4 = create /bin/ecma2unix
+bind -o 4 terminal *_out terminal4 *_in_term
+bind -i 4 terminal4 *_out_term terminal *_in
+
+terminal5 = create /bin/ecma2unix
+bind -o 5 terminal *_out terminal5 *_in_term
+bind -i 5 terminal5 *_out_term terminal *_in
+
 # Put the syslog on terminal1.
 syslog = lookup syslog
 bind syslog *_out terminal1 *_in
@@ -52,15 +60,15 @@ start syslog
 bind terminal2 *_out this *_in
 bind this *_out terminal2 *_in
 
-# Put the PS2 keyboard/mouse test on terminal3.
-ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
-bind terminal3 *_out ps2_keyboard_mouse_test *_in
-bind ps2_keyboard_mouse_test *_out terminal3 *_in
+## Put the PS2 keyboard/mouse test on terminal3.
+#ps2_keyboard_mouse_test = create /bin/ps2_keyboard_mouse_test
+#bind terminal3 *_out ps2_keyboard_mouse_test *_in
+#bind ps2_keyboard_mouse_test *_out terminal3 *_in
 
-# Loopback on terminal 4.
-chan = create /bin/byte_channel
-bind -o 4 terminal *_out chan *_in
-bind -i 4 chan *_out terminal *_in
+## Loopback on terminal 4.
+#chan = create /bin/byte_channel
+#bind -o 4 terminal *_out chan *_in
+#bind -i 4 chan *_out terminal *_in
 
 #frtimer = create /bin/frtimer
 #sampler = create /bin/sampler
@@ -69,12 +77,11 @@ bind -i 4 chan *_out terminal *_in
 #bind sampler stdout terminal3 stdin
 #start sampler
 
-s = create /bin/byte_channel
-
-com1 = create -p /bin/serial_port
-bind com1 *_out s *_in
-bind s *_out com1 *_in
-start com1
+#s = create /bin/byte_channel
+#com1 = create -p /bin/serial_port
+#bind com1 *_out s *_in
+#bind s *_out com1 *_in
+#start com1
 
 #pci = create -p -n pci /bin/pci
 #ne2000 = create -p /bin/ne2000

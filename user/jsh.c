@@ -204,6 +204,36 @@ destroy_binding (binding_t* binding)
   free (binding);
 }
 
+static void
+destroya (automaton_t** aptr)
+{
+  if (*aptr != 0) {
+    automaton_t* automaton = *aptr;
+    *aptr = automaton->next;
+
+    /* Remove the bindings. */
+    binding_t** bptr = &bindings_head;
+    while (*bptr != 0) {
+      if ((*bptr)->output_automaton == automaton ||
+	  (*bptr)->input_automaton == automaton) {
+	binding_t* binding = *bptr;
+	*bptr = binding->next;
+
+	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+
+	destroy_binding (binding);
+      }
+      else {
+	bptr = &(*bptr)->next;
+      }
+    }
+
+    bfprintf (&text_out_buffer, "-> %d: destroyed\n", automaton->aid);
+
+    destroy_automaton (automaton);
+  }
+}
+
 /*
   Begin Line Queue Section
   ========================
@@ -286,6 +316,14 @@ line_append (char c)
     current_line = realloc (current_line, current_line_capacity);
   }
   current_line[current_line_size++] = c;
+}
+
+static void
+line_back (void)
+{
+  if (current_line_size != 0) {
+    --current_line_size;
+  }
 }
 
 static void
@@ -953,6 +991,34 @@ bind_ (void)
   return false;
 }
 
+static bool
+destroy_ (void)
+{
+  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "destroy") == 0) {
+    if (scan_strings_size != 2) {
+      bfprintf (&text_out_buffer, "-> usage: destroy NAME\n");
+      return true;
+    }
+  
+    automaton_t** aptr;
+    for (aptr = &automata_head; *aptr != 0; aptr = &(*aptr)->next) {
+      if (strcmp ((*aptr)->name, scan_strings[1]) == 0) {
+	break;
+      }
+    }
+
+    if (*aptr == 0) {
+      bfprintf (&text_out_buffer, "-> error: %s does not name an automaton", scan_strings[1]);
+      return true;
+    }
+
+    destroya (aptr);
+
+    return true;
+  }
+  return false;
+}
+
 static void
 lookup_usage (void)
 {
@@ -1016,126 +1082,115 @@ static bool
 describe_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "describe") == 0) {
-    if (scan_strings_size == 1) {
-      bfprintf (&text_out_buffer, "-> usage: describe NAME...\n");
+    if (scan_strings_size != 2) {
+      bfprintf (&text_out_buffer, "-> usage: describe NAME\n");
       return true;
     }
 
-    action_desc_t* actions = 0;
-
-    for (size_t idx = 1; idx != scan_strings_size; ++idx) {
-      bfprintf (&text_out_buffer, "%s:\n", scan_strings[idx]);
-      automaton_t* automaton = find_automaton (scan_strings[idx]);
-      if (automaton == 0) {
-	bfprintf (&text_out_buffer, "\t (name not recognized)\n");
-	continue;
-      }
-
-      description_t description;
-      if (description_init (&description, automaton->aid) != 0) {
-	bfprintf (&text_out_buffer, "\t(no description)\n");
-	continue;
-      }
-
-      size_t action_count = description_action_count (&description);
-      if (action_count == -1) {
-	bfprintf (&text_out_buffer, "\t(bad description)\n");
-	description_fini (&description);
-	continue;
-      }
-
-      if (action_count == 0) {
-	bfprintf (&text_out_buffer, "\t(empty)\n");
-	description_fini (&description);
-	continue;
-      }
-
-      actions = realloc (actions, action_count * sizeof (action_desc_t));
-
-      if (description_read_all (&description, actions) != 0) {
-	bfprintf (&text_out_buffer, "\t(bad description)\n");
-	description_fini (&description);
-	continue;
-      }
-
-      for (size_t action = 0; action != action_count; ++action) {
-	switch (actions[action].type) {
-	case LILY_ACTION_INPUT:
-	  bfprintf (&text_out_buffer, "\t IN ");
-	  break;
-	case LILY_ACTION_OUTPUT:
-	  bfprintf (&text_out_buffer, "\tOUT ");
-	  break;
-	case LILY_ACTION_INTERNAL:
-	  bfprintf (&text_out_buffer, "\tINT ");
-	  break;
-	case LILY_ACTION_SYSTEM_INPUT:
-	  bfprintf (&text_out_buffer, "\tSYS ");
-	  break;
-	default:
-	  bfprintf (&text_out_buffer, "\t??? ");
-	  break;
-	}
-
-	switch (actions[action].parameter_mode) {
-	case NO_PARAMETER:
-	  bfprintf (&text_out_buffer, "  ");
-	  break;
-	case PARAMETER:
-	  bfprintf (&text_out_buffer, "* ");
-	  break;
-	case AUTO_PARAMETER:
-	  bfprintf (&text_out_buffer, "@ ");
-	  break;
-	default:
-	  bfprintf (&text_out_buffer, "? ");
-	  break;
-	}
-
-	bfprintf (&text_out_buffer, "%d\t\t%s\t\t%s\n", actions[action].number, actions[action].name, actions[action].description);
-      }
-
-      description_fini (&description);
+    automaton_t* automaton = find_automaton (scan_strings[1]);
+    if (automaton == 0) {
+      bfprintf (&text_out_buffer, "-> error: name %s not recognized\n", scan_strings[1]);
+      return true;
     }
 
-    free (actions);
+    description_t description;
+    if (description_init (&description, automaton->aid) != 0) {
+      bfprintf (&text_out_buffer, "-> error: bad description\n");
+      return true;
+    }
 
+    size_t action_count = description_action_count (&description);
+    if (action_count == -1) {
+      bfprintf (&text_out_buffer, "-> error: bad description\n");
+      description_fini (&description);
+      return true;
+    }
+    
+    action_desc_t* actions = malloc (action_count * sizeof (action_desc_t));
+    if (description_read_all (&description, actions) != 0) {
+      bfprintf (&text_out_buffer, "-> error: bad description\n");
+      description_fini (&description);
+      free (actions);
+      return true;
+    }
+
+    bfprintf (&text_out_buffer, "aid=%d path=%s\n", automaton->aid, automaton->path);
+    
+    /* Print the actions. */
+    for (size_t action = 0; action != action_count; ++action) {
+      switch (actions[action].type) {
+      case LILY_ACTION_INPUT:
+	bfprintf (&text_out_buffer, " IN ");
+	break;
+      case LILY_ACTION_OUTPUT:
+	bfprintf (&text_out_buffer, "OUT ");
+	break;
+      case LILY_ACTION_INTERNAL:
+	bfprintf (&text_out_buffer, "INT ");
+	break;
+      case LILY_ACTION_SYSTEM_INPUT:
+	bfprintf (&text_out_buffer, "SYS ");
+	break;
+      default:
+	bfprintf (&text_out_buffer, "??? ");
+	break;
+      }
+      
+      switch (actions[action].parameter_mode) {
+      case NO_PARAMETER:
+	bfprintf (&text_out_buffer, "  ");
+	break;
+      case PARAMETER:
+	bfprintf (&text_out_buffer, "* ");
+	break;
+      case AUTO_PARAMETER:
+	bfprintf (&text_out_buffer, "@ ");
+	break;
+      default:
+	bfprintf (&text_out_buffer, "? ");
+	break;
+      }
+      
+      bfprintf (&text_out_buffer, "%d\t%s\t%s\n", actions[action].number, actions[action].name, actions[action].description);
+    }
+    
+    free (actions);
+    
+    description_fini (&description);
+
+    /* Print the input bindings. */
+    for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
+      if (binding->input_automaton == automaton) {
+	bfprintf (&text_out_buffer, "%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+      }
+    }
+
+    for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
+      if (binding->output_automaton == automaton) {
+	bfprintf (&text_out_buffer, "%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+      }
+    }
+    
     return true;
   }
   return false;
 }
 
 static bool
-show_ (void)
+list_ (void)
 {
   if (scan_strings_size >= 1) {
-    if (strcmp ("show", scan_strings[0]) == 0) {
+    if (strcmp ("list", scan_strings[0]) == 0) {
       if (scan_strings_size == 1) {
 
-	bfprintf (&text_out_buffer, "automata:\n");
-	if (automata_head != 0) {
-	  for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) {
-	    bfprintf (&text_out_buffer, "\t%d:\t%s\t%s\n", automaton->aid, automaton->name, automaton->path);
-	  }
+	for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) {
+ 	  bfprintf (&text_out_buffer, "%s\n", automaton->name);
 	}
-	else {
-	  bfprintf (&text_out_buffer, "\t[empty]\n");
-	}
-
-	bfprintf (&text_out_buffer, "bindings:\n");
-	if (bindings_head != 0) {
-	  for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
-	    bfprintf (&text_out_buffer, "\t%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
-	  }
-	}
-	else {
-	  bfprintf (&text_out_buffer, "\t[empty]\n");
-	}
-
+	
 	return true;
       }
       else {
-	bfprintf (&text_out_buffer, "-> usage: show\n");
+	bfprintf (&text_out_buffer, "-> usage: list\n");
 	return true;
       }
     }
@@ -1198,9 +1253,10 @@ typedef bool (*dispatch_func_t) (void);
 static dispatch_func_t dispatch[] = {
   create_,
   bind_,
+  destroy_,
   lookup_,
   describe_,
-  show_,
+  list_,
   start_,
   /* Catch errors. */
   error_,
@@ -1384,6 +1440,12 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
       else {
 	/* Control character. */
 	switch (c) {
+	case '\b':
+	  line_back ();
+	  buffer_file_put (&text_out_buffer, '\b');
+	  buffer_file_put (&text_out_buffer, ' ');
+	  buffer_file_put (&text_out_buffer, '\b');
+	  break;
 	case '\n':
 	  /* Terminate. */
 	  line_append (0);
@@ -1461,31 +1523,7 @@ BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t 
     }
   }
 
-  if (*aptr != 0) {
-    automaton_t* automaton = *aptr;
-    *aptr = automaton->next;
-
-    /* Remove the bindings. */
-    binding_t** bptr = &bindings_head;
-    while (*bptr != 0) {
-      if ((*bptr)->output_automaton == automaton ||
-	  (*bptr)->input_automaton == automaton) {
-	binding_t* binding = *bptr;
-	*bptr = binding->next;
-
-	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
-
-	destroy_binding (binding);
-      }
-      else {
-	bptr = &(*bptr)->next;
-      }
-    }
-
-    bfprintf (&text_out_buffer, "-> %d: destroyed\n", automaton->aid);
-
-    destroy_automaton (automaton);
-  }
+  destroya (aptr);
 
   finish_input (bda, bdb);
 }

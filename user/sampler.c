@@ -47,7 +47,7 @@ BEGIN_OUTPUT (NO_PARAMETER, REQUEST_NO, "request", "", request_, ano_t ano, int 
   finish_output (false, -1, -1);
 }
 
-BEGIN_INPUT (NO_PARAMETER, RESPONSE_NO, "response", "", response_, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing unsigned int", response_, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
   buffer_file_t buffer;
@@ -60,7 +60,6 @@ BEGIN_INPUT (NO_PARAMETER, RESPONSE_NO, "response", "", response_, ano_t ano, in
     finish_input (bda, bdb);
   }
 
-  //samp = (tick % 2) == 1;
   bfprintf (&text_out_buffer, "tick = %d\n", tick);
 
   finish_input (bda, bdb);
