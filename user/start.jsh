@@ -77,11 +77,11 @@ bind this *_out terminal2 *_in
 #bind sampler stdout terminal3 stdin
 #start sampler
 
-#s = create /bin/byte_channel
-#com1 = create -p /bin/serial_port
-#bind com1 *_out s *_in
-#bind s *_out com1 *_in
-#start com1
+com1 = create -p /bin/serial_port
+s = create /bin/byte_channel
+bind com1 *_out s *_in
+bind s *_out com1 *_in
+start com1
 
 #pci = create -p -n pci /bin/pci
 #ne2000 = create -p /bin/ne2000

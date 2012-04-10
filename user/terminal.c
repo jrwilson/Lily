@@ -6,6 +6,7 @@
 #include "vga_msg.h"
 #include "mouse_msg.h"
 #include "syslog.h"
+#include <description.h>
 
 /*
   Terminal
@@ -260,6 +261,7 @@
 #define TEXT_IN_NO 9
 #define VGA_OP_NO 10
 
+#define INFO "terminal: info: "
 #define WARNING "terminal: warning: "
 #define ERROR "terminal: error: "
 
@@ -771,6 +773,18 @@ static int ralt = 0;
 static int lctrl = 0;
 static int rctrl = 0;
 
+typedef enum {
+  UP,
+  DOWN,
+} key_status_t;
+
+static key_status_t lshift_status = UP;
+static key_status_t rshift_status = UP;
+static key_status_t lalt_status = UP;
+static key_status_t ralt_status = UP;
+static key_status_t lctrl_status = UP;
+static key_status_t rctrl_status = UP;
+
 #define SHIFT_WEIGHT (1 << 0)
 #define ALT_WEIGHT (1 << 1)
 #define CTRL_WEIGHT (1 << 2)
@@ -921,9 +935,12 @@ typedef enum {
   SYMBOL_ASCII_DELETE,
 
   SYMBOL_NONE,
-  SYMBOL_SHIFT,
-  SYMBOL_ALT,
-  SYMBOL_CTRL,
+  SYMBOL_LSHIFT,
+  SYMBOL_RSHIFT,
+  SYMBOL_LALT,
+  SYMBOL_RALT,
+  SYMBOL_LCTRL,
+  SYMBOL_RCTRL,
 
   SYMBOL_CAPSLOCK,
   SYMBOL_NUMLOCK,
@@ -1061,34 +1078,124 @@ shift_func (symbol_t symbol,
 	    bool make)
 {
   if (make) {
-    ++shift;
+    switch (symbol) {
+    case SYMBOL_LSHIFT:
+      if (lshift_status == UP) {
+	lshift_status = DOWN;
+	++shift;
+      }
+      break;
+    case SYMBOL_RSHIFT:
+      if (rshift_status == UP) {
+	rshift_status = DOWN;
+	++shift;
+      }
+      break;
+    default:
+      break;
+    }
   }
   else {
-    --shift;
+    switch (symbol) {
+    case SYMBOL_LSHIFT:
+      if (lshift_status == DOWN) {
+	lshift_status = UP;
+	--shift;
+      }
+      break;
+    case SYMBOL_RSHIFT:
+      if (rshift_status == DOWN) {
+	rshift_status = UP;
+	--shift;
+      }
+      break;
+    default:
+      break;
+    }
   }
 }
 
 static void
 alt_func (symbol_t symbol,
-	  bool make)
+	    bool make)
 {
   if (make) {
-    ++alt;
+    switch (symbol) {
+    case SYMBOL_LALT:
+      if (lalt_status == UP) {
+	lalt_status = DOWN;
+	++alt;
+      }
+      break;
+    case SYMBOL_RALT:
+      if (ralt_status == UP) {
+	ralt_status = DOWN;
+	++alt;
+      }
+      break;
+    default:
+      break;
+    }
   }
   else {
-    --alt;
+    switch (symbol) {
+    case SYMBOL_LALT:
+      if (lalt_status == DOWN) {
+	lalt_status = UP;
+	--alt;
+      }
+      break;
+    case SYMBOL_RALT:
+      if (ralt_status == DOWN) {
+	ralt_status = UP;
+	--alt;
+      }
+      break;
+    default:
+      break;
+    }
   }
 }
 
 static void
 ctrl_func (symbol_t symbol,
-	   bool make)
+	    bool make)
 {
   if (make) {
-    ++ctrl;
+    switch (symbol) {
+    case SYMBOL_LCTRL:
+      if (lctrl_status == UP) {
+	lctrl_status = DOWN;
+	++ctrl;
+      }
+      break;
+    case SYMBOL_RCTRL:
+      if (rctrl_status == UP) {
+	rctrl_status = DOWN;
+	++ctrl;
+      }
+      break;
+    default:
+      break;
+    }
   }
   else {
-    --ctrl;
+    switch (symbol) {
+    case SYMBOL_LCTRL:
+      if (lctrl_status == DOWN) {
+	lctrl_status = UP;
+	--ctrl;
+      }
+      break;
+    case SYMBOL_RCTRL:
+      if (rctrl_status == DOWN) {
+	rctrl_status = UP;
+	--ctrl;
+      }
+      break;
+    default:
+      break;
+    }
   }
 }
 
@@ -1330,6 +1437,28 @@ initialize (void)
       exit ();
     }
 
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      action_desc_t syslog_text_in;
+      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
+	exit ();
+      }
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+	exit ();
+      }
+
+      description_fini (&syslog_description);
+    }
+
     vga_op_list_bda = buffer_create (0);
     vga_op_list_bdb = buffer_create (0);
     if (vga_op_list_bda == -1 ||
@@ -1356,12 +1485,12 @@ initialize (void)
     insert_modifier_group (CTRL_WEIGHT | ALT_WEIGHT | SHIFT_WEIGHT);
 
     /* Connect the modifier keys to the modifier symbols. */
-    insert_symbol_all (KEY_LSHIFT, SYMBOL_SHIFT);
-    insert_symbol_all (KEY_RSHIFT, SYMBOL_SHIFT);
-    insert_symbol_all (KEY_LALT, SYMBOL_ALT);
-    insert_symbol_all (KEY_RALT, SYMBOL_ALT);
-    insert_symbol_all (KEY_LCTRL, SYMBOL_CTRL);
-    insert_symbol_all (KEY_RCTRL, SYMBOL_CTRL);
+    insert_symbol_all (KEY_LSHIFT, SYMBOL_LSHIFT);
+    insert_symbol_all (KEY_RSHIFT, SYMBOL_RSHIFT);
+    insert_symbol_all (KEY_LALT, SYMBOL_LALT);
+    insert_symbol_all (KEY_RALT, SYMBOL_RALT);
+    insert_symbol_all (KEY_LCTRL, SYMBOL_LCTRL);
+    insert_symbol_all (KEY_RCTRL, SYMBOL_RCTRL);
 
     /* Connect keys with ASCII symbols to their symbols. */
     /* insert_symbol (CTRL_WEIGHT, KEY_0, SYMBOL_ASCII_NULL); */
@@ -1530,9 +1659,12 @@ initialize (void)
     }
 
     /* Insert modifying actions. */
-    charset[SYMBOL_SHIFT] = shift_func;
-    charset[SYMBOL_ALT] = alt_func;
-    charset[SYMBOL_CTRL] = ctrl_func;
+    charset[SYMBOL_LSHIFT] = shift_func;
+    charset[SYMBOL_RSHIFT] = shift_func;
+    charset[SYMBOL_LALT] = alt_func;
+    charset[SYMBOL_RALT] = alt_func;
+    charset[SYMBOL_LCTRL] = ctrl_func;
+    charset[SYMBOL_RCTRL] = ctrl_func;
 
     /* Caps Lock. */
     charset[SYMBOL_CAPSLOCK] = capslock_func;
@@ -2061,59 +2193,57 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
 {
   initialize ();
 
-  if (state == RUN) {
-    buffer_file_t input_buffer;
-    if (buffer_file_initr (&input_buffer, bda) != 0) {
-      bfprintf (&syslog_buffer, WARNING "could not initialize scan code buffer for reading\n");
-      finish_input (bda, bdb);
+  buffer_file_t input_buffer;
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
+    bfprintf (&syslog_buffer, WARNING "could not initialize scan code buffer for reading\n");
+    finish_input (bda, bdb);
+  }
+  
+  size_t size = buffer_file_size (&input_buffer);
+  const unsigned char* codes = buffer_file_readp (&input_buffer, size);
+  if (codes == 0) {
+    bfprintf (&syslog_buffer, WARNING "could not read the scan code buffer\n");
+    finish_input (bda, bdb);
+  }
+  
+  for (size_t idx = 0; idx != size; ++idx) {
+    if (consume != 0) {
+      --consume;
+      continue;
     }
     
-    size_t size = buffer_file_size (&input_buffer);
-    const unsigned char* codes = buffer_file_readp (&input_buffer, size);
-    if (codes == 0) {
-      bfprintf (&syslog_buffer, WARNING "could not read the scan code buffer\n");
-      finish_input (bda, bdb);
-    }
-    
-    for (size_t idx = 0; idx != size; ++idx) {
-      if (consume != 0) {
-	--consume;
-	continue;
-      }
-      
-      unsigned char scan = codes[idx];
-      if (scan < BREAK_MASK) {
-	if (!escaped) {
-	  process_key_code (scan_to_key[scan], true);
-	}
-	else {
-	  escaped = false;
-	  /* Ignore fake shifts. */
-	  if (scan != SCAN_LSHIFT) {
-	    process_key_code (escaped_scan_to_key[scan], true);
-	  }
-	}
-      }
-      else if (scan == 0xE0) {
-	escaped = true;
-      }
-      else if (scan == 0xE1) {
-	process_key_code (KEY_PAUSE, true);
-	process_key_code (KEY_PAUSE, false);
-	consume = 5;
+    unsigned char scan = codes[idx];
+    if (scan < BREAK_MASK) {
+      if (!escaped) {
+	process_key_code (scan_to_key[scan], true);
       }
       else {
-	/* Break. */
-	scan -= BREAK_MASK;
-	if (!escaped) {
-	  process_key_code (scan_to_key[scan], false);
+	escaped = false;
+	/* Ignore fake shifts. */
+	if (scan != SCAN_LSHIFT) {
+	  process_key_code (escaped_scan_to_key[scan], true);
 	}
-	else {
-	  escaped = false;
-  	  /* Ignore fake shifts. */
-	  if (scan != SCAN_LSHIFT) {
-	    process_key_code (escaped_scan_to_key[scan], false);
-	  }
+      }
+    }
+    else if (scan == 0xE0) {
+      escaped = true;
+    }
+    else if (scan == 0xE1) {
+      process_key_code (KEY_PAUSE, true);
+      process_key_code (KEY_PAUSE, false);
+      consume = 5;
+    }
+    else {
+      /* Break. */
+      scan -= BREAK_MASK;
+      if (!escaped) {
+	process_key_code (scan_to_key[scan], false);
+      }
+      else {
+	escaped = false;
+	/* Ignore fake shifts. */
+	if (scan != SCAN_LSHIFT) {
+	  process_key_code (escaped_scan_to_key[scan], false);
 	}
       }
     }
@@ -2132,27 +2262,25 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 {
   initialize ();
 
-  if (state == RUN) {
-    size_t count = 0;
-    mouse_packet_t mouse_packet;
-    mouse_packet_list_t mouse_packet_list;
-    if (mouse_packet_list_initr (&mouse_packet_list, bda, &count) != 0) {
-      bfprintf (&syslog_buffer, WARNING "could not initialize mouse packet list for reading\n");
+  size_t count = 0;
+  mouse_packet_t mouse_packet;
+  mouse_packet_list_t mouse_packet_list;
+  if (mouse_packet_list_initr (&mouse_packet_list, bda, &count) != 0) {
+    bfprintf (&syslog_buffer, WARNING "could not initialize mouse packet list for reading\n");
+    finish_input (bda, bdb);
+  }
+  
+  for (size_t idx = 0; idx != count; ++idx) {
+    if (mouse_packet_list_read (&mouse_packet_list, &mouse_packet) != 0) {
+      bfprintf (&syslog_buffer, WARNING "could not read mouse packet\n");
       finish_input (bda, bdb);
     }
     
-    for (size_t idx = 0; idx != count; ++idx) {
-      if (mouse_packet_list_read (&mouse_packet_list, &mouse_packet) != 0) {
-	bfprintf (&syslog_buffer, WARNING "could not read mouse packet\n");
-	finish_input (bda, bdb);
+    if (mouse_packet_list_write (&clients[active_client].mouse_packet_list, &mouse_packet) != 0) {
+      bfprintf (&syslog_buffer, ERROR "could not write mouse packet\n");
+      state = STOP;
+      finish_input (bda, bdb);
       }
-      
-      if (mouse_packet_list_write (&clients[active_client].mouse_packet_list, &mouse_packet) != 0) {
-	bfprintf (&syslog_buffer, ERROR "could not write mouse packet\n");
-	state = STOP;
-	finish_input (bda, bdb);
-      }
-    }
   }
 
   finish_input (bda, bdb);
@@ -2169,7 +2297,7 @@ BEGIN_OUTPUT (PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano
   /* Adjust the client number. */
   --client;
 
-  if (state == RUN && client >= 0 && client < CLIENT_COUNT) {
+  if (client >= 0 && client < CLIENT_COUNT) {
     if (buffer_file_size (&clients[client].text_out_buffer) != 0) {
       buffer_file_truncate (&clients[client].text_out_buffer);
       finish_output (true, clients[client].text_out_bd, -1);
@@ -2186,7 +2314,7 @@ BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packe
   /* Adjust the client number. */
   --client;
 
-  if (state == RUN && client >= 0 && client < CLIENT_COUNT) {
+  if (client >= 0 && client < CLIENT_COUNT) {
     if (clients[client].mouse_packet_list.count != 0) {
       if (mouse_packet_list_reset (&clients[client].mouse_packet_list) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not reset mouse packet list\n");
@@ -2211,7 +2339,7 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
   /* Adjust the client number. */
   --client;
 
-  if (state == RUN && client >= 0 && client < CLIENT_COUNT) {
+  if (client >= 0 && client < CLIENT_COUNT) {
     buffer_file_t input_buffer;
     if (buffer_file_initr (&input_buffer, bda) != 0) {
       bfprintf (&syslog_buffer, WARNING "could not initialize text_in buffer for reading\n");
@@ -2286,7 +2414,7 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
 static bool
 vga_op_precondition (void)
 {
-  return state == RUN && vga_op_list.count != 0;
+  return vga_op_list.count != 0;
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_out", "vga_op_list", vga_op, ano_t ano, int param)
@@ -2311,17 +2439,15 @@ do_schedule (void)
   if (syslog_precondition ()) {
     schedule (SYSLOG_NO, 0);
   }
-  if (state == RUN) {
-    for (size_t client = 0; client != CLIENT_COUNT; ++client) {
-      if (buffer_file_size (&clients[client].text_out_buffer) != 0) {
-	schedule (TEXT_OUT_NO, client + 1);
-      }
-      if (clients[client].mouse_packet_list.count != 0) {
-	schedule (MOUSE_PACKETS_OUT_NO, client + 1);
-      }
+  for (size_t client = 0; client != CLIENT_COUNT; ++client) {
+    if (buffer_file_size (&clients[client].text_out_buffer) != 0) {
+      schedule (TEXT_OUT_NO, client + 1);
     }
-    if (vga_op_precondition ()) {
+    if (clients[client].mouse_packet_list.count != 0) {
+      schedule (MOUSE_PACKETS_OUT_NO, client + 1);
+    }
+  }
+  if (vga_op_precondition ()) {
       schedule (VGA_OP_NO, 0);
-    }
   }
 }

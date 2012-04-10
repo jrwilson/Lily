@@ -94,9 +94,9 @@
 #define LEVEL_14 (3 << 6)
 
 /* Bits in the MODEM_CONTROL_REG. */
-/* Data terminal ready (ready to receive data). */
+/* Data terminal ready. */
 #define DTR (1 << 0)
-/* Request to send (ready to send data). */
+/* Request to send. */
 #define RTS (1 << 1)
 #define IRQ_ENABLE (1 << 3)
 
@@ -266,7 +266,7 @@ initialize (void)
     /* Initialize the serial port. */
     
     /* Enable the receive interrupt. */
-    outb (PORT_BASE + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT);
+    outb (PORT_BASE + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT | ENABLE_RECEIVER_LINE_STATUS_INT | ENABLE_MODEM_STATUS_INT);
     /* Set the divisor (baud).  This wipes out all other settings. */
     outb (PORT_BASE + LINE_CONTROL_REG, DLAB);
     unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);    
@@ -390,7 +390,7 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
   initialize ();
 
   /* Enable TX/RX. */
-  outb (PORT_BASE + MODEM_CONTROL_REG, IRQ_ENABLE | RTS | DTR);
+  outb (PORT_BASE + MODEM_CONTROL_REG, IRQ_ENABLE | DTR);
 
   finish_input (bda, bdb);
 }

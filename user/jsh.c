@@ -6,6 +6,9 @@
 #include "vfs_msg.h"
 #include <callback_queue.h>
 #include "argv.h"
+#include "syslog.h"
+
+#define ERROR "jsh: error: "
 
 /* TODO:  Improve the error handling. */
 
@@ -62,9 +65,21 @@ atoi (const char* s)
 #define UNBOUND_NO 7
 #define VFS_RESPONSE_NO 8
 #define VFS_REQUEST_NO 9
+#define SYSLOG_NO 10
+#define HALT_NO 11
 
 /* Initialization flag. */
 static bool initialized = false;
+
+typedef enum {
+  RUN,
+  HALT,
+} state_t;
+static state_t state = RUN;
+
+/* Syslog buffer. */
+static bd_t syslog_bd = -1;
+static buffer_file_t syslog_buffer;
 
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
@@ -202,6 +217,19 @@ destroy_binding (binding_t* binding)
   free (binding->output_action_name);
   free (binding->input_action_name);
   free (binding);
+}
+
+static void
+unbound_ (binding_t** ptr)
+{
+  if (*ptr != 0) {
+    binding_t* binding = *ptr;
+    *ptr = binding->next;
+    
+    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+    
+    destroy_binding (binding);
+  }
 }
 
 static void
@@ -542,7 +570,9 @@ create_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not read vfs readfile response\n");
+    state = HALT;
+    return;
   }
 
   if (error != VFS_SUCCESS) {
@@ -553,17 +583,23 @@ create_callback (void* data,
   bd_t bd1 = buffer_create (0);
   bd_t bd2 = buffer_create (0);
   if (bd1 == -1 || bd2 == -1) {
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not create argv buffers\n");
+    state = HALT;
+    return;
   }
 
   argv_t argv;
   if (argv_initw (&argv, bd1, bd2) != 0) {
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not initialize argv buffers\n");
+    state = HALT;
+    return;
   }
 
   for (; create_argv_idx != scan_strings_size; ++create_argv_idx) {
     if (argv_append (&argv, scan_strings[create_argv_idx], strlen (scan_strings[create_argv_idx]) + 1) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not append to argv buffers\n");
+      state = HALT;
+      return;
     }
   }
 
@@ -992,6 +1028,37 @@ bind_ (void)
 }
 
 static bool
+unbind_ (void)
+{
+  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "unbind") == 0) {
+    if (scan_strings_size != 2) {
+      bfprintf (&text_out_buffer, "-> usage: unbind BID\n");
+      return true;
+    }
+  
+    bid_t bid = atoi (scan_strings[1]);
+
+    binding_t** ptr;
+    for (ptr = &bindings_head; *ptr != 0; ptr = &(*ptr)->next) {
+      if ((*ptr)->bid == bid) {
+	break;
+      }
+    }
+
+    if (*ptr == 0) {
+      bfprintf (&text_out_buffer, "-> error: %s does not refer to a binding", scan_strings[1]);
+      return true;
+    }
+
+    unbind ((*ptr)->bid);
+    unbound_ (ptr);
+
+    return true;
+  }
+  return false;
+}
+
+static bool
 destroy_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "destroy") == 0) {
@@ -1254,6 +1321,7 @@ typedef bool (*dispatch_func_t) (void);
 static dispatch_func_t dispatch[] = {
   create_,
   bind_,
+  unbind_,
   destroy_,
   lookup_,
   describe_,
@@ -1277,16 +1345,22 @@ readscript_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not read script\n");
+    state = HALT;
+    return;
   }
 
   if (error != VFS_SUCCESS) {
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not read script\n");
+    state = HALT;
+    return;
   }
 
   const char* str = buffer_map (bdb);
   if (str == 0) {
-    exit ();
+    bfprintf (&syslog_buffer, ERROR "could not map script\n");
+    state = HALT;
+    return;
   }
   
   char* str_copy = malloc (size + 1);
@@ -1304,6 +1378,38 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    syslog_bd = buffer_create (0);
+    if (syslog_bd == -1) {
+      /* Nothing we can do. */
+      exit ();
+    }
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+      /* Nothing we can do. */
+      exit ();
+    }
+
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    if (syslog_aid != -1) {
+      /* Bind to the syslog. */
+
+      description_t syslog_description;
+      if (description_init (&syslog_description, syslog_aid) != 0) {
+	exit ();
+      }
+      
+      action_desc_t syslog_text_in;
+      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
+	exit ();
+      }
+      
+      /* We bind the response first so they don't get lost. */
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+	exit ();
+      }
+
+      description_fini (&syslog_description);
+    }
+
     aid_t aid = getaid ();
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
@@ -1315,17 +1421,23 @@ initialize (void)
 
     text_out_bd = buffer_create (0);
     if (text_out_bd == -1) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not create text_out buffer\n");
+      state = HALT;
+      return;
     }
     if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not initialize text_out buffer\n");
+      state = HALT;
+      return;
     }
 
     vfs_request_bda = buffer_create (0);
     vfs_request_bdb = buffer_create (0);
     if (vfs_request_bda == -1 ||
     	vfs_request_bdb == -1) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not create vfs_request buffer\n");
+      state = HALT;
+      return;
     }
     vfs_request_queue_init (&vfs_request_queue);
     callback_queue_init (&vfs_response_queue);
@@ -1333,28 +1445,38 @@ initialize (void)
     /* Bind to the vfs. */
     aid_t vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
     if (vfs_aid == -1) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "no vfs\n");
+      state = HALT;
+      return;
     }
     
     description_t vfs_description;
     if (description_init (&vfs_description, vfs_aid) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not describe vfs\n");
+      state = HALT;
+      return;
     }
 
     action_desc_t vfs_request;
     if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "vfs does not contain %s\n", VFS_REQUEST_NAME);
+      state = HALT;
+      return;
     }
 
     action_desc_t vfs_response;
     if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "vfs does not contain %s\n", VFS_RESPONSE_NAME);
+      state = HALT;
+      return;
     }
     
     /* We bind the response first so they don't get lost. */
     if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
     	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
+      state = HALT;
+      return;
     }
 
     description_fini (&vfs_description);
@@ -1367,7 +1489,9 @@ initialize (void)
     	const char* filename;
     	size_t size;
     	if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
-	  exit ();
+	  bfprintf (&syslog_buffer, ERROR "could not read script argument\n");
+	  state = HALT;
+	  return;
     	}
 
     	vfs_request_queue_push_readfile (&vfs_request_queue, filename);
@@ -1389,6 +1513,55 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
   finish_internal ();
+}
+
+/* Halt
+   ----
+   Halt the automaton.
+   
+   Pre:  state == HALT and syslog_buffer is empty
+   Post: 
+*/
+static bool
+halt_precondition (void)
+{
+  return state == HALT && buffer_file_size (&syslog_buffer) == 0;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, HALT_NO, "", "", halt, ano_t ano, int param)
+{
+  initialize ();
+
+  if (halt_precondition ()) {
+    exit ();
+  }
+  finish_internal ();
+}
+
+/* syslog
+   ------
+   Output error messages.
+   
+   Pre:  syslog_buffer is not empty
+   Post: syslog_buffer is empty
+*/
+static bool
+syslog_precondition (void)
+{
+  return buffer_file_size (&syslog_buffer) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
+{
+  initialize ();
+
+  if (syslog_precondition ()) {
+    buffer_file_truncate (&syslog_buffer);
+    finish_output (true, syslog_bd, -1);
+  }
+  else {
+    finish_output (false, -1, -1);
+  }
 }
 
 BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
@@ -1435,7 +1608,9 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
 	/* Printable character. */
 	line_append (c);
 	if (buffer_file_put (&text_out_buffer, c) != 0) {
-	  exit ();
+	  bfprintf (&syslog_buffer, ERROR "could not write to text_out\n");
+	  state = HALT;
+	  finish_internal ();
 	}
       }
       else {
@@ -1451,7 +1626,9 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
 	  /* Terminate. */
 	  line_append (0);
 	  if (buffer_file_put (&text_out_buffer, '\n') != 0) {
-	    exit ();
+	    bfprintf (&syslog_buffer, ERROR "could not write to text_out\n");
+	    state = HALT;
+	    finish_internal ();
 	  }
 
 	  if (scanner_process (current_line, current_line_size) == 0) {
@@ -1540,14 +1717,7 @@ BEGIN_SYSTEM_INPUT (UNBOUND_NO, "", "", unbound, ano_t ano, bid_t bid, bd_t bda,
     }
   }
 
-  if (*ptr != 0) {
-    binding_t* binding = *ptr;
-    *ptr = binding->next;
-
-    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
-
-    destroy_binding (binding);
-  }
+  unbound_ (ptr);
 
   finish_input (bda, bdb);
 }
@@ -1571,7 +1741,9 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
 
   if (vfs_request_precondition ()) {
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      exit ();
+      bfprintf (&syslog_buffer, ERROR "could not send vfs request\n");
+      state = HALT;
+      finish_output (false, -1, -1);
     }
     finish_output (true, vfs_request_bda, vfs_request_bdb);
   }
@@ -1618,5 +1790,11 @@ do_schedule (void)
   }
   if (vfs_request_precondition ()) {
     schedule (VFS_REQUEST_NO, 0);
+  }
+  if (syslog_precondition ()) {
+    schedule (SYSLOG_NO, 0);
+  }
+  if (halt_precondition ()) {
+    schedule (HALT_NO, 0);
   }
 }
