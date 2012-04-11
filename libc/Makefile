@@ -1,5 +1,5 @@
 CC=i586-pc-lily-gcc
-AS=i586-elf-as
+AS=i586-pc-lily-as
 CFLAGS=-MD -O2 -g -Wall -fno-builtin -std=c99
 
 # Headers that will be installed.
