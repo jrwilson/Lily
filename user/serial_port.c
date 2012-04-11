@@ -55,6 +55,7 @@
 #define ENABLE_RECEIVED_DATA_AVAILABLE_INT (1 << 0)
 #define ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT (1 << 1)
 #define ENABLE_RECEIVER_LINE_STATUS_INT (1 << 2)
+/* You must clear the modem status register by reading it to re-enable this interrupt. */
 #define ENABLE_MODEM_STATUS_INT (1 << 3)
 
 /* Bits in the INTERRUPT_ID_REG. */
@@ -262,20 +263,6 @@ initialize (void)
       state = HALT;
       return;
     }
-
-    /* Initialize the serial port. */
-    
-    /* Enable the receive interrupt. */
-    outb (PORT_BASE + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT | ENABLE_RECEIVER_LINE_STATUS_INT | ENABLE_MODEM_STATUS_INT);
-    /* Set the divisor (baud).  This wipes out all other settings. */
-    outb (PORT_BASE + LINE_CONTROL_REG, DLAB);
-    unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);    
-    outb (PORT_BASE + DIVISOR_LSB_REG, divisor & 0xFF);
-    outb (PORT_BASE + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF);
-    /* Set the frame type. */
-    outb (PORT_BASE + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
-    /* Reset the FIFO. */
-    outb (PORT_BASE + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
   }
 }
 
@@ -389,8 +376,27 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
 {
   initialize ();
 
+  /* Initialize the serial port. */
+  
+  /* Enable the receive interrupt. */
+  outb (PORT_BASE + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT);
+  /* Set the divisor (baud).  This wipes out all other settings. */
+  outb (PORT_BASE + LINE_CONTROL_REG, DLAB);
+  unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);    
+  outb (PORT_BASE + DIVISOR_LSB_REG, divisor & 0xFF);
+  outb (PORT_BASE + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF);
+  /* Set the frame type. */
+  outb (PORT_BASE + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
+  /* Reset the FIFO. */
+  outb (PORT_BASE + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
+  
   /* Enable TX/RX. */
-  outb (PORT_BASE + MODEM_CONTROL_REG, IRQ_ENABLE | DTR);
+  outb (PORT_BASE + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS);
+
+  /* Clear the status registers by reading them. */
+  inb (PORT_BASE + INTERRUPT_ID_REG);
+  inb (PORT_BASE + LINE_STATUS_REG);
+  inb (PORT_BASE + MODEM_STATUS_REG);
 
   finish_input (bda, bdb);
 }
@@ -398,6 +404,8 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
 BEGIN_INPUT (NO_PARAMETER, STOP_NO, "stop", "", stop, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
+
+  bfprintf (&syslog_buffer, INFO "stop\n");
 
   /* Disable TX/RX. */
   outb (PORT_BASE + MODEM_CONTROL_REG, 0);
