@@ -77,11 +77,17 @@ bind this *_out terminal2 *_in
 #bind sampler stdout terminal3 stdin
 #start sampler
 
-com1 = create -p /bin/serial_port
-s = create /bin/byte_channel
-bind com1 *_out s *_in
-bind s *_out com1 *_in
+com1 = create -p /bin/serial_port com1
+com2 = create -p /bin/serial_port com2
+bind com1 text_out com2 text_in
+bind com2 text_out com1 text_in
 start com1
+start com2
+
+zsnoop = create /bin/zsnoop
+bind com1 text_out zsnoop text_in_a
+bind com2 text_out zsnoop text_in_b
+bind zsnoop text_out terminal3 text_in
 
 #pci = create -p -n pci /bin/pci
 #ne2000 = create -p /bin/ne2000
