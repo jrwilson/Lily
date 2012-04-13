@@ -1182,10 +1182,13 @@ describe_ (void)
       return true;
     }
 
-    bfprintf (&text_out_buffer, "aid=%d path=%s\n", automaton->aid, automaton->path);
+    bfprintf (&text_out_buffer, "-> aid=%d path=%s\n", automaton->aid, automaton->path);
     
     /* Print the actions. */
     for (size_t action = 0; action != action_count; ++action) {
+
+      bfprintf (&text_out_buffer, "-> ");
+
       switch (actions[action].type) {
       case LILY_ACTION_INPUT:
 	bfprintf (&text_out_buffer, " IN ");
@@ -1229,13 +1232,13 @@ describe_ (void)
     /* Print the input bindings. */
     for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
       if (binding->input_automaton == automaton) {
-	bfprintf (&text_out_buffer, "%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
       }
     }
 
     for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
       if (binding->output_automaton == automaton) {
-	bfprintf (&text_out_buffer, "%d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
       }
     }
     
@@ -1252,7 +1255,7 @@ list_ (void)
       if (scan_strings_size == 1) {
 
 	for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) {
- 	  bfprintf (&text_out_buffer, "%s\n", automaton->name);
+ 	  bfprintf (&text_out_buffer, "-> %s\n", automaton->name);
 	}
 	
 	return true;
