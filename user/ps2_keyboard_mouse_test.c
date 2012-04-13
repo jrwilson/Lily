@@ -16,7 +16,7 @@
 */
 
 #define INIT_NO 1
-#define TEXT_IN_NO 3
+#define SCAN_CODES_IN_NO 3
 #define MOUSE_PACKETS_IN_NO 4
 #define TEXT_OUT_NO 5
 
@@ -49,7 +49,7 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", scan_codes_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
 
@@ -59,13 +59,13 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   }
 
   size_t size = buffer_file_size (&input_buffer);
-  const char* codes = buffer_file_readp (&input_buffer, size);
+  const unsigned char* codes = buffer_file_readp (&input_buffer, size);
   if (codes == 0) {
     finish_input (bda, bdb);
   }
 
   for (size_t idx = 0; idx != size; ++idx) {
-    bfprintf (&text_out_buffer, "ascii %c (%d)\n", codes[idx], codes[idx]);
+    bfprintf (&text_out_buffer, "scan code %x\n", codes[idx]);
   }
 
   finish_input (bda, bdb);
