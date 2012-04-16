@@ -20,4 +20,6 @@
 
 #define kassert(expr) do { if (!(expr)) { kout << "Assertion failed (" __FILE__ ":" quote(__LINE__) "): " #expr; halt (); } } while (0);
 
+#define kpanic(msg) do { kout << "Kernel panic (" __FILE__ ":" quote(__LINE__) "): " << msg << endl; halt (); } while (0);
+
 #endif /* __kassert_hpp__ */

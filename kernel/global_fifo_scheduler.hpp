@@ -230,7 +230,7 @@ public:
 	switch (action_.action->type) {
 	case INPUT:
 	  // Error.  Not a local action.
-	  kassert (0);
+	  kpanic ("Non-local action on execution queue");
 	  break;
 	case OUTPUT:
 	  {

@@ -40,12 +40,12 @@ automaton::schedule (const shared_ptr<automaton>& ths,
       break;
     case INPUT:
     case SYSTEM_INPUT:
-      return make_pair (-1, LILY_ERROR_BADANO);
+      return make_pair (-1, LILY_ERROR_INVAL);
       break;
     }
   }
   else {
-    return make_pair (-1, LILY_ERROR_BADANO);
+    return make_pair (-1, LILY_ERROR_ANODNE);
   }
 }
 
@@ -182,7 +182,7 @@ automaton::create_automaton (const kstring& name,
     return make_pair (child, LILY_ERROR_SUCCESS);
   }
   else {
-    return make_pair (shared_ptr<automaton> (), LILY_ERROR_BADTEXT);
+    return make_pair (shared_ptr<automaton> (), LILY_ERROR_INVAL);
   }
 }
 

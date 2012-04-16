@@ -113,66 +113,46 @@ exception_dispatch (volatile registers regs)
 {
   switch (regs.number) {
   case DIVIDE_ERROR:
-    // BUG
-    kout << "Divide error" << endl;
-    kout << regs << endl;
-    kassert (0);
+    kpanic ("TODO:  Handle divide error");
     break;
   case SINGLE_STEP:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle single step");
     break;
   case NON_MASKABLE_INTERRUPT:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle non-maskable interrupt");
     break;
   case BREAKPOINT:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle breakpoint");
     break;
   case OVERFLOW_ERROR:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle overflow error");
     break; 
   case BOUND:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle bound");
     break; 
   case INVALID_OPCODE:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle invalide opcode");
     break; 
   case COPROCESSOR_NA:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle coprocessor not available");
     break; 
   case DOUBLE_FAULT:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle double fault");
     break; 
   case COPROCESSOR_SEGMENT_OVERRUN:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle coprocessor segment overrun");
     break; 
   case INVALID_TASK_STATE_SEGMENT:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle invalid task state segment");
     break; 
   case SEGMENT_NOT_PRESENT:
-    // BUG
-    kout << "Segment not present" << endl;
-    kout << regs << endl;
-    kassert (0);
+    kpanic ("TODO:  Handle segment not present");
     break; 
   case STACK_SEGMENT_OVERRUN:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle stack segment overrun");
     break; 
   case GENERAL_PROTECTION_FAULT:
-    // BUG
-    kout << "General Protection Fault" << endl;
-    kout << regs << endl;
-    kassert (0);
+    kpanic ("TODO:  Handle general protection fault");
     break; 
   case PAGE_FAULT:
     {
@@ -235,17 +215,16 @@ exception_dispatch (volatile registers regs)
       	return;
       }
 
-      // BUG:  We only know how to deal with copy-on-write page faults and kernel data.
       kout << "Page Fault" << endl;
       kout << "address = " << hexformat (address) << endl;
       // kout << "not_present = " << vm::not_present (error) << endl;
       kout << regs << endl;
-      kassert (0);
+
+      kpanic ("TODO:  Handle page fault");
     }
     break; 
   case COPROCESSOR_ERROR:
-    // BUG
-    kassert (0);
+    kpanic ("TODO:  Handle coprocessor error");
     break; 
   }
 }

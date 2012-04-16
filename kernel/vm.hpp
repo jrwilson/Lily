@@ -251,7 +251,7 @@ namespace vm {
     return get_page_directory ()->entry[PAGE_ENTRY_COUNT - 1].frame_;
   }
 
-  // BUG:  This is a shared resource.
+  // NOTE:  This is a shared resource.
   inline logical_address_t
   get_stub1 (void)
   {
@@ -390,7 +390,7 @@ namespace vm {
       asm ("invlpg (%0)\n" :: "r"(logical_addr));
     }
     else if (error_if_not_present) {
-      kassert (0);
+      kpanic ("Unampping an address that is not mapped");
     }
 
   }

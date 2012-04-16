@@ -85,7 +85,8 @@ create (bd_t text_bd,
 	bd_t bdb,
 	const char* name,
 	size_t name_size,
-	bool retain_privilege);
+	bool retain_privilege,
+	lily_error_t* err);
 
 bid_t
 bind (aid_t output_automaton,
@@ -93,7 +94,8 @@ bind (aid_t output_automaton,
       int output_parameter,
       aid_t input_automaton,
       ano_t input_action,
-      int input_parameter);
+      int input_parameter,
+      lily_error_t* err);
 
 int
 unbind (bid_t bid,
@@ -254,5 +256,8 @@ subscribe_irq (int irq,
 int
 unsubscribe_irq (int irq,
 		 lily_error_t* err);
+
+const char*
+lily_error_string (lily_error_t err);
 
 #endif /* AUTOMATON_H */

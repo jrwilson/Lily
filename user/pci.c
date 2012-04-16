@@ -242,7 +242,7 @@ initialize (void)
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
 	exit ();
       }
 

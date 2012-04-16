@@ -204,7 +204,7 @@ serial_port_callback (void* ptr,
     return;
   }
 
-  if (create (bdb, size, bd, -1, spc->name, strlen (spc->name) + 1, true) == -1) {
+  if (create (bdb, size, bd, -1, spc->name, strlen (spc->name) + 1, true, 0) == -1) {
     bfprintf (&syslog_buffer, ERROR "could not create %s\n", spc->name);
     spc_destroy (spc);
     state = HALT;
@@ -257,7 +257,7 @@ initialize (void)
       }
             
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
 	exit ();
       }
 
@@ -305,8 +305,8 @@ initialize (void)
     }
     
     /* We bind the response first so they don't get lost. */
-    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
+    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0, 0) == -1 ||
+    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0, 0) == -1) {
       bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
       state = HALT;
       return;

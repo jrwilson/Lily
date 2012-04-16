@@ -33,7 +33,6 @@ trap_handler::install ()
 }
 
 struct create_args {
-  uint32_t eip;
   bd_t text_bd;
   size_t text_size;
   bd_t bda;
@@ -44,7 +43,6 @@ struct create_args {
 };
 
 struct bind_args {
-  uint32_t eip;
   aid_t output_automaton;
   ano_t output_action;
   int output_parameter;
@@ -87,10 +85,9 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_CREATE:
     {
-      create_args* ptr = reinterpret_cast<create_args*> (regs.useresp);
+      create_args* ptr = reinterpret_cast<create_args*> (regs.ebx);
       if (!a->verify_stack (ptr, sizeof (create_args))) {
-	// BUG:  Can't get the arguments from the stack.
-	kassert (0);
+	kpanic ("TODO:  Can't get create arguments from the stack");
       }
       pair<aid_t, lily_error_t> r = a->create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->name, ptr->name_size, ptr->retain_privilege);
       regs.eax = r.first;
@@ -100,10 +97,9 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BIND:
     {
-      bind_args* ptr = reinterpret_cast<bind_args*> (regs.useresp);
+      bind_args* ptr = reinterpret_cast<bind_args*> (regs.ebx);
       if (!a->verify_stack (ptr, sizeof (bind_args))) {
-	// BUG:  Can't get the arguments from the stack.
-	kassert (0);
+	kpanic ("TODO:  Can't get bind arguments from the stack");
       }
       pair<bid_t, lily_error_t> r = a->bind (a, ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
       regs.eax = r.first;
@@ -398,8 +394,7 @@ trap_dispatch (volatile registers regs)
     }
     break;
   default:
-    // BUG:  Unknown system call.
-    kassert (0);
+    kpanic ("TODO:  Unknown system call");
     break;
   }
 }

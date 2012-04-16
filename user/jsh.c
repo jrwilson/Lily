@@ -602,7 +602,7 @@ create_callback (void* data,
     }
   }
 
-  aid_t aid = create (bdb, size, bd1, bd2, create_register_name, create_register_name_size, create_retain_privilege);
+  aid_t aid = create (bdb, size, bd1, bd2, create_register_name, create_register_name_size, create_retain_privilege, 0);
   if (aid == -1) {
     buffer_destroy (bd1, 0);
     buffer_destroy (bd2, 0);
@@ -774,7 +774,7 @@ single_bind (automaton_t* output_automaton,
     break;
   }
       
-  bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter);
+  bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter, 0);
   if (bid == -1) {
     description_fini (&output_description);
     description_fini (&input_description);
@@ -911,7 +911,7 @@ glob_bind (automaton_t* output_automaton,
 	      break;
 	    }
 
-	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param);
+	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param, 0);
 	    if (bid != -1) {
 	      if (subscribe_unbound (bid, UNBOUND_NO, 0) == 0) {
 		binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param);
@@ -1405,7 +1405,7 @@ initialize (void)
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
 	exit ();
       }
 
@@ -1474,8 +1474,8 @@ initialize (void)
     }
     
     /* We bind the response first so they don't get lost. */
-    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
+    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0, 0) == -1 ||
+    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0, 0) == -1) {
       bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
       state = HALT;
       return;

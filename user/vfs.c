@@ -474,7 +474,7 @@ client_path_lookup_done (client_t* client,
       }
       
       /* Bind to the response first so they don't get lost. */
-      bid_t bid = bind (req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
+      bid_t bid = bind (req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0, 0);
       if (bid == -1) {
 	/* Answer. */
 	description_fini (&desc);
@@ -483,7 +483,7 @@ client_path_lookup_done (client_t* client,
 	return;
       }
       
-      if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0) == -1) {
+      if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0, 0) == -1) {
 	unbind (bid, 0);
 	/* Answer. */
 	description_fini (&desc);
@@ -750,7 +750,7 @@ initialize (void)
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
 	exit ();
       }
 

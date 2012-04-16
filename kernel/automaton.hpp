@@ -443,7 +443,7 @@ public:
     // Check that the name does not exist.
     kstring name_str (name, name_size);
     if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_EXISTS);
+      return make_pair (-1, LILY_ERROR_ALREADY);
     }
     
     // Find the text buffer.
@@ -520,7 +520,7 @@ public:
 
     // Are we the parent?
     if (child->parent_ != ths) {
-      return make_pair (-1, LILY_ERROR_NOTOWNER);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
 
     child->unsubscribe (child);
@@ -977,7 +977,7 @@ public:
     shared_ptr<buffer> b = bpos->second;
     if (b->begin () != 0) {
       // Buffer was mapped.
-      return make_pair (-1, LILY_ERROR_MAPPED);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     b->resize (size);
@@ -1001,7 +1001,7 @@ public:
     
     if (d->begin () != 0) {
       // The destination is mapped.
-      return make_pair (-1, LILY_ERROR_MAPPED);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     // Append.
@@ -1048,7 +1048,7 @@ public:
     
     if (b->size () == 0) {
       // The buffer is empty.
-      return make_pair ((void*)0, LILY_ERROR_EMPTY);
+      return make_pair ((void*)0, LILY_ERROR_INVAL);
     }
 
     if (b->begin () != 0) {
@@ -1212,7 +1212,7 @@ public:
     if (output_action == 0 ||
 	output_action->type != OUTPUT) {
       // Output action does not exist or has the wrong type.
-      return make_pair (-1, LILY_ERROR_OBADANO);
+      return make_pair (-1, LILY_ERROR_OANODNE);
     }
   
     // Check the input action dynamically.
@@ -1220,7 +1220,7 @@ public:
     if (input_action == 0 ||
 	input_action->type != INPUT) {
       // Input action does not exist or has the wrong type.
-      return make_pair (-1, LILY_ERROR_IBADANO);
+      return make_pair (-1, LILY_ERROR_IANODNE);
     }
   
     // Correct the parameters.
@@ -1322,7 +1322,7 @@ public:
     
     // Are we the owner?
     if (binding->owner != ths) {
-      return make_pair (-1, LILY_ERROR_NOTOWNER);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
     
     unbind (binding, true, true, true);
@@ -1368,30 +1368,30 @@ public:
     physical_address_t const source_end = align_up (reinterpret_cast<physical_address_t> (source) + size, PAGE_SIZE);
 
     if (!privileged_) {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
 
     if ((reinterpret_cast<logical_address_t> (destination) & (PAGE_SIZE - 1)) != (reinterpret_cast<physical_address_t> (source) & (PAGE_SIZE - 1))) {
-      return make_pair (-1, LILY_ERROR_ALIGN);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     if (size == 0) {
-      return make_pair (-1, LILY_ERROR_SIZE);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
     if (source_end > ONE_MEGABYTE) {
-      return make_pair (-1, LILY_ERROR_SRCNA);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {
       if (mmapped_frames_[physical_address_to_frame (address)]) {
-  	return make_pair (-1, LILY_ERROR_SRCINUSE);
+  	return make_pair (-1, LILY_ERROR_ALREADY);
       }
     }
 
     if (!vm_area_is_free (destination_begin, destination_end)) {
-      return make_pair (-1, LILY_ERROR_DSTINUSE);
+      return make_pair (-1, LILY_ERROR_ALREADY);
     }
     
     mapped_area* area = new mapped_area (destination_begin,
@@ -1417,7 +1417,7 @@ public:
   {
     mapped_areas_type::iterator pos = find_if (mapped_areas_.begin (), mapped_areas_.end (), contains_address (destination));
     if (pos == mapped_areas_.end ()) {
-      return make_pair (-1, LILY_ERROR_NOTMAPPED);
+      return make_pair (-1, LILY_ERROR_NOT);
     }
 
     mapped_area* area = *pos;
@@ -1442,12 +1442,12 @@ public:
   reserve_port (unsigned short port)
   {
     if (!privileged_) {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
 
     if (reserved_ports_[port]) {
       // Port is already reserved.
-      return make_pair (-1, LILY_ERROR_PORTINUSE);
+      return make_pair (-1, LILY_ERROR_ALREADY);
     }
 
     // Reserve the port.
@@ -1462,7 +1462,7 @@ public:
   {
     port_set_type::iterator pos = port_set_.find (port);
     if (pos == port_set_.end ()) {
-      return make_pair (-1, LILY_ERROR_NOTRESERVED);
+      return make_pair (-1, LILY_ERROR_NOT);
     }
 
     reserved_ports_[port] = false;
@@ -1478,7 +1478,7 @@ public:
       return make_pair (io::inb (port), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
   }
 
@@ -1491,7 +1491,7 @@ public:
       return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
   }
 
@@ -1502,7 +1502,7 @@ public:
       return make_pair (io::inw (port), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
   }
 
@@ -1515,7 +1515,7 @@ public:
       return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
   }
 
@@ -1526,7 +1526,7 @@ public:
       return make_pair (io::inl (port), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
   }
 
@@ -1539,7 +1539,7 @@ public:
       return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
   }
 
@@ -1552,7 +1552,7 @@ public:
     kassert (ths.get () == this);
     
     if (!privileged_) {
-      return make_pair (-1, LILY_ERROR_PERM);
+      return make_pair (-1, LILY_ERROR_PERMISSION);
     }
     
     if (irq == irq_handler::PIT_IRQ ||
@@ -1565,7 +1565,7 @@ public:
     // Find the action.
     const paction* action = find_action (action_number);
     if (action == 0 || action->type != SYSTEM_INPUT) {
-      return make_pair (-1, LILY_ERROR_BADANO);
+      return make_pair (-1, LILY_ERROR_ANODNE);
     }
     
     // Correct the parameter.
@@ -1591,7 +1591,7 @@ public:
   {
     irq_map_type::iterator pos = irq_map_.find (irq);
     if (pos == irq_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_NOTSUBSCRIBED);
+      return make_pair (-1, LILY_ERROR_NOT);
     }
     
     irq_handler::unsubscribe (pos->first, pos->second);
@@ -1613,7 +1613,7 @@ public:
 
     const paction* action = find_action (action_number);
     if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
-      return make_pair (-1, LILY_ERROR_BADANO);
+      return make_pair (-1, LILY_ERROR_ANODNE);
     }
 
     bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
@@ -1642,7 +1642,7 @@ public:
 
     size_t count = binding_subscriptions_.erase (subject);
     if (count == 0) {
-      return make_pair (-1, LILY_ERROR_NOTSUBSCRIBED);
+      return make_pair (-1, LILY_ERROR_NOT);
     }
 
     count = subject->subscribers.erase (ths);
@@ -1664,7 +1664,7 @@ public:
 
     const paction* action = find_action (action_number);
     if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
-      return make_pair (-1, LILY_ERROR_BADANO);
+      return make_pair (-1, LILY_ERROR_ANODNE);
     }
 
     aid_to_automaton_map_type::const_iterator subject_pos = aid_to_automaton_map_.find (aid);
@@ -1693,7 +1693,7 @@ public:
 
     size_t count = automaton_subscriptions_.erase (subject);
     if (count == 0) {
-      return make_pair (-1, LILY_ERROR_NOTSUBSCRIBED);
+      return make_pair (-1, LILY_ERROR_NOT);
     }
 
     count = subject->subscribers_.erase (ths);

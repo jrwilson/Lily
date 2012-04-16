@@ -110,7 +110,7 @@ readfile_callback (void* data,
     return;
   }
 
-  if (create (bdb, size, bd1, bd2, 0, 0, true) == -1) {
+  if (create (bdb, size, bd1, bd2, 0, 0, true, 0) == -1) {
     bfprintf (&syslog_buffer, ERROR "could not create %s\n", SHELL_PATH);
     state = STOP;
     return;
@@ -206,7 +206,7 @@ initialize (void)
     
     /* Create the syslog. */
     if (syslog_file != 0) {
-      aid_t syslog_aid = create (syslog_file->bd, syslog_file->size, -1, -1, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, false);
+      aid_t syslog_aid = create (syslog_file->bd, syslog_file->size, -1, -1, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, false, 0);
       if (syslog_aid != -1) {
 
 	/* Bind to the syslog. */
@@ -221,7 +221,7 @@ initialize (void)
 	}
 
 	/* We bind the response first so they don't get lost. */
-	if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, desc.number, 0) == -1) {
+	if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, desc.number, 0, 0) == -1) {
 	  exit ();
 	}
 	
@@ -237,7 +237,7 @@ initialize (void)
       state = STOP;
       return;
     }
-    aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false);
+    aid_t vfs = create (vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false, 0);
     cpio_file_destroy (vfs_file);
     if (vfs == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create vfs\n");
@@ -268,8 +268,8 @@ initialize (void)
     }
     
     /* We bind the response first so they don't get lost. */
-    if (bind (vfs, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-	bind (aid, VFS_REQUEST_NO, 0, vfs, vfs_request.number, 0) == -1) {
+    if (bind (vfs, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0, 0) == -1 ||
+	bind (aid, VFS_REQUEST_NO, 0, vfs, vfs_request.number, 0, 0) == -1) {
       bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
       state = STOP;
       return;
@@ -284,7 +284,7 @@ initialize (void)
       return;
     }
     /* Note:  We pass the buffer containing the cpio archive. */
-    aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false);
+    aid_t tmpfs = create (tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false, 0);
     cpio_file_destroy (tmpfs_file);
     if (tmpfs == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create tmpfs\n");

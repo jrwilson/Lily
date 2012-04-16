@@ -22,7 +22,7 @@
 	   "mov %3, %%ebx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx" ); \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" ); \
   if (err != 0) { \
     *err = e; \
   }
@@ -107,6 +107,35 @@ void
 exit (void)
 {
   syscall0 (LILY_SYSCALL_EXIT);
+}
+
+aid_t
+create (bd_t text_bd,
+	size_t text_size,
+	bd_t bda,
+	bd_t bdb,
+	const char* name,
+	size_t name_size,
+	bool retain_privilege,
+	lily_error_t* err)
+{
+  aid_t retval;
+  syscall1re (LILY_SYSCALL_CREATE, retval, &text_bd, err);
+  return retval;
+}
+
+bid_t
+bind (aid_t output_automaton,
+      ano_t output_action,
+      int output_parameter,
+      aid_t input_automaton,
+      ano_t input_action,
+      int input_parameter,
+      lily_error_t* err)
+{
+  aid_t retval;
+  syscall1re (LILY_SYSCALL_BIND, retval, &output_automaton, err);
+  return retval;
 }
 
 int
@@ -452,3 +481,39 @@ unsubscribe_irq (int irq,
   return retval;
 }
 
+const char*
+lily_error_string (lily_error_t err)
+{
+  switch (err) {
+  case LILY_ERROR_SUCCESS:
+    return "success";
+  case LILY_ERROR_INVAL:
+    return "invalid input value";
+  case LILY_ERROR_ALREADY:
+    return "resource already in use";
+  case LILY_ERROR_NOT:
+    return "no effect";
+  case LILY_ERROR_PERMISSION:
+    return "operation not permitted";
+  case LILY_ERROR_AIDDNE:
+    return "automaton does not exist";
+  case LILY_ERROR_BIDDNE:
+    return "binding does not exist";
+  case LILY_ERROR_ANODNE:
+    return "action does not exist";
+  case LILY_ERROR_BDDNE:
+    return "buffer does not exist";
+  case LILY_ERROR_NOMEM:
+    return "out of memory";
+  case LILY_ERROR_OAIDDNE:
+    return "output automaton does not exist";
+  case LILY_ERROR_IAIDDNE:
+    return "input automaton does not exist";
+  case LILY_ERROR_OANODNE:
+    return "output action does not exist";
+  case LILY_ERROR_IANODNE:
+    return "input action does not exist";
+  }
+  
+  return "unknown error";
+}
