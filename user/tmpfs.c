@@ -133,11 +133,11 @@ inode_create (vfs_fs_node_type_t type,
     /* Expand the vector if necessary. */
     if (nodes_size == nodes_capacity) {
       nodes_capacity *= 2;
-      nodes = realloc (nodes, nodes_capacity * sizeof (inode_t*));
+      nodes = realloc (0, nodes, nodes_capacity * sizeof (inode_t*));
     }
 
     /* Create a new node. */
-    node = malloc (sizeof (inode_t));
+    node = malloc (0, sizeof (inode_t));
     node->node.id = nodes_size++;
   }
 
@@ -147,7 +147,7 @@ inode_create (vfs_fs_node_type_t type,
   /* Initialize the node. */
   node->node.type = type;
   node->name_size = name_size;
-  node->name = malloc (name_size);
+  node->name = malloc (0, name_size);
   memcpy (node->name, name, name_size);
   node->bd = bd;
   node->size = size;
@@ -195,7 +195,7 @@ file_find_or_create (inode_t* parent,
   }
 
   /* Create a node. */
-  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd, 0), size, parent);
+  *ptr = inode_create (FILE, name, name_size, buffer_copy (0, bd), size, parent);
 
   return *ptr;
 }
@@ -234,16 +234,16 @@ initialize (void)
     if (syslog_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
+    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
+      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
 	exit ();
       }
       
@@ -253,17 +253,17 @@ initialize (void)
       }
             
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
+      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
-      description_fini (&syslog_description);
+      description_fini (&syslog_description, 0);
     }
 
     /* Allocate the inode vector. */
     nodes_capacity = 1;
     nodes_size = 0;
-    nodes = malloc (nodes_capacity * sizeof (inode_t*));
+    nodes = malloc (0, nodes_capacity * sizeof (inode_t*));
     
     /* Create the root. */
     nodes[nodes_size++] = inode_create (DIRECTORY, "", 0, -1, 0, 0);
@@ -274,7 +274,7 @@ initialize (void)
     response_bdb = buffer_create (0, 0);
     if (response_bda == -1 ||
 	response_bdb == -1) {
-      bfprintf (&syslog_buffer, ERROR "could not create response buffer\n");
+      bfprintf (&syslog_buffer, 0, ERROR "could not create response buffer\n");
       state = STOP;
       return;
     }
@@ -328,10 +328,10 @@ initialize (void)
     }
 
     if (bda != -1) {
-      buffer_destroy (bda, 0);
+      buffer_destroy (0, bda);
     }
     if (bdb != -1) {
-      buffer_destroy (bdb, 0);
+      buffer_destroy (0, bdb);
     }
   }
 }
@@ -471,7 +471,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
       }
 
       if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
-	bfprintf (&syslog_buffer, ERROR "could not enqueue readfile response\n");
+	bfprintf (&syslog_buffer, 0, ERROR "could not enqueue readfile response\n");
 	state = STOP;
 	finish_input (bda, bdb);
       }
@@ -499,7 +499,7 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
 
   if (response_precondition ()) {
     if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not enqueue response\n");
+      bfprintf (&syslog_buffer, 0, ERROR "could not enqueue response\n");
       state = STOP;
       finish_output (false, -1, -1);
     }
@@ -514,12 +514,12 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0, 0);
+    schedule (0, STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0, 0);
+    schedule (0, SYSLOG_NO, 0);
   }
   if (response_precondition ()) {
-    schedule (TMPFS_RESPONSE_NO, 0, 0);
+    schedule (0, TMPFS_RESPONSE_NO, 0);
   }
 }

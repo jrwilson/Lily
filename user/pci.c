@@ -103,8 +103,8 @@ read_config (unsigned char bus,
 	     unsigned int size)
 {
   unsigned long address = CONFIG_ENABLE_MASK | (bus << BUS_SHIFT) | (slot << SLOT_SHIFT) | (function << FUNCTION_SHIFT) | (offset & REGISTER_MASK);
-  outl (CONFIG_ADDRESS, address, 0);
-  unsigned long value = inl (CONFIG_DATA, 0);
+  outl (0, CONFIG_ADDRESS, address);
+  unsigned long value = inl (0, CONFIG_DATA);
   value >>= (8 * (offset & ~REGISTER_MASK));
   switch (size) {
   case 1:
@@ -146,7 +146,7 @@ device_create (unsigned char bus,
 	       unsigned char slot,
 	       unsigned char function)
 {
-  device_t* device = malloc (sizeof (device_t));
+  device_t* device = malloc (0, sizeof (device_t));
   memset (device, 0, sizeof (device_t));
 
   device->bus = bus;
@@ -223,16 +223,16 @@ initialize (void)
     if (syslog_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
+    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
+      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
 	exit ();
       }
       
@@ -242,17 +242,17 @@ initialize (void)
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
+      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
-      description_fini (&syslog_description);
+      description_fini (&syslog_description, 0);
     }
 
     /* Reserve the ports to configure the PCI. */
-    if (reserve_port (CONFIG_ADDRESS, 0) != 0 ||
-	reserve_port (CONFIG_DATA, 0) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not reserve I/O ports\n");
+    if (reserve_port (0, CONFIG_ADDRESS) != 0 ||
+	reserve_port (0, CONFIG_DATA) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
     }
@@ -261,7 +261,7 @@ initialize (void)
     enumerate (0);
 
     for (device_t* d = devices_head; d != 0; d = d->next) {
-      bfprintf (&syslog_buffer, "%x:%x.%x %x %x\n", d->bus, d->slot, d->function, d->vendor, d->device);
+      bfprintf (&syslog_buffer, 0, "%x:%x.%x %x %x\n", d->bus, d->slot, d->function, d->vendor, d->device);
     }
   }
 }
@@ -325,9 +325,9 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0, 0);
+    schedule (0, STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0, 0);
+    schedule (0, SYSLOG_NO, 0);
   }
 }

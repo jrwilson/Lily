@@ -48,7 +48,7 @@ int
 cpio_archive_init (cpio_archive_t* ar,
 		   bd_t bd)
 {
-  if (buffer_file_initr (&ar->bf, bd) != 0) {
+  if (buffer_file_initr (&ar->bf, 0, bd) != 0) {
     return -1;
   }
 
@@ -112,16 +112,16 @@ cpio_archive_next_file (cpio_archive_t* ar)
   }
 
   /* Create a new entry. */
-  cpio_file_t* f = malloc (sizeof (cpio_file_t));
+  cpio_file_t* f = malloc (0, sizeof (cpio_file_t));
   /* Record the name. */
-  f->name = malloc (namesize);
+  f->name = malloc (0, namesize);
   memcpy (f->name, name, namesize);
   f->name_size = namesize;
   f->mode = from_hex (h->mode);
   /* Create a buffer and copy the file content. */
-  f->bd = buffer_create (size_to_pages (filesize), 0);
-  memcpy (buffer_map (f->bd, 0), data, filesize);
-  buffer_unmap (f->bd, 0);
+  f->bd = buffer_create (0, size_to_pages (filesize));
+  memcpy (buffer_map (0, f->bd), data, filesize);
+  buffer_unmap (0, f->bd);
   f->size = filesize;
 
   return f;
@@ -130,7 +130,7 @@ cpio_archive_next_file (cpio_archive_t* ar)
 void
 cpio_file_destroy (cpio_file_t* file)
 {
-  buffer_destroy (file->bd, 0);
+  buffer_destroy (0, file->bd);
   free (file->name);
   free (file);
 }

@@ -54,9 +54,9 @@ EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INTERNAL, parameter_mode, func, action_no, 
 void func (ano, param)
 
 int
-schedule (ano_t action_number,
-	  int parameter,
-	  lily_error_t* err);
+schedule (lily_error_t* err,
+	  ano_t action_number,
+	  int parameter);
 
 void
 finish (bool output_fired,
@@ -79,98 +79,98 @@ void
 exit (void);
 
 aid_t
-create (bd_t text_bd,
+create (lily_error_t* err,
+	bd_t text_bd,
 	size_t text_size,
 	bd_t bda,
 	bd_t bdb,
 	const char* name,
 	size_t name_size,
-	bool retain_privilege,
-	lily_error_t* err);
+	bool retain_privilege);
 
 bid_t
-bind (aid_t output_automaton,
+bind (lily_error_t* err,
+      aid_t output_automaton,
       ano_t output_action,
       int output_parameter,
       aid_t input_automaton,
       ano_t input_action,
-      int input_parameter,
-      lily_error_t* err);
+      int input_parameter);
 
 int
-unbind (bid_t bid,
-	lily_error_t* err);
+unbind (lily_error_t* err,
+	bid_t bid);
 
 int
-destroy (aid_t aid,
-	 lily_error_t* err);
+destroy (lily_error_t* err,
+	 aid_t aid);
 
 int
-subscribe_unbound (bid_t bid,
-		   ano_t action_number,
-		   lily_error_t* err);
+subscribe_unbound (lily_error_t* err,
+		   bid_t bid,
+		   ano_t action_number);
 
 int
-unsubscribe_unbound (bid_t bid,
-		     lily_error_t* err);
+unsubscribe_unbound (lily_error_t* err,
+		     bid_t bid);
 
 int
-subscribe_destroyed (aid_t aid,
-		     ano_t action_number,
-		     lily_error_t* err);
+subscribe_destroyed (lily_error_t* err,
+		     aid_t aid,
+		     ano_t action_number);
 
 int
-unsubscribe_destroyed (aid_t aid,
-		       lily_error_t* err);
+unsubscribe_destroyed (lily_error_t* err,
+		       aid_t aid);
 
 void*
-adjust_break (ptrdiff_t size,
-	      lily_error_t* err);
+adjust_break (lily_error_t* err,
+	      ptrdiff_t size);
 
 bd_t
-buffer_create (size_t size,
-	       lily_error_t* err);
+buffer_create (lily_error_t* err,
+	       size_t size);
 
 bd_t
-buffer_copy (bd_t bd,
-	     lily_error_t* err);
+buffer_copy (lily_error_t* err,
+	     bd_t bd);
 
 int
-buffer_destroy (bd_t bd,
-		lily_error_t* err);
+buffer_destroy (lily_error_t* err,
+		bd_t bd);
 
 size_t
-buffer_size (bd_t bd,
-	     lily_error_t* err);
+buffer_size (lily_error_t* err,
+	     bd_t bd);
 
 size_t
-buffer_resize (bd_t bd,
-	       size_t size,
-	       lily_error_t* err);
+buffer_resize (lily_error_t* err,
+	       bd_t bd,
+	       size_t size);
 
 int
-buffer_assign (bd_t dest,
-	       bd_t src,
-	       lily_error_t* err);
+buffer_assign (lily_error_t* err,
+	       bd_t dest,
+	       bd_t src);
 
 size_t
-buffer_append (bd_t dest,
-	       bd_t src,
-	       lily_error_t* err);
+buffer_append (lily_error_t* err,
+	       bd_t dest,
+	       bd_t src);
 
 void*
-buffer_map (bd_t bd,
-	    lily_error_t* err);
+buffer_map (lily_error_t* err,
+	    bd_t bd);
 
 int
-buffer_unmap (bd_t bd,
-	      lily_error_t* err);
+buffer_unmap (lily_error_t* err,
+	      bd_t bd);
 
 #define SYSCONF_PAGESIZE LILY_SYSCALL_SYSCONF_PAGESIZE
 
 long
-sysconf (int name,
-	 lily_error_t* err);
+sysconf (lily_error_t* err,
+	 int name);
 
 size_t
 pagesize (void);
@@ -181,13 +181,13 @@ size_t
 size_to_pages (size_t size);
 
 aid_t
-lookup (const char* name,
-	size_t size,
-	lily_error_t* err);
+lookup (lily_error_t* err,
+	const char* name,
+	size_t size);
 
 bd_t
-describe (aid_t aid,
-	  lily_error_t* err);
+describe (lily_error_t* err,
+	  aid_t aid);
 
 aid_t
 getaid (void);
@@ -199,63 +199,63 @@ bd_t
 getinitb (void);
 
 int
-getmonotime (mono_time_t* t,
-	     lily_error_t* err);
+getmonotime (lily_error_t* err,
+	     mono_time_t* t);
 
 int
-map (const void* destination,
+map (lily_error_t* err,
+     const void* destination,
      const void* source,
-     size_t size,
-     lily_error_t* err);
+     size_t size);
 
 int
-unmap (const void* destination,
-       lily_error_t* err);
+unmap (lily_error_t* err,
+       const void* destination);
 
 int
-reserve_port (unsigned short port,
-	      lily_error_t* err);
+reserve_port (lily_error_t* err,
+	      unsigned short port);
 
 int
-unreserve_port (unsigned short port,
-		lily_error_t* err);
+unreserve_port (lily_error_t* err,
+		unsigned short port);
 
 unsigned char
-inb (unsigned short port,
-     lily_error_t* err);
+inb (lily_error_t* err,
+     unsigned short port);
 
 int
-outb (unsigned short port,
-      unsigned char value,
-      lily_error_t* err);
+outb (lily_error_t* err,
+      unsigned short port,
+      unsigned char value);
 
 unsigned short
-inw (unsigned short port,
-     lily_error_t* err);
+inw (lily_error_t* err,
+     unsigned short port);
 
 int
-outw (unsigned short port,
-      unsigned short value,
-      lily_error_t* err);
+outw (lily_error_t* err,
+      unsigned short port,
+      unsigned short value);
 
 unsigned long
-inl (unsigned short port,
-     lily_error_t* err);
+inl (lily_error_t* err,
+     unsigned short port);
 
 int
-outl (unsigned short port,
-      unsigned long value,
-      lily_error_t* err);
+outl (lily_error_t* err,
+      unsigned short port,
+      unsigned long value);
 
 int
-subscribe_irq (int irq,
+subscribe_irq (lily_error_t* err,
+	       int irq,
 	       ano_t ano,
-	       int param,
-	       lily_error_t* err);
+	       int param);
 
 int
-unsubscribe_irq (int irq,
-		 lily_error_t* err);
+unsubscribe_irq (lily_error_t* err,
+		 int irq);
 
 const char*
 lily_error_string (lily_error_t err);

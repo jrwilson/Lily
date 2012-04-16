@@ -22,7 +22,7 @@ initialize (void)
     if (text_out_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
       exit ();
     }
   }
@@ -51,7 +51,7 @@ BEGIN_INPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing un
 {
   initialize ();
   buffer_file_t buffer;
-  if (buffer_file_initr (&buffer, bda) != 0) {
+  if (buffer_file_initr (&buffer, 0, bda) != 0) {
     finish_input (bda, bdb);
   }
 
@@ -60,7 +60,7 @@ BEGIN_INPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing un
     finish_input (bda, bdb);
   }
 
-  bfprintf (&text_out_buffer, "tick = %d\n", tick);
+  bfprintf (&text_out_buffer, 0, "tick = %d\n", tick);
 
   finish_input (bda, bdb);
 }
@@ -79,9 +79,9 @@ void
 do_schedule (void)
 {
   if (samp) {
-    schedule (REQUEST_NO, 0, 0);
+    schedule (0, REQUEST_NO, 0);
   }
   if (buffer_file_size (&text_out_buffer) != 0) {
-    schedule (TEXT_OUT_NO, 0, 0);
+    schedule (0, TEXT_OUT_NO, 0);
   }
 }

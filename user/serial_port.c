@@ -139,13 +139,13 @@ baud_to_divisor (unsigned short baud)
 static bool
 transmit_holding_register_empty (void)
 {
-  return inb (port_base + LINE_STATUS_REG, 0) & TRANSMIT_HOLDING_REGISTER_EMPTY;
+  return inb (0, port_base + LINE_STATUS_REG) & TRANSMIT_HOLDING_REGISTER_EMPTY;
 }
 
 static bool
 received_data_ready (void)
 {
-  return inb (port_base + LINE_STATUS_REG, 0) & RECEIVED_DATA_READY;
+  return inb (0, port_base + LINE_STATUS_REG) & RECEIVED_DATA_READY;
 }
 
 typedef struct buffer buffer_t;
@@ -164,7 +164,7 @@ send (void)
 {
   /* We assume FIFO mode where we can send 16 bytes. */
   for (size_t count = 0; count != 16 && buffer_head != 0; ++count) {
-    outb (port_base + TRANSMIT_BUFFER_REG, buffer_head->data[buffer_head->pos++], 0);
+    outb (0, port_base + TRANSMIT_BUFFER_REG, buffer_head->data[buffer_head->pos++]);
     if (buffer_head->pos == buffer_head->size) {
       buffer_t* buffer = buffer_head;
       buffer_head = buffer->next;
@@ -182,9 +182,9 @@ static void
 push_buffer (const void* data,
 	     size_t size)
 {
-  buffer_t* buffer = malloc (sizeof (buffer_t));
+  buffer_t* buffer = malloc (0, sizeof (buffer_t));
   memset (buffer, 0, sizeof (buffer_t));
-  buffer->data = malloc (size);
+  buffer->data = malloc (0, size);
   memcpy (buffer->data, data, size);
   buffer->size = size;
   
@@ -242,7 +242,7 @@ typedef struct {
 static pc_t*
 pc_create (void)
 {
-  pc_t* pc = malloc (sizeof (pc_t));
+  pc_t* pc = malloc (0, sizeof (pc_t));
   memset (pc, 0, sizeof (pc_t));
   pc->scan_state = SCAN_START;
   pc->token_tail = &pc->token_head;
@@ -277,7 +277,7 @@ pc_append_char (pc_t* pc,
 {
   if (pc->str_size == pc->str_capacity) {
     pc->str_capacity = pc->str_capacity * 2 + 1;
-    pc->str = realloc (pc->str, pc->str_capacity);
+    pc->str = realloc (0, pc->str, pc->str_capacity);
   }
   pc->str[pc->str_size++] = c;
 }
@@ -286,7 +286,7 @@ static void
 pc_push_token (pc_t* pc,
 	       token_type_t type)
 {
-  token_t* token = malloc (sizeof (token_t));
+  token_t* token = malloc (0, sizeof (token_t));
   memset (token, 0, sizeof (token_t));
   token->type = type;
   if (type == TOKEN_STRING) {
@@ -350,7 +350,7 @@ pc_push_item (pc_t* pc,
 	      char* key,
 	      char* value)
 {
-  arg_item_t* item = malloc (sizeof (arg_item_t));
+  arg_item_t* item = malloc (0, sizeof (arg_item_t));
   memset (item, 0, sizeof (arg_item_t));
   item->key = key;
   item->value = value;
@@ -492,7 +492,7 @@ static arg_item_t*
 parse_args (bd_t bd)
 {
   buffer_file_t bf;
-  if (buffer_file_initr (&bf, bd) != 0) {
+  if (buffer_file_initr (&bf, 0, bd) != 0) {
     return 0;
   }
 
@@ -533,17 +533,17 @@ initialize (void)
       /* Nothing we can do. */
       exit ();
     }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
       /* Nothing we can do. */
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
+    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
+      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
 	exit ();
       }
       
@@ -553,21 +553,21 @@ initialize (void)
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
+      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
-      description_fini (&syslog_description);
+      description_fini (&syslog_description, 0);
     }
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
-      bfprintf (&syslog_buffer, ERROR "could not create output buffer\n");
+      bfprintf (&syslog_buffer, 0, ERROR "could not create output buffer\n");
       state = HALT;
       return;
     }
-    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not initialize output buffer\n");
+    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not initialize output buffer\n");
       state = HALT;
       return;
     }
@@ -584,22 +584,22 @@ initialize (void)
     for (arg_item_t* item = first_arg; item != 0; item = item->next) {
       if (strcmp (item->key, "port") == 0) {
 	if (item->value != 0) {
-	  bfprintf (&syslog_buffer, INFO "PORT = %s\n", item->value);
+	  bfprintf (&syslog_buffer, 0, INFO "PORT = %s\n", item->value);
 	}
 	else {
-	  bfprintf (&syslog_buffer, ERROR "option port requires a value\n");
+	  bfprintf (&syslog_buffer, 0, ERROR "option port requires a value\n");
 	}
       }
       else if (strcmp (item->key, "irq") == 0) {
 	if (item->value != 0) {
-	  bfprintf (&syslog_buffer, INFO "IRQ = %s\n", item->value);
+	  bfprintf (&syslog_buffer, 0, INFO "IRQ = %s\n", item->value);
 	}
 	else {
-	  bfprintf (&syslog_buffer, ERROR "option irq requires a value\n");
+	  bfprintf (&syslog_buffer, 0, ERROR "option irq requires a value\n");
 	}
       }
       else {
-	bfprintf (&syslog_buffer, ERROR "unknown option %s\n", item->key);
+	bfprintf (&syslog_buffer, 0, ERROR "unknown option %s\n", item->key);
       }
     }
 
@@ -644,24 +644,24 @@ initialize (void)
     /* } */
 
     if (bda != -1) {
-      buffer_destroy (bda, 0);
+      buffer_destroy (0, bda);
     }
     if (bdb != -1) {
-      buffer_destroy (bdb, 0);
+      buffer_destroy (0, bdb);
     }
 
     /* Reserve the ports. */
     for (unsigned short idx = 0; idx != REGISTER_COUNT; ++idx) {
-      if (reserve_port (port_base + idx, 0) != 0) {
-	bfprintf (&syslog_buffer, ERROR "could not reserve I/O port %x\n", port_base + idx);
+      if (reserve_port (0, port_base + idx) != 0) {
+	bfprintf (&syslog_buffer, 0, ERROR "could not reserve I/O port %x\n", port_base + idx);
 	state = HALT;
 	return;
       }
     }
 
     /* Subscribe to the IRQ. */
-    if (subscribe_irq (irq, INTERRUPT_NO, 0, 0) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not subscribe to IRQ %d\n", irq);
+    if (subscribe_irq (0, irq, INTERRUPT_NO, 0) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not subscribe to IRQ %d\n", irq);
       state = HALT;
       return;
     }
@@ -727,15 +727,15 @@ BEGIN_SYSTEM_INPUT (INTERRUPT_NO, "", "", interrupt, ano_t ano, aid_t aid, bd_t 
 {
   initialize ();
 
-  unsigned char interrupt_type = inb (port_base + INTERRUPT_ID_REG, 0);
+  unsigned char interrupt_type = inb (0, port_base + INTERRUPT_ID_REG);
 
   if ((interrupt_type & NO_INTERRUPT) == 0) {
     switch (interrupt_type & INTERRUPT_MASK) {
     case RECEIVED_DATA_AVAILABLE_INT:
     case CHARACTER_TIMEOUT_INT:
       while (received_data_ready ()) {
-	if (buffer_file_put (&text_out_buffer, inb (port_base + RECEIVE_BUFFER_REG, 0)) != 0) {
-	  bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
+	if (buffer_file_put (&text_out_buffer, 0, inb (0, port_base + RECEIVE_BUFFER_REG)) != 0) {
+	  bfprintf (&syslog_buffer, 0, ERROR "could not write to output buffer\n");
 	  state = HALT;
 	  finish_input (bda, bdb);
 	}
@@ -748,7 +748,7 @@ BEGIN_SYSTEM_INPUT (INTERRUPT_NO, "", "", interrupt, ano_t ano, aid_t aid, bd_t 
     case RECEIVER_LINE_STATUS_INT:
     case TRANSMIT_MACHINE_INT:
     case TIMER_INTERRUPT_INT:
-      bfprintf (&syslog_buffer, WARNING "unknown interrupt type %x\n", interrupt_type & INTERRUPT_MASK);
+      bfprintf (&syslog_buffer, 0, WARNING "unknown interrupt type %x\n", interrupt_type & INTERRUPT_MASK);
       break;
     }
   }
@@ -781,24 +781,24 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
   /* Initialize the serial port. */
   
   /* Enable the receive interrupt. */
-  outb (port_base + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT, 0);
+  outb (0, port_base + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT);
   /* Set the divisor (baud).  This wipes out all other settings. */
-  outb (port_base + LINE_CONTROL_REG, DLAB, 0);
+  outb (0, port_base + LINE_CONTROL_REG, DLAB);
   unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);    
-  outb (port_base + DIVISOR_LSB_REG, divisor & 0xFF, 0);
-  outb (port_base + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF, 0);
+  outb (0, port_base + DIVISOR_LSB_REG, divisor & 0xFF);
+  outb (0, port_base + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF);
   /* Set the frame type. */
-  outb (port_base + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1, 0);
+  outb (0, port_base + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
   /* Reset the FIFO. */
-  outb (port_base + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE, 0);
+  outb (0, port_base + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
   
   /* Enable TX/RX. */
-  outb (port_base + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS, 0);
+  outb (0, port_base + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS);
 
   /* Clear the status registers by reading them. */
-  inb (port_base + INTERRUPT_ID_REG, 0);
-  inb (port_base + LINE_STATUS_REG, 0);
-  inb (port_base + MODEM_STATUS_REG, 0);
+  inb (0, port_base + INTERRUPT_ID_REG);
+  inb (0, port_base + LINE_STATUS_REG);
+  inb (0, port_base + MODEM_STATUS_REG);
 
   finish_input (bda, bdb);
 }
@@ -807,10 +807,10 @@ BEGIN_INPUT (NO_PARAMETER, STOP_NO, "stop", "", stop, ano_t ano, int param, bd_t
 {
   initialize ();
 
-  bfprintf (&syslog_buffer, INFO "stop\n");
+  bfprintf (&syslog_buffer, 0, INFO "stop\n");
 
   /* Disable TX/RX. */
-  outb (port_base + MODEM_CONTROL_REG, 0, 0);
+  outb (0, port_base + MODEM_CONTROL_REG, 0);
 
   finish_input (bda, bdb);
 }
@@ -820,8 +820,8 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
-    bfprintf (&syslog_buffer, WARNING "bad input buffer\n");
+  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
+    bfprintf (&syslog_buffer, 0, WARNING "bad input buffer\n");
     finish_input (bda, bdb);
   }
 
@@ -829,7 +829,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   if (size != 0) {
     const unsigned char* data = buffer_file_readp (&input_buffer, size);
     if (data == 0) {
-      bfprintf (&syslog_buffer, WARNING "bad input buffer\n");
+      bfprintf (&syslog_buffer, 0, WARNING "bad input buffer\n");
       finish_input (bda, bdb);
     }
 
@@ -846,12 +846,12 @@ void
 do_schedule (void)
 {
   if (halt_precondition ()) {
-    schedule (HALT_NO, 0, 0);
+    schedule (0, HALT_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0, 0);
+    schedule (0, SYSLOG_NO, 0);
   }
   if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0, 0);
+    schedule (0, TEXT_OUT_NO, 0);
   }
 }

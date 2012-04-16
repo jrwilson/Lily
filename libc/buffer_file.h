@@ -26,19 +26,23 @@ typedef struct {
 
 int
 buffer_file_initw (buffer_file_t* bf,
+		   lily_error_t* err,
 		   bd_t bd);
 
 int
 buffer_file_write (buffer_file_t* bf,
+		   lily_error_t* err,
 		   const void* ptr,
 		   size_t size);
 
 int
 buffer_file_put (buffer_file_t* bf,
+		 lily_error_t* err,
 		 char c);
 
 int
 buffer_file_puts (buffer_file_t* bf,
+		  lily_error_t* err,
 		  const char* s);
 
 void
@@ -46,6 +50,7 @@ buffer_file_truncate (buffer_file_t* bf);
 
 int
 buffer_file_initr (buffer_file_t* bf,
+		   lily_error_t* err,
 		   bd_t bd);
 
 const void*
@@ -72,6 +77,7 @@ buffer_file_seek (buffer_file_t* bf,
 
 int
 bfprintf (buffer_file_t* bf,
+	  lily_error_t* err,
 	  const char* format,
 	  ...);
 

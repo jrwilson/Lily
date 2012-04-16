@@ -21,10 +21,12 @@ typedef struct {
 
 int
 description_init (description_t* d,
+		  lily_error_t* err,
 		  aid_t aid);
 
-void
-description_fini (description_t* d);
+int
+description_fini (description_t* d,
+		  lily_error_t* err);
 
 size_t
 description_action_count (description_t* d);

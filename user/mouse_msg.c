@@ -4,7 +4,7 @@ int
 mouse_packet_list_initw (mouse_packet_list_t* vol,
 			 bd_t bda)
 {
-  if (buffer_file_initw (&vol->bf, bda) != 0) {
+  if (buffer_file_initw (&vol->bf, 0, bda) != 0) {
     return -1;
   }
   
@@ -39,7 +39,7 @@ int
 mouse_packet_list_write (mouse_packet_list_t* vol,
 			 const mouse_packet_t *mp)
 {
-  if (buffer_file_write (&vol->bf, mp, sizeof (mouse_packet_t)) != 0) {
+  if (buffer_file_write (&vol->bf, 0, mp, sizeof (mouse_packet_t)) != 0) {
     return -1;
   }
   
@@ -50,7 +50,7 @@ mouse_packet_list_write (mouse_packet_list_t* vol,
   if (buffer_file_seek (&vol->bf, 0) != 0) {
     return -1;
   }
-  if (buffer_file_write (&vol->bf, &vol->count, sizeof (size_t)) != 0) {
+  if (buffer_file_write (&vol->bf, 0, &vol->count, sizeof (size_t)) != 0) {
     return -1;
   }
   if (buffer_file_seek (&vol->bf, position) != 0) {
@@ -65,7 +65,7 @@ mouse_packet_list_initr (mouse_packet_list_t* vol,
 			 bd_t bda,
 			 size_t* count)
 {
-  if (buffer_file_initr (&vol->bf, bda) != 0) {
+  if (buffer_file_initr (&vol->bf, 0, bda) != 0) {
     return -1;
   }
   

@@ -146,7 +146,7 @@ spc_create (unsigned short port,
 	    unsigned char irq,
 	    const char* name)
 {
-  spc_t* spc = malloc (sizeof (spc_t));
+  spc_t* spc = malloc (0, sizeof (spc_t));
   memset (spc, 0, sizeof (spc_t));
   spc->port = port;
   spc->irq = irq;
@@ -170,48 +170,48 @@ serial_port_callback (void* ptr,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, ERROR "vfs provided bad readfile response\n");
+    bfprintf (&syslog_buffer, 0, ERROR "vfs provided bad readfile response\n");
     spc_destroy (spc);
     return;
   }
 
   if (error != VFS_SUCCESS) {
-    bfprintf (&syslog_buffer, ERROR "could not read %s\n", SERIAL_PORT_PATH);
+    bfprintf (&syslog_buffer, 0, ERROR "could not read %s\n", SERIAL_PORT_PATH);
     spc_destroy (spc);
     return;
   }
 
   bd_t bd = buffer_create (0, 0);
   if (bd == -1) {
-    bfprintf (&syslog_buffer, ERROR "could not create argument buffer\n");
+    bfprintf (&syslog_buffer, 0, ERROR "could not create argument buffer\n");
     spc_destroy (spc);
     state = HALT;
     return;
   }
 
   buffer_file_t bf;
-  if (buffer_file_initw (&bf, bd) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could not initialize argument buffer\n");
+  if (buffer_file_initw (&bf, 0, bd) != 0) {
+    bfprintf (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
     spc_destroy (spc);
     state = HALT;
     return;
   }
 
-  if (bfprintf (&bf, "port=%d irq=%d", spc->port, spc->irq) != 0) {
-    bfprintf (&syslog_buffer, ERROR "could not write to argv\n");
+  if (bfprintf (&bf, 0, "port=%d irq=%d", spc->port, spc->irq) != 0) {
+    bfprintf (&syslog_buffer, 0, ERROR "could not write to argv\n");
     spc_destroy (spc);
     state = HALT;
     return;
   }
 
-  if (create (bdb, size, bd, -1, spc->name, strlen (spc->name) + 1, true, 0) == -1) {
-    bfprintf (&syslog_buffer, ERROR "could not create %s\n", spc->name);
+  if (create (0, bdb, size, bd, -1, spc->name, strlen (spc->name) + 1, true) == -1) {
+    bfprintf (&syslog_buffer, 0, ERROR "could not create %s\n", spc->name);
     spc_destroy (spc);
     state = HALT;
     return;
   }
 
-  buffer_destroy (bd, 0);
+  buffer_destroy (0, bd);
   spc_destroy (spc);
 }
 
@@ -222,7 +222,7 @@ create_serial_port (unsigned short port,
 {
   spc_t* spc = spc_create (port, irq, name);
   vfs_request_queue_push_readfile (&vfs_request_queue, SERIAL_PORT_PATH);
-  callback_queue_push (&vfs_response_queue, serial_port_callback, spc);
+  callback_queue_push (&vfs_response_queue, 0, serial_port_callback, spc);
 }
 
 static void
@@ -238,16 +238,16 @@ initialize (void)
     if (syslog_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
+    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
+      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
 	exit ();
       }
       
@@ -257,18 +257,18 @@ initialize (void)
       }
             
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
+      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
-      description_fini (&syslog_description);
+      description_fini (&syslog_description, 0);
     }
 
     vfs_request_bda = buffer_create (0, 0);
     vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bda == -1 ||
     	vfs_request_bdb == -1) {
-      bfprintf (&syslog_buffer, ERROR "could not create vfs_request buffer\n");
+      bfprintf (&syslog_buffer, 0, ERROR "could not create vfs_request buffer\n");
       state = HALT;
       return;
     }
@@ -276,46 +276,46 @@ initialize (void)
     callback_queue_init (&vfs_response_queue);
 
     /* Bind to the vfs. */
-    aid_t vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1, 0);
+    aid_t vfs_aid = lookup (0, VFS_NAME, strlen (VFS_NAME) + 1);
     if (vfs_aid == -1) {
-      bfprintf (&syslog_buffer, ERROR "no vfs\n");
+      bfprintf (&syslog_buffer, 0, ERROR "no vfs\n");
       state = HALT;
       return;
     }
     
     description_t vfs_description;
-    if (description_init (&vfs_description, vfs_aid) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not describe vfs\n");
+    if (description_init (&vfs_description, 0, vfs_aid) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not describe vfs\n");
       state = HALT;
       return;
     }
 
     action_desc_t vfs_request;
     if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) {
-      bfprintf (&syslog_buffer, ERROR "vfs does not contain %s\n", VFS_REQUEST_NAME);
+      bfprintf (&syslog_buffer, 0, ERROR "vfs does not contain %s\n", VFS_REQUEST_NAME);
       state = HALT;
       return;
     }
 
     action_desc_t vfs_response;
     if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) {
-      bfprintf (&syslog_buffer, ERROR "vfs does not contain %s\n", VFS_RESPONSE_NAME);
+      bfprintf (&syslog_buffer, 0, ERROR "vfs does not contain %s\n", VFS_RESPONSE_NAME);
       state = HALT;
       return;
     }
     
     /* We bind the response first so they don't get lost. */
-    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0, 0) == -1 ||
-    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0, 0) == -1) {
-      bfprintf (&syslog_buffer, ERROR "could not bind to vfs\n");
+    if (bind (0, vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
+    	bind (0, aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not bind to vfs\n");
       state = HALT;
       return;
     }
 
-    description_fini (&vfs_description);
+    description_fini (&vfs_description, 0);
 
-    if (map (BDA_ADDRESS, BDA_ADDRESS, sizeof (bios_t), 0) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not map BIOS data area\n");
+    if (map (0, BDA_ADDRESS, BDA_ADDRESS, sizeof (bios_t)) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not map BIOS data area\n");
       state = HALT;
       return;
     }
@@ -430,7 +430,7 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
 
   if (vfs_request_precondition ()) {
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not send vfs request\n");
+      bfprintf (&syslog_buffer, 0, ERROR "could not send vfs request\n");
       state = HALT;
       finish_output (false, -1, -1);
     }
@@ -469,12 +469,12 @@ void
 do_schedule (void)
 {
   if (halt_precondition ()) {
-    schedule (HALT_NO, 0, 0);
+    schedule (0, HALT_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0, 0);
+    schedule (0, SYSLOG_NO, 0);
   }
   if (vfs_request_precondition ()) {
-    schedule (VFS_REQUEST_NO, 0, 0);
+    schedule (0, VFS_REQUEST_NO, 0);
   }
 }

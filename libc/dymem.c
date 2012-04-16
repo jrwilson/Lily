@@ -419,7 +419,8 @@ remove (header_t* h)
 }
 
 void*
-malloc (size_t size)
+malloc (lily_error_t* err,
+	size_t size)
 {
   if (size == 0) {
     return 0;
@@ -427,7 +428,7 @@ malloc (size_t size)
 
   if (first_header_ == 0) {
     /* Initialize. */
-    char* original_break = adjust_break (2 * HEADER_ALIGN, 0);
+    char* original_break = adjust_break (err, 2 * HEADER_ALIGN);
     if (original_break == 0) {
       /* Fail. */
       return 0;
@@ -468,7 +469,7 @@ malloc (size_t size)
     // The last chunk is not available.
     // Create one.
     size_t request_size = HEADER_SIZE + size + FOOTER_SIZE;
-    void* temp = adjust_break (request_size, 0);
+    void* temp = adjust_break (err, request_size);
     if (temp == 0) {
       /* Fail. */
       return 0;
@@ -480,7 +481,7 @@ malloc (size_t size)
     // The last chunk is available but too small.
     // Resize the last chunk.
     size_t request_size = size - header_size (last_header_);
-    if (adjust_break (request_size, 0) == 0) {
+    if (adjust_break (err, request_size) == 0) {
       /* Fail. */
       return 0;
     }
@@ -565,7 +566,8 @@ free (void* ptr)
 }
 
 void*
-realloc (void* ptr,
+realloc (lily_error_t* err,
+	 void* ptr,
 	 size_t size)
 {
   /* We'll do a simple allocate, copy, and then free. */
@@ -594,7 +596,7 @@ realloc (void* ptr,
 	  const size_t copy_size = (old_size < size) ? old_size : size;
 
 	  /* Allocate. */
-	  void* retval = malloc (size);
+	  void* retval = malloc (err, size);
 	  if (retval != 0) {
 	    /* Copy and free. */
 	    memcpy (retval, ptr, copy_size);
@@ -619,7 +621,7 @@ realloc (void* ptr,
   }
   else {
     /* Pointer was 0. */
-    return malloc (size);
+    return malloc (err, size);
   }
 }
 

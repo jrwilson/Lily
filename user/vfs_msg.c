@@ -28,12 +28,12 @@ vfs_request_queue_push_mount (vfs_request_queue_t* vrq,
 			      aid_t aid,
 			      const char* path)
 {
-  vfs_request_queue_item_t* item = malloc (sizeof (vfs_request_queue_item_t));
+  vfs_request_queue_item_t* item = malloc (0, sizeof (vfs_request_queue_item_t));
   memset (item, 0, sizeof (vfs_request_queue_item_t));
   item->type = VFS_MOUNT;
   item->u.mount.aid = aid;
   size_t size = strlen (path) + 1;
-  item->u.mount.path = malloc (size);
+  item->u.mount.path = malloc (0, size);
   memcpy (item->u.mount.path, path, size);
   item->u.mount.path_size = size;
   
@@ -45,11 +45,11 @@ void
 vfs_request_queue_push_readfile (vfs_request_queue_t* vrq,
 				 const char* path)
 {
-  vfs_request_queue_item_t* item = malloc (sizeof (vfs_request_queue_item_t));
+  vfs_request_queue_item_t* item = malloc (0, sizeof (vfs_request_queue_item_t));
   memset (item, 0, sizeof (vfs_request_queue_item_t));
   item->type = VFS_READFILE;
   size_t size = strlen (path) + 1;
-  item->u.readfile.path = malloc (size);
+  item->u.readfile.path = malloc (0, size);
   memcpy (item->u.readfile.path, path, size);
   item->u.readfile.path_size = size;
   
@@ -65,7 +65,7 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
   vfs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) != 0) {
+  if (buffer_file_initw (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -73,7 +73,7 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) != 0) {
+  if (buffer_file_write (&file, 0, &item->type, sizeof (vfs_type_t)) != 0) {
     return -1;
   }
 
@@ -82,15 +82,15 @@ vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
     return -1;
     break;
   case VFS_MOUNT:
-    if (buffer_file_write (&file, &item->u.mount.aid, sizeof (aid_t)) != 0 ||
-	buffer_file_write (&file, &item->u.mount.path_size, sizeof (size_t)) != 0 ||
-	buffer_file_write (&file, item->u.mount.path, item->u.mount.path_size) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.mount.aid, sizeof (aid_t)) != 0 ||
+	buffer_file_write (&file, 0, &item->u.mount.path_size, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, 0, item->u.mount.path, item->u.mount.path_size) != 0) {
       return -1;
     }
     break;
   case VFS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.path_size, sizeof (size_t)) != 0 ||
-	buffer_file_write (&file, item->u.readfile.path, item->u.readfile.path_size) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.readfile.path_size, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, 0, item->u.readfile.path, item->u.readfile.path_size) != 0) {
       return -1;
     }
     break;
@@ -110,7 +110,7 @@ vfs_request_queue_push_from_buffer (vfs_request_queue_t* vrq,
   *type = VFS_UNKNOWN;
 
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -223,7 +223,7 @@ void
 vfs_response_queue_push_bad_request (vfs_response_queue_t* vrq,
 				     vfs_type_t type)
 {
-  vfs_response_queue_item_t* item = malloc (sizeof (vfs_response_queue_item_t));
+  vfs_response_queue_item_t* item = malloc (0, sizeof (vfs_response_queue_item_t));
   memset (item, 0, sizeof (vfs_response_queue_item_t));
   item->type = type;
   item->error = VFS_BAD_REQUEST;
@@ -236,7 +236,7 @@ void
 vfs_response_queue_push_mount (vfs_response_queue_t* vrq,
 			       vfs_error_t error)
 {
-  vfs_response_queue_item_t* item = malloc (sizeof (vfs_response_queue_item_t));
+  vfs_response_queue_item_t* item = malloc (0, sizeof (vfs_response_queue_item_t));
   memset (item, 0, sizeof (vfs_response_queue_item_t));
   item->type = VFS_MOUNT;
   item->error = error;
@@ -251,13 +251,13 @@ vfs_response_queue_push_readfile (vfs_response_queue_t* vrq,
 				  size_t size,
 				  bd_t bd)
 {
-  vfs_response_queue_item_t* item = malloc (sizeof (vfs_response_queue_item_t));
+  vfs_response_queue_item_t* item = malloc (0, sizeof (vfs_response_queue_item_t));
   memset (item, 0, sizeof (vfs_response_queue_item_t));
   item->type = VFS_READFILE;
   item->error = error;
   item->u.readfile.size = size;
   if (bd != -1) {
-    item->u.readfile.bd = buffer_copy (bd, 0);
+    item->u.readfile.bd = buffer_copy (0, bd);
     if (item->u.readfile.bd == -1) {
       return -1;
     }
@@ -280,7 +280,7 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
   vfs_response_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) != 0) {
+  if (buffer_file_initw (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -288,8 +288,8 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_type_t)) != 0 ||
-      buffer_file_write (&file, &item->error, sizeof (vfs_error_t)) != 0) {
+  if (buffer_file_write (&file, 0, &item->type, sizeof (vfs_type_t)) != 0 ||
+      buffer_file_write (&file, 0, &item->error, sizeof (vfs_error_t)) != 0) {
     return -1;
   }
 
@@ -301,17 +301,17 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
     /* Nothing. */
     break;
   case VFS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.readfile.size, sizeof (size_t)) != 0) {
       return -1;
     }
     if (item->u.readfile.bd != -1) {
-      if (buffer_assign (bdb, item->u.readfile.bd, 0) != 0) {
+      if (buffer_assign (0, bdb, item->u.readfile.bd) != 0) {
 	return -1;
       }
-      buffer_destroy (item->u.readfile.bd, 0);
+      buffer_destroy (0, item->u.readfile.bd);
     }
     else {
-      if (buffer_resize (bdb, 0, 0) != 0) {
+      if (buffer_resize (0, bdb, 0) != 0) {
 	return -1;
       }
     }
@@ -334,7 +334,7 @@ read_vfs_mount_response (bd_t bda,
 			 vfs_error_t* error)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
   
@@ -354,7 +354,7 @@ read_vfs_readfile_response (bd_t bd,
 			    size_t* size)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bd) != 0) {
+  if (buffer_file_initr (&file, 0, bd) != 0) {
     return -1;
   }
   
@@ -377,7 +377,7 @@ read_vfs_fs_request_type (bd_t bda,
 			  vfs_fs_type_t* type)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -396,7 +396,7 @@ read_vfs_fs_descend_request (bd_t bda,
 			     size_t* name_size)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -425,7 +425,7 @@ read_vfs_fs_descend_response (bd_t bda,
 			      vfs_fs_node_t* node)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
   
@@ -446,7 +446,7 @@ read_vfs_fs_readfile_request (bd_t bda,
 			      size_t* id)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
   
@@ -467,7 +467,7 @@ read_vfs_fs_readfile_response (bd_t bda,
 			       size_t* size)
 {
   buffer_file_t file;
-  if (buffer_file_initr (&file, bda) != 0) {
+  if (buffer_file_initr (&file, 0, bda) != 0) {
     return -1;
   }
   
@@ -502,11 +502,11 @@ vfs_fs_request_queue_push_descend (vfs_fs_request_queue_t* vrq,
 				   const char* name,
 				   size_t name_size)
 {
-  vfs_fs_request_queue_item_t* item = malloc (sizeof (vfs_fs_request_queue_item_t));
+  vfs_fs_request_queue_item_t* item = malloc (0, sizeof (vfs_fs_request_queue_item_t));
   memset (item, 0, sizeof (vfs_fs_request_queue_item_t));
   item->type = VFS_FS_DESCEND;
   item->u.descend.id = id;
-  item->u.descend.name = malloc (name_size);
+  item->u.descend.name = malloc (0, name_size);
   memcpy (item->u.descend.name, name, name_size);
   item->u.descend.name_size = name_size;
   
@@ -518,7 +518,7 @@ void
 vfs_fs_request_queue_push_readfile (vfs_fs_request_queue_t* vrq,
 				    size_t id)
 {
-  vfs_fs_request_queue_item_t* item = malloc (sizeof (vfs_fs_request_queue_item_t));
+  vfs_fs_request_queue_item_t* item = malloc (0, sizeof (vfs_fs_request_queue_item_t));
   memset (item, 0, sizeof (vfs_fs_request_queue_item_t));
   item->type = VFS_FS_READFILE;
   item->u.readfile.id = id;
@@ -535,7 +535,7 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
   vfs_fs_request_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) != 0) {
+  if (buffer_file_initw (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -543,7 +543,7 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_fs_type_t)) != 0) {
+  if (buffer_file_write (&file, 0, &item->type, sizeof (vfs_fs_type_t)) != 0) {
     return -1;
   }
 
@@ -552,14 +552,14 @@ vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
     return -1;
     break;
   case VFS_FS_DESCEND:
-    if (buffer_file_write (&file, &item->u.descend.id, sizeof (size_t)) != 0 ||
-	buffer_file_write (&file, &item->u.descend.name_size, sizeof (size_t)) != 0 ||
-	buffer_file_write (&file, item->u.descend.name, item->u.descend.name_size) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.descend.id, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, 0, &item->u.descend.name_size, sizeof (size_t)) != 0 ||
+	buffer_file_write (&file, 0, item->u.descend.name, item->u.descend.name_size) != 0) {
       return -1;
     }
     break;
   case VFS_FS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.id, sizeof (size_t)) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.readfile.id, sizeof (size_t)) != 0) {
       return -1;
     }
     break;
@@ -625,7 +625,7 @@ void
 vfs_fs_response_queue_push_bad_request (vfs_fs_response_queue_t* vrq,
 					vfs_fs_type_t type)
 {
-  vfs_fs_response_queue_item_t* item = malloc (sizeof (vfs_fs_response_queue_item_t));
+  vfs_fs_response_queue_item_t* item = malloc (0, sizeof (vfs_fs_response_queue_item_t));
   memset (item, 0, sizeof (vfs_fs_response_queue_item_t));
   item->type = type;
   item->error = VFS_FS_BAD_REQUEST;
@@ -639,7 +639,7 @@ vfs_fs_response_queue_push_descend (vfs_fs_response_queue_t* vrq,
 				    vfs_fs_error_t error,
 				    const vfs_fs_node_t* node)
 {
-  vfs_fs_response_queue_item_t* item = malloc (sizeof (vfs_fs_response_queue_item_t));
+  vfs_fs_response_queue_item_t* item = malloc (0, sizeof (vfs_fs_response_queue_item_t));
   memset (item, 0, sizeof (vfs_fs_response_queue_item_t));
   item->type = VFS_FS_DESCEND;
   item->error = error;
@@ -655,13 +655,13 @@ vfs_fs_response_queue_push_readfile (vfs_fs_response_queue_t* vrq,
 				     size_t size,
 				     bd_t bd)
 {
-  vfs_fs_response_queue_item_t* item = malloc (sizeof (vfs_fs_response_queue_item_t));
+  vfs_fs_response_queue_item_t* item = malloc (0, sizeof (vfs_fs_response_queue_item_t));
   memset (item, 0, sizeof (vfs_fs_response_queue_item_t));
   item->type = VFS_FS_READFILE;
   item->error = error;
   item->u.readfile.size = size;
   if (bd != -1) {
-    item->u.readfile.bd = buffer_copy (bd, 0);
+    item->u.readfile.bd = buffer_copy (0, bd);
     if (item->u.readfile.bd == -1) {
       return -1;
     }
@@ -684,7 +684,7 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
   vfs_fs_response_queue_item_t* item = vrq->head;
 
   buffer_file_t file;
-  if (buffer_file_initw (&file, bda) != 0) {
+  if (buffer_file_initw (&file, 0, bda) != 0) {
     return -1;
   }
 
@@ -692,8 +692,8 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
     return -1;
   }
 
-  if (buffer_file_write (&file, &item->type, sizeof (vfs_fs_type_t)) != 0 ||
-      buffer_file_write (&file, &item->error, sizeof (vfs_fs_error_t)) != 0) {
+  if (buffer_file_write (&file, 0, &item->type, sizeof (vfs_fs_type_t)) != 0 ||
+      buffer_file_write (&file, 0, &item->error, sizeof (vfs_fs_error_t)) != 0) {
     return -1;
   }
 
@@ -702,15 +702,15 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
     return -1;
     break;
   case VFS_FS_DESCEND:
-    if (buffer_file_write (&file, &item->u.descend.node, sizeof (vfs_fs_node_t)) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.descend.node, sizeof (vfs_fs_node_t)) != 0) {
       return -1;
     }
     break;
   case VFS_FS_READFILE:
-    if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) != 0) {
+    if (buffer_file_write (&file, 0, &item->u.readfile.size, sizeof (size_t)) != 0) {
       return -1;
     }
-    if (buffer_assign (bdb, item->u.readfile.bd, 0) != 0) {
+    if (buffer_assign (0, bdb, item->u.readfile.bd) != 0) {
       return -1;
     }
     break;
@@ -735,7 +735,7 @@ vfs_fs_response_queue_pop (vfs_fs_response_queue_t* vrq)
     break;
   case VFS_FS_READFILE:
     if (item->u.readfile.bd != -1) {
-      buffer_destroy (item->u.readfile.bd, 0);
+      buffer_destroy (0, item->u.readfile.bd);
     }
     break;
   }

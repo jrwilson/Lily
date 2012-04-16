@@ -57,10 +57,10 @@ static buffer_file_t syslog_buffer;
 static void
 set_cursor_location (unsigned short location)
 {
-  outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_HIGH_REGISTER, 0);
-  outb (CRT_DATA_PORT, location >> 8, 0);
-  outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_LOW_REGISTER, 0);
-  outb (CRT_DATA_PORT, location & 0xFF, 0);
+  outb (0, CRT_ADDRESS_PORT, CURSOR_LOCATION_HIGH_REGISTER);
+  outb (0, CRT_DATA_PORT, location >> 8);
+  outb (0, CRT_ADDRESS_PORT, CURSOR_LOCATION_LOW_REGISTER);
+  outb (0, CRT_DATA_PORT, location & 0xFF);
 }
 
 static void
@@ -85,16 +85,16 @@ initialize (void)
     if (syslog_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
+    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
+      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
 	exit ();
       }
       
@@ -104,24 +104,24 @@ initialize (void)
       }
             
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
+      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
-      description_fini (&syslog_description);
+      description_fini (&syslog_description, 0);
     }
 
     /* Reserve all of the VGA ports.*/
-    if (reserve_port (CRT_ADDRESS_PORT, 0) != 0 ||
-	reserve_port (CRT_DATA_PORT, 0) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not reserve I/O ports\n");
+    if (reserve_port (0, CRT_ADDRESS_PORT) != 0 ||
+	reserve_port (0, CRT_DATA_PORT) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
     }
 
     /* Map in the video memory. */
-    if (map ((const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE, 0) != 0) {
-      bfprintf (&syslog_buffer, ERROR "could not map vga video memory\n");
+    if (map (0, (const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
+      bfprintf (&syslog_buffer, 0, ERROR "could not map vga video memory\n");
       state = STOP;
       return;
     }
@@ -247,9 +247,9 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0, 0);
+    schedule (0, STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0, 0);
+    schedule (0, SYSLOG_NO, 0);
   }
 }

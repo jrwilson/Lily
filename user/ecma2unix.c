@@ -44,7 +44,7 @@ initialize (void)
     if (text_out_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
       exit ();
     }
 
@@ -60,7 +60,7 @@ initialize (void)
     if (text_out_term_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&text_out_term_buffer, text_out_term_bd) != 0) {
+    if (buffer_file_initw (&text_out_term_buffer, 0, text_out_term_bd) != 0) {
       exit ();
     }
   }
@@ -77,7 +77,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_TERM_NO, "text_in_term", "buffer_file_t", tex
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
     finish_input (bda, bdb);
   }
   
@@ -94,12 +94,12 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_TERM_NO, "text_in_term", "buffer_file_t", tex
     const char c = *begin;
     /* Convert \r to \n. */
     if (c != '\r') {
-      if (buffer_file_put (&text_out_buffer, c) != 0) {
+      if (buffer_file_put (&text_out_buffer, 0, c) != 0) {
 	exit ();
       }
     }
     else {
-      if (buffer_file_put (&text_out_buffer, '\n') != 0) {
+      if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
 	exit ();
       }
     }
@@ -175,7 +175,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
     finish_input (bda, bdb);
   }
   
@@ -192,11 +192,11 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
     const char c = *begin;
     /* Convert \n to \r\n. */
     if (c == '\n') {
-      if (buffer_file_put (&text_out_term_buffer, '\r') != 0) {
+      if (buffer_file_put (&text_out_term_buffer, 0, '\r') != 0) {
 	exit ();
       }
     }
-    if (buffer_file_put (&text_out_term_buffer, c) != 0) {
+    if (buffer_file_put (&text_out_term_buffer, 0, c) != 0) {
       exit ();
     }
   }
@@ -226,12 +226,12 @@ void
 do_schedule (void)
 {
   if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0, 0);
+    schedule (0, TEXT_OUT_NO, 0);
   }
   if (mouse_packets_out_precondition ()) {
-    schedule (MOUSE_PACKETS_OUT_NO, 0, 0);
+    schedule (0, MOUSE_PACKETS_OUT_NO, 0);
   }
   if (text_out_term_precondition ()) {
-    schedule (TEXT_OUT_TERM_NO, 0, 0);
+    schedule (0, TEXT_OUT_TERM_NO, 0);
   }
 }

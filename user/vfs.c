@@ -136,11 +136,11 @@ file_system_create (aid_t aid)
   }
   bd_t request_bdb = buffer_create (0, 0);
   if (request_bdb == -1) {
-    buffer_destroy (request_bda, 0);
+    buffer_destroy (0, request_bda);
     return 0;
   }
 
-  file_system_t* fs = malloc (sizeof (file_system_t));
+  file_system_t* fs = malloc (0, sizeof (file_system_t));
   memset (fs, 0, sizeof (file_system_t));
   fs->aid = aid;
   vfs_fs_request_queue_init (&fs->request_queue);
@@ -150,7 +150,7 @@ file_system_create (aid_t aid)
   fs->global_next = file_system_head;
   file_system_head = fs;
 
-  bfprintf (&syslog_buffer, INFO "TODO:  subscribe to file system\n");
+  bfprintf (&syslog_buffer, 0, INFO "TODO:  subscribe to file system\n");
 
   return fs;
 }
@@ -196,7 +196,7 @@ file_system_pop_request (file_system_t** f)
   file_system_t* fs = *f;
   /* Pop the response. */
   if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) != 0) {
-    bfprintf (&syslog_buffer, WARNING "could not write to file system request buffer\n");
+    bfprintf (&syslog_buffer, 0, WARNING "could not write to file system request buffer\n");
   }
 
   /* Remove the file system from the request queue. */
@@ -260,7 +260,7 @@ static mount_item_t*
 mount_item_create (const vnode_t* a,
 		   const vnode_t* b)
 {
-  mount_item_t* item = malloc (sizeof (mount_item_t));
+  mount_item_t* item = malloc (0, sizeof (mount_item_t));
   memset (item, 0, sizeof (mount_item_t));
   item->a = *a;
   item->b = *b;
@@ -335,11 +335,11 @@ create_client (aid_t aid)
   }
   bd_t response_bdb = buffer_create (0, 0);
   if (response_bdb == -1) {
-    buffer_destroy (response_bda, 0);
+    buffer_destroy (0, response_bda);
     return 0;
   }
 
-  client_t* client = malloc (sizeof (client_t));
+  client_t* client = malloc (0, sizeof (client_t));
   memset (client, 0, sizeof (client_t));
   client->aid = aid;
   vfs_request_queue_init (&client->request_queue);
@@ -350,7 +350,7 @@ create_client (aid_t aid)
   client_head = client;
   client->on_response_queue = false;
   
-  bfprintf (&syslog_buffer, INFO "TODO:  Subscribe to client\n");
+  bfprintf (&syslog_buffer, 0, INFO "TODO:  Subscribe to client\n");
 
   return client;
 }
@@ -397,23 +397,23 @@ readfile_callback (void* data,
   vfs_fs_error_t error;
   size_t size;
   if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, WARNING "could not read readfile response\n");
+    bfprintf (&syslog_buffer, 0, WARNING "could not read readfile response\n");
     return;
   }
 
   if (error != VFS_FS_SUCCESS) {
-    bfprintf (&syslog_buffer, WARNING "readfile did not succeed\n");
+    bfprintf (&syslog_buffer, 0, WARNING "readfile did not succeed\n");
     return;
   }
       
-  if (size > buffer_size (bdb, 0) * pagesize ()) {
-    bfprintf (&syslog_buffer, WARNING "readfile response has bad size\n");
+  if (size > buffer_size (0, bdb) * pagesize ()) {
+    bfprintf (&syslog_buffer, 0, WARNING "readfile response has bad size\n");
     return;
   }
 
   /* Answer. */
   if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) != 0) {
-    bfprintf (&syslog_buffer, WARNING "could not copy file buffer\n");
+    bfprintf (&syslog_buffer, 0, WARNING "could not copy file buffer\n");
     return;
   }
   client_answer (client);
@@ -426,7 +426,7 @@ client_path_lookup_done (client_t* client,
   const vfs_request_queue_item_t* req = vfs_request_queue_front (&client->request_queue);
   switch (req->type) {
   case VFS_UNKNOWN:
-    bfprintf (&syslog_buffer, WARNING "unknown request in client request queue\n");
+    bfprintf (&syslog_buffer, 0, WARNING "unknown request in client request queue\n");
     break;
   case VFS_MOUNT:
     /* The path could not be translated. */
@@ -447,7 +447,7 @@ client_path_lookup_done (client_t* client,
 
     /* Bind to the file system. */
     description_t desc;
-    if (description_init (&desc, req->u.mount.aid) != 0) {
+    if (description_init (&desc, 0, req->u.mount.aid) != 0) {
       /* Answer. */
       vfs_response_queue_push_mount (&client->response_queue, VFS_AID_DNE);
       client_answer (client);
@@ -458,7 +458,7 @@ client_path_lookup_done (client_t* client,
       action_desc_t request;
       if (description_read_name (&desc, &request, VFS_FS_REQUEST_NAME) != 0) {
 	/* Answer. */
-	description_fini (&desc);
+	description_fini (&desc, 0);
 	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
 	client_answer (client);
 	return;
@@ -467,33 +467,33 @@ client_path_lookup_done (client_t* client,
       action_desc_t response;
       if (description_read_name (&desc, &response, VFS_FS_RESPONSE_NAME) != 0) {
 	/* Answer. */
-	description_fini (&desc);
+	description_fini (&desc, 0);
 	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
 	client_answer (client);
 	return;
       }
       
       /* Bind to the response first so they don't get lost. */
-      bid_t bid = bind (req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0, 0);
+      bid_t bid = bind (0, req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
       if (bid == -1) {
 	/* Answer. */
-	description_fini (&desc);
+	description_fini (&desc, 0);
 	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
 	client_answer (client);
 	return;
       }
       
-      if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0, 0) == -1) {
-	unbind (bid, 0);
+      if (bind (0, vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0) == -1) {
+	unbind (0, bid);
 	/* Answer. */
-	description_fini (&desc);
+	description_fini (&desc, 0);
 	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
 	client_answer (client);
 	return;
       }
     }
 
-    description_fini (&desc);
+    description_fini (&desc, 0);
 
     /* The mount succeeded.  Insert an entry into the list. */
     file_system_t* fs = file_system_create (req->u.mount.aid);
@@ -534,7 +534,7 @@ client_path_lookup_done (client_t* client,
 
     /* Form a message to a file system. */
     vfs_fs_request_queue_push_readfile (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id);
-    callback_queue_push (&client->path_lookup_current.fs->callback_queue, readfile_callback, client);
+    callback_queue_push (&client->path_lookup_current.fs->callback_queue, 0, readfile_callback, client);
     file_system_put_on_request_queue (client->path_lookup_current.fs);
     return;
 
@@ -556,7 +556,7 @@ descend_callback (void* data,
   vfs_fs_error_t error;
   vfs_fs_node_t node;
   if (read_vfs_fs_descend_response (bda, bdb, &error, &node) != 0) {
-    bfprintf (&syslog_buffer, WARNING "could not read descend response\n");
+    bfprintf (&syslog_buffer, 0, WARNING "could not read descend response\n");
     return;
   }
 
@@ -618,7 +618,7 @@ client_resume_path_lookup (client_t* client,
   
   /* Form a message to a file system. */
   vfs_fs_request_queue_push_descend (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id, client->path_lookup_begin, client->path_lookup_end - client->path_lookup_begin);
-  callback_queue_push (&client->path_lookup_current.fs->callback_queue, descend_callback, client);
+  callback_queue_push (&client->path_lookup_current.fs->callback_queue, 0, descend_callback, client);
   file_system_put_on_request_queue (client->path_lookup_current.fs);
 }
 
@@ -631,7 +631,7 @@ client_start (client_t* client)
     switch (req->type) {
     case VFS_UNKNOWN:
       /* An unknown request type got on the queue.  This is a logic error. */
-      bfprintf (&syslog_buffer, WARNING "unknown request on client request queue\n");
+      bfprintf (&syslog_buffer, 0, WARNING "unknown request on client request queue\n");
       break;
     case VFS_MOUNT:
       if (!check_absolute_path (req->u.mount.path, req->u.mount.path_size)) {
@@ -700,7 +700,7 @@ client_pop_response (client_t** c)
   client_t* client = *c;
   /* Pop the response. */
   if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) != 0) {
-    bfprintf (&syslog_buffer, WARNING "could not write to client response buffer\n");
+    bfprintf (&syslog_buffer, 0, WARNING "could not write to client response buffer\n");
   }
 
   /* Remove the client from the response queue. */
@@ -730,17 +730,17 @@ initialize (void)
       /* Nothing we can do. */
       exit ();
     }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
       /* Nothing we can do. */
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
+    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
+      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
 	exit ();
       }
       
@@ -750,11 +750,11 @@ initialize (void)
       }
       
       /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0, 0) == -1) {
+      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit ();
       }
 
-      description_fini (&syslog_description);
+      description_fini (&syslog_description, 0);
     }
 
     root.fs = 0;
@@ -833,7 +833,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
   if (client == 0) {
     client = create_client (aid);
     if (client == 0) {
-      bfprintf (&syslog_buffer, WARNING "could not create client\n");
+      bfprintf (&syslog_buffer, 0, WARNING "could not create client\n");
       finish_input (bda, bdb);
     }
   }
@@ -918,15 +918,15 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0, 0);
+    schedule (0, STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0, 0);
+    schedule (0, SYSLOG_NO, 0);
   }
   if (response_head != 0) {
-    schedule (VFS_RESPONSE_NO, response_head->aid, 0);
+    schedule (0, VFS_RESPONSE_NO, response_head->aid);
   }
   if (request_head != 0) {
-    schedule (VFS_FS_REQUEST_NO, request_head->aid, 0);
+    schedule (0, VFS_FS_REQUEST_NO, request_head->aid);
   }
 }

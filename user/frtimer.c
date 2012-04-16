@@ -22,7 +22,7 @@ initialize (void)
     if (response_bd == -1) {
       exit ();
     }
-    if (buffer_file_initw (&response_buffer, response_bd) != 0) {
+    if (buffer_file_initw (&response_buffer, 0, response_bd) != 0) {
       exit ();
     }
   }
@@ -54,7 +54,7 @@ BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing u
   if (req) {
     req = false;
     buffer_file_truncate (&response_buffer);
-    if (buffer_file_write (&response_buffer, &tick, sizeof (unsigned int)) != 0) {
+    if (buffer_file_write (&response_buffer, 0, &tick, sizeof (unsigned int)) != 0) {
       exit ();
     }
     finish_output (true, response_bd, -1);
@@ -65,8 +65,8 @@ BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing u
 void
 do_schedule (void)
 {
-  schedule (TICK_NO, 0, 0);
+  schedule (0, TICK_NO, 0);
   if (req) {
-    schedule (RESPONSE_NO, 0, 0);
+    schedule (0, RESPONSE_NO, 0);
   }
 }

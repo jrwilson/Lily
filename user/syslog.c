@@ -41,7 +41,7 @@ initialize (void)
       /* Nothing we can do. */
       exit ();
     }
-    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
       /* Nothing we can do. */
       exit ();
     }
@@ -83,7 +83,7 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
   initialize ();
 
   buffer_file_t text_in_buffer;
-  if (buffer_file_initr (&text_in_buffer, bda) != 0) {
+  if (buffer_file_initr (&text_in_buffer, 0, bda) != 0) {
     finish_input (bda, bdb);
   }
 
@@ -102,12 +102,12 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
       if (print_prefix) {
 	print_prefix = false;
 	/* Print the prefix. */
-	if (bfprintf (&text_out_buffer, "(%d) ", aid) != 0) {
+	if (bfprintf (&text_out_buffer, 0, "(%d) ", aid) != 0) {
 	  exit ();
 	}
       }
 
-      if (buffer_file_put (&text_out_buffer, *begin) != 0) {
+      if (buffer_file_put (&text_out_buffer, 0, *begin) != 0) {
 	exit ();
       }
 
@@ -118,7 +118,7 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
     
     if (!print_prefix) {
       /* No new line. */
-      if (buffer_file_put (&text_out_buffer, '\n') != 0) {
+      if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
 	exit ();
       }
     }
@@ -157,6 +157,6 @@ void
 do_schedule (void)
 {
   if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0, 0);
+    schedule (0, TEXT_OUT_NO, 0);
   }
 }

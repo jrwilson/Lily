@@ -16,8 +16,9 @@ typedef void (*callback_t) (void*, bd_t, bd_t);
 void
 callback_queue_init (callback_queue_t* bq);
 
-void
+int
 callback_queue_push (callback_queue_t* bq,
+		     lily_error_t* err,
 		     callback_t callback,
 		     void* data);
 
