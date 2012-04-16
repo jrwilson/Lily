@@ -84,7 +84,6 @@ static buffer_file_t syslog_buffer;
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
 
-#define VFS_NAME "vfs"
 static bd_t vfs_request_bda = -1;
 static bd_t vfs_request_bdb = -1;
 static vfs_request_queue_t vfs_request_queue;

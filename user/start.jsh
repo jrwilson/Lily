@@ -24,6 +24,8 @@
 # +----------------+   +-----------------+   +-----+
 #
 
+bios = create -p /bin/bios
+
 ps2_keyboard_mouse = create -p /bin/ps2_keyboard_mouse
 terminal = create /bin/terminal
 vga = create -p /bin/vga

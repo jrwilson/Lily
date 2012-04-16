@@ -30,9 +30,6 @@
 #define ERROR "boot_automaton: error: "
 #define WARNING "boot_automaton: warning: "
 
-/* Names for registration. */
-#define VFS_NAME "vfs"
-
 /* Paths in the cpio archive. */
 #define SYSLOG_PATH "bin/syslog"
 #define VFS_PATH "bin/vfs"

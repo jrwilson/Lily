@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <lily/types.h>
 
+#define VFS_NAME "vfs"
+
 /*
   User Section
   ============

@@ -16,7 +16,8 @@ ne2000 \
 serial_port \
 byte_channel \
 ecma2unix \
-zsnoop
+zsnoop \
+bios
 
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -82,7 +83,7 @@ sampler : sampler.o
 ne2000 : ne2000.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file
 
-serial_port : serial_port.o argv.o
+serial_port : serial_port.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lio -ldymem
 
 byte_channel : byte_channel.o
@@ -93,6 +94,9 @@ ecma2unix : ecma2unix.o mouse_msg.o
 
 zsnoop : zsnoop.o
 	$(CC) -o $@ $^ -lbuffer_file
+
+bios : bios.o vfs_msg.o
+	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -lio -ldymem
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<
