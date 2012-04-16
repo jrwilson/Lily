@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <io.h>
 #include <buffer_file.h>
 #include <string.h>
 #include <description.h>
@@ -140,13 +139,13 @@ baud_to_divisor (unsigned short baud)
 static bool
 transmit_holding_register_empty (void)
 {
-  return inb (port_base + LINE_STATUS_REG) & TRANSMIT_HOLDING_REGISTER_EMPTY;
+  return inb (port_base + LINE_STATUS_REG, 0) & TRANSMIT_HOLDING_REGISTER_EMPTY;
 }
 
 static bool
 received_data_ready (void)
 {
-  return inb (port_base + LINE_STATUS_REG) & RECEIVED_DATA_READY;
+  return inb (port_base + LINE_STATUS_REG, 0) & RECEIVED_DATA_READY;
 }
 
 typedef struct buffer buffer_t;
@@ -165,7 +164,7 @@ send (void)
 {
   /* We assume FIFO mode where we can send 16 bytes. */
   for (size_t count = 0; count != 16 && buffer_head != 0; ++count) {
-    outb (port_base + TRANSMIT_BUFFER_REG, buffer_head->data[buffer_head->pos++]);
+    outb (port_base + TRANSMIT_BUFFER_REG, buffer_head->data[buffer_head->pos++], 0);
     if (buffer_head->pos == buffer_head->size) {
       buffer_t* buffer = buffer_head;
       buffer_head = buffer->next;
@@ -529,7 +528,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       /* Nothing we can do. */
       exit ();
@@ -539,7 +538,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -561,7 +560,7 @@ initialize (void)
       description_fini (&syslog_description);
     }
 
-    text_out_bd = buffer_create (0);
+    text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create output buffer\n");
       state = HALT;
@@ -645,15 +644,15 @@ initialize (void)
     /* } */
 
     if (bda != -1) {
-      buffer_destroy (bda);
+      buffer_destroy (bda, 0);
     }
     if (bdb != -1) {
-      buffer_destroy (bdb);
+      buffer_destroy (bdb, 0);
     }
 
     /* Reserve the ports. */
     for (unsigned short idx = 0; idx != REGISTER_COUNT; ++idx) {
-      if (reserve_port (port_base + idx) != 0) {
+      if (reserve_port (port_base + idx, 0) != 0) {
 	bfprintf (&syslog_buffer, ERROR "could not reserve I/O port %x\n", port_base + idx);
 	state = HALT;
 	return;
@@ -661,7 +660,7 @@ initialize (void)
     }
 
     /* Subscribe to the IRQ. */
-    if (subscribe_irq (irq, INTERRUPT_NO, 0) != 0) {
+    if (subscribe_irq (irq, INTERRUPT_NO, 0, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not subscribe to IRQ %d\n", irq);
       state = HALT;
       return;
@@ -728,14 +727,14 @@ BEGIN_SYSTEM_INPUT (INTERRUPT_NO, "", "", interrupt, ano_t ano, aid_t aid, bd_t 
 {
   initialize ();
 
-  unsigned char interrupt_type = inb (port_base + INTERRUPT_ID_REG);
+  unsigned char interrupt_type = inb (port_base + INTERRUPT_ID_REG, 0);
 
   if ((interrupt_type & NO_INTERRUPT) == 0) {
     switch (interrupt_type & INTERRUPT_MASK) {
     case RECEIVED_DATA_AVAILABLE_INT:
     case CHARACTER_TIMEOUT_INT:
       while (received_data_ready ()) {
-	if (buffer_file_put (&text_out_buffer, inb (port_base + RECEIVE_BUFFER_REG)) != 0) {
+	if (buffer_file_put (&text_out_buffer, inb (port_base + RECEIVE_BUFFER_REG, 0)) != 0) {
 	  bfprintf (&syslog_buffer, ERROR "could not write to output buffer\n");
 	  state = HALT;
 	  finish_input (bda, bdb);
@@ -782,24 +781,24 @@ BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, b
   /* Initialize the serial port. */
   
   /* Enable the receive interrupt. */
-  outb (port_base + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT);
+  outb (port_base + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT, 0);
   /* Set the divisor (baud).  This wipes out all other settings. */
-  outb (port_base + LINE_CONTROL_REG, DLAB);
+  outb (port_base + LINE_CONTROL_REG, DLAB, 0);
   unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);    
-  outb (port_base + DIVISOR_LSB_REG, divisor & 0xFF);
-  outb (port_base + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF);
+  outb (port_base + DIVISOR_LSB_REG, divisor & 0xFF, 0);
+  outb (port_base + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF, 0);
   /* Set the frame type. */
-  outb (port_base + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
+  outb (port_base + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1, 0);
   /* Reset the FIFO. */
-  outb (port_base + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
+  outb (port_base + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE, 0);
   
   /* Enable TX/RX. */
-  outb (port_base + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS);
+  outb (port_base + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS, 0);
 
   /* Clear the status registers by reading them. */
-  inb (port_base + INTERRUPT_ID_REG);
-  inb (port_base + LINE_STATUS_REG);
-  inb (port_base + MODEM_STATUS_REG);
+  inb (port_base + INTERRUPT_ID_REG, 0);
+  inb (port_base + LINE_STATUS_REG, 0);
+  inb (port_base + MODEM_STATUS_REG, 0);
 
   finish_input (bda, bdb);
 }
@@ -811,7 +810,7 @@ BEGIN_INPUT (NO_PARAMETER, STOP_NO, "stop", "", stop, ano_t ano, int param, bd_t
   bfprintf (&syslog_buffer, INFO "stop\n");
 
   /* Disable TX/RX. */
-  outb (port_base + MODEM_CONTROL_REG, 0);
+  outb (port_base + MODEM_CONTROL_REG, 0, 0);
 
   finish_input (bda, bdb);
 }
@@ -847,12 +846,12 @@ void
 do_schedule (void)
 {
   if (halt_precondition ()) {
-    schedule (HALT_NO, 0);
+    schedule (HALT_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0);
+    schedule (TEXT_OUT_NO, 0, 0);
   }
 }

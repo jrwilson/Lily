@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <io.h>
 #include <string.h>
 #include <buffer_file.h>
 #include <description.h>
@@ -156,7 +155,7 @@ static unsigned char mouse_packet_data [MAX_MOUSE_PACKET_SIZE];
 static unsigned char
 controller_status (void)
 {
-  return inb (CONTROLLER_PORT);
+  return inb (CONTROLLER_PORT, 0);
 }
 
 static void
@@ -175,20 +174,20 @@ static unsigned char
 read_byte (void)
 {
   while (!byte_ready ()) ;;
-  return inb (DATA_PORT);
+  return inb (DATA_PORT, 0);
 }
 
 static void
 controller_command (unsigned char c)
 {
   wait_to_send ();
-  outb (CONTROLLER_PORT, c);
+  outb (CONTROLLER_PORT, c, 0);
 }
 
 static int
 disable_keyboard() {
   wait_to_send ();
-  outb (DATA_PORT, KEYBOARD_SET_DEFAULTS_AND_DISABLE);
+  outb (DATA_PORT, KEYBOARD_SET_DEFAULTS_AND_DISABLE, 0);
   unsigned char c = read_byte ();
   if (c != KEYBOARD_COMMAND_ACK) {
     bfprintf (&syslog_buffer, ERROR "keyboard responded to disable with %x\n", c);
@@ -200,7 +199,7 @@ disable_keyboard() {
 static int
 enable_keyboard() {
   wait_to_send ();
-  outb (DATA_PORT, KEYBOARD_ENABLE);
+  outb (DATA_PORT, KEYBOARD_ENABLE, 0);
   unsigned char c = read_byte ();
   if (c != KEYBOARD_COMMAND_ACK) {
     bfprintf (&syslog_buffer, ERROR "keyboard responded to enable with %x\n", c);
@@ -216,7 +215,7 @@ mouse_write (unsigned char c)
   controller_command (CONTROLLER_WRITE_TO_MOUSE);
   /* Then, send the data. */
   wait_to_send ();
-  outb (DATA_PORT, c);
+  outb (DATA_PORT, c, 0);
 }
 
 /* Controller routines. */
@@ -238,7 +237,7 @@ controller_set_compaq_status_byte (unsigned char status)
 {
   controller_command (CONTROLLER_SET_COMPAQ_STATUS_BYTE);
   wait_to_send ();
-  outb (DATA_PORT, status);
+  outb (DATA_PORT, status, 0);
 }
 
 /* Mouse routines. */
@@ -337,7 +336,7 @@ write_mouse_packet () {
     packet.z_delta_vertical = 0;
     packet.z_delta_horizontal = 0;
 
-    if (getmonotime (&packet.time_stamp) != 0) {
+    if (getmonotime (&packet.time_stamp, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not get the time\n");
       state = STOP;
       return;
@@ -396,7 +395,7 @@ initialize (void)
     initialized = true;
 
     /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       exit ();
     }
@@ -404,7 +403,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -427,7 +426,7 @@ initialize (void)
     }
 
     /* Create the keyboard output buffer. */
-    scan_codes_bd = buffer_create (0);
+    scan_codes_bd = buffer_create (0, 0);
     if (scan_codes_bd == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create scan codes buffer\n");
       state = STOP;
@@ -440,7 +439,7 @@ initialize (void)
     }
 
     /* Create the mouse output buffer. */
-    mouse_packets_bd = buffer_create (0);
+    mouse_packets_bd = buffer_create (0, 0);
     if (mouse_packets_bd == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create mouse packets buffer\n");
       state = STOP;
@@ -453,25 +452,25 @@ initialize (void)
     }
 
     /* Reserve ports. */
-    if (reserve_port (DATA_PORT) != 0) {
+    if (reserve_port (DATA_PORT, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not reserve data port\n");
       state = STOP;
       return;
     }
-    if (reserve_port (CONTROLLER_PORT) != 0) {
+    if (reserve_port (CONTROLLER_PORT, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not reserve controller port\n");
       state = STOP;
       return;
     }
     
     /* Reserve IRQs. */
-    if (subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0) != 0) {
+    if (subscribe_irq (KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not subscribe to keyboard irq\n");
       state = STOP;
       return;
     }
     
-    if (subscribe_irq (MOUSE_IRQ, MOUSE_INTERRUPT_NO, 0) != 0) {
+    if (subscribe_irq (MOUSE_IRQ, MOUSE_INTERRUPT_NO, 0, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not subscribe to mouse irq\n");
       state = STOP;
       return;
@@ -701,15 +700,15 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (scan_codes_precondition ()) {
-    schedule (SCAN_CODES_NO, 0);
+    schedule (SCAN_CODES_NO, 0, 0);
   }
   if (mouse_packets_out_precondition ()) {
-    schedule (MOUSE_PACKETS_OUT_NO, 0);
+    schedule (MOUSE_PACKETS_OUT_NO, 0, 0);
   }
 }

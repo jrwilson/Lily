@@ -257,7 +257,7 @@ vfs_response_queue_push_readfile (vfs_response_queue_t* vrq,
   item->error = error;
   item->u.readfile.size = size;
   if (bd != -1) {
-    item->u.readfile.bd = buffer_copy (bd);
+    item->u.readfile.bd = buffer_copy (bd, 0);
     if (item->u.readfile.bd == -1) {
       return -1;
     }
@@ -305,13 +305,13 @@ vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
       return -1;
     }
     if (item->u.readfile.bd != -1) {
-      if (buffer_assign (bdb, item->u.readfile.bd) != 0) {
+      if (buffer_assign (bdb, item->u.readfile.bd, 0) != 0) {
 	return -1;
       }
-      buffer_destroy (item->u.readfile.bd);
+      buffer_destroy (item->u.readfile.bd, 0);
     }
     else {
-      if (buffer_resize (bdb, 0) != 0) {
+      if (buffer_resize (bdb, 0, 0) != 0) {
 	return -1;
       }
     }
@@ -661,7 +661,7 @@ vfs_fs_response_queue_push_readfile (vfs_fs_response_queue_t* vrq,
   item->error = error;
   item->u.readfile.size = size;
   if (bd != -1) {
-    item->u.readfile.bd = buffer_copy (bd);
+    item->u.readfile.bd = buffer_copy (bd, 0);
     if (item->u.readfile.bd == -1) {
       return -1;
     }
@@ -710,7 +710,7 @@ vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
     if (buffer_file_write (&file, &item->u.readfile.size, sizeof (size_t)) != 0) {
       return -1;
     }
-    if (buffer_assign (bdb, item->u.readfile.bd) != 0) {
+    if (buffer_assign (bdb, item->u.readfile.bd, 0) != 0) {
       return -1;
     }
     break;
@@ -735,7 +735,7 @@ vfs_fs_response_queue_pop (vfs_fs_response_queue_t* vrq)
     break;
   case VFS_FS_READFILE:
     if (item->u.readfile.bd != -1) {
-      buffer_destroy (item->u.readfile.bd);
+      buffer_destroy (item->u.readfile.bd, 0);
     }
     break;
   }

@@ -8,7 +8,7 @@ description_init (description_t* d,
 		  aid_t aid)
 {
   d->aid = aid;
-  bd_t bd = describe (aid);
+  bd_t bd = describe (aid, 0);
   if (bd == -1) {
     return -1;
   }
@@ -21,7 +21,7 @@ description_init (description_t* d,
 void
 description_fini (description_t* d)
 {
-  buffer_destroy (buffer_file_bd (&d->bf));
+  buffer_destroy (buffer_file_bd (&d->bf), 0);
 }
 
 size_t

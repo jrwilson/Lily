@@ -30,7 +30,7 @@ reset (vga_op_list_t* vol)
       return -1;
     }
 
-    if (buffer_resize (vol->bdb, 0) != 0) {
+    if (buffer_resize (vol->bdb, 0, 0) != 0) {
       return -1;
     }
   }
@@ -102,16 +102,16 @@ vga_op_list_write_bassign (vga_op_list_t* vol,
   if (reset (vol) != 0) {
     return -1;
   }
-  size_t bd_size = buffer_size (bd);
+  size_t bd_size = buffer_size (bd, 0);
   if (bd_size == -1 || size > bd_size * pagesize ()) {
     /* The buffer was too small. */
     return -1;
   }
 
   /* Find the offset in pages of the data. */
-  size_t bd_offset = buffer_size (vol->bdb);
+  size_t bd_offset = buffer_size (vol->bdb, 0);
   /* Append the data. */
-  if (buffer_append (vol->bdb, bd) != 0) {
+  if (buffer_append (vol->bdb, bd, 0) != 0) {
     return -1;
   }
   
@@ -141,8 +141,8 @@ vga_op_list_initr (vga_op_list_t* vol,
   }
 
   vol->bdb = bdb;
-  vol->bdb_size = buffer_size (bdb);
-  vol->ptr = buffer_map (bdb);
+  vol->bdb_size = buffer_size (bdb, 0);
+  vol->ptr = buffer_map (bdb, 0);
 
   *count = vol->count;
 

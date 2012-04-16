@@ -579,8 +579,8 @@ create_callback (void* data,
     return;
   }
 
-  bd_t bd1 = buffer_create (0);
-  bd_t bd2 = buffer_create (0);
+  bd_t bd1 = buffer_create (0, 0);
+  bd_t bd2 = buffer_create (0, 0);
   if (bd1 == -1 || bd2 == -1) {
     bfprintf (&syslog_buffer, ERROR "could not create argv buffers\n");
     state = HALT;
@@ -604,15 +604,15 @@ create_callback (void* data,
 
   aid_t aid = create (bdb, size, bd1, bd2, create_register_name, create_register_name_size, create_retain_privilege);
   if (aid == -1) {
-    buffer_destroy (bd1);
-    buffer_destroy (bd2);
+    buffer_destroy (bd1, 0);
+    buffer_destroy (bd2, 0);
     bfprintf (&text_out_buffer, "-> error: create failed\n");
     return;
   }
 
-  if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
-    buffer_destroy (bd1);
-    buffer_destroy (bd2);
+  if (subscribe_destroyed (aid, DESTROYED_NO, 0) != 0) {
+    buffer_destroy (bd1, 0);
+    buffer_destroy (bd2, 0);
     bfprintf (&text_out_buffer, "-> error: subscribe failed\n");
     return;
   }
@@ -623,8 +623,8 @@ create_callback (void* data,
   automaton->next = automata_head;
   automata_head = automaton;
 
-  buffer_destroy (bd1);
-  buffer_destroy (bd2);
+  buffer_destroy (bd1, 0);
+  buffer_destroy (bd2, 0);
   
   bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid);
 }
@@ -782,7 +782,7 @@ single_bind (automaton_t* output_automaton,
     return;
   }
 
-  if (subscribe_unbound (bid, UNBOUND_NO) != 0) {
+  if (subscribe_unbound (bid, UNBOUND_NO, 0) != 0) {
     description_fini (&output_description);
     description_fini (&input_description);
     bfprintf (&text_out_buffer, "-> error: subscribe failed\n");
@@ -913,7 +913,7 @@ glob_bind (automaton_t* output_automaton,
 
 	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param);
 	    if (bid != -1) {
-	      if (subscribe_unbound (bid, UNBOUND_NO) == 0) {
+	      if (subscribe_unbound (bid, UNBOUND_NO, 0) == 0) {
 		binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param);
 
 		binding->next = bindings_head;
@@ -1049,7 +1049,7 @@ unbind_ (void)
       return true;
     }
 
-    unbind ((*ptr)->bid);
+    unbind ((*ptr)->bid, 0);
     unbound_ (ptr);
 
     return true;
@@ -1078,7 +1078,7 @@ destroy_ (void)
       return true;
     }
 
-    destroy ((*aptr)->aid);
+    destroy ((*aptr)->aid, 0);
     destroyed_ (aptr);
 
     return true;
@@ -1111,7 +1111,7 @@ lookup_ (void)
       }
       
       /* Perform the lookup. */
-      aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1);
+      aid_t aid = lookup (scan_strings[3], strlen (scan_strings[3]) + 1, 0);
       if (aid == -1) {
 	bfprintf (&text_out_buffer, "-> no automaton registered under %s\n", scan_strings[3]);
 	return true;
@@ -1123,7 +1123,7 @@ lookup_ (void)
 	return true;
       }
       
-      if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
+      if (subscribe_destroyed (aid, DESTROYED_NO, 0) != 0) {
 	bfprintf (&text_out_buffer, "-> error: subscribe failed\n");
 	return true;
       }
@@ -1358,7 +1358,7 @@ readscript_callback (void* data,
     return;
   }
 
-  const char* str = buffer_map (bdb);
+  const char* str = buffer_map (bdb, 0);
   if (str == 0) {
     bfprintf (&syslog_buffer, ERROR "could not map script\n");
     state = HALT;
@@ -1370,7 +1370,7 @@ readscript_callback (void* data,
   /* Terminate with newline. */
   str_copy[size] = '\n';
   string_push_front (str_copy, size + 1);
-  buffer_unmap (bdb);
+  buffer_unmap (bdb, 0);
   process_hold = false;
 }
 
@@ -1380,7 +1380,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       /* Nothing we can do. */
       exit ();
@@ -1390,7 +1390,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -1421,7 +1421,7 @@ initialize (void)
     this_automaton->next = automata_head;
     automata_head = this_automaton;
 
-    text_out_bd = buffer_create (0);
+    text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create text_out buffer\n");
       state = HALT;
@@ -1433,8 +1433,8 @@ initialize (void)
       return;
     }
 
-    vfs_request_bda = buffer_create (0);
-    vfs_request_bdb = buffer_create (0);
+    vfs_request_bda = buffer_create (0, 0);
+    vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bda == -1 ||
     	vfs_request_bdb == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create vfs_request buffer\n");
@@ -1445,7 +1445,7 @@ initialize (void)
     callback_queue_init (&vfs_response_queue);
 
     /* Bind to the vfs. */
-    aid_t vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
+    aid_t vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1, 0);
     if (vfs_aid == -1) {
       bfprintf (&syslog_buffer, ERROR "no vfs\n");
       state = HALT;
@@ -1503,10 +1503,10 @@ initialize (void)
     }
     
     if (bda != -1) {
-      buffer_destroy (bda);
+      buffer_destroy (bda, 0);
     }
     if (bdb != -1) {
-      buffer_destroy (bdb);
+      buffer_destroy (bdb, 0);
     }
   }
 }
@@ -1782,21 +1782,21 @@ void
 do_schedule (void)
 {
   if (process_line_precondition ()) {
-    schedule (PROCESS_LINE_NO, 0);
+    schedule (PROCESS_LINE_NO, 0, 0);
   }
   if (!start_queue_empty ()) {
-    schedule (START_NO, start_queue_front ());
+    schedule (START_NO, start_queue_front (), 0);
   }
   if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0);
+    schedule (TEXT_OUT_NO, 0, 0);
   }
   if (vfs_request_precondition ()) {
-    schedule (VFS_REQUEST_NO, 0);
+    schedule (VFS_REQUEST_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (halt_precondition ()) {
-    schedule (HALT_NO, 0);
+    schedule (HALT_NO, 0, 0);
   }
 }

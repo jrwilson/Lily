@@ -53,11 +53,10 @@ void func (ano, param);						\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INTERNAL, parameter_mode, func, action_no, action_name, action_desc); \
 void func (ano, param)
 
-extern int automatonerrno;
-
 int
 schedule (ano_t action_number,
-	  int parameter);
+	  int parameter,
+	  lily_error_t* err);
 
 void
 finish (bool output_fired,
@@ -97,63 +96,79 @@ bind (aid_t output_automaton,
       int input_parameter);
 
 int
-unbind (bid_t bid);
+unbind (bid_t bid,
+	lily_error_t* err);
 
 int
-destroy (aid_t aid);
+destroy (aid_t aid,
+	 lily_error_t* err);
 
 int
 subscribe_unbound (bid_t bid,
-		   ano_t action_number);
+		   ano_t action_number,
+		   lily_error_t* err);
 
 int
-unsubscribe_unbound (bid_t bid);
-
+unsubscribe_unbound (bid_t bid,
+		     lily_error_t* err);
 
 int
 subscribe_destroyed (aid_t aid,
-		     ano_t action_number);
+		     ano_t action_number,
+		     lily_error_t* err);
 
 int
-unsubscribe_destroyed (aid_t aid);
+unsubscribe_destroyed (aid_t aid,
+		       lily_error_t* err);
 
 void*
-adjust_break (ptrdiff_t size);
+adjust_break (ptrdiff_t size,
+	      lily_error_t* err);
 
 bd_t
-buffer_create (size_t size);
+buffer_create (size_t size,
+	       lily_error_t* err);
 
 bd_t
-buffer_copy (bd_t bd);
+buffer_copy (bd_t bd,
+	     lily_error_t* err);
 
 int
-buffer_destroy (bd_t bd);
+buffer_destroy (bd_t bd,
+		lily_error_t* err);
 
 size_t
-buffer_size (bd_t bd);
+buffer_size (bd_t bd,
+	     lily_error_t* err);
 
 size_t
 buffer_resize (bd_t bd,
-	       size_t size);
+	       size_t size,
+	       lily_error_t* err);
 
 int
 buffer_assign (bd_t dest,
-	       bd_t src);
+	       bd_t src,
+	       lily_error_t* err);
 
 size_t
 buffer_append (bd_t dest,
-	       bd_t src);
+	       bd_t src,
+	       lily_error_t* err);
 
 void*
-buffer_map (bd_t bd);
+buffer_map (bd_t bd,
+	    lily_error_t* err);
 
 int
-buffer_unmap (bd_t bd);
+buffer_unmap (bd_t bd,
+	      lily_error_t* err);
 
 #define SYSCONF_PAGESIZE LILY_SYSCALL_SYSCONF_PAGESIZE
 
 long
-sysconf (int name);
+sysconf (int name,
+	 lily_error_t* err);
 
 size_t
 pagesize (void);
@@ -165,10 +180,12 @@ size_to_pages (size_t size);
 
 aid_t
 lookup (const char* name,
-	size_t size);
+	size_t size,
+	lily_error_t* err);
 
 bd_t
-describe (aid_t aid);
+describe (aid_t aid,
+	  lily_error_t* err);
 
 aid_t
 getaid (void);
@@ -180,6 +197,62 @@ bd_t
 getinitb (void);
 
 int
-getmonotime (mono_time_t* t);
+getmonotime (mono_time_t* t,
+	     lily_error_t* err);
+
+int
+map (const void* destination,
+     const void* source,
+     size_t size,
+     lily_error_t* err);
+
+int
+unmap (const void* destination,
+       lily_error_t* err);
+
+int
+reserve_port (unsigned short port,
+	      lily_error_t* err);
+
+int
+unreserve_port (unsigned short port,
+		lily_error_t* err);
+
+unsigned char
+inb (unsigned short port,
+     lily_error_t* err);
+
+int
+outb (unsigned short port,
+      unsigned char value,
+      lily_error_t* err);
+
+unsigned short
+inw (unsigned short port,
+     lily_error_t* err);
+
+int
+outw (unsigned short port,
+      unsigned short value,
+      lily_error_t* err);
+
+unsigned long
+inl (unsigned short port,
+     lily_error_t* err);
+
+int
+outl (unsigned short port,
+      unsigned long value,
+      lily_error_t* err);
+
+int
+subscribe_irq (int irq,
+	       ano_t ano,
+	       int param,
+	       lily_error_t* err);
+
+int
+unsubscribe_irq (int irq,
+		 lily_error_t* err);
 
 #endif /* AUTOMATON_H */

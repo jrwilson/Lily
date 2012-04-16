@@ -119,9 +119,9 @@ cpio_archive_next_file (cpio_archive_t* ar)
   f->name_size = namesize;
   f->mode = from_hex (h->mode);
   /* Create a buffer and copy the file content. */
-  f->bd = buffer_create (size_to_pages (filesize));
-  memcpy (buffer_map (f->bd), data, filesize);
-  buffer_unmap (f->bd);
+  f->bd = buffer_create (size_to_pages (filesize), 0);
+  memcpy (buffer_map (f->bd, 0), data, filesize);
+  buffer_unmap (f->bd, 0);
   f->size = filesize;
 
   return f;
@@ -130,7 +130,7 @@ cpio_archive_next_file (cpio_archive_t* ar)
 void
 cpio_file_destroy (cpio_file_t* file)
 {
-  buffer_destroy (file->bd);
+  buffer_destroy (file->bd, 0);
   free (file->name);
   free (file);
 }

@@ -130,13 +130,13 @@ static file_system_t** request_tail = &request_head;
 static file_system_t*
 file_system_create (aid_t aid)
 {
-  bd_t request_bda = buffer_create (0);
+  bd_t request_bda = buffer_create (0, 0);
   if (request_bda == -1) {
     return 0;
   }
-  bd_t request_bdb = buffer_create (0);
+  bd_t request_bdb = buffer_create (0, 0);
   if (request_bdb == -1) {
-    buffer_destroy (request_bda);
+    buffer_destroy (request_bda, 0);
     return 0;
   }
 
@@ -329,13 +329,13 @@ find_client_response (aid_t aid)
 static client_t*
 create_client (aid_t aid)
 {
-  bd_t response_bda = buffer_create (0);
+  bd_t response_bda = buffer_create (0, 0);
   if (response_bda == -1) {
     return 0;
   }
-  bd_t response_bdb = buffer_create (0);
+  bd_t response_bdb = buffer_create (0, 0);
   if (response_bdb == -1) {
-    buffer_destroy (response_bda);
+    buffer_destroy (response_bda, 0);
     return 0;
   }
 
@@ -406,7 +406,7 @@ readfile_callback (void* data,
     return;
   }
       
-  if (size > buffer_size (bdb) * pagesize ()) {
+  if (size > buffer_size (bdb, 0) * pagesize ()) {
     bfprintf (&syslog_buffer, WARNING "readfile response has bad size\n");
     return;
   }
@@ -484,7 +484,7 @@ client_path_lookup_done (client_t* client,
       }
       
       if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0) == -1) {
-	unbind (bid);
+	unbind (bid, 0);
 	/* Answer. */
 	description_fini (&desc);
 	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
@@ -725,7 +725,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       /* Nothing we can do. */
       exit ();
@@ -735,7 +735,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -918,15 +918,15 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (response_head != 0) {
-    schedule (VFS_RESPONSE_NO, response_head->aid);
+    schedule (VFS_RESPONSE_NO, response_head->aid, 0);
   }
   if (request_head != 0) {
-    schedule (VFS_FS_REQUEST_NO, request_head->aid);
+    schedule (VFS_FS_REQUEST_NO, request_head->aid, 0);
   }
 }

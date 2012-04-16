@@ -123,7 +123,7 @@ private:
    */
 
 public:
-  static pair<shared_ptr<automaton>, int>
+  static pair<shared_ptr<automaton>, lily_error_t>
   create_automaton (const kstring& name,
 		    const shared_ptr<automaton>& parent,
 		    bool privileged,
@@ -301,13 +301,13 @@ public:
     return aid_;
   }
 
-  inline pair<aid_t, int>
+  inline pair<aid_t, lily_error_t>
   lookup (const char* name,
 	  size_t size)
   {
     // Check the name.
     if (!verify_span (name, size) || name[size -1] != 0) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     // Check the name in the map.
@@ -315,10 +315,10 @@ public:
 
     registry_map_type::const_iterator pos = registry_map_.find (n);
     if (pos != registry_map_.end ()) {
-      return make_pair (pos->second->aid (), LILY_SYSCALL_ESUCCESS);
+      return make_pair (pos->second->aid (), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_ESUCCESS);
+      return make_pair (-1, LILY_ERROR_SUCCESS);
     }
   }
 
@@ -364,12 +364,12 @@ private:
   }
 
 public:  
-  inline pair<bd_t, int>
+  inline pair<bd_t, lily_error_t>
   describe (aid_t aid)
   {
     aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
     if (pos == aid_to_automaton_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+      return make_pair (-1, LILY_ERROR_AIDDNE);
     }
 
     shared_ptr<automaton> subject = pos->second;
@@ -401,12 +401,12 @@ public:
     size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
 
     // Create a buffer for the description.
-    pair<bd_t, int> r = buffer_create (page_count);
+    pair<bd_t, lily_error_t> r = buffer_create (page_count);
     if (r.first == -1) {
       return r;
     }
 
-    pair<void*, int> s = buffer_map (r.first);
+    pair<void*, lily_error_t> s = buffer_map (r.first);
     if (s.first == 0) {
       // Destroy the buffer.
       buffer_destroy (r.first);
@@ -416,14 +416,14 @@ public:
     memcpy (s.first, &total_size, sizeof (size_t));
     memcpy (reinterpret_cast<char*> (s.first) + sizeof (size_t), desc.c_str (), desc.size ());
 
-    return make_pair (r.first, LILY_SYSCALL_ESUCCESS);
+    return make_pair (r.first, LILY_ERROR_SUCCESS);
   }
 
   /*
    * AUTOMATA HIERARCHY
    */
   
-  inline pair<aid_t, int>
+  inline pair<aid_t, lily_error_t>
   create (const shared_ptr<automaton>& ths,
 	  bd_t text_bd,
 	  size_t /*text_size*/,
@@ -437,20 +437,20 @@ public:
     
     // Check the name data.
     if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
     
     // Check that the name does not exist.
     kstring name_str (name, name_size);
     if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EEXISTS);
+      return make_pair (-1, LILY_ERROR_EXISTS);
     }
     
     // Find the text buffer.
     shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
     if (text_buffer.get () == 0) {
       // Buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
     
     // Find and synchronize the data buffers so the frames listed in the buffers are correct.
@@ -464,7 +464,7 @@ public:
     }
     
     // Create the automaton.
-    pair<shared_ptr<automaton>, int> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
     
     if (r.first.get () != 0) {
       return make_pair (r.first->aid (), r.second);
@@ -507,20 +507,20 @@ private:
   destroy (const shared_ptr<automaton>& ths);
 
 public:
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   destroy (const shared_ptr<automaton>& ths,
 	   aid_t aid)
   {
     aid_to_automaton_map_type::iterator pos = aid_to_automaton_map_.find (aid);
     if (pos == aid_to_automaton_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+      return make_pair (-1, LILY_ERROR_AIDDNE);
     }
 
     shared_ptr<automaton> child = pos->second;
 
     // Are we the parent?
     if (child->parent_ != ths) {
-      return make_pair (-1, LILY_SYSCALL_ENOTOWNER);
+      return make_pair (-1, LILY_ERROR_NOTOWNER);
     }
 
     child->unsubscribe (child);
@@ -529,7 +529,7 @@ public:
     size_t count = children_.erase (child);
     kassert (count == 1);
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
   /*
@@ -648,7 +648,7 @@ public:
 	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
   }
 
-  pair<int, int>
+  pair<int, lily_error_t>
   schedule (const shared_ptr<automaton>& ths,
 	    ano_t action_number,
 	    int parameter);
@@ -861,7 +861,7 @@ public:
     return stack_area_->begin () <= address && (address + size) <= stack_area_->end ();
   }
 
-  inline pair<void*, int>
+  inline pair<void*, lily_error_t>
   adjust_break (ptrdiff_t size)
   {
     kassert (heap_area_ != 0);
@@ -886,11 +886,11 @@ public:
 	    vm::map (address, vm::zero_frame (), vm::USER, vm::MAP_COPY_ON_WRITE);
 	  }
 	  
-	  return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
+	  return make_pair (reinterpret_cast<void*> (old_end), LILY_ERROR_SUCCESS);
 	}
 	else {
 	  // Failure.
-	  return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
+	  return make_pair ((void*)0, LILY_ERROR_NOMEM);
 	}
       }
       else {
@@ -905,17 +905,17 @@ public:
 	  vm::unmap (address);
 	}
 
-	return make_pair (reinterpret_cast<void*> (old_end), LILY_SYSCALL_ESUCCESS);
+	return make_pair (reinterpret_cast<void*> (old_end), LILY_ERROR_SUCCESS);
       }
     }
     else {
-      return make_pair (reinterpret_cast<void*> (heap_area_->end ()), LILY_SYSCALL_ESUCCESS);
+      return make_pair (reinterpret_cast<void*> (heap_area_->end ()), LILY_ERROR_SUCCESS);
     }
   }
 
   // TODO:  Limit the number and size of buffers.
 
-  inline pair<bd_t, int>
+  inline pair<bd_t, lily_error_t>
   buffer_create (size_t size)
   {
     
@@ -926,17 +926,17 @@ public:
     buffer* b = new buffer (size);
     bd_to_buffer_map_.insert (make_pair (bd, b));
 
-    return make_pair (bd, LILY_SYSCALL_ESUCCESS);
+    return make_pair (bd, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<bd_t, int>
+  inline pair<bd_t, lily_error_t>
   buffer_copy (bd_t other)
   {
     
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (other);
     if (bpos == bd_to_buffer_map_.end ()) {
       // Buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
 
     shared_ptr<buffer> b = bpos->second;
@@ -948,7 +948,7 @@ public:
     buffer* n = new buffer (*b, 0, b->size ());
     bd_to_buffer_map_.insert (make_pair (bd, n));
     
-    return make_pair (bd, LILY_SYSCALL_ESUCCESS);
+    return make_pair (bd, LILY_ERROR_SUCCESS);
   }
   
   inline bd_t
@@ -964,27 +964,27 @@ public:
     return bd;
   }
 
-  inline pair<size_t, int>
+  inline pair<int, lily_error_t>
   buffer_resize (bd_t bd,
 		 size_t size)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos == bd_to_buffer_map_.end ()) {
       // Buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
 
     shared_ptr<buffer> b = bpos->second;
     if (b->begin () != 0) {
       // Buffer was mapped.
-      return make_pair (-1, LILY_SYSCALL_EMAPPED);
+      return make_pair (-1, LILY_ERROR_MAPPED);
     }
 
     b->resize (size);
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<size_t, int>
+  inline pair<size_t, lily_error_t>
   buffer_append (bd_t dst,
 		 bd_t src)
   {
@@ -993,7 +993,7 @@ public:
     if (dst_pos == bd_to_buffer_map_.end () ||
 	src_pos == bd_to_buffer_map_.end ()) {
       // One of the buffers does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
 
     shared_ptr<buffer> d = dst_pos->second;
@@ -1001,15 +1001,15 @@ public:
     
     if (d->begin () != 0) {
       // The destination is mapped.
-      return make_pair (-1, LILY_SYSCALL_EMAPPED);
+      return make_pair (-1, LILY_ERROR_MAPPED);
     }
 
     // Append.
     d->append (*s, 0, s->size ());
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   buffer_assign (bd_t dest,
 		 bd_t src)
   {
@@ -1018,7 +1018,7 @@ public:
     if (dest_pos == bd_to_buffer_map_.end () ||
 	src_pos == bd_to_buffer_map_.end ()) {
       // One of the buffers does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
 
     shared_ptr<buffer> dest_b = dest_pos->second;
@@ -1029,10 +1029,10 @@ public:
     dest_b->append (*src_b, 0, src_b->size ());
 
     // Append.
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<void*, int>
+  inline pair<void*, lily_error_t>
   buffer_map (bd_t bd)
   {
     kassert (heap_area_ != 0);
@@ -1041,19 +1041,19 @@ public:
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos == bd_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return make_pair ((void*)0, LILY_SYSCALL_EBDDNE);
+      return make_pair ((void*)0, LILY_ERROR_BDDNE);
     }
 
     shared_ptr<buffer> b = bpos->second;
     
     if (b->size () == 0) {
       // The buffer is empty.
-      return make_pair ((void*)0, LILY_SYSCALL_EEMPTY);
+      return make_pair ((void*)0, LILY_ERROR_EMPTY);
     }
 
     if (b->begin () != 0) {
       // The buffer is already mapped.  Return the address.
-      return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_SYSCALL_ESUCCESS);
+      return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_ERROR_SUCCESS);
     }
 
     // Map the buffer.
@@ -1077,21 +1077,21 @@ public:
 	b->map_end ((*stack_pos)->begin ());
 	memory_map_.insert (prev.base (), b.get ());
 	// Success.
-	return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_SYSCALL_ESUCCESS);
+	return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_ERROR_SUCCESS);
       }
     }
     
     // Couldn't find a big enough hole.
-    return make_pair ((void*)0, LILY_SYSCALL_ENOMEM);
+    return make_pair ((void*)0, LILY_ERROR_NOMEM);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   buffer_unmap (bd_t bd)
   {
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos == bd_to_buffer_map_.end ()) {
       // The buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
     
     shared_ptr<buffer> b = bpos->second;
@@ -1104,10 +1104,10 @@ public:
       b->unmap ();
     }
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   buffer_destroy (bd_t bd)
   {
     bd_to_buffer_map_type::iterator bpos = bd_to_buffer_map_.find (bd);
@@ -1123,24 +1123,24 @@ public:
       // Remove from the bd map.
       bd_to_buffer_map_.erase (bpos);
 
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+      return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
       // The buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
   }
 
-  inline pair<size_t, int>
+  inline pair<size_t, lily_error_t>
   buffer_size (bd_t bd)
   {
     bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
     if (bpos != bd_to_buffer_map_.end ()) {
-      return make_pair (bpos->second->size (), LILY_SYSCALL_ESUCCESS);
+      return make_pair (bpos->second->size (), LILY_ERROR_SUCCESS);
     }
     else {
       // The buffer does not exist.
-      return make_pair (-1, LILY_SYSCALL_EBDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
   }
 
@@ -1175,7 +1175,7 @@ public:
     }
   }
 
-  inline pair<bid_t, int>
+  inline pair<bid_t, lily_error_t>
   bind (const shared_ptr<automaton>& ths,
 	aid_t output_aid,
 	ano_t output_ano,
@@ -1189,13 +1189,13 @@ public:
     aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
     if (output_pos == aid_to_automaton_map_.end ()) {
       // Output automaton DNE.
-      return make_pair (-1, LILY_SYSCALL_EOAIDDNE);
+      return make_pair (-1, LILY_ERROR_OAIDDNE);
     }
   
     aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
     if (input_pos == aid_to_automaton_map_.end ()) {
       // Input automaton DNE.
-      return make_pair (-1, LILY_SYSCALL_EIAIDDNE);
+      return make_pair (-1, LILY_ERROR_IAIDDNE);
     }
   
     shared_ptr<automaton> output_automaton = output_pos->second;
@@ -1204,7 +1204,7 @@ public:
   
     if (output_automaton == input_automaton) {
       // The output and input automata must be different.
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
   
     // Check the output action dynamically.
@@ -1212,7 +1212,7 @@ public:
     if (output_action == 0 ||
 	output_action->type != OUTPUT) {
       // Output action does not exist or has the wrong type.
-      return make_pair (-1, LILY_SYSCALL_EOBADANO);
+      return make_pair (-1, LILY_ERROR_OBADANO);
     }
   
     // Check the input action dynamically.
@@ -1220,7 +1220,7 @@ public:
     if (input_action == 0 ||
 	input_action->type != INPUT) {
       // Input action does not exist or has the wrong type.
-      return make_pair (-1, LILY_SYSCALL_EIBADANO);
+      return make_pair (-1, LILY_ERROR_IBADANO);
     }
   
     // Correct the parameters.
@@ -1258,7 +1258,7 @@ public:
 	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
 	  if ((*pos2)->enabled ()) {
 	    // The input is bound to an enabled action.
-	    return make_pair (-1, LILY_SYSCALL_EINVAL);
+	    return make_pair (-1, LILY_ERROR_INVAL);
 	  }
 	}
       }
@@ -1270,7 +1270,7 @@ public:
       if (pos1 != output_automaton->bound_outputs_map_.end ()) {
 	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
 	  if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
-	    return make_pair (-1, LILY_SYSCALL_EINVAL);
+	    return make_pair (-1, LILY_ERROR_INVAL);
 	  }
 	}
       }
@@ -1303,10 +1303,10 @@ public:
       kassert (r.second);
     }
   
-    return make_pair (b->bid, LILY_SYSCALL_ESUCCESS);
+    return make_pair (b->bid, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   unbind (const shared_ptr<automaton>& ths,
 	  bid_t bid)
   {
@@ -1315,19 +1315,19 @@ public:
     // Look up the binding.
     bid_to_binding_map_type::iterator pos = bid_to_binding_map_.find (bid);
     if (pos == bid_to_binding_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EBIDDNE);
+      return make_pair (-1, LILY_ERROR_BIDDNE);
     }
     
     shared_ptr<binding> binding = pos->second;
     
     // Are we the owner?
     if (binding->owner != ths) {
-      return make_pair (-1, LILY_SYSCALL_ENOTOWNER);
+      return make_pair (-1, LILY_ERROR_NOTOWNER);
     }
     
     unbind (binding, true, true, true);
     
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
   
   /*
@@ -1335,17 +1335,17 @@ public:
    */
 
 public:
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   getmonotime (mono_time_t* t)
   {
     // Check the name.
     if (!verify_span (t, sizeof (mono_time_t))) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     irq_handler::getmonotime (t);
     
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
   // The automaton is requesting that the physical memory from [source, source + size) appear at [destination, destination + size) in its address space.
@@ -1357,7 +1357,7 @@ public:
   // *  Part of the source lies outside the regions of memory marked for memory-mapped I/O.
   // *  Part of the source is already claimed by some other automaton.  (Mapping the same region twice is an error.)
   // *  The destination address is not available.
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   map (const void* destination,
        const void* source,
        size_t size)
@@ -1368,30 +1368,30 @@ public:
     physical_address_t const source_end = align_up (reinterpret_cast<physical_address_t> (source) + size, PAGE_SIZE);
 
     if (!privileged_) {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
 
     if ((reinterpret_cast<logical_address_t> (destination) & (PAGE_SIZE - 1)) != (reinterpret_cast<physical_address_t> (source) & (PAGE_SIZE - 1))) {
-      return make_pair (-1, LILY_SYSCALL_EALIGN);
+      return make_pair (-1, LILY_ERROR_ALIGN);
     }
 
     if (size == 0) {
-      return make_pair (-1, LILY_SYSCALL_ESIZE);
+      return make_pair (-1, LILY_ERROR_SIZE);
     }
 
     // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
     if (source_end > ONE_MEGABYTE) {
-      return make_pair (-1, LILY_SYSCALL_ESRCNA);
+      return make_pair (-1, LILY_ERROR_SRCNA);
     }
 
     for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {
       if (mmapped_frames_[physical_address_to_frame (address)]) {
-  	return make_pair (-1, LILY_SYSCALL_ESRCINUSE);
+  	return make_pair (-1, LILY_ERROR_SRCINUSE);
       }
     }
 
     if (!vm_area_is_free (destination_begin, destination_end)) {
-      return make_pair (-1, LILY_SYSCALL_EDSTINUSE);
+      return make_pair (-1, LILY_ERROR_DSTINUSE);
     }
     
     mapped_area* area = new mapped_area (destination_begin,
@@ -1409,15 +1409,15 @@ public:
     }
 
     // Success.
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   unmap (const void* destination)
   {
     mapped_areas_type::iterator pos = find_if (mapped_areas_.begin (), mapped_areas_.end (), contains_address (destination));
     if (pos == mapped_areas_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_ENOTMAPPED);
+      return make_pair (-1, LILY_ERROR_NOTMAPPED);
     }
 
     mapped_area* area = *pos;
@@ -1434,116 +1434,116 @@ public:
 
     remove_vm_area (area);
     
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
   // The automaton is requesting access to the specified I/O port.
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   reserve_port (unsigned short port)
   {
     if (!privileged_) {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
 
     if (reserved_ports_[port]) {
       // Port is already reserved.
-      return make_pair (-1, LILY_SYSCALL_EPORTINUSE);
+      return make_pair (-1, LILY_ERROR_PORTINUSE);
     }
 
     // Reserve the port.
     reserved_ports_[port] = true;
     port_set_.insert (port);
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   unreserve_port (unsigned short port)
   {
     port_set_type::iterator pos = port_set_.find (port);
     if (pos == port_set_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_ENOTRESERVED);
+      return make_pair (-1, LILY_ERROR_NOTRESERVED);
     }
 
     reserved_ports_[port] = false;
     port_set_.erase (pos);
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<uint8_t, int>
+  inline pair<uint8_t, lily_error_t>
   inb (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
-      return make_pair (io::inb (port), LILY_SYSCALL_ESUCCESS);
+      return make_pair (io::inb (port), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   outb (uint16_t port,
 	uint8_t value)
   {
     if (port_set_.find (port) != port_set_.end ()) {
       io::outb (port, value);
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+      return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
   }
 
-  inline pair<uint16_t, int>
+  inline pair<uint16_t, lily_error_t>
   inw (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
-      return make_pair (io::inw (port), LILY_SYSCALL_ESUCCESS);
+      return make_pair (io::inw (port), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   outw (uint16_t port,
 	uint16_t value)
   {
     if (port_set_.find (port) != port_set_.end ()) {
       io::outw (port, value);
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+      return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
   }
 
-  inline pair<uint32_t, int>
+  inline pair<uint32_t, lily_error_t>
   inl (uint16_t port)
   {
     if (port_set_.find (port) != port_set_.end ()) {
-      return make_pair (io::inl (port), LILY_SYSCALL_ESUCCESS);
+      return make_pair (io::inl (port), LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   outl (uint16_t port,
 	uint32_t value)
   {
     if (port_set_.find (port) != port_set_.end ()) {
       io::outl (port, value);
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+      return make_pair (0, LILY_ERROR_SUCCESS);
     }
     else {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   subscribe_irq (const shared_ptr<automaton>& ths,
 		 int irq,
 		 ano_t action_number,
@@ -1552,20 +1552,20 @@ public:
     kassert (ths.get () == this);
     
     if (!privileged_) {
-      return make_pair (-1, LILY_SYSCALL_EPERM);
+      return make_pair (-1, LILY_ERROR_PERM);
     }
     
     if (irq == irq_handler::PIT_IRQ ||
 	irq == irq_handler::CASCADE_IRQ ||
 	irq < irq_handler::IRQ_BASE ||
 	irq >= irq_handler::IRQ_LIMIT) {
-      return make_pair (-1, LILY_SYSCALL_EINVAL);
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
     
     // Find the action.
     const paction* action = find_action (action_number);
     if (action == 0 || action->type != SYSTEM_INPUT) {
-      return make_pair (-1, LILY_SYSCALL_EBADANO);
+      return make_pair (-1, LILY_ERROR_BADANO);
     }
     
     // Correct the parameter.
@@ -1575,7 +1575,7 @@ public:
     
     if (irq_map_.find (irq) != irq_map_.end ()) {
       /* Already subscribed.  Note that we don't check the action. */
-      return make_pair (-1, LILY_SYSCALL_EALREADY);
+      return make_pair (-1, LILY_ERROR_ALREADY);
     }
     
     caction c (ths, action, parameter);
@@ -1583,28 +1583,28 @@ public:
     irq_map_.insert (make_pair (irq, c));
     irq_handler::subscribe (irq, c);
     
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
   
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   unsubscribe_irq (int irq)
   {
     irq_map_type::iterator pos = irq_map_.find (irq);
     if (pos == irq_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+      return make_pair (-1, LILY_ERROR_NOTSUBSCRIBED);
     }
     
     irq_handler::unsubscribe (pos->first, pos->second);
     irq_map_.erase (pos);
     
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
   /*
    * SUBSCRIPTIONS
    */
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   subscribe_unbound (const shared_ptr<automaton>& ths,
 		     bid_t bid,
 		     ano_t action_number)
@@ -1613,12 +1613,12 @@ public:
 
     const paction* action = find_action (action_number);
     if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
-      return make_pair (-1, LILY_SYSCALL_EBADANO);
+      return make_pair (-1, LILY_ERROR_BADANO);
     }
 
     bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
     if (subject_pos == bid_to_binding_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EBIDDNE);
+      return make_pair (-1, LILY_ERROR_BIDDNE);
     }
 
     shared_ptr<binding> subject = subject_pos->second;
@@ -1626,36 +1626,36 @@ public:
     binding_subscriptions_.insert (subject);
     subject->subscribers.insert (make_pair (ths, caction (ths, action, subject->bid)));
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   unsubscribe_unbound (const shared_ptr<automaton>& ths,
 		       bid_t bid)
   {
     bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
     if (subject_pos == bid_to_binding_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EBIDDNE);
+      return make_pair (-1, LILY_ERROR_BIDDNE);
     }
 
     shared_ptr<binding> subject = subject_pos->second;
 
     size_t count = binding_subscriptions_.erase (subject);
     if (count == 0) {
-      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+      return make_pair (-1, LILY_ERROR_NOTSUBSCRIBED);
     }
 
     count = subject->subscribers.erase (ths);
     kassert (count == 1);
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
   // The automaton wants to receive a notification via action_number when the automaton corresponding to aid is destroyed.
   // The automaton must have an action for receiving the event.
   // The automaton corresponding to aid must exist.
   // Not an error if already subscribed.
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   subscribe_destroyed (const shared_ptr<automaton>& ths,
 		       aid_t aid,
 		       ano_t action_number)
@@ -1664,12 +1664,12 @@ public:
 
     const paction* action = find_action (action_number);
     if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
-      return make_pair (-1, LILY_SYSCALL_EBADANO);
+      return make_pair (-1, LILY_ERROR_BADANO);
     }
 
     aid_to_automaton_map_type::const_iterator subject_pos = aid_to_automaton_map_.find (aid);
     if (subject_pos == aid_to_automaton_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+      return make_pair (-1, LILY_ERROR_AIDDNE);
     }
 
     shared_ptr<automaton> subject = subject_pos->second;
@@ -1677,29 +1677,29 @@ public:
     automaton_subscriptions_.insert (subject);
     subject->subscribers_.insert (make_pair (ths, caction (ths, action, subject->aid_)));
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<int, int>
+  inline pair<int, lily_error_t>
   unsubscribe_destroyed (const shared_ptr<automaton>& ths,
 			 aid_t aid)
   {
     aid_to_automaton_map_type::const_iterator subject_pos = aid_to_automaton_map_.find (aid);
     if (subject_pos == aid_to_automaton_map_.end ()) {
-      return make_pair (-1, LILY_SYSCALL_EAIDDNE);
+      return make_pair (-1, LILY_ERROR_AIDDNE);
     }
 
     shared_ptr<automaton> subject = subject_pos->second;
 
     size_t count = automaton_subscriptions_.erase (subject);
     if (count == 0) {
-      return make_pair (-1, LILY_SYSCALL_ENOTSUBSCRIBED);
+      return make_pair (-1, LILY_ERROR_NOTSUBSCRIBED);
     }
 
     count = subject->subscribers_.erase (ths);
     kassert (count == 1);
 
-    return make_pair (0, LILY_SYSCALL_ESUCCESS);
+    return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
   /*

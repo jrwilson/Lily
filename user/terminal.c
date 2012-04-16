@@ -1427,7 +1427,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       /* Nothing we can do. */
       exit ();
@@ -1437,7 +1437,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -1459,8 +1459,8 @@ initialize (void)
       description_fini (&syslog_description);
     }
 
-    vga_op_list_bda = buffer_create (0);
-    vga_op_list_bdb = buffer_create (0);
+    vga_op_list_bda = buffer_create (0, 0);
+    vga_op_list_bdb = buffer_create (0, 0);
     if (vga_op_list_bda == -1 ||
 	vga_op_list_bdb == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create vga op list buffers\n");
@@ -1695,7 +1695,7 @@ initialize (void)
 
     /* Set up the clients. */
     for (size_t client = 0; client != CLIENT_COUNT; ++client) {
-      clients[client].text_out_bd = buffer_create (0);
+      clients[client].text_out_bd = buffer_create (0, 0);
       if (clients[client].text_out_bd == -1) {
     	bfprintf (&syslog_buffer, ERROR "could not create ascii buffer\n");
     	state = STOP;
@@ -1707,7 +1707,7 @@ initialize (void)
     	return;
       }
       
-      clients[client].mouse_packets_bd = buffer_create (0);
+      clients[client].mouse_packets_bd = buffer_create (0, 0);
       if (clients[client].mouse_packets_bd == -1) {
     	bfprintf (&syslog_buffer, ERROR "could not create mouse packets buffer\n");
     	state = STOP;
@@ -1721,13 +1721,13 @@ initialize (void)
       
       clients[client].au.attribute = DEFAULT_ATTRIBUTE;
 
-      clients[client].screen_bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
+      clients[client].screen_bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE), 0);
       if (clients[client].screen_bd == -1) {
     	bfprintf (&syslog_buffer, ERROR "could not create screen buffer\n");
     	state = STOP;
     	return;
       }
-      clients[client].screen_buffer = buffer_map (clients[client].screen_bd);
+      clients[client].screen_buffer = buffer_map (clients[client].screen_bd, 0);
       if (clients[client].screen_buffer == 0) {
     	bfprintf (&syslog_buffer, ERROR "could not map screen buffer\n");
     	state = STOP;
@@ -2434,20 +2434,20 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   for (size_t client = 0; client != CLIENT_COUNT; ++client) {
     if (buffer_file_size (&clients[client].text_out_buffer) != 0) {
-      schedule (TEXT_OUT_NO, client + 1);
+      schedule (TEXT_OUT_NO, client + 1, 0);
     }
     if (clients[client].mouse_packet_list.count != 0) {
-      schedule (MOUSE_PACKETS_OUT_NO, client + 1);
+      schedule (MOUSE_PACKETS_OUT_NO, client + 1, 0);
     }
   }
   if (vga_op_precondition ()) {
-      schedule (VGA_OP_NO, 0);
+    schedule (VGA_OP_NO, 0, 0);
   }
 }

@@ -8,7 +8,6 @@
 #include <buffer_file.h>
 #include <string.h>
 #include <description.h>
-#include <io.h>
 #include <callback_queue.h>
 #include <dymem.h>
 #include "syslog.h"
@@ -182,7 +181,7 @@ serial_port_callback (void* ptr,
     return;
   }
 
-  bd_t bd = buffer_create (0);
+  bd_t bd = buffer_create (0, 0);
   if (bd == -1) {
     bfprintf (&syslog_buffer, ERROR "could not create argument buffer\n");
     spc_destroy (spc);
@@ -212,7 +211,7 @@ serial_port_callback (void* ptr,
     return;
   }
 
-  buffer_destroy (bd);
+  buffer_destroy (bd, 0);
   spc_destroy (spc);
 }
 
@@ -235,7 +234,7 @@ initialize (void)
     aid_t aid = getaid ();
 
     /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       exit ();
     }
@@ -243,7 +242,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -265,8 +264,8 @@ initialize (void)
       description_fini (&syslog_description);
     }
 
-    vfs_request_bda = buffer_create (0);
-    vfs_request_bdb = buffer_create (0);
+    vfs_request_bda = buffer_create (0, 0);
+    vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bda == -1 ||
     	vfs_request_bdb == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create vfs_request buffer\n");
@@ -277,7 +276,7 @@ initialize (void)
     callback_queue_init (&vfs_response_queue);
 
     /* Bind to the vfs. */
-    aid_t vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1);
+    aid_t vfs_aid = lookup (VFS_NAME, strlen (VFS_NAME) + 1, 0);
     if (vfs_aid == -1) {
       bfprintf (&syslog_buffer, ERROR "no vfs\n");
       state = HALT;
@@ -315,7 +314,7 @@ initialize (void)
 
     description_fini (&vfs_description);
 
-    if (map (BDA_ADDRESS, BDA_ADDRESS, sizeof (bios_t)) != 0) {
+    if (map (BDA_ADDRESS, BDA_ADDRESS, sizeof (bios_t), 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not map BIOS data area\n");
       state = HALT;
       return;
@@ -470,12 +469,12 @@ void
 do_schedule (void)
 {
   if (halt_precondition ()) {
-    schedule (HALT_NO, 0);
+    schedule (HALT_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (vfs_request_precondition ()) {
-    schedule (VFS_REQUEST_NO, 0);
+    schedule (VFS_REQUEST_NO, 0, 0);
   }
 }

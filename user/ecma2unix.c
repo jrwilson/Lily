@@ -40,7 +40,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    text_out_bd = buffer_create (0);
+    text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
       exit ();
     }
@@ -48,7 +48,7 @@ initialize (void)
       exit ();
     }
 
-    mouse_packets_bd = buffer_create (0);
+    mouse_packets_bd = buffer_create (0, 0);
     if (mouse_packets_bd == -1) {
       exit ();
     }
@@ -56,7 +56,7 @@ initialize (void)
       exit ();
     }
 
-    text_out_term_bd = buffer_create (0);
+    text_out_term_bd = buffer_create (0, 0);
     if (text_out_term_bd == -1) {
       exit ();
     }
@@ -226,12 +226,12 @@ void
 do_schedule (void)
 {
   if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0);
+    schedule (TEXT_OUT_NO, 0, 0);
   }
   if (mouse_packets_out_precondition ()) {
-    schedule (MOUSE_PACKETS_OUT_NO, 0);
+    schedule (MOUSE_PACKETS_OUT_NO, 0, 0);
   }
   if (text_out_term_precondition ()) {
-    schedule (TEXT_OUT_TERM_NO, 0);
+    schedule (TEXT_OUT_TERM_NO, 0, 0);
   }
 }

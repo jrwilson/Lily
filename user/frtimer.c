@@ -18,7 +18,7 @@ initialize (void)
 {
   if (!initialized) {
     initialized = true;
-    response_bd = buffer_create (0);
+    response_bd = buffer_create (0, 0);
     if (response_bd == -1) {
       exit ();
     }
@@ -65,8 +65,8 @@ BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing u
 void
 do_schedule (void)
 {
-  schedule (TICK_NO, 0);
+  schedule (TICK_NO, 0, 0);
   if (req) {
-    schedule (RESPONSE_NO, 0);
+    schedule (RESPONSE_NO, 0, 0);
   }
 }

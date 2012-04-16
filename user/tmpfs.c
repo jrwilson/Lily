@@ -195,7 +195,7 @@ file_find_or_create (inode_t* parent,
   }
 
   /* Create a node. */
-  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd), size, parent);
+  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd, 0), size, parent);
 
   return *ptr;
 }
@@ -230,7 +230,7 @@ initialize (void)
     initialized = true;
 
     /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       exit ();
     }
@@ -238,7 +238,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -270,8 +270,8 @@ initialize (void)
     
     /* TODO:  Do we need to make the root its own parent? */
 
-    response_bda = buffer_create (0);
-    response_bdb = buffer_create (0);
+    response_bda = buffer_create (0, 0);
+    response_bdb = buffer_create (0, 0);
     if (response_bda == -1 ||
 	response_bdb == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create response buffer\n");
@@ -328,10 +328,10 @@ initialize (void)
     }
 
     if (bda != -1) {
-      buffer_destroy (bda);
+      buffer_destroy (bda, 0);
     }
     if (bdb != -1) {
-      buffer_destroy (bdb);
+      buffer_destroy (bdb, 0);
     }
   }
 }
@@ -514,12 +514,12 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (response_precondition ()) {
-    schedule (TMPFS_RESPONSE_NO, 0);
+    schedule (TMPFS_RESPONSE_NO, 0, 0);
   }
 }

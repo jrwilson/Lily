@@ -12,7 +12,7 @@ automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 bitset<ONE_MEGABYTE / PAGE_SIZE> automaton::mmapped_frames_;
 bitset<65536> automaton::reserved_ports_;
 
-pair<int, int>
+pair<int, lily_error_t>
 automaton::schedule (const shared_ptr<automaton>& ths,
 		     ano_t action_number,
 		     int parameter)
@@ -36,16 +36,16 @@ automaton::schedule (const shared_ptr<automaton>& ths,
     case OUTPUT:
     case INTERNAL:
       scheduler::schedule (caction (ths, action, parameter));
-      return make_pair (0, LILY_SYSCALL_ESUCCESS);
+      return make_pair (0, LILY_ERROR_SUCCESS);
       break;
     case INPUT:
     case SYSTEM_INPUT:
-      return make_pair (-1, LILY_SYSCALL_EBADANO);
+      return make_pair (-1, LILY_ERROR_BADANO);
       break;
     }
   }
   else {
-    return make_pair (-1, LILY_SYSCALL_EBADANO);
+    return make_pair (-1, LILY_ERROR_BADANO);
   }
 }
 
@@ -82,7 +82,7 @@ automaton::exit (const shared_ptr<automaton>& ths)
   Context (2) acquires the id_lock_ before invoking this function for thread safety.
 */
 
-pair<shared_ptr<automaton>, int>
+pair<shared_ptr<automaton>, lily_error_t>
 automaton::create_automaton (const kstring& name,
 			     const shared_ptr<automaton>& parent,
 			     bool privileged,
@@ -179,10 +179,10 @@ automaton::create_automaton (const kstring& name,
   text->override (begin, end);
 
   if (parse_result == 0) {
-    return make_pair (child, LILY_SYSCALL_ESUCCESS);
+    return make_pair (child, LILY_ERROR_SUCCESS);
   }
   else {
-    return make_pair (shared_ptr<automaton> (), LILY_SYSCALL_EBADTEXT);
+    return make_pair (shared_ptr<automaton> (), LILY_ERROR_BADTEXT);
   }
 }
 

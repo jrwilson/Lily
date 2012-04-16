@@ -427,7 +427,7 @@ malloc (size_t size)
 
   if (first_header_ == 0) {
     /* Initialize. */
-    char* original_break = adjust_break (2 * HEADER_ALIGN);
+    char* original_break = adjust_break (2 * HEADER_ALIGN, 0);
     if (original_break == 0) {
       /* Fail. */
       return 0;
@@ -468,7 +468,7 @@ malloc (size_t size)
     // The last chunk is not available.
     // Create one.
     size_t request_size = HEADER_SIZE + size + FOOTER_SIZE;
-    void* temp = adjust_break (request_size);
+    void* temp = adjust_break (request_size, 0);
     if (temp == 0) {
       /* Fail. */
       return 0;
@@ -480,7 +480,7 @@ malloc (size_t size)
     // The last chunk is available but too small.
     // Resize the last chunk.
     size_t request_size = size - header_size (last_header_);
-    if (adjust_break (request_size) == 0) {
+    if (adjust_break (request_size, 0) == 0) {
       /* Fail. */
       return 0;
     }

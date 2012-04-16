@@ -8,13 +8,13 @@ buffer_file_initw (buffer_file_t* bf,
 		   bd_t bd)
 {
   bf->bd = bd;
-  bf->bd_size = buffer_size (bd);
+  bf->bd_size = buffer_size (bd, 0);
   if (bf->bd_size == -1) {
     return -1;
   }
   bf->capacity = bf->bd_size * pagesize ();
   if (bf->bd_size != 0) {
-    bf->ptr = buffer_map (bd);
+    bf->ptr = buffer_map (bd, 0);
     if (bf->ptr == 0) {
       return -1;
     }
@@ -46,13 +46,13 @@ buffer_file_write (buffer_file_t* bf,
 
   /* Resize if necessary. */
   if (bf->capacity < new_position) {
-    buffer_unmap (bf->bd);
+    buffer_unmap (bf->bd, 0);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
-    if (buffer_resize (bf->bd, bf->bd_size) != 0) {
+    if (buffer_resize (bf->bd, bf->bd_size, 0) != 0) {
       return -1;
     }
-    bf->ptr = buffer_map (bf->bd);
+    bf->ptr = buffer_map (bf->bd, 0);
     if (bf->ptr == 0) {
       return -1;
     }
@@ -84,13 +84,13 @@ buffer_file_put (buffer_file_t* bf,
   
   /* Resize if necessary. */
   if (bf->capacity < new_position) {
-    buffer_unmap (bf->bd);
+    buffer_unmap (bf->bd, 0);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
-    if (buffer_resize (bf->bd, bf->bd_size) != 0) {
+    if (buffer_resize (bf->bd, bf->bd_size, 0) != 0) {
       return -1;
     }
-    bf->ptr = buffer_map (bf->bd);
+    bf->ptr = buffer_map (bf->bd, 0);
     if (bf->ptr == 0) {
       return -1;
     }
@@ -134,12 +134,12 @@ buffer_file_initr (buffer_file_t* bf,
 		   bd_t bd)
 {
   bf->bd = bd;
-  bf->bd_size = buffer_size (bd);
+  bf->bd_size = buffer_size (bd, 0);
   if (bf->bd_size == -1) {
     return -1;
   }
   bf->capacity = bf->bd_size * pagesize ();
-  bf->ptr = buffer_map (bd);
+  bf->ptr = buffer_map (bd, 0);
   if (bf->ptr == 0) {
     return -1;
   }

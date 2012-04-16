@@ -38,7 +38,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       /* Nothing we can do. */
       exit ();
@@ -48,7 +48,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -71,7 +71,7 @@ initialize (void)
     }
 
     /* Lookup the PCI automaton. */
-    aid_t pci_aid = lookup (PCI_NAME, strlen (PCI_NAME) + 1);
+    aid_t pci_aid = lookup (PCI_NAME, strlen (PCI_NAME) + 1, 0);
     if (pci_aid == -1) {
       bfprintf (&syslog_buffer, ERROR "pci automaton does not exist\n");
       state = STOP;
@@ -139,9 +139,9 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
 }

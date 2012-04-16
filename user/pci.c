@@ -1,5 +1,4 @@
 #include <automaton.h>
-#include <io.h>
 #include <dymem.h>
 #include <buffer_file.h>
 #include <string.h>
@@ -104,8 +103,8 @@ read_config (unsigned char bus,
 	     unsigned int size)
 {
   unsigned long address = CONFIG_ENABLE_MASK | (bus << BUS_SHIFT) | (slot << SLOT_SHIFT) | (function << FUNCTION_SHIFT) | (offset & REGISTER_MASK);
-  outl (CONFIG_ADDRESS, address);
-  unsigned long value = inl (CONFIG_DATA);
+  outl (CONFIG_ADDRESS, address, 0);
+  unsigned long value = inl (CONFIG_DATA, 0);
   value >>= (8 * (offset & ~REGISTER_MASK));
   switch (size) {
   case 1:
@@ -220,7 +219,7 @@ initialize (void)
     initialized = true;
 
     /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       exit ();
     }
@@ -228,7 +227,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookup (SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, 0);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -251,8 +250,8 @@ initialize (void)
     }
 
     /* Reserve the ports to configure the PCI. */
-    if (reserve_port (CONFIG_ADDRESS) != 0 ||
-	reserve_port (CONFIG_DATA) != 0) {
+    if (reserve_port (CONFIG_ADDRESS, 0) != 0 ||
+	reserve_port (CONFIG_DATA, 0) != 0) {
       bfprintf (&syslog_buffer, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
@@ -326,9 +325,9 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
 }

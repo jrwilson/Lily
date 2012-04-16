@@ -83,8 +83,8 @@ readfile_callback (void* data,
     return;
   }
 
-  bd_t bd1 = buffer_create (0);
-  bd_t bd2 = buffer_create (0);
+  bd_t bd1 = buffer_create (0, 0);
+  bd_t bd2 = buffer_create (0, 0);
   if (bd1 == -1 || bd2 == -1) {
     bfprintf (&syslog_buffer, ERROR "could not create argv buffers\n");
     state = STOP;
@@ -116,8 +116,8 @@ readfile_callback (void* data,
     return;
   }
 
-  buffer_destroy (bd1);
-  buffer_destroy (bd2);
+  buffer_destroy (bd1, 0);
+  buffer_destroy (bd2, 0);
 
   /* The bdb buffer will be destroyed by the input action that calls this callback. */
 }
@@ -151,7 +151,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
+    syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
       /* Nothing we can do. */
       exit ();
@@ -161,8 +161,8 @@ initialize (void)
       exit ();
     }
 
-    vfs_request_bda = buffer_create (0);
-    vfs_request_bdb = buffer_create (0);
+    vfs_request_bda = buffer_create (0, 0);
+    vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bda == -1 ||
 	vfs_request_bdb == -1) {
       bfprintf (&syslog_buffer, ERROR "could not create vfs request buffers\n");
@@ -297,10 +297,10 @@ initialize (void)
     callback_queue_push (&vfs_response_queue, mount_callback, 0);
 
     if (bda != -1) {
-      buffer_destroy (bda);
+      buffer_destroy (bda, 0);
     }
     if (bdb != -1) {
-      buffer_destroy (bdb);
+      buffer_destroy (bdb, 0);
     }
   }
 }
@@ -421,12 +421,12 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
+    schedule (STOP_NO, 0, 0);
   }
   if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0, 0);
   }
   if (vfs_request_precondition ()) {
-    schedule (VFS_REQUEST_NO, 0);
+    schedule (VFS_REQUEST_NO, 0, 0);
   }
 }
