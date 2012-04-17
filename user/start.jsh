@@ -11,7 +11,6 @@
 #   -o param  Specify the output parameter
 #   -i param  Specify the input parameter
 # name = lookup registry_name
-# start name
 
 #
 #                      +-----------------+
@@ -56,7 +55,7 @@ bind -i 5 terminal5 *_out_term terminal *_in
 # Put the syslog on terminal1.
 syslog = lookup syslog
 bind syslog *_out terminal1 *_in
-start syslog
+com syslog enable!
 
 # Put this shell on terminal2.
 bind terminal2 *_out this *_in

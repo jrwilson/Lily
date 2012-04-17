@@ -71,14 +71,14 @@ pci : pci.o
 jsh : jsh.o argv.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
-syslog : syslog.o 
-	$(CC) -o $@ $^ -lbuffer_file
+syslog : syslog.o kv_parse.o
+	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 frtimer : frtimer.o
 	$(CC) -o $@ $^ -lbuffer_file
 
-sampler : sampler.o
-	$(CC) -o $@ $^ -lbuffer_file
+sampler : sampler.o kv_parse.o
+	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 ne2000 : ne2000.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file

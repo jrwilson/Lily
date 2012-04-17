@@ -16,7 +16,6 @@ Network card driver
 disk driver
 editor
 development environment
-command/response actions
 improve text shell
 Make the keyboard more robust (i.e., what if we hit a key before initialization)
 Drivers should probe hardware

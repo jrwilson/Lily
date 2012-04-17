@@ -16,9 +16,9 @@
 #define SYSLOG_NO 3
 #define INTERRUPT_NO 4
 #define TEXT_OUT_NO 5
-#define START_NO 6
-#define STOP_NO 7
-#define TEXT_IN_NO 8
+#define TEXT_IN_NO 6
+#define COM_IN_NO 7
+#define COM_OUT_NO 8
 
 #define INFO "serial_port: info: "
 #define WARNING "serial_port: warning: "
@@ -112,10 +112,11 @@
 static bool initialized = false;
 
 typedef enum {
-  RUN,
+  OFFLINE,
+  ONLINE,
   HALT,
 } state_t;
-static state_t state = RUN;
+static state_t state = OFFLINE;
 
 /* Syslog buffer. */
 static bd_t syslog_bd = -1;
@@ -124,6 +125,12 @@ static buffer_file_t syslog_buffer;
 /* Standard output buffer. */
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
+
+#define COM_IN "[enable! | disable! | status?]"
+#define COM_OUT "status = [offline | online | halt]"
+
+static bd_t com_out_bd = -1;
+static buffer_file_t com_out_buffer;
 
 static unsigned short port_base = 0;
 
@@ -245,6 +252,16 @@ initialize (void)
       buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize output buffer\n");
       state = HALT;
       return;
+    }
+
+    com_out_bd = buffer_create (0, 0);
+    if (com_out_bd == -1) {
+      /* Nothing we can do. */
+      exit ();
+    }
+    if (buffer_file_initw (&com_out_buffer, 0, com_out_bd) != 0) {
+      /* Nothing we can do. */
+      exit ();
     }
 
     bd_t bda = getinita ();
@@ -474,45 +491,6 @@ BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, 
   finish_output (false, -1, -1);
 }
 
-BEGIN_INPUT (NO_PARAMETER, START_NO, "start", "", start, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  /* Initialize the serial port. */
-  
-  /* Enable the receive interrupt. */
-  outb (0, port_base + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT);
-  /* Set the divisor (baud).  This wipes out all other settings. */
-  outb (0, port_base + LINE_CONTROL_REG, DLAB);
-  unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);    
-  outb (0, port_base + DIVISOR_LSB_REG, divisor & 0xFF);
-  outb (0, port_base + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF);
-  /* Set the frame type. */
-  outb (0, port_base + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
-  /* Reset the FIFO. */
-  outb (0, port_base + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
-  
-  /* Enable TX/RX. */
-  outb (0, port_base + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS);
-
-  /* Clear the status registers by reading them. */
-  inb (0, port_base + INTERRUPT_ID_REG);
-  inb (0, port_base + LINE_STATUS_REG);
-  inb (0, port_base + MODEM_STATUS_REG);
-
-  finish_input (bda, bdb);
-}
-
-BEGIN_INPUT (NO_PARAMETER, STOP_NO, "stop", "", stop, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-
-  /* Disable TX/RX. */
-  outb (0, port_base + MODEM_CONTROL_REG, 0);
-
-  finish_input (bda, bdb);
-}
-
 BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
@@ -540,6 +518,113 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   finish_input (bda, bdb);
 }
 
+static void
+print_status (void)
+{
+  switch (state) {
+  case OFFLINE:
+    buffer_file_puts (&com_out_buffer, 0, "status = offline\n");
+    break;
+  case ONLINE:
+    buffer_file_puts (&com_out_buffer, 0, "status = online\n");
+    break;
+  case HALT:
+    buffer_file_puts (&com_out_buffer, 0, "status = halt\n");
+    break;
+  }
+}
+
+BEGIN_INPUT (NO_PARAMETER, COM_IN_NO, "com_in", COM_IN, com_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  buffer_file_t bf;
+  if (buffer_file_initr (&bf, 0, bda) != 0) {
+    finish_input (bda, bdb);
+  }
+
+  const size_t size = buffer_file_size (&bf);
+  const char* begin = buffer_file_readp (&bf, size);
+  if (begin == 0) {
+    finish_input (bda, bdb);
+  }
+  const char* end = begin + size;
+  const char* ptr = begin;
+  
+  char* key = 0;
+  char* value = 0;
+  while (ptr != end && kv_parse (0, &key, &value, &ptr, end) == 0) {
+    if (key != 0) {
+      if (strcmp (key, "enable!") == 0) {
+	if (state == OFFLINE) {
+	  /* Initialize the serial port. */
+	  
+	  /* Enable the receive interrupt. */
+	  outb (0, port_base + INTERRUPT_ENABLE_REG, ENABLE_RECEIVED_DATA_AVAILABLE_INT | ENABLE_TRANSMIT_HOLDING_REGISTER_EMPTY_INT);
+	  /* Set the divisor (baud).  This wipes out all other settings. */
+	  outb (0, port_base + LINE_CONTROL_REG, DLAB);
+	  unsigned short divisor = baud_to_divisor (DEFAULT_BAUD);
+	  outb (0, port_base + DIVISOR_LSB_REG, divisor & 0xFF);
+	  outb (0, port_base + DIVISOR_MSB_REG, (divisor >> 8) & 0xFF);
+	  /* Set the frame type. */
+	  outb (0, port_base + LINE_CONTROL_REG, BITS_8 | NO_PARITY | STOP_1);
+	  /* Reset the FIFO. */
+	  outb (0, port_base + FIFO_CONTROL_REG, LEVEL_14 | TRANSMIT_FIFO_RESET | RECEIVE_FIFO_RESET | FIFO_ENABLE);
+	  
+	  /* Enable TX/RX. */
+	  outb (0, port_base + MODEM_CONTROL_REG, IRQ_ENABLE | DTR | RTS);
+	  
+	  /* Clear the status registers by reading them. */
+	  inb (0, port_base + INTERRUPT_ID_REG);
+	  inb (0, port_base + LINE_STATUS_REG);
+	  inb (0, port_base + MODEM_STATUS_REG);
+
+	  state = ONLINE;
+	}
+	print_status ();
+      }
+      else if (strcmp (key, "disable!") == 0) {
+	if (state == ONLINE) {
+	  /* Disable TX/RX. */
+	  outb (0, port_base + MODEM_CONTROL_REG, 0);
+
+	  state = OFFLINE;
+	}
+	print_status ();
+      }
+      else if (strcmp (key, "status?") == 0) {
+	print_status ();
+      }
+      else {
+	bfprintf (&com_out_buffer, 0, "unknown label `%s'\n", key);
+      }
+    }
+    free (key);
+    free (value);
+  }
+
+  finish_input (bda, bdb);
+}
+
+static bool
+com_out_precondition (void)
+{
+  return buffer_file_size (&com_out_buffer) != 0;
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, COM_OUT_NO, "com_out", COM_OUT, com_out, ano_t ano, int param)
+{
+  initialize ();
+
+  if (com_out_precondition ()) {
+    buffer_file_truncate (&com_out_buffer);
+    finish_output (true, com_out_bd, -1);
+  }
+  else {
+    finish_output (false, -1, -1);
+  }
+}
+
 void
 do_schedule (void)
 {
@@ -551,5 +636,8 @@ do_schedule (void)
   }
   if (text_out_precondition ()) {
     schedule (0, TEXT_OUT_NO, 0);
+  }
+  if (com_out_precondition ()) {
+    schedule (0, COM_OUT_NO, 0);
   }
 }

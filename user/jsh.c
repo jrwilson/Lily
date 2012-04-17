@@ -55,7 +55,6 @@ atoi (const char* s)
 }
 
 #define INIT_NO 1
-#define START_NO 2
 #define TEXT_IN_NO 3
 #define PROCESS_LINE_NO 4
 #define TEXT_OUT_NO 5
@@ -65,6 +64,8 @@ atoi (const char* s)
 #define VFS_REQUEST_NO 9
 #define SYSLOG_NO 10
 #define HALT_NO 11
+#define COM_OUT_NO 12
+#define COM_IN_NO 13
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -87,6 +88,9 @@ static bd_t vfs_request_bdb = -1;
 static vfs_request_queue_t vfs_request_queue;
 static callback_queue_t vfs_response_queue;
 static bool process_hold = false;
+
+static bd_t com_out_bd = -1;
+static buffer_file_t com_out_buffer;
 
 typedef struct automaton automaton_t;
 typedef struct automaton_item automaton_item_t;
@@ -382,7 +386,7 @@ static size_t scan_strings_capacity = 0;
 
 /* Tokens
 
-   string - [a-zA-Z0-9_/-=*]+
+   string - [a-zA-Z0-9_/-=*?!]+
 
    whitespace - [ \t\0]
 
@@ -413,7 +417,9 @@ scanner_put (char* ptr)
 	(c == '/') ||
 	(c == '-') ||
 	(c == '=') ||
-	(c == '*')) {
+	(c == '*') ||
+	(c == '?') ||
+	(c == '!')) {
       scanner_enter_string (ptr);
       scan_state = SCAN_STRING;
       break;
@@ -442,7 +448,9 @@ scanner_put (char* ptr)
 	(c == '/') ||
 	(c == '-') ||
 	(c == '=') ||
-	(c == '*')) {
+	(c == '*') ||
+	(c == '?') ||
+	(c == '!')) {
       /* Still scanning a string. */
       scan_state = SCAN_STRING;
       break;
@@ -509,46 +517,52 @@ scanner_process (char* string,
   ======================
 */
 
-typedef struct start_item start_item_t;
-struct start_item {
+typedef struct com_item com_item_t;
+struct com_item {
   aid_t aid;
-  start_item_t* next;
+  char* str;
+  com_item_t* next;
 };
 
-static start_item_t* start_head = 0;
-static start_item_t** start_tail = &start_head;
+static com_item_t* com_head = 0;
+static com_item_t** com_tail = &com_head;
 
 static bool
-start_queue_empty (void)
+com_queue_empty (void)
 {
-  return start_head == 0;
+  return com_head == 0;
 }
 
 static aid_t
-start_queue_front (void)
+com_queue_front (void)
 {
-  return start_head->aid;
+  return com_head->aid;
 }
 
 static void
-start_queue_push (aid_t aid)
+com_queue_push (aid_t aid,
+		const char* str)
 {
-  start_item_t* item = malloc (0, sizeof (start_item_t));
-  memset (item, 0, sizeof (start_item_t));
+  com_item_t* item = malloc (0, sizeof (com_item_t));
+  memset (item, 0, sizeof (com_item_t));
   item->aid = aid;
-  *start_tail = item;
-  start_tail = &item->next;
+  size_t len = strlen (str) + 1;
+  item->str = malloc (0, len);
+  memcpy (item->str, str, len);
+  *com_tail = item;
+  com_tail = &item->next;
 }
 
 static void
-start_queue_pop (void)
+com_queue_pop (void)
 {
-  start_item_t* item = start_head;
-  start_head = item->next;
-  if (start_head == 0) {
-    start_tail = &start_head;
+  com_item_t* item = com_head;
+  com_head = item->next;
+  if (com_head == 0) {
+    com_tail = &com_head;
   }
 
+  free (item->str);
   free (item);
 }
 
@@ -1264,39 +1278,48 @@ list_ (void)
 }
 
 static bool
-start_ (void)
+com_ (void)
 {
-  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "start") == 0) {
-    if (scan_strings_size == 1) {
-      buffer_file_puts (&text_out_buffer, 0, "-> usage: start ID...\n");
+  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "com") == 0) {
+    if (scan_strings_size < 3) {
+      buffer_file_puts (&text_out_buffer, 0, "-> usage: com ID ARGS...\n");
       return true;
     }
 
-    for (size_t idx = 1; idx != scan_strings_size; ++idx) {
-      automaton_t* automaton = find_automaton (scan_strings[idx]);
-      if (automaton != 0) {
-	/* Check if we are already bound. */
-	binding_t* b;
-	for (b = bindings_head; b != 0; b = b->next) {
-	  if (b->output_automaton == this_automaton &&
-	      b->input_automaton == automaton &&
-	      b->output_action == START_NO) {
-	    break;
-	  }
-	}
-
-	if (b == 0) {
-	  /* Bind to start. */
-	  single_bind (this_automaton, "start", 0, automaton, "start", 0);
-	}
-	
-	/* Add to the start queue. */
-	start_queue_push (automaton->aid);
-	continue;
-      }
-
-      bfprintf (&text_out_buffer, 0, "-> warning: label or name %s does not exist\n", scan_strings[idx]);
+    automaton_t* automaton = find_automaton (scan_strings[1]);
+    if (automaton == 0) {
+      bfprintf (&text_out_buffer, 0, "-> warning: automaton %s\n", scan_strings[1]);
+      return true;
     }
+
+    /* Check if we are already bound. */
+    binding_t* b;
+    for (b = bindings_head; b != 0; b = b->next) {
+      if (b->output_automaton == this_automaton &&
+	  b->input_automaton == automaton &&
+	  b->output_action == COM_OUT_NO) {
+	break;
+      }
+    }
+    if (b == 0) {
+      /* Bind to com. */
+      single_bind (this_automaton, "com_out", 0, automaton, "com_in", 0);
+    }
+
+    for (b = bindings_head; b != 0; b = b->next) {
+      if (b->output_automaton == automaton &&
+	  b->input_automaton == this_automaton &&
+	  b->input_action == COM_IN_NO) {
+	break;
+      }
+    }
+    if (b == 0) {
+      /* Bind to com. */
+      single_bind (automaton, "com_out", 0, this_automaton, "com_in", 0);
+    }
+	
+    /* Add to the COM queue. */
+    com_queue_push (automaton->aid, current_line + (scan_strings[2] - scan_string_copy));
 
     return true;
   }
@@ -1323,7 +1346,7 @@ static dispatch_func_t dispatch[] = {
   lookup_,
   describe_,
   list_,
-  start_,
+  com_,
   /* Catch errors. */
   error_,
   0
@@ -1424,6 +1447,18 @@ initialize (void)
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
       buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize text_out buffer\n");
+      state = HALT;
+      return;
+    }
+
+    com_out_bd = buffer_create (0, 0);
+    if (com_out_bd == -1) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create com_out buffer\n");
+      state = HALT;
+      return;
+    }
+    if (buffer_file_initw (&com_out_buffer, 0, com_out_bd) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize com_out buffer\n");
       state = HALT;
       return;
     }
@@ -1587,7 +1622,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
 static bool
 process_line_precondition (void)
 {
-  return !process_hold && !string_empty () && start_queue_empty () && callback_queue_empty (&vfs_response_queue);
+  return !process_hold && !string_empty () && com_queue_empty () && callback_queue_empty (&vfs_response_queue);
 }
 
 BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, int param)
@@ -1655,17 +1690,6 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
     current_string_idx = 0;
   }
   finish_internal ();
-}
-
-BEGIN_OUTPUT (AUTO_PARAMETER, START_NO, "start", "", start, ano_t ano, aid_t aid)
-{
-  initialize ();
-
-  if (!start_queue_empty () && aid == start_queue_front ()) {
-    start_queue_pop ();
-    finish_output (true, -1, -1);
-  }
-  finish_output (false, -1, -1);
 }
 
 static bool
@@ -1773,14 +1797,47 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
   finish_input (bda, bdb);
 }
 
+BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+
+  if (!com_queue_empty () && aid == com_queue_front ()) {
+    buffer_file_truncate (&com_out_buffer);
+    buffer_file_puts (&com_out_buffer, 0, com_head->str);
+    com_queue_pop ();
+    finish_output (true, com_out_bd, -1);
+  }
+  finish_output (false, -1, -1);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, COM_IN_NO, "com_in", "", com_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  buffer_file_t bf;
+  if (buffer_file_initr (&bf, 0, bda) != 0) {
+    finish_input (bda, bdb);
+  }
+
+  size_t size = buffer_file_size (&bf);
+  if (size == 0) {
+    finish_input (bda, bdb);
+  }
+  const char* begin = buffer_file_readp (&bf, size);
+  if (begin == 0) {
+    finish_input (bda, bdb);
+  }
+
+  buffer_file_write (&text_out_buffer, 0, begin, size);
+
+  finish_input (bda, bdb);
+}
+
 void
 do_schedule (void)
 {
   if (process_line_precondition ()) {
     schedule (0, PROCESS_LINE_NO, 0);
-  }
-  if (!start_queue_empty ()) {
-    schedule (0, START_NO, start_queue_front ());
   }
   if (text_out_precondition ()) {
     schedule (0, TEXT_OUT_NO, 0);
@@ -1793,5 +1850,8 @@ do_schedule (void)
   }
   if (halt_precondition ()) {
     schedule (0, HALT_NO, 0);
+  }
+  if (!com_queue_empty ()) {
+    schedule (0, COM_OUT_NO, com_queue_front ());
   }
 }
