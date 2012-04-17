@@ -1,4 +1,7 @@
 #include "string.h"
+#include "ctype.h"
+#include <stdbool.h>
+#include <limits.h>
 
 char*
 strcpy (char* dest,
@@ -267,5 +270,175 @@ memchr (const void *s,
   }
   else {
     return 0;
+  }
+}
+
+static int
+toval (char c)
+{
+  if (isdigit (c)) {
+    return c - '0';
+  }
+  else if (isupper (c)) {
+    return c - 'A' + 10;
+  }
+  else if (islower (c)) {
+    return c - 'a' + 10;
+  }
+  else {
+    return -1;
+  }
+}
+
+static unsigned long int
+strtoul_ (string_error_t* err,
+	  const char* ptr,
+	  const char* nptr,
+	  char** endptr,
+	  int base,
+	  bool negative)
+{
+  bool once = false;
+  unsigned long int retval = 0;
+  bool overflow = false;
+
+  while (*ptr != '\0') {
+    int val = toval (*ptr);
+    if (val == -1 || val >= base) {
+      if (!once) {
+	/* No digits. */
+	if (err != 0) {
+	  *err = STRING_INVAL;
+	}
+	if (endptr != 0) {
+	  *endptr = (char*)nptr;
+	}
+	return 0;
+      }
+      else {
+	break;
+      }
+    }
+
+    unsigned long int n = retval * base + val;
+    if (n < retval) {
+      /* Overflow. */
+      overflow = true;
+    }
+    retval = n;
+    ++ptr;
+    once = true;
+  }
+
+  if (!overflow) {
+    if (err != 0) {
+      *err = STRING_SUCCESS;
+    }
+    if (endptr != 0) {
+      *endptr = (char*)ptr;
+    }
+    if (negative) {
+      return -retval;
+    }
+    else {
+      return retval;
+    }
+  }
+  else {
+    if (err != 0) {
+      *err = STRING_RANGE;
+    }
+    if (endptr != 0) {
+      *endptr = (char*)ptr;
+    }
+    return ULONG_MAX;
+  }
+}
+
+unsigned long int
+strtoul (string_error_t* err,
+	 const char* nptr,
+	 char** endptr,
+	 int base)
+{
+  if (!(base == 0 || (base >= 2 && base <= 36))) {
+    /* Bad base. */
+    if (err != 0) {
+      *err = STRING_INVAL;
+    }
+    if (endptr != 0) {
+      *endptr = (char*)nptr;
+    }
+    return 0;
+  }
+
+  const char* ptr = nptr;
+
+  /* Skip white space. */
+  while (*ptr != '\0' && isspace (*ptr)) {
+    ++ptr;
+  }
+
+  if (*ptr == '\0') {
+    /* No digits. */
+    if (err != 0) {
+      *err = STRING_INVAL;
+    }
+    if (endptr != 0) {
+      *endptr = (char*)nptr;
+    }
+    return 0;
+  }
+
+  bool negative = false;
+  if (*ptr == '+') {
+    ++ptr;
+  }
+  else if (*ptr == '-') {
+    ++ptr;
+    negative = true;
+  }
+
+  if (*ptr == '\0') {
+    /* No digits. */
+    if (err != 0) {
+      *err = STRING_INVAL;
+    }
+    if (endptr != 0) {
+      *endptr = (char*)nptr;
+    }
+    return 0;
+  }
+
+  if (base == 0 || base == 8 || base == 16) {
+    if (*ptr == '0') {
+      ++ptr;
+      if (*ptr == '\0') {
+	/* Zero. */
+	if (err != 0) {
+	  *err = STRING_SUCCESS;
+	}
+	if (endptr != 0) {
+	  *endptr = (char*)ptr;
+	}
+	return 0;
+      }
+      else if (*ptr == 'x') {
+	++ptr;
+	/* Number is hex. */
+	return strtoul_ (err, ptr, nptr, endptr, 16, negative);
+      }
+      else {
+	/* Number is octal. */
+	return strtoul_ (err, ptr, nptr, endptr, 8, negative);
+      }
+    }
+    else {
+      /* Number is decimal. */
+      return strtoul_ (err, ptr, nptr, endptr, 10, negative);
+    }
+  }
+  else {
+    return strtoul_ (err, ptr, nptr, endptr, base, negative);
   }
 }

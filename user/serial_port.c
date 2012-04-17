@@ -278,59 +278,67 @@ initialize (void)
     const char* end = begin + size;
     const char* ptr = begin;
 
+    bool error = false;
+
     char* key = 0;
     char* value = 0;
-    while (ptr != end && kv_parse (0, &key, &value, &ptr, end) == 0) {
+    while (!error && ptr != end && kv_parse (0, &key, &value, &ptr, end) == 0) {
       if (key != 0) {
-	bfprintf (&syslog_buffer, 0, "KEY: %s", key);
+	if (strcmp (key, "port") == 0) {
+	  if (value != 0) {
+	    string_error_t err;
+	    char* ptr;
+	    unsigned short p = strtoul (&err, value, &ptr, 0);
+	    if (err == STRING_SUCCESS && *ptr == '\0') {
+	      port_base = p;
+	    }
+	    else {
+	      bfprintf (&syslog_buffer, 0, ERROR "could not parse port value %s\n", value);
+	      error = true;
+	    }
+	  }
+	  else {
+	    buffer_file_puts (&syslog_buffer, 0, ERROR "port requires a value\n");
+	    error = true;
+	  }
+	}
+	else if (strcmp (key, "irq") == 0) {
+	  if (value != 0) {
+	    string_error_t err;
+	    char* ptr;
+	    unsigned int p = strtoul (&err, value, &ptr, 0);
+	    if (err == STRING_SUCCESS && *ptr == '\0') {
+	      irq = p;
+	    }
+	    else {
+	      bfprintf (&syslog_buffer, 0, ERROR "could not parse irq value %s\n", value);
+	      error = true;
+	    }
+	  }
+	  else {
+	    buffer_file_puts (&syslog_buffer, 0, ERROR "irq requires a value\n");
+	    error = true;
+	  }
+	}
+	else {
+	  bfprintf (&syslog_buffer, 0, ERROR "unknown option %s\n", key);
+	  error = true;
+	}
       }
-      if (value != 0) {
-	bfprintf (&syslog_buffer, 0, " VAL: %s", value);
-      }
-      buffer_file_put (&syslog_buffer, 0, '\n');
       free (key);
       free (value);
     }
 
-    state = HALT;
-    return;
-    /* 	if (strncmp ("com1", str, size) == 0) { */
-    /* 	  port_base = COM1_PORT; */
-    /* 	  irq = COM1_IRQ; */
-    /* 	} */
-    /* 	else if (strncmp ("com2", str, size) == 0) { */
-    /* 	  port_base = COM2_PORT; */
-    /* 	  irq = COM2_IRQ; */
-    /* 	} */
-    /* 	else if (strncmp ("com3", str, size) == 0) { */
-    /* 	  port_base = COM3_PORT; */
-    /* 	  irq = COM3_IRQ; */
-    /* 	} */
-    /* 	else if (strncmp ("com4", str, size) == 0) { */
-    /* 	  port_base = COM4_PORT; */
-    /* 	  irq = COM4_IRQ; */
-    /* 	} */
-    /* 	else { */
-    /* 	  bfprintf (&syslog_buffer, ERROR "unknown port: %s\n", str); */
-    /* 	  state = HALT; */
-    /* 	  return; */
-    /* 	} */
-    /*   } */
-      
-    /*   if (argc > 2) { */
-    /* 	for (size_t idx = 2; idx != argc; ++idx) { */
-    /* 	  const char* str; */
-    /* 	  size_t size; */
-    /* 	  if (argv_arg (&argv, 1, (const void**)&str, &size) != 0) { */
-    /* 	    bfprintf (&syslog_buffer, ERROR "could not read argument\n"); */
-    /* 	    state = HALT; */
-    /* 	    return; */
-    /* 	  } */
-	  
-    /* 	  bfprintf (&syslog_buffer, WARNING "ignoring extraneous argument: %s\n", str); */
-    /* 	} */
-    /*   } */
-    /* } */
+    if (error) {
+      state = HALT;
+      return;
+    }
+
+    if (port_base == -1 || irq == -1) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "usage: port=PORT irq=IRQ\n");
+      state = HALT;
+      return;
+    }
 
     if (bda != -1) {
       buffer_destroy (0, bda);
@@ -354,6 +362,9 @@ initialize (void)
       state = HALT;
       return;
     }
+
+    /* TODO:  Ensure that a UART exists at the port and determine its type. */
+    bfprintf (&syslog_buffer, 0, INFO "port=%#x irq=%d\n", port_base, irq);
   }
 }
 

@@ -3,6 +3,12 @@
 
 #include <stddef.h>
 
+typedef enum {
+  STRING_SUCCESS,
+  STRING_INVAL,
+  STRING_RANGE,
+} string_error_t;
+
 char*
 strcpy (char* dest,
 	const char* src);
@@ -85,5 +91,11 @@ void*
 memchr (const void *s,
 	int c,
 	size_t n);
+
+unsigned long int
+strtoul (string_error_t* err,
+	 const char* nptr,
+	 char** endptr,
+	 int base);
 
 #endif /* STRING_H */
