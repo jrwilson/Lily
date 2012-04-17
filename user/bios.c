@@ -204,7 +204,7 @@ serial_port_callback (void* ptr,
     return;
   }
 
-  if (create (0, bdb, size, bd, -1, spc->name, strlen (spc->name) + 1, true) == -1) {
+  if (creates (0, bdb, size, bd, -1, spc->name, true) == -1) {
     bfprintf (&syslog_buffer, 0, ERROR "could not create %s\n", spc->name);
     spc_destroy (spc);
     state = HALT;
@@ -242,7 +242,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -276,7 +276,7 @@ initialize (void)
     callback_queue_init (&vfs_response_queue);
 
     /* Bind to the vfs. */
-    aid_t vfs_aid = lookup (0, VFS_NAME, strlen (VFS_NAME) + 1);
+    aid_t vfs_aid = lookups (0, VFS_NAME);
     if (vfs_aid == -1) {
       bfprintf (&syslog_buffer, 0, ERROR "no vfs\n");
       state = HALT;

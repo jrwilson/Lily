@@ -86,7 +86,16 @@ create (lily_error_t* err,
 	bd_t bdb,
 	const char* name,
 	size_t name_size,
-	bool retain_privilege);
+	bool retain_privilege) __attribute__ ((noinline));
+
+aid_t
+creates (lily_error_t* err,
+	 bd_t text_bd,
+	 size_t text_size,
+	 bd_t bda,
+	 bd_t bdb,
+	 const char* name,
+	 bool retain_privilege);
 
 bid_t
 bind (lily_error_t* err,
@@ -184,6 +193,10 @@ aid_t
 lookup (lily_error_t* err,
 	const char* name,
 	size_t size);
+
+aid_t
+lookups (lily_error_t* err,
+	 const char* name);
 
 bd_t
 describe (lily_error_t* err,

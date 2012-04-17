@@ -557,7 +557,6 @@ start_queue_pop (void)
 static const char* create_name = 0;
 static bool create_retain_privilege = false;
 static const char* create_register_name = 0;
-static size_t create_register_name_size = 0;
 static const char* create_path = 0;
 static size_t create_argv_idx = 0;
 
@@ -602,7 +601,7 @@ create_callback (void* data,
     }
   }
 
-  aid_t aid = create (0, bdb, size, bd1, bd2, create_register_name, create_register_name_size, create_retain_privilege);
+  aid_t aid = creates (0, bdb, size, bd1, bd2, create_register_name, create_retain_privilege);
   if (aid == -1) {
     buffer_destroy (0, bd1);
     buffer_destroy (0, bd2);
@@ -660,7 +659,6 @@ create_ (void)
     /* Parse the options. */
     create_retain_privilege = false;
     create_register_name = 0;
-    create_register_name_size = 0;
     
     for (;;) {
       if (idx >= scan_strings_size) {
@@ -682,7 +680,6 @@ create_ (void)
 	}
 	
 	create_register_name = scan_strings[idx];
-	create_register_name_size = strlen (create_register_name) + 1;
 	++idx;
       }
       
@@ -1111,7 +1108,7 @@ lookup_ (void)
       }
       
       /* Perform the lookup. */
-      aid_t aid = lookup (0, scan_strings[3], strlen (scan_strings[3]) + 1);
+      aid_t aid = lookups (0, scan_strings[3]);
       if (aid == -1) {
 	bfprintf (&text_out_buffer, 0, "-> no automaton registered under %s\n", scan_strings[3]);
 	return true;
@@ -1390,7 +1387,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -1445,7 +1442,7 @@ initialize (void)
     callback_queue_init (&vfs_response_queue);
 
     /* Bind to the vfs. */
-    aid_t vfs_aid = lookup (0, VFS_NAME, strlen (VFS_NAME) + 1);
+    aid_t vfs_aid = lookups (0, VFS_NAME);
     if (vfs_aid == -1) {
       bfprintf (&syslog_buffer, 0, ERROR "no vfs\n");
       state = HALT;

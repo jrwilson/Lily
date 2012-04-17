@@ -238,7 +238,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 

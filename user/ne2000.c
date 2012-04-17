@@ -48,7 +48,7 @@ initialize (void)
       exit ();
     }
 
-    aid_t syslog_aid = lookup (0, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1);
+    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
@@ -71,7 +71,7 @@ initialize (void)
     }
 
     /* Lookup the PCI automaton. */
-    aid_t pci_aid = lookup (0, PCI_NAME, strlen (PCI_NAME) + 1);
+    aid_t pci_aid = lookups (0, PCI_NAME);
     if (pci_aid == -1) {
       bfprintf (&syslog_buffer, 0, ERROR "pci automaton does not exist\n");
       state = STOP;

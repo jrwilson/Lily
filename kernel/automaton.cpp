@@ -338,11 +338,11 @@ automaton::destroy (const shared_ptr<automaton>& ths)
 	 la != (*pos)->end ();
 	 la += PAGE_SIZE, pa += PAGE_SIZE) {
       mmapped_frames_[physical_address_to_frame (pa)] = false;
-      memory_map_type::iterator pos2 = find (memory_map_.begin (), memory_map_.end (), *pos);
-      kassert (pos2 != memory_map_.end ());
-      memory_map_.erase (pos2);
-      delete (*pos);
     }
+    memory_map_type::iterator pos2 = find (memory_map_.begin (), memory_map_.end (), *pos);
+    kassert (pos2 != memory_map_.end ());
+    memory_map_.erase (pos2);
+    delete (*pos);
   }
   mapped_areas_.clear ();
   

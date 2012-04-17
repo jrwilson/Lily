@@ -26,7 +26,7 @@ TARGETS=boot_automaton boot_data
 all : $(TARGETS)
 
 boot_automaton : boot_automaton.o cpio.o vfs_msg.o argv.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 	mkdir -p init_fs/bin
@@ -48,55 +48,55 @@ to_buffer_file : to_buffer_file.c
 
 # File systems
 vfs : vfs.o vfs_msg.o
-	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -ldymem -lstring
+	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -ldymem
 
 tmpfs : tmpfs.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
-	$(CC) -o $@ $^  -ldescription -lbuffer_file -lstring
+	$(CC) -o $@ $^  -ldescription -lbuffer_file
 
 ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 terminal : terminal.o vga_msg.o mouse_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 vga : vga.o vga_msg.o
-	$(CC) -o $@ $^  -ldescription -lbuffer_file -lstring
+	$(CC) -o $@ $^  -ldescription -lbuffer_file
 
 pci : pci.o 
-	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem -lstring
+	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
 
 jsh : jsh.o argv.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
 syslog : syslog.o 
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 frtimer : frtimer.o
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 sampler : sampler.o
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 ne2000 : ne2000.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file
 
 serial_port : serial_port.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file  -ldymem -lstring
+	$(CC) -o $@ $^ -ldescription -lbuffer_file  -ldymem
 
 byte_channel : byte_channel.o
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 ecma2unix : ecma2unix.o mouse_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 zsnoop : zsnoop.o
-	$(CC) -o $@ $^ -lbuffer_file -lstring
+	$(CC) -o $@ $^ -lbuffer_file
 
 bios : bios.o vfs_msg.o
-	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file  -ldymem -lstring
+	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file  -ldymem
 
 %.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<

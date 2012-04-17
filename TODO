@@ -1,10 +1,10 @@
 Kernel
 ======
-Fix kpanic with TODO
-Spurious interrupts
+Fix kpanic's with TODO
+Handle spurious interrupts
 Exit/destroy race condition
 Refactor kernel logging framework (vga and/or serial)
-Fix kassert (1. Enter text mode 2. print 3. halt)
+Fix kassert (1. enter text mode 2. print 3. halt)
 Add time to scheduler
 
 Automata
@@ -18,7 +18,7 @@ editor
 development environment
 command/response actions
 improve text shell
-Make the keyboared more robust
+Make the keyboard more robust (i.e., what if we hit a key before initialization)
 Drivers should probe hardware
 Factor out bind to syslog
 Factor out bind to vfs

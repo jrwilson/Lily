@@ -110,7 +110,7 @@ readfile_callback (void* data,
     return;
   }
 
-  if (create (0, bdb, size, bd1, bd2, 0, 0, true) == -1) {
+  if (creates (0, bdb, size, bd1, bd2, 0, true) == -1) {
     bfprintf (&syslog_buffer, 0, ERROR "could not create %s\n", SHELL_PATH);
     state = STOP;
     return;
@@ -206,7 +206,7 @@ initialize (void)
     
     /* Create the syslog. */
     if (syslog_file != 0) {
-      aid_t syslog_aid = create (0, syslog_file->bd, syslog_file->size, -1, -1, SYSLOG_NAME, strlen (SYSLOG_NAME) + 1, false);
+      aid_t syslog_aid = creates (0, syslog_file->bd, syslog_file->size, -1, -1, SYSLOG_NAME, false);
       if (syslog_aid != -1) {
 
 	/* Bind to the syslog. */
@@ -237,7 +237,7 @@ initialize (void)
       state = STOP;
       return;
     }
-    aid_t vfs = create (0, vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, strlen (VFS_NAME) + 1, false);
+    aid_t vfs = creates (0, vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, false);
     cpio_file_destroy (vfs_file);
     if (vfs == -1) {
       bfprintf (&syslog_buffer, 0, ERROR "could not create vfs\n");
@@ -284,7 +284,7 @@ initialize (void)
       return;
     }
     /* Note:  We pass the buffer containing the cpio archive. */
-    aid_t tmpfs = create (0, tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, 0, false);
+    aid_t tmpfs = creates (0, tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, false);
     cpio_file_destroy (tmpfs_file);
     if (tmpfs == -1) {
       bfprintf (&syslog_buffer, 0, ERROR "could not create tmpfs\n");

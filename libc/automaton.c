@@ -1,4 +1,5 @@
 #include "automaton.h"
+#include "string.h"
 
 #define syscall0(syscall)		\
   __asm__ ("mov %0, %%eax\n" \
@@ -122,6 +123,23 @@ create (lily_error_t* err,
   aid_t retval;
   syscall1re (LILY_SYSCALL_CREATE, retval, &text_bd, err);
   return retval;
+}
+
+aid_t
+creates (lily_error_t* err,
+	 bd_t text_bd,
+	 size_t text_size,
+	 bd_t bda,
+	 bd_t bdb,
+	 const char* name,
+	 bool retain_privilege)
+{
+  if (name != 0) {
+    return create (err, text_bd, text_size, bda, bdb, name, strlen (name) + 1, retain_privilege);
+  }
+  else {
+    return create (err, text_bd, text_size, bda, bdb, 0, 0, retain_privilege);
+  }
 }
 
 bid_t
@@ -322,6 +340,13 @@ lookup (lily_error_t* err,
   aid_t retval;
   syscall2re (LILY_SYSCALL_LOOKUP, retval, name, size, err);
   return retval;
+}
+
+aid_t
+lookups (lily_error_t* err,
+	 const char* name)
+{
+  return lookup (err, name, strlen (name) + 1);
 }
 
 bd_t
