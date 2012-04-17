@@ -25,7 +25,7 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o vfs_msg.o argv.o
+boot_automaton : boot_automaton.o cpio.o vfs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
@@ -68,7 +68,7 @@ vga : vga.o vga_msg.o
 pci : pci.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
 
-jsh : jsh.o argv.o vfs_msg.o
+jsh : jsh.o vfs_msg.o kv_parse.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
 syslog : syslog.o kv_parse.o

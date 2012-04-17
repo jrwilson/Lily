@@ -21,7 +21,6 @@ Make the keyboard more robust (i.e., what if we hit a key before initialization)
 Drivers should probe hardware
 Factor out bind to syslog
 Factor out bind to vfs
-Remove argv
 subscribe to mounted file system
 subscribe to vfs client
 High-level bind using string names

@@ -189,7 +189,7 @@ serial_port_callback (void* ptr,
   }
 
   if (bfprintf (&bf, 0, "port=%#x irq=%d", spc->port, spc->irq) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argv\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argument buffer\n");
     spc_destroy (spc);
     state = HALT;
     return;

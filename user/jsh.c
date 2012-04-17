@@ -5,8 +5,8 @@
 #include <description.h>
 #include "vfs_msg.h"
 #include <callback_queue.h>
-#include "argv.h"
 #include "syslog.h"
+#include "kv_parse.h"
 
 #define ERROR "jsh: error: "
 
@@ -591,39 +591,34 @@ create_callback (void* data,
   }
 
   bd_t bd1 = buffer_create (0, 0);
-  bd_t bd2 = buffer_create (0, 0);
-  if (bd1 == -1 || bd2 == -1) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argv buffers\n");
+  if (bd1 == -1) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argument buffer\n");
     state = HALT;
     return;
   }
 
-  argv_t argv;
-  if (argv_initw (&argv, bd1, bd2) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argv buffers\n");
+  buffer_file_t bf;
+  if (buffer_file_initw (&bf, 0, bd1) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
     state = HALT;
     return;
   }
 
-  for (; create_argv_idx != scan_strings_size; ++create_argv_idx) {
-    if (argv_append (&argv, scan_strings[create_argv_idx], strlen (scan_strings[create_argv_idx]) + 1) != 0) {
-      buffer_file_puts (&syslog_buffer, 0, ERROR "could not append to argv buffers\n");
-      state = HALT;
-      return;
-    }
+  if (buffer_file_puts (&bf, 0, current_line + (scan_strings[create_argv_idx] - scan_string_copy)) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not append to argument buffer\n");
+    state = HALT;
+    return;
   }
 
-  aid_t aid = creates (0, bdb, size, bd1, bd2, create_register_name, create_retain_privilege);
+  aid_t aid = creates (0, bdb, size, bd1, -1, create_register_name, create_retain_privilege);
   if (aid == -1) {
     buffer_destroy (0, bd1);
-    buffer_destroy (0, bd2);
     buffer_file_puts (&text_out_buffer, 0, "-> error: create failed\n");
     return;
   }
 
   if (subscribe_destroyed (0, aid, DESTROYED_NO) != 0) {
     buffer_destroy (0, bd1);
-    buffer_destroy (0, bd2);
     buffer_file_puts (&text_out_buffer, 0, "-> error: subscribe failed\n");
     return;
   }
@@ -635,7 +630,6 @@ create_callback (void* data,
   automata_head = automaton;
 
   buffer_destroy (0, bd1);
-  buffer_destroy (0, bd2);
   
   bfprintf (&text_out_buffer, 0, "-> %s = %d\n", scan_strings[0], aid);
 }
@@ -1512,26 +1506,43 @@ initialize (void)
     }
 
     description_fini (&vfs_description, 0);
-    
-    argv_t argv;
-    size_t argc;
-    if (argv_initr (&argv, bda, bdb, &argc) == 0) {
-      if (argc >= 2) {
-    	/* Request the script. */
-    	const char* filename;
-    	size_t size;
-    	if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
-	  buffer_file_puts (&syslog_buffer, 0, ERROR "could not read script argument\n");
-	  state = HALT;
-	  return;
-    	}
 
-    	vfs_request_queue_push_readfile (&vfs_request_queue, 0, filename);
-	process_hold = true;
-    	callback_queue_push (&vfs_response_queue, 0, readscript_callback, 0);
+    if (bda != -1) {
+      /* Process arguments. */
+      buffer_file_t bf;
+      if (buffer_file_initr (&bf, 0, bda) != 0) {
+	buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
+	state = HALT;
+	return;
+      }
+
+      const size_t size = buffer_file_size (&bf);
+      const char* begin = buffer_file_readp (&bf, size);
+      if (begin == 0) {
+	buffer_file_puts (&syslog_buffer, 0, ERROR "could not read init buffer\n");
+	state = HALT;
+	return;
+      }
+      const char* end = begin + size;
+      const char* ptr = begin;
+
+      char* key = 0;
+      char* value = 0;
+      while (ptr != end && kv_parse (0, &key, &value, &ptr, end) == 0) {
+	if (key != 0) {
+	  if (strcmp (key, "script") == 0) {
+	    if (value != 0) {
+	      vfs_request_queue_push_readfile (&vfs_request_queue, 0, value);
+	      process_hold = true;
+	      callback_queue_push (&vfs_response_queue, 0, readscript_callback, 0);
+	    }
+	  }
+	}
+	free (key);
+	free (value);
       }
     }
-    
+
     if (bda != -1) {
       buffer_destroy (0, bda);
     }

@@ -5,7 +5,6 @@
 #include <dymem.h>
 #include "cpio.h"
 #include "vfs_msg.h"
-#include "argv.h"
 #include "syslog.h"
 
 /*
@@ -40,8 +39,7 @@
 
 /* Create a shell located here with this argument. */
 #define SHELL_PATH "/bin/jsh"
-/* The cannot contain more than one string. */
-#define SHELL_CMDLINE "/scr/start.jsh"
+#define SCRIPT_PATH "/scr/start.jsh"
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -84,40 +82,32 @@ readfile_callback (void* data,
   }
 
   bd_t bd1 = buffer_create (0, 0);
-  bd_t bd2 = buffer_create (0, 0);
-  if (bd1 == -1 || bd2 == -1) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argv buffers\n");
+  if (bd1 == -1) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argument buffer\n");
     state = STOP;
     return;
   }
 
-  argv_t argv;
-  if (argv_initw (&argv, bd1, bd2) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argv\n");
+  buffer_file_t bf;
+  if (buffer_file_initw (&bf, 0, bd1) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
     state = STOP;
     return;
   }
 
-  if (argv_append (&argv, SHELL_PATH, strlen (SHELL_PATH) + 1) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argv\n");
+  if (bfprintf (&bf, 0, "script=%s\n", SCRIPT_PATH) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not append to argument buffer\n");
     state = STOP;
     return;
   }
 
-  if (argv_append (&argv, SHELL_CMDLINE, strlen (SHELL_CMDLINE) + 1) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argv\n");
-    state = STOP;
-    return;
-  }
-
-  if (creates (0, bdb, size, bd1, bd2, 0, true) == -1) {
+  if (creates (0, bdb, size, bd1, -1, 0, true) == -1) {
     bfprintf (&syslog_buffer, 0, ERROR "could not create %s\n", SHELL_PATH);
     state = STOP;
     return;
   }
 
   buffer_destroy (0, bd1);
-  buffer_destroy (0, bd2);
 
   /* The bdb buffer will be destroyed by the input action that calls this callback. */
 }
