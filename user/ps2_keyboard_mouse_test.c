@@ -75,14 +75,13 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 {
   initialize ();
 
-  size_t count = 0;
   mouse_packet_t mp;
   mouse_packet_list_t input_buffer;
-  if (mouse_packet_list_initr (&input_buffer, bda, &count) != 0) {
+  if (mouse_packet_list_initr (&input_buffer, 0, bda) != 0) {
     finish_input (bda, bdb);
   }
 
-  for (size_t idx = 0; idx != count; ++idx) {
+  for (size_t idx = 0; idx != input_buffer.count; ++idx) {
     if (mouse_packet_list_read (&input_buffer, &mp) != 0) {
       finish_input (bda, bdb);
     }

@@ -70,20 +70,24 @@ vfs_request_queue_front (const vfs_request_queue_t* vrq);
 
 void
 vfs_request_queue_push_mount (vfs_request_queue_t* vrq,
+			      lily_error_t* err,
 			      aid_t aid,
 			      const char* path);
 
 void
 vfs_request_queue_push_readfile (vfs_request_queue_t* vrq,
+				 lily_error_t* err,
 				 const char* path);
 
 int
 vfs_request_queue_pop_to_buffer (vfs_request_queue_t* vrq,
+				 lily_error_t* err,
 				 bd_t bda,
 				 bd_t bdb);
 
 int
 vfs_request_queue_push_from_buffer (vfs_request_queue_t* vrq,
+				    lily_error_t* err,
 				    bd_t bda,
 				    bd_t bdb,
 				    vfs_type_t* type);
@@ -106,30 +110,36 @@ vfs_response_queue_empty (const vfs_response_queue_t* vrq);
 
 void
 vfs_response_queue_push_bad_request (vfs_response_queue_t* vrq,
+				     lily_error_t* err,
 				     vfs_type_t type);
 
 void
 vfs_response_queue_push_mount (vfs_response_queue_t* vrq,
+			       lily_error_t* err,
 			       vfs_error_t error);
 
 int
 vfs_response_queue_push_readfile (vfs_response_queue_t* vrq,
+				  lily_error_t* err,
 				  vfs_error_t error,
 				  size_t size,
 				  bd_t bd);
 
 int
 vfs_response_queue_pop_to_buffer (vfs_response_queue_t* vrq,
+				  lily_error_t* err,
 				  bd_t bda,
 				  bd_t bdb);
 
 int
-read_vfs_mount_response (bd_t bda,
+read_vfs_mount_response (lily_error_t* err,
+			 bd_t bda,
 			 bd_t bdb,
 			 vfs_error_t* error);
 
 int
-read_vfs_readfile_response (bd_t bd,
+read_vfs_readfile_response (lily_error_t* err,
+			    bd_t bd,
 			    vfs_error_t* error,
 			    size_t* size);
 
@@ -197,16 +207,19 @@ vfs_fs_request_queue_empty (const vfs_fs_request_queue_t* vrq);
 
 void
 vfs_fs_request_queue_push_descend (vfs_fs_request_queue_t* vrq,
+				   lily_error_t* err,
 				   size_t id,
 				   const char* name,
 				   size_t name_size);
 
 void
 vfs_fs_request_queue_push_readfile (vfs_fs_request_queue_t* vrq,
+				    lily_error_t* err,
 				    size_t id);
 
 int
 vfs_fs_request_queue_pop_to_buffer (vfs_fs_request_queue_t* vrq,
+				    lily_error_t* err,
 				    bd_t bda,
 				    bd_t bdb);
 
@@ -228,52 +241,62 @@ vfs_fs_response_queue_empty (const vfs_fs_response_queue_t* vrq);
 
 void
 vfs_fs_response_queue_push_bad_request (vfs_fs_response_queue_t* vrq,
+					lily_error_t* err,
 					vfs_fs_type_t type);
 
 void
 vfs_fs_response_queue_push_descend (vfs_fs_response_queue_t* vrq,
+				    lily_error_t* err,
 				    vfs_fs_error_t error,
 				    const vfs_fs_node_t* node);
 
 int
 vfs_fs_response_queue_push_readfile (vfs_fs_response_queue_t* vrq,
+				     lily_error_t* err,
 				     vfs_fs_error_t error,
 				     size_t size,
 				     bd_t bd);
 
 int
 vfs_fs_response_queue_pop_to_buffer (vfs_fs_response_queue_t* vrq,
+				     lily_error_t* err,
 				     bd_t bda,
 				     bd_t bdb);
 
 void
-vfs_fs_response_queue_pop (vfs_fs_response_queue_t* vrq);
+vfs_fs_response_queue_pop (vfs_fs_response_queue_t* vrq,
+			   lily_error_t* err);
 
 int
-read_vfs_fs_request_type (bd_t bda,
+read_vfs_fs_request_type (lily_error_t* err,
+			  bd_t bda,
 			  bd_t bdb,
 			  vfs_fs_type_t* type);
 
 int
-read_vfs_fs_descend_request (bd_t bda,
+read_vfs_fs_descend_request (lily_error_t* err,
+			     bd_t bda,
 			     bd_t bdb,
 			     size_t* id,
 			     const char** name,
 			     size_t* name_size);
 
 int
-read_vfs_fs_descend_response (bd_t bda,
+read_vfs_fs_descend_response (lily_error_t* err,
+			      bd_t bda,
 			      bd_t bdb,
 			      vfs_fs_error_t* error,
 			      vfs_fs_node_t* node);
 
 int
-read_vfs_fs_readfile_request (bd_t bda,
+read_vfs_fs_readfile_request (lily_error_t* err,
+			      bd_t bda,
 			      bd_t bdb,
 			      size_t* id);
 
 int
-read_vfs_fs_readfile_response (bd_t bda,
+read_vfs_fs_readfile_response (lily_error_t* err,
+			       bd_t bda,
 			       bd_t bdb,
 			       vfs_fs_error_t* error,
 			       size_t* size);

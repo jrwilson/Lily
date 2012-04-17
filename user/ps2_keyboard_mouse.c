@@ -337,7 +337,7 @@ write_mouse_packet () {
     packet.z_delta_horizontal = 0;
 
     if (getmonotime (0, &packet.time_stamp) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not get the time\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not get the time\n");
       state = STOP;
       return;
     }
@@ -379,8 +379,8 @@ write_mouse_packet () {
       }
     }
 
-    if (mouse_packet_list_write (&mouse_packet_list, &packet) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "failed to write to mouse packet list\n");
+    if (mouse_packet_list_write (&mouse_packet_list, 0, &packet) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "failed to write to mouse packet list\n");
       state = STOP;
       return;
     }
@@ -428,12 +428,12 @@ initialize (void)
     /* Create the keyboard output buffer. */
     scan_codes_bd = buffer_create (0, 0);
     if (scan_codes_bd == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create scan codes buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create scan codes buffer\n");
       state = STOP;
       return;
     }
     if (buffer_file_initw (&scan_codes_buffer, 0, scan_codes_bd) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not initialize scan codes buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize scan codes buffer\n");
       state = STOP;
       return;
     }
@@ -441,37 +441,37 @@ initialize (void)
     /* Create the mouse output buffer. */
     mouse_packets_bd = buffer_create (0, 0);
     if (mouse_packets_bd == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create mouse packets buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create mouse packets buffer\n");
       state = STOP;
       return;
     }
-    if (mouse_packet_list_initw (&mouse_packet_list, mouse_packets_bd) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not initialize mouse packets buffer\n");
+    if (mouse_packet_list_initw (&mouse_packet_list, 0, mouse_packets_bd) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize mouse packets buffer\n");
       state = STOP;
       return;
     }
 
     /* Reserve ports. */
     if (reserve_port (0, DATA_PORT) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not reserve data port\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not reserve data port\n");
       state = STOP;
       return;
     }
     if (reserve_port (0, CONTROLLER_PORT) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not reserve controller port\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not reserve controller port\n");
       state = STOP;
       return;
     }
     
     /* Reserve IRQs. */
     if (subscribe_irq (0, KEYBOARD_IRQ, KEYBOARD_INTERRUPT_NO, 0) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not subscribe to keyboard irq\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not subscribe to keyboard irq\n");
       state = STOP;
       return;
     }
     
     if (subscribe_irq (0, MOUSE_IRQ, MOUSE_INTERRUPT_NO, 0) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not subscribe to mouse irq\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not subscribe to mouse irq\n");
       state = STOP;
       return;
     }
@@ -591,7 +591,7 @@ BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano
   initialize ();
   if (byte_ready ()) {
     if (buffer_file_put (&scan_codes_buffer, 0, read_byte ()) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not write to output buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to output buffer\n");
       state = STOP;
     }
   }
@@ -658,7 +658,7 @@ BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int 
       write_mouse_packet ();
       break;
     default:
-      bfprintf (&syslog_buffer, 0, ERROR "unrecognized packet byte state\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "unrecognized packet byte state\n");
       state = STOP;
       finish_input (bda, bdb);
     }
@@ -685,7 +685,7 @@ BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_pa
 
   if (mouse_packets_out_precondition ()) {
     if (mouse_packet_list_reset (&mouse_packet_list) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "mouse packet list reset failed\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "mouse packet list reset failed\n");
       state = STOP;
       finish_output (false, -1, -1);
     }

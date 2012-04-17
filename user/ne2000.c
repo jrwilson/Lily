@@ -73,7 +73,7 @@ initialize (void)
     /* Lookup the PCI automaton. */
     aid_t pci_aid = lookups (0, PCI_NAME);
     if (pci_aid == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "pci automaton does not exist\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "pci automaton does not exist\n");
       state = STOP;
       return;
     }

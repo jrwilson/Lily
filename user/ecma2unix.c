@@ -52,7 +52,7 @@ initialize (void)
     if (mouse_packets_bd == -1) {
       exit ();
     }
-    if (mouse_packet_list_initw (&mouse_packet_list, mouse_packets_bd) != 0) {
+    if (mouse_packet_list_initw (&mouse_packet_list, 0, mouse_packets_bd) != 0) {
       exit ();
     }
 
@@ -112,19 +112,18 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_TERM_NO, "mouse_packets_in_term", "m
 {
   initialize ();
 
-  size_t count = 0;
   mouse_packet_t mp;
   mouse_packet_list_t input_buffer;
-  if (mouse_packet_list_initr (&input_buffer, bda, &count) != 0) {
+  if (mouse_packet_list_initr (&input_buffer, 0, bda) != 0) {
     finish_input (bda, bdb);
   }
 
-  for (size_t idx = 0; idx != count; ++idx) {
+  for (size_t idx = 0; idx != input_buffer.count; ++idx) {
     if (mouse_packet_list_read (&input_buffer, &mp) != 0) {
       finish_input (bda, bdb);
     }
     
-    if (mouse_packet_list_write (&mouse_packet_list, &mp) != 0) {
+    if (mouse_packet_list_write (&mouse_packet_list, 0, &mp) != 0) {
       exit ();
     }
   }

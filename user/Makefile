@@ -83,7 +83,7 @@ sampler : sampler.o
 ne2000 : ne2000.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file
 
-serial_port : serial_port.o
+serial_port : serial_port.o kv_parse.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file  -ldymem
 
 byte_channel : byte_channel.o

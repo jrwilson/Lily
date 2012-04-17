@@ -20,6 +20,7 @@ typedef struct {
 
 int
 mouse_packet_list_initw (mouse_packet_list_t* vol,
+			 lily_error_t* err,
 			 bd_t bda);
 
 int
@@ -27,12 +28,13 @@ mouse_packet_list_reset (mouse_packet_list_t* vol);
 
 int
 mouse_packet_list_write (mouse_packet_list_t* vol,
+			 lily_error_t* err,
 			 const mouse_packet_t *mp);
 
 int
 mouse_packet_list_initr (mouse_packet_list_t* vol,
-			 bd_t bda,
-			 size_t* count);
+			 lily_error_t* err,
+			 bd_t bda);
 
 int
 mouse_packet_list_read (mouse_packet_list_t* vol,

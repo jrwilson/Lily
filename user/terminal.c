@@ -371,15 +371,15 @@ switch_to_client (size_t client)
   if (client != active_client && client < CLIENT_COUNT) {
     active_client = client;
     /* Send the data. */
-    if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, clients[active_client].screen_bd) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not write vga op list\n");
+    if (vga_op_list_write_bassign (&vga_op_list, 0, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, clients[active_client].screen_bd) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not write vga op list\n");
       state = STOP;
       return;
     }
     
     /* Send the cursor. */
-    if (vga_op_list_write_set_cursor_location (&vga_op_list, clients[active_client].active_position_y * LINE_LIMIT_POSITION + clients[active_client].active_position_x) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not write vga op list\n");
+    if (vga_op_list_write_set_cursor_location (&vga_op_list, 0, clients[active_client].active_position_y * LINE_LIMIT_POSITION + clients[active_client].active_position_x) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not write vga op list\n");
       state = STOP;
       return;
     }
@@ -980,7 +980,7 @@ static void
 insert_modifier_group (unsigned int modifier)
 {
   if (modifier_state_to_symbols[modifier] != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "modifier group exists\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "modifier group exists\n");
     state = STOP;
     return;
   }
@@ -998,7 +998,7 @@ insert_symbol (unsigned int modifier,
 	       symbol_t symbol)
 {
   if (modifier_state_to_symbols[modifier] == 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "modifier group does not exist\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "modifier group does not exist\n");
     state = STOP;
     return;
   }
@@ -1062,7 +1062,7 @@ process_key_code (unsigned char key_code,
 		  bool make)
 {
   if (key_code == 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "null key code\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "null key code\n");
     state = STOP;
     return;
   }
@@ -1215,7 +1215,7 @@ ascii_func (symbol_t symbol,
     }
 
     if (buffer_file_put (&clients[active_client].text_out_buffer, 0, c) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "Could not write to text_out buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "Could not write to text_out buffer\n");
       state = STOP;
       return;
     }
@@ -1246,7 +1246,7 @@ up_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, 0, "\e[A") != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
       state = STOP;
       return;
     }
@@ -1259,7 +1259,7 @@ down_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, 0, "\e[B") != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
       state = STOP;
       return;
     }
@@ -1272,7 +1272,7 @@ left_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, 0, "\e[D") != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
       state = STOP;
       return;
     }
@@ -1285,7 +1285,7 @@ right_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, 0, "\e[C") != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "Could not write to ascii buffer\n");
       state = STOP;
       return;
     }
@@ -1463,13 +1463,13 @@ initialize (void)
     vga_op_list_bdb = buffer_create (0, 0);
     if (vga_op_list_bda == -1 ||
 	vga_op_list_bdb == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create vga op list buffers\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create vga op list buffers\n");
       state = STOP;
       return;
     }
 
-    if (vga_op_list_initw (&vga_op_list, vga_op_list_bda, vga_op_list_bdb) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not initialize vga op list buffers\n");
+    if (vga_op_list_initw (&vga_op_list, 0, vga_op_list_bda, vga_op_list_bdb) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize vga op list buffers\n");
       state = STOP;
       return;
     }
@@ -1697,24 +1697,24 @@ initialize (void)
     for (size_t client = 0; client != CLIENT_COUNT; ++client) {
       clients[client].text_out_bd = buffer_create (0, 0);
       if (clients[client].text_out_bd == -1) {
-    	bfprintf (&syslog_buffer, 0, ERROR "could not create ascii buffer\n");
+    	buffer_file_puts (&syslog_buffer, 0, ERROR "could not create ascii buffer\n");
     	state = STOP;
     	return;
       }
       if (buffer_file_initw (&clients[client].text_out_buffer, 0, clients[client].text_out_bd) != 0) {
-    	bfprintf (&syslog_buffer, 0, ERROR "could not initialize ascii buffer\n");
+    	buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize ascii buffer\n");
     	state = STOP;
     	return;
       }
       
       clients[client].mouse_packets_bd = buffer_create (0, 0);
       if (clients[client].mouse_packets_bd == -1) {
-    	bfprintf (&syslog_buffer, 0, ERROR "could not create mouse packets buffer\n");
+    	buffer_file_puts (&syslog_buffer, 0, ERROR "could not create mouse packets buffer\n");
     	state = STOP;
     	return;
       }
-      if (mouse_packet_list_initw (&clients[client].mouse_packet_list, clients[client].mouse_packets_bd) != 0) {
-    	bfprintf (&syslog_buffer, 0, ERROR "could not initialize mouse packets buffer\n");
+      if (mouse_packet_list_initw (&clients[client].mouse_packet_list, 0, clients[client].mouse_packets_bd) != 0) {
+    	buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize mouse packets buffer\n");
     	state = STOP;
     	return;
       }
@@ -1723,13 +1723,13 @@ initialize (void)
 
       clients[client].screen_bd = buffer_create (0, size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
       if (clients[client].screen_bd == -1) {
-    	bfprintf (&syslog_buffer, 0, ERROR "could not create screen buffer\n");
+    	buffer_file_puts (&syslog_buffer, 0, ERROR "could not create screen buffer\n");
     	state = STOP;
     	return;
       }
       clients[client].screen_buffer = buffer_map (0, clients[client].screen_bd);
       if (clients[client].screen_buffer == 0) {
-    	bfprintf (&syslog_buffer, 0, ERROR "could not map screen buffer\n");
+    	buffer_file_puts (&syslog_buffer, 0, ERROR "could not map screen buffer\n");
     	state = STOP;
     	return;
       }
@@ -2195,14 +2195,14 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
 
   buffer_file_t input_buffer;
   if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not initialize scan code buffer for reading\n");
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not initialize scan code buffer for reading\n");
     finish_input (bda, bdb);
   }
   
   size_t size = buffer_file_size (&input_buffer);
   const unsigned char* codes = buffer_file_readp (&input_buffer, size);
   if (codes == 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not read the scan code buffer\n");
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not read the scan code buffer\n");
     finish_input (bda, bdb);
   }
   
@@ -2262,22 +2262,21 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
 {
   initialize ();
 
-  size_t count = 0;
   mouse_packet_t mouse_packet;
   mouse_packet_list_t mouse_packet_list;
-  if (mouse_packet_list_initr (&mouse_packet_list, bda, &count) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not initialize mouse packet list for reading\n");
+  if (mouse_packet_list_initr (&mouse_packet_list, 0, bda) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not initialize mouse packet list for reading\n");
     finish_input (bda, bdb);
   }
   
-  for (size_t idx = 0; idx != count; ++idx) {
+  for (size_t idx = 0; idx != mouse_packet_list.count; ++idx) {
     if (mouse_packet_list_read (&mouse_packet_list, &mouse_packet) != 0) {
-      bfprintf (&syslog_buffer, 0, WARNING "could not read mouse packet\n");
+      buffer_file_puts (&syslog_buffer, 0, WARNING "could not read mouse packet\n");
       finish_input (bda, bdb);
     }
     
-    if (mouse_packet_list_write (&clients[active_client].mouse_packet_list, &mouse_packet) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not write mouse packet\n");
+    if (mouse_packet_list_write (&clients[active_client].mouse_packet_list, 0, &mouse_packet) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not write mouse packet\n");
       state = STOP;
       finish_input (bda, bdb);
       }
@@ -2317,7 +2316,7 @@ BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packe
   if (client >= 0 && client < CLIENT_COUNT) {
     if (clients[client].mouse_packet_list.count != 0) {
       if (mouse_packet_list_reset (&clients[client].mouse_packet_list) != 0) {
-	bfprintf (&syslog_buffer, 0, ERROR "could not reset mouse packet list\n");
+	buffer_file_puts (&syslog_buffer, 0, ERROR "could not reset mouse packet list\n");
 	state = STOP;
 	finish_output (false, -1, -1);
       }
@@ -2342,14 +2341,14 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
   if (client >= 0 && client < CLIENT_COUNT) {
     buffer_file_t input_buffer;
     if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
-      bfprintf (&syslog_buffer, 0, WARNING "could not initialize text_in buffer for reading\n");
+      buffer_file_puts (&syslog_buffer, 0, WARNING "could not initialize text_in buffer for reading\n");
       finish_input (bda, bdb);
     }
     
     size_t size = buffer_file_size (&input_buffer);
     const char* begin = buffer_file_readp (&input_buffer, size);
     if (begin == 0) {
-      bfprintf (&syslog_buffer, 0, WARNING "could not read text_in buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, WARNING "could not read text_in buffer\n");
       finish_input (bda, bdb);
     }
     
@@ -2378,8 +2377,8 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
     if (client == active_client) {
       if (screen_buffer_changed) {
 	/* Send the data. */
-	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, clients[active_client].screen_bd) != 0) {
-	  bfprintf (&syslog_buffer, 0, ERROR "could not write vga op list\n");
+	if (vga_op_list_write_bassign (&vga_op_list, 0, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, clients[active_client].screen_bd) != 0) {
+	  buffer_file_puts (&syslog_buffer, 0, ERROR "could not write vga op list\n");
 	  state = STOP;
 	  finish_input (bda, bdb);
 	}
@@ -2388,8 +2387,8 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
       size_t new_cursor_location = clients[active_client].active_position_y * LINE_LIMIT_POSITION + clients[active_client].active_position_x;
       if (new_cursor_location != old_cursor_location) {
 	/* Send the cursor. */
-	if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
-	  bfprintf (&syslog_buffer, 0, ERROR "could not write vga op list\n");
+	if (vga_op_list_write_set_cursor_location (&vga_op_list, 0, new_cursor_location) != 0) {
+	  buffer_file_puts (&syslog_buffer, 0, ERROR "could not write vga op list\n");
 	  state = STOP;
 	  finish_input (bda, bdb);
 	}

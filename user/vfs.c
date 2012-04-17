@@ -150,7 +150,7 @@ file_system_create (aid_t aid)
   fs->global_next = file_system_head;
   file_system_head = fs;
 
-  bfprintf (&syslog_buffer, 0, INFO "TODO:  subscribe to file system\n");
+  buffer_file_puts (&syslog_buffer, 0, INFO "TODO:  subscribe to file system\n");
 
   return fs;
 }
@@ -195,8 +195,8 @@ file_system_pop_request (file_system_t** f)
 {
   file_system_t* fs = *f;
   /* Pop the response. */
-  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not write to file system request buffer\n");
+  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, 0, fs->request_bda, fs->request_bdb) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not write to file system request buffer\n");
   }
 
   /* Remove the file system from the request queue. */
@@ -350,7 +350,7 @@ create_client (aid_t aid)
   client_head = client;
   client->on_response_queue = false;
   
-  bfprintf (&syslog_buffer, 0, INFO "TODO:  Subscribe to client\n");
+  buffer_file_puts (&syslog_buffer, 0, INFO "TODO:  Subscribe to client\n");
 
   return client;
 }
@@ -396,24 +396,24 @@ readfile_callback (void* data,
 
   vfs_fs_error_t error;
   size_t size;
-  if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not read readfile response\n");
+  if (read_vfs_fs_readfile_response (0, bda, bdb, &error, &size) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not read readfile response\n");
     return;
   }
 
   if (error != VFS_FS_SUCCESS) {
-    bfprintf (&syslog_buffer, 0, WARNING "readfile did not succeed\n");
+    buffer_file_puts (&syslog_buffer, 0, WARNING "readfile did not succeed\n");
     return;
   }
       
   if (size > buffer_size (0, bdb) * pagesize ()) {
-    bfprintf (&syslog_buffer, 0, WARNING "readfile response has bad size\n");
+    buffer_file_puts (&syslog_buffer, 0, WARNING "readfile response has bad size\n");
     return;
   }
 
   /* Answer. */
-  if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not copy file buffer\n");
+  if (vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_SUCCESS, size, bdb) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not copy file buffer\n");
     return;
   }
   client_answer (client);
@@ -426,13 +426,13 @@ client_path_lookup_done (client_t* client,
   const vfs_request_queue_item_t* req = vfs_request_queue_front (&client->request_queue);
   switch (req->type) {
   case VFS_UNKNOWN:
-    bfprintf (&syslog_buffer, 0, WARNING "unknown request in client request queue\n");
+    buffer_file_puts (&syslog_buffer, 0, WARNING "unknown request in client request queue\n");
     break;
   case VFS_MOUNT:
     /* The path could not be translated. */
     if (fail) {
       /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, VFS_PATH_DNE);
+      vfs_response_queue_push_mount (&client->response_queue, 0, VFS_PATH_DNE);
       client_answer (client);
       return;
     }
@@ -440,7 +440,7 @@ client_path_lookup_done (client_t* client,
     /* The final destination was not a directory. */
     if (client->path_lookup_current.node.type != DIRECTORY) {
       /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_DIRECTORY);
+      vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_DIRECTORY);
       client_answer (client);
       return;
     }
@@ -449,7 +449,7 @@ client_path_lookup_done (client_t* client,
     description_t desc;
     if (description_init (&desc, 0, req->u.mount.aid) != 0) {
       /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, VFS_AID_DNE);
+      vfs_response_queue_push_mount (&client->response_queue, 0, VFS_AID_DNE);
       client_answer (client);
       return;
     }
@@ -459,7 +459,7 @@ client_path_lookup_done (client_t* client,
       if (description_read_name (&desc, &request, VFS_FS_REQUEST_NAME) != 0) {
 	/* Answer. */
 	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
+	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_FS);
 	client_answer (client);
 	return;
       }
@@ -468,7 +468,7 @@ client_path_lookup_done (client_t* client,
       if (description_read_name (&desc, &response, VFS_FS_RESPONSE_NAME) != 0) {
 	/* Answer. */
 	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS);
+	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_FS);
 	client_answer (client);
 	return;
       }
@@ -478,7 +478,7 @@ client_path_lookup_done (client_t* client,
       if (bid == -1) {
 	/* Answer. */
 	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
+	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_AVAILABLE);
 	client_answer (client);
 	return;
       }
@@ -487,7 +487,7 @@ client_path_lookup_done (client_t* client,
 	unbind (0, bid);
 	/* Answer. */
 	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE);
+	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_AVAILABLE);
 	client_answer (client);
 	return;
       }
@@ -510,7 +510,7 @@ client_path_lookup_done (client_t* client,
     mount_head = item;
 
     /* Answer. */
-    vfs_response_queue_push_mount (&client->response_queue, VFS_SUCCESS);
+    vfs_response_queue_push_mount (&client->response_queue, 0, VFS_SUCCESS);
     client_answer (client);
     return;
 
@@ -519,7 +519,7 @@ client_path_lookup_done (client_t* client,
     /* The path could not be translated. */
     if (fail) {
       /* Answer. */
-      vfs_response_queue_push_readfile (&client->response_queue, VFS_PATH_DNE, 0, -1);
+      vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_PATH_DNE, 0, -1);
       client_answer (client);
       return;
     }
@@ -527,13 +527,13 @@ client_path_lookup_done (client_t* client,
     /* The final destination was not a file. */
     if (client->path_lookup_current.node.type != FILE) {
       /* Answer. */
-      vfs_response_queue_push_readfile (&client->response_queue, VFS_NOT_FILE, 0, -1);
+      vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_NOT_FILE, 0, -1);
       client_answer (client);
       return;
     }
 
     /* Form a message to a file system. */
-    vfs_fs_request_queue_push_readfile (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id);
+    vfs_fs_request_queue_push_readfile (&client->path_lookup_current.fs->request_queue, 0, client->path_lookup_current.node.id);
     callback_queue_push (&client->path_lookup_current.fs->callback_queue, 0, readfile_callback, client);
     file_system_put_on_request_queue (client->path_lookup_current.fs);
     return;
@@ -555,8 +555,8 @@ descend_callback (void* data,
 
   vfs_fs_error_t error;
   vfs_fs_node_t node;
-  if (read_vfs_fs_descend_response (bda, bdb, &error, &node) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not read descend response\n");
+  if (read_vfs_fs_descend_response (0, bda, bdb, &error, &node) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not read descend response\n");
     return;
   }
 
@@ -617,7 +617,7 @@ client_resume_path_lookup (client_t* client,
   }
   
   /* Form a message to a file system. */
-  vfs_fs_request_queue_push_descend (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id, client->path_lookup_begin, client->path_lookup_end - client->path_lookup_begin);
+  vfs_fs_request_queue_push_descend (&client->path_lookup_current.fs->request_queue, 0, client->path_lookup_current.node.id, client->path_lookup_begin, client->path_lookup_end - client->path_lookup_begin);
   callback_queue_push (&client->path_lookup_current.fs->callback_queue, 0, descend_callback, client);
   file_system_put_on_request_queue (client->path_lookup_current.fs);
 }
@@ -631,12 +631,12 @@ client_start (client_t* client)
     switch (req->type) {
     case VFS_UNKNOWN:
       /* An unknown request type got on the queue.  This is a logic error. */
-      bfprintf (&syslog_buffer, 0, WARNING "unknown request on client request queue\n");
+      buffer_file_puts (&syslog_buffer, 0, WARNING "unknown request on client request queue\n");
       break;
     case VFS_MOUNT:
       if (!check_absolute_path (req->u.mount.path, req->u.mount.path_size)) {
 	/* Answer. */
-	vfs_response_queue_push_mount (&client->response_queue, VFS_BAD_PATH);
+	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_BAD_PATH);
 	client_answer (client);
 	return;
       }
@@ -648,7 +648,7 @@ client_start (client_t* client)
       for (mnt = mount_head; mnt != 0; mnt = mnt->next) {
 	if (mnt->b.fs->aid == req->u.mount.aid) {
 	  /* Answer. */
-	  vfs_response_queue_push_mount (&client->response_queue, VFS_ALREADY_MOUNTED);
+	  vfs_response_queue_push_mount (&client->response_queue, 0, VFS_ALREADY_MOUNTED);
 	  client_answer (client);
 	  return;
 	}
@@ -661,7 +661,7 @@ client_start (client_t* client)
     case VFS_READFILE:
       if (!check_absolute_path (req->u.readfile.path, req->u.readfile.path_size)) {
 	/* Answer. */
-	vfs_response_queue_push_readfile (&client->response_queue, VFS_BAD_PATH, 0, -1);
+	vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_BAD_PATH, 0, -1);
 	client_answer (client);
 	return;
       }
@@ -681,14 +681,14 @@ client_push_request (client_t* client,
 {
   vfs_type_t type;
   bool empty = vfs_request_queue_empty (&client->request_queue);
-  if (vfs_request_queue_push_from_buffer (&client->request_queue, bda, bdb, &type) == 0) {
+  if (vfs_request_queue_push_from_buffer (&client->request_queue, 0, bda, bdb, &type) == 0) {
     if (empty) {
       client_start (client);
     }
   }
   else {
     /* Bad request. */
-    vfs_response_queue_push_bad_request (&client->response_queue, type);
+    vfs_response_queue_push_bad_request (&client->response_queue, 0, type);
     /* Add to the response queue if not already there. */
     client_put_on_response_queue (client);
   }
@@ -699,8 +699,8 @@ client_pop_response (client_t** c)
 {
   client_t* client = *c;
   /* Pop the response. */
-  if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "could not write to client response buffer\n");
+  if (vfs_response_queue_pop_to_buffer (&client->response_queue, 0, client->response_bda, client->response_bdb) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, WARNING "could not write to client response buffer\n");
   }
 
   /* Remove the client from the response queue. */
@@ -833,7 +833,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
   if (client == 0) {
     client = create_client (aid);
     if (client == 0) {
-      bfprintf (&syslog_buffer, 0, WARNING "could not create client\n");
+      buffer_file_puts (&syslog_buffer, 0, WARNING "could not create client\n");
       finish_input (bda, bdb);
     }
   }

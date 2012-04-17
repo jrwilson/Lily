@@ -274,7 +274,7 @@ initialize (void)
     response_bdb = buffer_create (0, 0);
     if (response_bda == -1 ||
 	response_bdb == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create response buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create response buffer\n");
       state = STOP;
       return;
     }
@@ -396,8 +396,8 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
   initialize ();
 
   vfs_fs_type_t type;
-  if (read_vfs_fs_request_type (bda, bdb, &type) != 0) {
-    vfs_fs_response_queue_push_bad_request (&response_queue, type);
+  if (read_vfs_fs_request_type (0, bda, bdb, &type) != 0) {
+    vfs_fs_response_queue_push_bad_request (&response_queue, 0, type);
     finish_input (bda, bdb);
   }
   
@@ -408,25 +408,25 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
       const char* name;
       size_t name_size;
       vfs_fs_node_t no_node;
-      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) != 0) {
-  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node);
+      if (read_vfs_fs_descend_request (0, bda, bdb, &id, &name, &name_size) != 0) {
+  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_BAD_REQUEST, &no_node);
   	finish_input (bda, bdb);
       }
 
       if (id >= nodes_size) {
-  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node);
+  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_BAD_NODE, &no_node);
   	finish_input (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node);
+  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_BAD_NODE, &no_node);
   	finish_input (bda, bdb);
       }
 
       if (inode->node.type != DIRECTORY) {
-  	vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_NOT_DIRECTORY, &no_node);
+  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_NOT_DIRECTORY, &no_node);
   	finish_input (bda, bdb);
       }
 
@@ -435,43 +435,43 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
   	if (child->name_size == name_size &&
   	    memcmp (child->name, name, name_size) == 0) {
   	  /* Found the child with the correct name. */
-  	  vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_SUCCESS, &child->node);
+  	  vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_SUCCESS, &child->node);
   	  finish_input (bda, bdb);
   	}
       }
 
       /* Didn't find it. */
-      vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_CHILD_DNE, &no_node);
+      vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_CHILD_DNE, &no_node);
       finish_input (bda, bdb);
     }
     break;
   case VFS_FS_READFILE:
     {
       size_t id;
-      if (read_vfs_fs_readfile_request (bda, bdb, &id) != 0) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1);
+      if (read_vfs_fs_readfile_request (0, bda, bdb, &id) != 0) {
+  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_BAD_REQUEST, 0, -1);
   	finish_input (bda, bdb);
       }
 
       if (id >= nodes_size) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1);
+  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_BAD_NODE, 0, -1);
   	finish_input (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1);
+  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_BAD_NODE, 0, -1);
   	finish_input (bda, bdb);
       }
 
       if (inode->node.type != FILE) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_NOT_FILE, 0, -1);
+  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_NOT_FILE, 0, -1);
   	finish_input (bda, bdb);
       }
 
-      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
-	bfprintf (&syslog_buffer, 0, ERROR "could not enqueue readfile response\n");
+      if (vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
+	buffer_file_puts (&syslog_buffer, 0, ERROR "could not enqueue readfile response\n");
 	state = STOP;
 	finish_input (bda, bdb);
       }
@@ -479,7 +479,7 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
     }
     break;
   default:
-    vfs_fs_response_queue_push_bad_request (&response_queue, VFS_UNKNOWN);
+    vfs_fs_response_queue_push_bad_request (&response_queue, 0, VFS_UNKNOWN);
     finish_input (bda, bdb);
     break;
   }
@@ -498,8 +498,8 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
   initialize ();
 
   if (response_precondition ()) {
-    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not enqueue response\n");
+    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, 0, response_bda, response_bdb) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not enqueue response\n");
       state = STOP;
       finish_output (false, -1, -1);
     }

@@ -12,8 +12,6 @@
 
 /* TODO:  Improve the error handling. */
 
-/* TODO:  Replace bfprintf with lightweight alternatives. put puts, etc. */
-
 /* TODO:  This is wrong on multiple levels. */
 static int
 atoi (const char* s)
@@ -567,8 +565,8 @@ create_callback (void* data,
 {
   vfs_error_t error;
   size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not read vfs readfile response\n");
+  if (read_vfs_readfile_response (0, bda, &error, &size) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not read vfs readfile response\n");
     state = HALT;
     return;
   }
@@ -581,21 +579,21 @@ create_callback (void* data,
   bd_t bd1 = buffer_create (0, 0);
   bd_t bd2 = buffer_create (0, 0);
   if (bd1 == -1 || bd2 == -1) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not create argv buffers\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argv buffers\n");
     state = HALT;
     return;
   }
 
   argv_t argv;
   if (argv_initw (&argv, bd1, bd2) != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not initialize argv buffers\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argv buffers\n");
     state = HALT;
     return;
   }
 
   for (; create_argv_idx != scan_strings_size; ++create_argv_idx) {
     if (argv_append (&argv, scan_strings[create_argv_idx], strlen (scan_strings[create_argv_idx]) + 1) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not append to argv buffers\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not append to argv buffers\n");
       state = HALT;
       return;
     }
@@ -605,14 +603,14 @@ create_callback (void* data,
   if (aid == -1) {
     buffer_destroy (0, bd1);
     buffer_destroy (0, bd2);
-    bfprintf (&text_out_buffer, 0, "-> error: create failed\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: create failed\n");
     return;
   }
 
   if (subscribe_destroyed (0, aid, DESTROYED_NO) != 0) {
     buffer_destroy (0, bd1);
     buffer_destroy (0, bd2);
-    bfprintf (&text_out_buffer, 0, "-> error: subscribe failed\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: subscribe failed\n");
     return;
   }
 
@@ -631,7 +629,7 @@ create_callback (void* data,
 static void
 create_usage (void)
 {
-  bfprintf (&text_out_buffer, 0, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n");
+  buffer_file_puts (&text_out_buffer, 0, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n");
 }
 
 static bool
@@ -696,7 +694,7 @@ create_ (void)
 
     /* Request the file. */
 
-    vfs_request_queue_push_readfile (&vfs_request_queue, create_path);
+    vfs_request_queue_push_readfile (&vfs_request_queue, 0, create_path);
     callback_queue_push (&vfs_response_queue, 0, create_callback, 0);
 
     return true;
@@ -707,7 +705,7 @@ create_ (void)
 static void
 bind_usage (void)
 {
-  bfprintf (&text_out_buffer, 0, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n");
+  buffer_file_puts (&text_out_buffer, 0, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n");
 }
 
 static void
@@ -722,12 +720,12 @@ single_bind (automaton_t* output_automaton,
   description_t output_description;
   description_t input_description;
   if (description_init (&output_description, 0, output_automaton->aid) != 0) {
-    bfprintf (&text_out_buffer, 0, "-> error: could not describe output\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: could not describe output\n");
     return;
   }
   if (description_init (&input_description, 0, input_automaton->aid) != 0) {
     description_fini (&output_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: could not describe input\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: could not describe input\n");
     return;
   }
       
@@ -736,7 +734,7 @@ single_bind (automaton_t* output_automaton,
   if (description_read_name (&output_description, &output_action, output_action_name) != 0) {
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: output action does not exist\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: output action does not exist\n");
     return;
   }
 
@@ -744,7 +742,7 @@ single_bind (automaton_t* output_automaton,
   if (description_read_name (&input_description, &input_action, input_action_name) != 0) {
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: input action does not exist\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: input action does not exist\n");
     return;
   }
 
@@ -775,14 +773,14 @@ single_bind (automaton_t* output_automaton,
   if (bid == -1) {
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: bind failed\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: bind failed\n");
     return;
   }
 
   if (subscribe_unbound (0, bid, UNBOUND_NO) != 0) {
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: subscribe failed\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: subscribe failed\n");
     return;
   }
 
@@ -811,12 +809,12 @@ glob_bind (automaton_t* output_automaton,
   description_t output_description;
   description_t input_description;
   if (description_init (&output_description, 0, output_automaton->aid) != 0) {
-    bfprintf (&text_out_buffer, 0, "-> error: could not describe output\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: could not describe output\n");
     return;
   }
   if (description_init (&input_description, 0, input_automaton->aid) != 0) {
     description_fini (&output_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: could not describe input\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: could not describe input\n");
     return;
   }
 
@@ -824,7 +822,7 @@ glob_bind (automaton_t* output_automaton,
   if (output_action_count == -1) {
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: bad output description\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: bad output description\n");
     return;
   }
 
@@ -832,7 +830,7 @@ glob_bind (automaton_t* output_automaton,
   if (output_action_count == -1) {
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: bad input description\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: bad input description\n");
     return;
   }
 
@@ -844,7 +842,7 @@ glob_bind (automaton_t* output_automaton,
     free (input_actions);
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: bad output description\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: bad output description\n");
   }
 
   if (description_read_all (&input_description, input_actions) != 0) {
@@ -852,7 +850,7 @@ glob_bind (automaton_t* output_automaton,
     free (input_actions);
     description_fini (&output_description, 0);
     description_fini (&input_description, 0);
-    bfprintf (&text_out_buffer, 0, "-> error: bad input description\n");
+    buffer_file_puts (&text_out_buffer, 0, "-> error: bad input description\n");
     return;
   }
 
@@ -1007,7 +1005,7 @@ bind_ (void)
 
       if (!((output_glob == 0 && input_glob == 0) ||
 	   (output_glob != 0 && input_glob != 0))) {
-	bfprintf (&text_out_buffer, 0, "-> error: glob disagreement\n");
+	buffer_file_puts (&text_out_buffer, 0, "-> error: glob disagreement\n");
 	return true;
       }
 
@@ -1028,7 +1026,7 @@ unbind_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "unbind") == 0) {
     if (scan_strings_size != 2) {
-      bfprintf (&text_out_buffer, 0, "-> usage: unbind BID\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> usage: unbind BID\n");
       return true;
     }
   
@@ -1059,7 +1057,7 @@ destroy_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "destroy") == 0) {
     if (scan_strings_size != 2) {
-      bfprintf (&text_out_buffer, 0, "-> usage: destroy NAME\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> usage: destroy NAME\n");
       return true;
     }
   
@@ -1086,7 +1084,7 @@ destroy_ (void)
 static void
 lookup_usage (void)
 {
-  bfprintf (&text_out_buffer, 0, "-> usage: NAME = lookup NAME\n");
+  buffer_file_puts (&text_out_buffer, 0, "-> usage: NAME = lookup NAME\n");
 }
 
 static bool
@@ -1121,7 +1119,7 @@ lookup_ (void)
       }
       
       if (subscribe_destroyed (0, aid, DESTROYED_NO) != 0) {
-	bfprintf (&text_out_buffer, 0, "-> error: subscribe failed\n");
+	buffer_file_puts (&text_out_buffer, 0, "-> error: subscribe failed\n");
 	return true;
       }
 
@@ -1147,7 +1145,7 @@ describe_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "describe") == 0) {
     if (scan_strings_size != 2) {
-      bfprintf (&text_out_buffer, 0, "-> usage: describe NAME\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> usage: describe NAME\n");
       return true;
     }
 
@@ -1159,20 +1157,20 @@ describe_ (void)
 
     description_t description;
     if (description_init (&description, 0, automaton->aid) != 0) {
-      bfprintf (&text_out_buffer, 0, "-> error: bad description\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> error: bad description\n");
       return true;
     }
 
     size_t action_count = description_action_count (&description);
     if (action_count == -1) {
-      bfprintf (&text_out_buffer, 0, "-> error: bad description\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> error: bad description\n");
       description_fini (&description, 0);
       return true;
     }
     
     action_desc_t* actions = malloc (0, action_count * sizeof (action_desc_t));
     if (description_read_all (&description, actions) != 0) {
-      bfprintf (&text_out_buffer, 0, "-> error: bad description\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> error: bad description\n");
       description_fini (&description, 0);
       free (actions);
       return true;
@@ -1183,38 +1181,38 @@ describe_ (void)
     /* Print the actions. */
     for (size_t action = 0; action != action_count; ++action) {
 
-      bfprintf (&text_out_buffer, 0, "-> ");
+      buffer_file_puts (&text_out_buffer, 0, "-> ");
 
       switch (actions[action].type) {
       case LILY_ACTION_INPUT:
-	bfprintf (&text_out_buffer, 0, " IN ");
+	buffer_file_puts (&text_out_buffer, 0, " IN ");
 	break;
       case LILY_ACTION_OUTPUT:
-	bfprintf (&text_out_buffer, 0, "OUT ");
+	buffer_file_puts (&text_out_buffer, 0, "OUT ");
 	break;
       case LILY_ACTION_INTERNAL:
-	bfprintf (&text_out_buffer, 0, "INT ");
+	buffer_file_puts (&text_out_buffer, 0, "INT ");
 	break;
       case LILY_ACTION_SYSTEM_INPUT:
-	bfprintf (&text_out_buffer, 0, "SYS ");
+	buffer_file_puts (&text_out_buffer, 0, "SYS ");
 	break;
       default:
-	bfprintf (&text_out_buffer, 0, "??? ");
+	buffer_file_puts (&text_out_buffer, 0, "??? ");
 	break;
       }
       
       switch (actions[action].parameter_mode) {
       case NO_PARAMETER:
-	bfprintf (&text_out_buffer, 0, "  ");
+	buffer_file_puts (&text_out_buffer, 0, "  ");
 	break;
       case PARAMETER:
-	bfprintf (&text_out_buffer, 0, "* ");
+	buffer_file_puts (&text_out_buffer, 0, "* ");
 	break;
       case AUTO_PARAMETER:
-	bfprintf (&text_out_buffer, 0, "@ ");
+	buffer_file_puts (&text_out_buffer, 0, "@ ");
 	break;
       default:
-	bfprintf (&text_out_buffer, 0, "? ");
+	buffer_file_puts (&text_out_buffer, 0, "? ");
 	break;
       }
       
@@ -1257,7 +1255,7 @@ list_ (void)
 	return true;
       }
       else {
-	bfprintf (&text_out_buffer, 0, "-> usage: list\n");
+	buffer_file_puts (&text_out_buffer, 0, "-> usage: list\n");
 	return true;
       }
     }
@@ -1270,7 +1268,7 @@ start_ (void)
 {
   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "start") == 0) {
     if (scan_strings_size == 1) {
-      bfprintf (&text_out_buffer, 0, "-> usage: start ID...\n");
+      buffer_file_puts (&text_out_buffer, 0, "-> usage: start ID...\n");
       return true;
     }
 
@@ -1343,21 +1341,21 @@ readscript_callback (void* data,
 {
   vfs_error_t error;
   size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not read script\n");
+  if (read_vfs_readfile_response (0, bda, &error, &size) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not read script\n");
     state = HALT;
     return;
   }
 
   if (error != VFS_SUCCESS) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not read script\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not read script\n");
     state = HALT;
     return;
   }
 
   const char* str = buffer_map (0, bdb);
   if (str == 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not map script\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not map script\n");
     state = HALT;
     return;
   }
@@ -1420,12 +1418,12 @@ initialize (void)
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create text_out buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create text_out buffer\n");
       state = HALT;
       return;
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not initialize text_out buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize text_out buffer\n");
       state = HALT;
       return;
     }
@@ -1434,7 +1432,7 @@ initialize (void)
     vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bda == -1 ||
     	vfs_request_bdb == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create vfs_request buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create vfs_request buffer\n");
       state = HALT;
       return;
     }
@@ -1444,14 +1442,14 @@ initialize (void)
     /* Bind to the vfs. */
     aid_t vfs_aid = lookups (0, VFS_NAME);
     if (vfs_aid == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "no vfs\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "no vfs\n");
       state = HALT;
       return;
     }
     
     description_t vfs_description;
     if (description_init (&vfs_description, 0, vfs_aid) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not describe vfs\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not describe vfs\n");
       state = HALT;
       return;
     }
@@ -1473,7 +1471,7 @@ initialize (void)
     /* We bind the response first so they don't get lost. */
     if (bind (0, vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
     	bind (0, aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not bind to vfs\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not bind to vfs\n");
       state = HALT;
       return;
     }
@@ -1488,12 +1486,12 @@ initialize (void)
     	const char* filename;
     	size_t size;
     	if (argv_arg (&argv, 1, (const void**)&filename, &size) != 0) {
-	  bfprintf (&syslog_buffer, 0, ERROR "could not read script argument\n");
+	  buffer_file_puts (&syslog_buffer, 0, ERROR "could not read script argument\n");
 	  state = HALT;
 	  return;
     	}
 
-    	vfs_request_queue_push_readfile (&vfs_request_queue, filename);
+    	vfs_request_queue_push_readfile (&vfs_request_queue, 0, filename);
 	process_hold = true;
     	callback_queue_push (&vfs_response_queue, 0, readscript_callback, 0);
       }
@@ -1607,7 +1605,7 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
 	/* Printable character. */
 	line_append (c);
 	if (buffer_file_put (&text_out_buffer, 0, c) != 0) {
-	  bfprintf (&syslog_buffer, 0, ERROR "could not write to text_out\n");
+	  buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to text_out\n");
 	  state = HALT;
 	  finish_internal ();
 	}
@@ -1625,7 +1623,7 @@ BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, 
 	  /* Terminate. */
 	  line_append (0);
 	  if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
-	    bfprintf (&syslog_buffer, 0, ERROR "could not write to text_out\n");
+	    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to text_out\n");
 	    state = HALT;
 	    finish_internal ();
 	  }
@@ -1739,8 +1737,8 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
   initialize ();
 
   if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not send vfs request\n");
+    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, 0, vfs_request_bda, vfs_request_bdb) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not send vfs request\n");
       state = HALT;
       finish_output (false, -1, -1);
     }

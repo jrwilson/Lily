@@ -16,23 +16,14 @@
 /* Physical address of the BIOS data area. */
 #define BDA_ADDRESS 0
 
-#define COM1_IRQ 4
-#define COM2_IRQ 3
-#define COM3_IRQ 4
-#define COM4_IRQ 3
-#define COM1_NAME "com1"
-#define COM2_NAME "com2"
-#define COM3_NAME "com3"
-#define COM4_NAME "com4"
+static int com_irq[] = { 4, 3, 4, 3 };
+static const char* com_name[] = { "com1", "com2", "com3", "com4" };
 
 #define SERIAL_PORT_PATH "/bin/serial_port"
 
 typedef struct {
   unsigned int interrupts[256];
-  unsigned short com1_ioport;
-  unsigned short com2_ioport;
-  unsigned short com3_ioport;
-  unsigned short com4_ioport;
+  unsigned short com_ioport[4];
   unsigned short lpt1_ioport;
   unsigned short lpt2_ioport;
   unsigned short lpt3_ioport;
@@ -169,8 +160,8 @@ serial_port_callback (void* ptr,
 
   vfs_error_t error;
   size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "vfs provided bad readfile response\n");
+  if (read_vfs_readfile_response (0, bda, &error, &size) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "vfs provided bad readfile response\n");
     spc_destroy (spc);
     return;
   }
@@ -183,7 +174,7 @@ serial_port_callback (void* ptr,
 
   bd_t bd = buffer_create (0, 0);
   if (bd == -1) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not create argument buffer\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argument buffer\n");
     spc_destroy (spc);
     state = HALT;
     return;
@@ -191,14 +182,14 @@ serial_port_callback (void* ptr,
 
   buffer_file_t bf;
   if (buffer_file_initw (&bf, 0, bd) != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
     spc_destroy (spc);
     state = HALT;
     return;
   }
 
-  if (bfprintf (&bf, 0, "port=%d irq=%d", spc->port, spc->irq) != 0) {
-    bfprintf (&syslog_buffer, 0, ERROR "could not write to argv\n");
+  if (bfprintf (&bf, 0, "port=%x irq=%d", spc->port, spc->irq) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argv\n");
     spc_destroy (spc);
     state = HALT;
     return;
@@ -221,7 +212,7 @@ create_serial_port (unsigned short port,
 		    const char* name)
 {
   spc_t* spc = spc_create (port, irq, name);
-  vfs_request_queue_push_readfile (&vfs_request_queue, SERIAL_PORT_PATH);
+  vfs_request_queue_push_readfile (&vfs_request_queue, 0, SERIAL_PORT_PATH);
   callback_queue_push (&vfs_response_queue, 0, serial_port_callback, spc);
 }
 
@@ -268,7 +259,7 @@ initialize (void)
     vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bda == -1 ||
     	vfs_request_bdb == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create vfs_request buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create vfs_request buffer\n");
       state = HALT;
       return;
     }
@@ -278,14 +269,14 @@ initialize (void)
     /* Bind to the vfs. */
     aid_t vfs_aid = lookups (0, VFS_NAME);
     if (vfs_aid == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "no vfs\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "no vfs\n");
       state = HALT;
       return;
     }
     
     description_t vfs_description;
     if (description_init (&vfs_description, 0, vfs_aid) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not describe vfs\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not describe vfs\n");
       state = HALT;
       return;
     }
@@ -307,7 +298,7 @@ initialize (void)
     /* We bind the response first so they don't get lost. */
     if (bind (0, vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
     	bind (0, aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not bind to vfs\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not bind to vfs\n");
       state = HALT;
       return;
     }
@@ -315,24 +306,18 @@ initialize (void)
     description_fini (&vfs_description, 0);
 
     if (map (0, BDA_ADDRESS, BDA_ADDRESS, sizeof (bios_t)) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not map BIOS data area\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not map BIOS data area\n");
       state = HALT;
       return;
     }
 
     const bios_t* bios = BDA_ADDRESS;
 
-    if (bios->com1_ioport != 0) {
-      create_serial_port (bios->com1_ioport, COM1_IRQ, COM1_NAME);
-    }
-    if (bios->com2_ioport != 0) {
-      create_serial_port (bios->com2_ioport, COM2_IRQ, COM2_NAME);
-    }
-    if (bios->com3_ioport != 0) {
-      create_serial_port (bios->com3_ioport, COM3_IRQ, COM3_NAME);
-    }
-    if (bios->com4_ioport != 0) {
-      create_serial_port (bios->com4_ioport, COM4_IRQ, COM4_NAME);
+    for (int idx = 0; idx != 4; ++idx) {
+      if (bios->com_ioport[idx] != 0) {
+	bfprintf (&syslog_buffer, 0, INFO "BIOS reports serial port at %x\n", bios->com_ioport[idx]);
+	create_serial_port (bios->com_ioport[idx], com_irq[idx], com_name[idx]);
+      }
     }
 
     /* bfprintf (&syslog_buffer, INFO "lpt1=%x\n", bios->lpt1_ioport); */
@@ -429,8 +414,8 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
   initialize ();
 
   if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not send vfs request\n");
+    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, 0, vfs_request_bda, vfs_request_bdb) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not send vfs request\n");
       state = HALT;
       finish_output (false, -1, -1);
     }

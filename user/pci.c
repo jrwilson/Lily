@@ -252,7 +252,7 @@ initialize (void)
     /* Reserve the ports to configure the PCI. */
     if (reserve_port (0, CONFIG_ADDRESS) != 0 ||
 	reserve_port (0, CONFIG_DATA) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
     }

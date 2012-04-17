@@ -2,10 +2,11 @@
 
 int
 vga_op_list_initw (vga_op_list_t* vol,
+		   lily_error_t* err,
 		   bd_t bda,
 		   bd_t bdb)
 {
-  if (buffer_file_initw (&vol->bf, 0, bda) != 0) {
+  if (buffer_file_initw (&vol->bf, err, bda) != 0) {
     return -1;
   }
 
@@ -22,11 +23,12 @@ vga_op_list_reset (vga_op_list_t* vol)
 }
 
 static int
-reset (vga_op_list_t* vol)
+reset (vga_op_list_t* vol,
+       lily_error_t* err)
 {
   if (vol->count == 0) {
     buffer_file_truncate (&vol->bf);
-    if (buffer_file_write (&vol->bf, 0, &vol->count, sizeof (size_t)) != 0) {
+    if (buffer_file_write (&vol->bf, err, &vol->count, sizeof (size_t)) != 0) {
       return -1;
     }
 
@@ -59,14 +61,15 @@ increment_count (vga_op_list_t* vol)
 
 int
 vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
+				       lily_error_t* err,
 				       size_t location)
 {
-  if (reset (vol) != 0) {
+  if (reset (vol, err) != 0) {
     return -1;
   }
   vga_op_type_t type = VGA_SET_CURSOR_LOCATION;
-  if (buffer_file_write (&vol->bf, 0, &type, sizeof (vga_op_type_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, &location, sizeof (size_t)) != 0) {
+  if (buffer_file_write (&vol->bf, err, &type, sizeof (vga_op_type_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, &location, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -75,18 +78,19 @@ vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
 
 int
 vga_op_list_write_assign (vga_op_list_t* vol,
+			  lily_error_t* err,
 			  size_t address,
 			  const void* data,
 			  size_t size)
 {
-  if (reset (vol) != 0) {
+  if (reset (vol, err) != 0) {
     return -1;
   }
   vga_op_type_t type = VGA_ASSIGN;
-  if (buffer_file_write (&vol->bf, 0, &type, sizeof (vga_op_type_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, &address, sizeof (size_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, &size, sizeof (size_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, data, size) != 0) {
+  if (buffer_file_write (&vol->bf, err, &type, sizeof (vga_op_type_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, &address, sizeof (size_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, &size, sizeof (size_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, data, size) != 0) {
     return -1;
   }
 
@@ -95,31 +99,32 @@ vga_op_list_write_assign (vga_op_list_t* vol,
 
 int
 vga_op_list_write_bassign (vga_op_list_t* vol,
+			   lily_error_t* err,
 			   size_t address,
 			   size_t size,
 			   bd_t bd)
 {
-  if (reset (vol) != 0) {
+  if (reset (vol, err) != 0) {
     return -1;
   }
-  size_t bd_size = buffer_size (0, bd);
+  size_t bd_size = buffer_size (err, bd);
   if (bd_size == -1 || size > bd_size * pagesize ()) {
     /* The buffer was too small. */
     return -1;
   }
 
   /* Find the offset in pages of the data. */
-  size_t bd_offset = buffer_size (0, vol->bdb);
+  size_t bd_offset = buffer_size (err, vol->bdb);
   /* Append the data. */
-  if (buffer_append (0, vol->bdb, bd) != 0) {
+  if (buffer_append (err, vol->bdb, bd) != 0) {
     return -1;
   }
   
   vga_op_type_t type = VGA_BASSIGN;
-  if (buffer_file_write (&vol->bf, 0, &type, sizeof (vga_op_type_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, &address, sizeof (size_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, &size, sizeof (size_t)) != 0 ||
-      buffer_file_write (&vol->bf, 0, &bd_offset, sizeof (size_t)) != 0) {
+  if (buffer_file_write (&vol->bf, err, &type, sizeof (vga_op_type_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, &address, sizeof (size_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, &size, sizeof (size_t)) != 0 ||
+      buffer_file_write (&vol->bf, err, &bd_offset, sizeof (size_t)) != 0) {
     return -1;
   }
 
@@ -128,11 +133,11 @@ vga_op_list_write_bassign (vga_op_list_t* vol,
 
 int
 vga_op_list_initr (vga_op_list_t* vol,
+		   lily_error_t* err,
 		   bd_t bda,
-		   bd_t bdb,
-		   size_t* count)
+		   bd_t bdb)
 {
-  if (buffer_file_initr (&vol->bf, 0, bda) != 0) {
+  if (buffer_file_initr (&vol->bf, err, bda) != 0) {
     return -1;
   }
 
@@ -141,10 +146,8 @@ vga_op_list_initr (vga_op_list_t* vol,
   }
 
   vol->bdb = bdb;
-  vol->bdb_size = buffer_size (0, bdb);
-  vol->ptr = buffer_map (0, bdb);
-
-  *count = vol->count;
+  vol->bdb_size = buffer_size (err, bdb);
+  vol->ptr = buffer_map (err, bdb);
 
   return 0;
 }

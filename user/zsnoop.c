@@ -86,13 +86,13 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_A_NO, "text_in_a", "buffer_file_t", text_in_a
 
   switch (last_host) {
   case HOST_NONE:
-    bfprintf (&text_out_buffer, 0, "A:");
+    buffer_file_puts (&text_out_buffer, 0, "A:");
     break;
   case HOST_A:
     /* Do nothing. */
     break;
   case HOST_B:
-    bfprintf (&text_out_buffer, 0, "\nA:");
+    buffer_file_puts (&text_out_buffer, 0, "\nA:");
     break;
   }
 
@@ -122,10 +122,10 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_B_NO, "text_in_b", "buffer_file_t", text_in_b
 
   switch (last_host) {
   case HOST_NONE:
-    bfprintf (&text_out_buffer, 0, "B:");
+    buffer_file_puts (&text_out_buffer, 0, "B:");
     break;
   case HOST_A:
-    bfprintf (&text_out_buffer, 0, "\nB:");
+    buffer_file_puts (&text_out_buffer, 0, "\nB:");
     break;
   case HOST_B:
     /* Do nothing. */

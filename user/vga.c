@@ -114,14 +114,14 @@ initialize (void)
     /* Reserve all of the VGA ports.*/
     if (reserve_port (0, CRT_ADDRESS_PORT) != 0 ||
 	reserve_port (0, CRT_DATA_PORT) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
     }
 
     /* Map in the video memory. */
     if (map (0, (const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not map vga video memory\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not map vga video memory\n");
       state = STOP;
       return;
     }
@@ -191,12 +191,11 @@ BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_in", "vga_op_list", vga_op, ano_t 
 
   if (state == RUN) {
     vga_op_list_t vol;
-    size_t count;
-    if (vga_op_list_initr (&vol, bda, bdb, &count) != 0) {
+    if (vga_op_list_initr (&vol, 0, bda, bdb) != 0) {
       finish_input (bda, bdb);
     }
     
-    for (size_t i = 0; i != count; ++i) {
+    for (size_t i = 0; i != vol.count; ++i) {
       vga_op_type_t type;
       if (vga_op_list_next_op_type (&vol, &type) != 0) {
 	finish_input (bda, bdb);

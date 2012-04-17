@@ -4,6 +4,7 @@
 #include <description.h>
 #include <dymem.h>
 #include "syslog.h"
+#include "kv_parse.h"
 
 /*
   Serial Port Driver
@@ -196,332 +197,6 @@ push_buffer (const void* data,
   }
 }
 
-typedef struct arg_item arg_item_t;
-struct arg_item {
-  char* key;
-  char* value;
-  arg_item_t* next;
-};
-
-typedef enum {
-  SCAN_START,
-  SCAN_STRING,
-} pc_scan_state_t;
-
-typedef enum {
-  PARSE_NORMAL,
-  PARSE_ERROR,
-} pc_parse_state_t;
-
-typedef enum {
-  TOKEN_STRING,
-  TOKEN_EQUAL,
-  TOKEN_END,
-} token_type_t;
-
-typedef struct token token_t;
-struct token {
-  token_type_t type;
-  char* str;
-  token_t* next;
-};
-
-typedef struct {
-  pc_scan_state_t scan_state;
-  char* str;
-  size_t str_size;
-  size_t str_capacity;
-  token_t* token_head;
-  token_t** token_tail;
-  pc_parse_state_t parse_state;
-  token_t* current_token;
-  arg_item_t* item_head;
-  arg_item_t** item_tail;
-} pc_t;
-
-static pc_t*
-pc_create (void)
-{
-  pc_t* pc = malloc (0, sizeof (pc_t));
-  memset (pc, 0, sizeof (pc_t));
-  pc->scan_state = SCAN_START;
-  pc->token_tail = &pc->token_head;
-  pc->parse_state= PARSE_NORMAL;
-  pc->item_tail = &pc->item_head;
-  return pc;
-}
-
-static void
-pc_destroy (pc_t* pc)
-{
-  free (pc->str);
-  while (pc->token_head) {
-    token_t* tmp = pc->token_head;
-    pc->token_head = tmp->next;
-    free (tmp->str);
-    free (tmp);
-  }
-  while (pc->item_head) {
-    arg_item_t* tmp = pc->item_head;
-    pc->item_head = tmp->next;
-    free (tmp->key);
-    free (tmp->value);
-    free (tmp);
-  }
-  free (pc);
-}
-
-static void
-pc_append_char (pc_t* pc,
-		const char c)
-{
-  if (pc->str_size == pc->str_capacity) {
-    pc->str_capacity = pc->str_capacity * 2 + 1;
-    pc->str = realloc (0, pc->str, pc->str_capacity);
-  }
-  pc->str[pc->str_size++] = c;
-}
-
-static void
-pc_push_token (pc_t* pc,
-	       token_type_t type)
-{
-  token_t* token = malloc (0, sizeof (token_t));
-  memset (token, 0, sizeof (token_t));
-  token->type = type;
-  if (type == TOKEN_STRING) {
-    token->str = pc->str;
-    pc->str = 0;
-    pc->str_size = 0;
-    pc->str_capacity = 0;
-  }
-  *pc->token_tail = token;
-  pc->token_tail = &token->next;
-}
-
-static void
-pc_put (pc_t* pc,
-	const char c)
-{
-  switch (pc->scan_state) {
-  case SCAN_START:
-    switch (c) {
-    case ' ':
-    case '\t':
-    case '\n':
-    case 0:
-      /* Ignore white-space. */
-      break;
-    case '=':
-      pc_push_token (pc, TOKEN_EQUAL);
-      break;
-    default:
-      pc_append_char (pc, c);
-      pc->scan_state = SCAN_STRING;
-      break;
-    }
-    break;
-  case SCAN_STRING:
-    switch (c) {
-    case ' ':
-    case '\t':
-    case '\n':
-    case 0:
-      pc_append_char (pc, 0);
-      pc_push_token (pc, TOKEN_STRING);
-      pc->scan_state = SCAN_START;
-      break;
-    case '=':
-      pc_append_char (pc, 0);
-      pc_push_token (pc, TOKEN_STRING);
-      pc_push_token (pc, TOKEN_EQUAL);
-      pc->scan_state = SCAN_START;
-      break;
-    default:
-      pc_append_char (pc, c);
-      break;
-    }
-    break;
-  }
-}
-
-static void
-pc_push_item (pc_t* pc,
-	      char* key,
-	      char* value)
-{
-  arg_item_t* item = malloc (0, sizeof (arg_item_t));
-  memset (item, 0, sizeof (arg_item_t));
-  item->key = key;
-  item->value = value;
-  *pc->item_tail = item;
-  pc->item_tail = &item->next;
-}
-
-static token_t*
-pc_accept (pc_t* pc,
-	   token_type_t type)
-{
-  token_t* retval = pc->current_token;
-  if (retval->type == type) {
-    pc->current_token = retval->next;
-    return retval;
-  }
-  else {
-    pc->parse_state = PARSE_ERROR;
-    return 0;
-  }
-}
-
-/*
-  expr -> item_list end
-  item_list -> lambda
-  item_list -> item item_list
-  item -> string item_end
-  item_end -> lambda
-  item_end -> equal string
- */
-
-static token_t*
-pc_item_end (pc_t* pc)
-{
-  if (pc->parse_state == PARSE_ERROR) {
-    return 0;
-  }
-
-  switch (pc->current_token->type) {
-  case TOKEN_STRING:
-  case TOKEN_END:
-    return 0;
-  case TOKEN_EQUAL:
-    pc_accept (pc, TOKEN_EQUAL);
-    return pc_accept (pc, TOKEN_STRING);
-  }
-
-  return 0;
-}
-
-static void
-pc_item (pc_t* pc)
-{
-  if (pc->parse_state == PARSE_ERROR) {
-    return;
-  }
-
-  switch (pc->current_token->type) {
-  case TOKEN_STRING:
-    {
-      token_t* key = pc_accept (pc, TOKEN_STRING);
-      if (key != 0) {
-	token_t* value = pc_item_end (pc);
-	if (value != 0) {
-	  /* Key and value. */
-	  pc_push_item (pc, key->str, value->str);
-	  key->str = 0;
-	  value->str = 0;
-	}
-	else {
-	  /* Just a key. */
-	  pc_push_item (pc, key->str, 0);
-	  key->str = 0;
-	}
-      }
-    }
-    break;
-  case TOKEN_END:
-  case TOKEN_EQUAL:
-    pc->parse_state = PARSE_ERROR;
-    break;
-  }
-}
-
-static void
-pc_item_list (pc_t* pc)
-{
-  if (pc->parse_state == PARSE_ERROR) {
-    return;
-  }
-
-  switch (pc->current_token->type) {
-  case TOKEN_STRING:
-    pc_item (pc);
-    pc_item_list (pc);
-  case TOKEN_END:
-    break;
-  case TOKEN_EQUAL:
-    pc->parse_state = PARSE_ERROR;
-    break;
-  }
-}
-
-static void
-pc_expr (pc_t* pc)
-{
-  if (pc->parse_state == PARSE_ERROR) {
-    return;
-  }
-
-  switch (pc->current_token->type) {
-  case TOKEN_STRING:
-  case TOKEN_END:
-    pc_item_list (pc);
-    pc_accept (pc, TOKEN_END);
-    break;
-  case TOKEN_EQUAL:
-    pc->parse_state = PARSE_ERROR;
-    break;
-  }
-}
-
-static arg_item_t*
-pc_get_items (pc_t* pc)
-{
-  pc->current_token = pc->token_head;
-  pc_expr (pc);
-
-  arg_item_t* retval = 0;
-  if (pc->parse_state != PARSE_ERROR) {
-    retval = pc->item_head;
-    pc->item_head = 0;
-  }
-
-  return retval;
-}
-
-static arg_item_t*
-parse_args (bd_t bd)
-{
-  buffer_file_t bf;
-  if (buffer_file_initr (&bf, 0, bd) != 0) {
-    return 0;
-  }
-
-  size_t size = buffer_file_size (&bf);
-  if (size == 0) {
-    return 0;
-  }
-
-  const char* begin = buffer_file_readp (&bf, size);
-  if (begin == 0) {
-    return 0;
-  }
-
-  const char* end = begin + size;
-
-  pc_t* pc = pc_create ();
-
-  for (const char* ptr = begin; ptr != end; ++ptr) {
-    pc_put (pc, *ptr);
-  }
-  pc_put (pc, 0);
-  pc_push_token (pc, TOKEN_END);
-
-  arg_item_t* items = pc_get_items (pc);
-  pc_destroy (pc);
-
-  return items;
-}
-
 static void
 initialize (void)
 {
@@ -562,12 +237,12 @@ initialize (void)
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not create output buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create output buffer\n");
       state = HALT;
       return;
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
-      bfprintf (&syslog_buffer, 0, ERROR "could not initialize output buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize output buffer\n");
       state = HALT;
       return;
     }
@@ -575,32 +250,46 @@ initialize (void)
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
 
+    if (bda == -1) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "usage: port=PORT irq=IRQ\n");
+      state = HALT;
+      return;
+    }      
+
     /* Set sentinel values. */
     port_base = -1;
     int irq = -1;
 
     /* Process arguments. */
-    arg_item_t* first_arg = parse_args (bda);
-    for (arg_item_t* item = first_arg; item != 0; item = item->next) {
-      if (strcmp (item->key, "port") == 0) {
-	if (item->value != 0) {
-	  bfprintf (&syslog_buffer, 0, INFO "PORT = %s\n", item->value);
-	}
-	else {
-	  bfprintf (&syslog_buffer, 0, ERROR "option port requires a value\n");
-	}
+    buffer_file_t bf;
+    if (buffer_file_initr (&bf, 0, bda) != 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize init buffer\n");
+      state = HALT;
+      return;
+    }
+
+    const size_t size = buffer_file_size (&bf);
+    const char* begin = buffer_file_readp (&bf, size);
+    if (begin == 0) {
+      buffer_file_puts (&syslog_buffer, 0, ERROR "could not read init buffer\n");
+      state = HALT;
+      return;
+    }
+    const char* end = begin + size;
+    const char* ptr = begin;
+
+    char* key = 0;
+    char* value = 0;
+    while (ptr != end && kv_parse (0, &key, &value, &ptr, end) == 0) {
+      if (key != 0) {
+	bfprintf (&syslog_buffer, 0, "KEY: %s", key);
       }
-      else if (strcmp (item->key, "irq") == 0) {
-	if (item->value != 0) {
-	  bfprintf (&syslog_buffer, 0, INFO "IRQ = %s\n", item->value);
-	}
-	else {
-	  bfprintf (&syslog_buffer, 0, ERROR "option irq requires a value\n");
-	}
+      if (value != 0) {
+	bfprintf (&syslog_buffer, 0, " VAL: %s", value);
       }
-      else {
-	bfprintf (&syslog_buffer, 0, ERROR "unknown option %s\n", item->key);
-      }
+      buffer_file_put (&syslog_buffer, 0, '\n');
+      free (key);
+      free (value);
     }
 
     state = HALT;
@@ -735,7 +424,7 @@ BEGIN_SYSTEM_INPUT (INTERRUPT_NO, "", "", interrupt, ano_t ano, aid_t aid, bd_t 
     case CHARACTER_TIMEOUT_INT:
       while (received_data_ready ()) {
 	if (buffer_file_put (&text_out_buffer, 0, inb (0, port_base + RECEIVE_BUFFER_REG)) != 0) {
-	  bfprintf (&syslog_buffer, 0, ERROR "could not write to output buffer\n");
+	  buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to output buffer\n");
 	  state = HALT;
 	  finish_input (bda, bdb);
 	}
@@ -807,8 +496,6 @@ BEGIN_INPUT (NO_PARAMETER, STOP_NO, "stop", "", stop, ano_t ano, int param, bd_t
 {
   initialize ();
 
-  bfprintf (&syslog_buffer, 0, INFO "stop\n");
-
   /* Disable TX/RX. */
   outb (0, port_base + MODEM_CONTROL_REG, 0);
 
@@ -821,7 +508,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
 
   buffer_file_t input_buffer;
   if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
-    bfprintf (&syslog_buffer, 0, WARNING "bad input buffer\n");
+    buffer_file_puts (&syslog_buffer, 0, WARNING "bad input buffer\n");
     finish_input (bda, bdb);
   }
 
@@ -829,7 +516,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   if (size != 0) {
     const unsigned char* data = buffer_file_readp (&input_buffer, size);
     if (data == 0) {
-      bfprintf (&syslog_buffer, 0, WARNING "bad input buffer\n");
+      buffer_file_puts (&syslog_buffer, 0, WARNING "bad input buffer\n");
       finish_input (bda, bdb);
     }
 
