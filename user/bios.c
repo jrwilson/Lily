@@ -188,7 +188,7 @@ serial_port_callback (void* ptr,
     return;
   }
 
-  if (bfprintf (&bf, 0, "port=%x irq=%d", spc->port, spc->irq) != 0) {
+  if (bfprintf (&bf, 0, "port=%#x irq=%d", spc->port, spc->irq) != 0) {
     buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argv\n");
     spc_destroy (spc);
     state = HALT;
@@ -315,7 +315,7 @@ initialize (void)
 
     for (int idx = 0; idx != 4; ++idx) {
       if (bios->com_ioport[idx] != 0) {
-	bfprintf (&syslog_buffer, 0, INFO "BIOS reports serial port at %x\n", bios->com_ioport[idx]);
+	bfprintf (&syslog_buffer, 0, INFO "BIOS reports serial port at %#x\n", bios->com_ioport[idx]);
 	create_serial_port (bios->com_ioport[idx], com_irq[idx], com_name[idx]);
       }
     }
