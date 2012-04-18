@@ -24,3 +24,16 @@ Factor out bind to vfs
 subscribe to mounted file system
 subscribe to vfs client
 High-level bind using string names
+
+
+
+Rethink the file system.
+In most operating systems, there is one virtual file system that federates a number of virtual and physical file systems.
+The file system is consistent for each process, i.e., /bin/sh is the same for all processes.
+This consistency facilitates IPC and other conventions, e.g., the working directory.
+
+Plan9 allows processes to alter their view of the file system similar to altering a memory map in traditional micro-kernels.
+
+Thus, we should admit the possibility that each automaton might want to build its own virtual file system.
+Alternatively, automata could share filesystem automata for a shared experience.
+Either way, these are ideas that need to be explored.

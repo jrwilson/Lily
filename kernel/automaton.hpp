@@ -303,28 +303,19 @@ public:
   lookup (const char* name,
 	  size_t size)
   {
-    kout << "lookup" << endl;
-
     // Check the name.
     if (!verify_span (name, size) || name[size -1] != 0) {
-      kout << "failed on span or terminator" << endl;
-      kassert (0);
       return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     // Check the name in the map.
     const kstring n (name, size);
 
-    kout << "name = " << n.c_str () << endl;
-
     registry_map_type::const_iterator pos = registry_map_.find (n);
     if (pos != registry_map_.end ()) {
-      kout << "exists" << endl;
       return make_pair (pos->second->aid (), LILY_ERROR_SUCCESS);
     }
     else {
-      kout << "does not exist" << endl;
-      kassert (0);
       return make_pair (-1, LILY_ERROR_SUCCESS);
     }
   }
@@ -669,7 +660,10 @@ public:
 
   // The automaton would like to no longer exist.
   void
-  exit (const shared_ptr<automaton>& ths);
+  exit (const shared_ptr<automaton>& ths,
+	int code,
+	const char* message,
+	size_t message_size);
 
   inline void
   unlock_execution ()

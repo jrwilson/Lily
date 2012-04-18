@@ -47,21 +47,21 @@ initialize (void)
     com_out_bd = buffer_create (0, 0);
     if (com_out_bd == -1) {
       /* Nothing we can do. */
-      exit ();
+      exit (__LINE__, 0, 0);
     }
     if (buffer_file_initw (&com_out_buffer, 0, com_out_bd) != 0) {
       /* Nothing we can do. */
-      exit ();
+      exit (__LINE__, 0, 0);
     }
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
       /* Nothing we can do. */
-      exit ();
+      exit (__LINE__, 0, 0);
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
       /* Nothing we can do. */
-      exit ();
+      exit (__LINE__, 0, 0);
     }
   }
 }
@@ -172,12 +172,12 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
 	print_prefix = false;
 	/* Print the prefix. */
 	if (bfprintf (&text_out_buffer, 0, "(%d) ", aid) != 0) {
-	  exit ();
+	  exit (__LINE__, 0, 0);
 	}
       }
 
       if (buffer_file_put (&text_out_buffer, 0, *begin) != 0) {
-	exit ();
+	exit (__LINE__, 0, 0);
       }
 
       print_prefix = (*begin == '\n');
@@ -188,7 +188,7 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
     if (!print_prefix) {
       /* No new line. */
       if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
-	exit ();
+	exit (__LINE__, 0, 0);
       }
     }
   }

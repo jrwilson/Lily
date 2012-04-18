@@ -4,6 +4,48 @@
 #include <buffer_file.h>
 #include <dymem.h>
 
+/* typedef enum { */
+/*   VFS_SUCCESS, */
+/*   VFS_BAD_REQUEST, */
+/*   VFS_BAD_PATH, */
+/*   VFS_PATH_DNE, */
+/*   VFS_NOT_DIRECTORY, */
+/*   VFS_NOT_FILE, */
+/*   VFS_AID_DNE, */
+/*   VFS_NOT_FS, */
+/*   VFS_ALREADY_MOUNTED, */
+/*   VFS_NOT_AVAILABLE, */
+/* } vfs_error_t; */
+
+const char*
+vfs_error_string (vfs_error_t error)
+{
+  switch (error) {
+  case VFS_SUCCESS:
+    return "success";
+  case VFS_BAD_REQUEST:
+    return "bad request";
+  case VFS_BAD_PATH:
+    return "bad path";
+  case VFS_PATH_DNE:
+    return "path does not exist";
+  case VFS_NOT_DIRECTORY:
+    return "not a directory";
+  case VFS_NOT_FILE:
+    return "not a file";
+  case VFS_AID_DNE:
+    return "automaton does not exist";
+  case VFS_NOT_FS:
+    return "autoamton is not a file system";
+  case VFS_ALREADY_MOUNTED:
+    return "already mounted";
+  case VFS_NOT_AVAILABLE:
+    return "not available";
+  }
+
+  return "unknown error";
+}
+
 void
 vfs_request_queue_init (vfs_request_queue_t* vrq)
 {
@@ -23,40 +65,58 @@ vfs_request_queue_front (const vfs_request_queue_t* vrq)
   return vrq->head;
 }
 
-void
+int
 vfs_request_queue_push_mount (vfs_request_queue_t* vrq,
 			      lily_error_t* err,
 			      aid_t aid,
 			      const char* path)
 {
   vfs_request_queue_item_t* item = malloc (err, sizeof (vfs_request_queue_item_t));
+  if (item == 0) {
+    return -1;
+  }
   memset (item, 0, sizeof (vfs_request_queue_item_t));
   item->type = VFS_MOUNT;
   item->u.mount.aid = aid;
   size_t size = strlen (path) + 1;
   item->u.mount.path = malloc (err, size);
+  if (item->u.mount.path == 0) {
+    free (item);
+    return -1;
+  }
   memcpy (item->u.mount.path, path, size);
   item->u.mount.path_size = size;
   
   *vrq->tail = item;
   vrq->tail = &item->next;
+
+  return 0;
 }
 
-void
+int
 vfs_request_queue_push_readfile (vfs_request_queue_t* vrq,
 				 lily_error_t* err,
 				 const char* path)
 {
   vfs_request_queue_item_t* item = malloc (err, sizeof (vfs_request_queue_item_t));
+  if (item == 0) {
+    return -1;
+  }
   memset (item, 0, sizeof (vfs_request_queue_item_t));
   item->type = VFS_READFILE;
   size_t size = strlen (path) + 1;
   item->u.readfile.path = malloc (err, size);
+  if (item->u.readfile.path == 0) {
+    free (item);
+    return -1;
+  }
   memcpy (item->u.readfile.path, path, size);
   item->u.readfile.path_size = size;
   
   *vrq->tail = item;
   vrq->tail = &item->next;
+
+  return 0;
 }
 
 int

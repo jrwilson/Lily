@@ -76,7 +76,13 @@ void
 finish_internal (void);
 
 void
-exit (void);
+exit (int code,
+      const char* message,
+      size_t message_size);
+
+void
+exits (int code,
+       const char* message);
 
 aid_t
 create (lily_error_t* err,

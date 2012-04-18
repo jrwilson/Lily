@@ -34,12 +34,15 @@ typedef struct {
 
 int
 cpio_archive_init (cpio_archive_t* ar,
+		   lily_error_t* err,
 		   bd_t bd);
 
 cpio_file_t*
-cpio_archive_next_file (cpio_archive_t* ar);
+cpio_archive_next_file (cpio_archive_t* ar,
+			lily_error_t* err);
 
-void
-cpio_file_destroy (cpio_file_t* file);
+int
+cpio_file_destroy (cpio_file_t* file,
+		   lily_error_t* err);
 
 #endif /* CPIO_H */

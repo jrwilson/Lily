@@ -27,11 +27,11 @@ initialize (void)
     com_out_bd = buffer_create (0, 0);
     if (com_out_bd == -1) {
       /* Nothing we can do. */
-      exit ();
+      exit (__LINE__, 0, 0);
     }
     if (buffer_file_initw (&com_out_buffer, 0, com_out_bd) != 0) {
       /* Nothing we can do. */
-      exit ();
+      exit (__LINE__, 0, 0);
     }
   }
 }

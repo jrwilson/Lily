@@ -20,10 +20,10 @@ initialize (void)
     initialized = true;
     response_bd = buffer_create (0, 0);
     if (response_bd == -1) {
-      exit ();
+      exit (__LINE__, 0, 0);
     }
     if (buffer_file_initw (&response_buffer, 0, response_bd) != 0) {
-      exit ();
+      exit (__LINE__, 0, 0);
     }
   }
 }
@@ -55,7 +55,7 @@ BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, "response", "buffer_file_t containing u
     req = false;
     buffer_file_truncate (&response_buffer);
     if (buffer_file_write (&response_buffer, 0, &tick, sizeof (unsigned int)) != 0) {
-      exit ();
+      exit (__LINE__, 0, 0);
     }
     finish_output (true, response_bd, -1);
   }

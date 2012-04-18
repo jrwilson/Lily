@@ -232,10 +232,10 @@ initialize (void)
     /* Create the syslog buffer. */
     syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
-      exit ();
+      exit (__LINE__, 0, 0);
     }
     if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
-      exit ();
+      exit (__LINE__, 0, 0);
     }
 
     aid_t syslog_aid = lookups (0, SYSLOG_NAME);
@@ -244,17 +244,17 @@ initialize (void)
 
       description_t syslog_description;
       if (description_init (&syslog_description, 0, syslog_aid) != 0) {
-	exit ();
+	exit (__LINE__, 0, 0);
       }
       
       action_desc_t syslog_text_in;
       if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
-	exit ();
+	exit (__LINE__, 0, 0);
       }
             
       /* We bind the response first so they don't get lost. */
       if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
-	exit ();
+	exit (__LINE__, 0, 0);
       }
 
       description_fini (&syslog_description, 0);
@@ -285,10 +285,10 @@ initialize (void)
 
     /* Parse the cpio archive looking for files that we need. */
     cpio_archive_t archive;
-    if (cpio_archive_init (&archive, bda) == 0) {
+    if (cpio_archive_init (&archive, 0, bda) == 0) {
       
       cpio_file_t* file;
-      while ((file = cpio_archive_next_file (&archive)) != 0) {
+      while ((file = cpio_archive_next_file (&archive, 0)) != 0) {
 	
 	/* Ignore the "." directory. */
 	if (strcmp (file->name, ".") != 0) {
@@ -323,7 +323,7 @@ initialize (void)
 	}
 	
 	/* Destroy the cpio file. */
-	cpio_file_destroy (file);
+	cpio_file_destroy (file, 0);
       }
     }
 
@@ -360,7 +360,7 @@ BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
   initialize ();
 
   if (stop_precondition ()) {
-    exit ();
+    exit (__LINE__, 0, 0);
   }
   finish_internal ();
 }

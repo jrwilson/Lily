@@ -5,6 +5,11 @@
   __asm__ ("mov %0, %%eax\n" \
 	   "int $0x80\n" : : "g"(syscall) : "eax", "ecx");
 
+#define syscall1(syscall, p1)		\
+  __asm__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx");
+
 #define syscall3(syscall, p1, p2, p3)		\
   __asm__ ("mov %0, %%eax\n" \
 	   "mov %1, %%ebx\n" \
@@ -105,9 +110,23 @@ finish_internal (void)
 }
 
 void
-exit (void)
+exit (int code,
+      const char* message,
+      size_t message_size)
 {
-  syscall0 (LILY_SYSCALL_EXIT);
+  syscall3 (LILY_SYSCALL_EXIT, code, message, message_size);
+}
+
+void
+exits (int code,
+       const char* message)
+{
+  if (message != 0) {
+    exit (code, message, strlen (message) + 1);
+  }
+  else {
+    exit (code, 0, 0);
+  }
 }
 
 aid_t

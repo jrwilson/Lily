@@ -51,10 +51,21 @@ automaton::schedule (const shared_ptr<automaton>& ths,
 
 // The automaton would like to no longer exist.
 void
-automaton::exit (const shared_ptr<automaton>& ths)
+automaton::exit (const shared_ptr<automaton>& ths,
+		 int code,
+		 const char* message,
+		 size_t message_size)
 {
   kassert (ths.get () == this);
-  
+
+  if (aid_ == 0) {
+    kout << "automaton 0 exited with code " << code << ": ";
+    if (message != 0 && verify_span (message, message_size) && message[message_size - 1] == '\0') {
+      kout << message;
+    }
+    kout << endl;
+  }
+      
   shared_ptr<automaton> parent = parent_;
   
   unsubscribe (ths);

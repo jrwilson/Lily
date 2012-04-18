@@ -37,6 +37,9 @@ typedef enum {
   VFS_NOT_AVAILABLE,
 } vfs_error_t;
 
+const char*
+vfs_error_string (vfs_error_t error);
+
 typedef struct vfs_request_queue_item vfs_request_queue_item_t;
 struct vfs_request_queue_item {
   vfs_type_t type;
@@ -68,13 +71,13 @@ vfs_request_queue_empty (const vfs_request_queue_t* vrq);
 const vfs_request_queue_item_t*
 vfs_request_queue_front (const vfs_request_queue_t* vrq);
 
-void
+int
 vfs_request_queue_push_mount (vfs_request_queue_t* vrq,
 			      lily_error_t* err,
 			      aid_t aid,
 			      const char* path);
 
-void
+int
 vfs_request_queue_push_readfile (vfs_request_queue_t* vrq,
 				 lily_error_t* err,
 				 const char* path);
