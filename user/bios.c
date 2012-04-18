@@ -16,18 +16,17 @@
 /* Physical address of the BIOS data area. */
 #define BDA_ADDRESS 0
 
+#define SERIAL_PORT_PATH "/bin/serial_port"
 static int com_irq[] = { 4, 3, 4, 3 };
 static const char* com_name[] = { "com1", "com2", "com3", "com4" };
 
-#define SERIAL_PORT_PATH "/bin/serial_port"
+#define VGA_PATH "/bin/vga"
+#define VGA_NAME "vga"
 
 typedef struct {
   unsigned int interrupts[256];
   unsigned short com_ioport[4];
-  unsigned short lpt1_ioport;
-  unsigned short lpt2_ioport;
-  unsigned short lpt3_ioport;
-  unsigned short lpt4_ioport;
+  unsigned short lpt_ioport[4];
   unsigned short equipment_list;
   unsigned char reserved0;
   unsigned short memory_size; /* In kilobytes. */
@@ -216,6 +215,68 @@ create_serial_port (unsigned short port,
   callback_queue_push (&vfs_response_queue, 0, serial_port_callback, spc);
 }
 
+typedef struct {
+  unsigned short port;
+  unsigned int parameter_table;
+} vgac_t;
+static vgac_t vgac;
+
+static void
+vga_callback (void* ptr,
+	      bd_t bda,
+	      bd_t bdb)
+{
+  vfs_error_t error;
+  size_t size;
+  if (read_vfs_readfile_response (0, bda, &error, &size) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "vfs provided bad readfile response\n");
+    return;
+  }
+
+  if (error != VFS_SUCCESS) {
+    bfprintf (&syslog_buffer, 0, ERROR "could not read %s\n", VGA_PATH);
+    return;
+  }
+
+  bd_t bd = buffer_create (0, 0);
+  if (bd == -1) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not create argument buffer\n");
+    state = HALT;
+    return;
+  }
+
+  buffer_file_t bf;
+  if (buffer_file_initw (&bf, 0, bd) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize argument buffer\n");
+    state = HALT;
+    return;
+  }
+
+  if (bfprintf (&bf, 0, "port=%#x parameter_table=%#x", vgac.port, vgac.parameter_table) != 0) {
+    buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argument buffer\n");
+    state = HALT;
+    return;
+  }
+
+  if (creates (0, bdb, size, bd, -1, VGA_NAME, true) == -1) {
+    bfprintf (&syslog_buffer, 0, ERROR "could not create %s\n", VGA_NAME);
+    state = HALT;
+    return;
+  }
+
+  buffer_destroy (0, bd);
+}
+
+static void
+create_vga (unsigned short port,
+	    unsigned int parameter_table)
+{
+  vgac.port = port;
+  vgac.parameter_table = parameter_table;
+  vfs_request_queue_push_readfile (&vfs_request_queue, 0, VGA_PATH);
+  callback_queue_push (&vfs_response_queue, 0, vga_callback, 0);
+}
+
 static void
 initialize (void)
 {
@@ -315,29 +376,34 @@ initialize (void)
 
     for (int idx = 0; idx != 4; ++idx) {
       if (bios->com_ioport[idx] != 0) {
-	bfprintf (&syslog_buffer, 0, INFO "BIOS reports serial port at %#x\n", bios->com_ioport[idx]);
+	bfprintf (&syslog_buffer, 0, INFO "BIOS reports a serial port at %#x\n", bios->com_ioport[idx]);
 	create_serial_port (bios->com_ioport[idx], com_irq[idx], com_name[idx]);
       }
     }
 
-    /* bfprintf (&syslog_buffer, INFO "lpt1=%x\n", bios->lpt1_ioport); */
-    /* bfprintf (&syslog_buffer, INFO "lpt2=%x\n", bios->lpt2_ioport); */
-    /* bfprintf (&syslog_buffer, INFO "lpt3=%x\n", bios->lpt3_ioport); */
-    /* bfprintf (&syslog_buffer, INFO "lpt4=%x\n", bios->lpt4_ioport); */
-    /* bfprintf (&syslog_buffer, INFO "current_video_mode=%x\n", bios->current_video_mode); */
-    /* bfprintf (&syslog_buffer, INFO "screen_column_count=%d\n", bios->screen_column_count); */
-    /* bfprintf (&syslog_buffer, INFO "crt_base_port=%x\n", bios->crt_base_port); */
-    /* bfprintf (&syslog_buffer, INFO "crt_mode_control_register=%x\n", bios->crt_mode_control_register); */
-    /* bfprintf (&syslog_buffer, INFO "rows_less1=%d\n", bios->rows_less1); */
-    /* bfprintf (&syslog_buffer, INFO "character_point_height=%d\n", bios->character_point_height); */
-    /* bfprintf (&syslog_buffer, INFO "video_mode_options=%x\n", bios->video_mode_options); */
-    /* bfprintf (&syslog_buffer, INFO "ega_feature_bit_switches=%x\n", bios->ega_feature_bit_switches); */
-    /* bfprintf (&syslog_buffer, INFO "video_display_data_area=%x\n", bios->video_display_data_area); */
-    /* bfprintf (&syslog_buffer, INFO "display_combination_code=%x\n", bios->display_combination_code); */
-    /* bfprintf (&syslog_buffer, INFO "video_parameter_table=%x\n", bios->video_parameter_table); */
-    /* bfprintf (&syslog_buffer, INFO "dynamic_save_area=%x\n", bios->dynamic_save_area); */
-    /* bfprintf (&syslog_buffer, INFO "alpha_aux_char_generator=%x\n", bios->alpha_aux_char_generator); */
-    /* bfprintf (&syslog_buffer, INFO "text_aux_char_generator=%x\n", bios->text_aux_char_generator); */
+    if (bios->crt_base_port != 0) {
+      bfprintf (&syslog_buffer, 0, INFO "BIOS reports a VGA at %#x\n", bios->crt_base_port);
+      create_vga (bios->crt_base_port, bios->video_parameter_table);
+    }
+
+    /* bfprintf (&syslog_buffer, 0, INFO "lpt1=%x\n", bios->lpt_ioport[0]); */
+    /* bfprintf (&syslog_buffer, 0, INFO "lpt2=%x\n", bios->lpt_ioport[1]); */
+    /* bfprintf (&syslog_buffer, 0, INFO "lpt3=%x\n", bios->lpt_ioport[2]); */
+    /* bfprintf (&syslog_buffer, 0, INFO "lpt4=%x\n", bios->lpt_ioport[3]); */
+    /* bfprintf (&syslog_buffer, 0, INFO "current_video_mode=%x\n", bios->current_video_mode); */
+    /* bfprintf (&syslog_buffer, 0, INFO "screen_column_count=%d\n", bios->screen_column_count); */
+    /* bfprintf (&syslog_buffer, 0, INFO "crt_base_port=%x\n", bios->crt_base_port); */
+    /* bfprintf (&syslog_buffer, 0, INFO "crt_mode_control_register=%x\n", bios->crt_mode_control_register); */
+    /* bfprintf (&syslog_buffer, 0, INFO "rows_less1=%d\n", bios->rows_less1); */
+    /* bfprintf (&syslog_buffer, 0, INFO "character_point_height=%d\n", bios->character_point_height); */
+    /* bfprintf (&syslog_buffer, 0, INFO "video_mode_options=%x\n", bios->video_mode_options); */
+    /* bfprintf (&syslog_buffer, 0, INFO "ega_feature_bit_switches=%x\n", bios->ega_feature_bit_switches); */
+    /* bfprintf (&syslog_buffer, 0, INFO "video_display_data_area=%x\n", bios->video_display_data_area); */
+    /* bfprintf (&syslog_buffer, 0, INFO "display_combination_code=%x\n", bios->display_combination_code); */
+    /* bfprintf (&syslog_buffer, 0, INFO "video_parameter_table=%x\n", bios->video_parameter_table); */
+    /* bfprintf (&syslog_buffer, 0, INFO "dynamic_save_area=%x\n", bios->dynamic_save_area); */
+    /* bfprintf (&syslog_buffer, 0, INFO "alpha_aux_char_generator=%x\n", bios->alpha_aux_char_generator); */
+    /* bfprintf (&syslog_buffer, 0, INFO "text_aux_char_generator=%x\n", bios->text_aux_char_generator); */
   }
 }
 

@@ -62,8 +62,8 @@ ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
 terminal : terminal.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
-vga : vga.o vga_msg.o
-	$(CC) -o $@ $^  -ldescription -lbuffer_file
+vga : vga.o vga_msg.o kv_parse.o
+	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
 
 pci : pci.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem

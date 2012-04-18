@@ -581,7 +581,7 @@ bfprintf (buffer_file_t* bf,
       /* case 'X': */
   	/* TODO */
     	{
-    	  int num = va_arg (ap, int);
+    	  unsigned int num = va_arg (ap, unsigned int);
 	  if (fbuf.alternate_form) {
     	    if (buffer_file_puts (bf, err, "0x") != 0) {
   	      va_end (ap);
@@ -594,12 +594,7 @@ bfprintf (buffer_file_t* bf,
     	      return -1;
     	    }
     	  }
-    	  else if (num != -2147483648) {
-    	    if (num < 0) {
-    	      fbuf_push_left (&fbuf, '-');
-    	      num *= -1;
-    	    }
-
+    	  else {
     	    while (num != 0) {
     	      fbuf_push_right (&fbuf, to_hex (num % 16));
     	      num /= 16;
@@ -617,12 +612,6 @@ bfprintf (buffer_file_t* bf,
   		va_end (ap);
     		return -1;
     	      }
-    	    }
-    	  }
-    	  else {
-    	    if (buffer_file_puts (bf, err, "-ffffffff") != 0) {
-  	      va_end (ap);
-    	      return -1;
     	    }
     	  }
     	}

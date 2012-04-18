@@ -27,7 +27,7 @@ bios = create -p /bin/bios
 
 ps2_keyboard_mouse = create -p /bin/ps2_keyboard_mouse
 terminal = create /bin/terminal
-vga = create -p /bin/vga
+vga = lookup vga
 
 bind ps2_keyboard_mouse *_out terminal *_in
 bind terminal *_out vga *_in

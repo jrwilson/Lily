@@ -9,7 +9,7 @@ automaton::registry_map_type automaton::registry_map_;
 bid_t automaton::current_bid_ = 0;
 automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 
-bitset<ONE_MEGABYTE / PAGE_SIZE> automaton::mmapped_frames_;
+automaton::mapped_areas_type automaton::all_mapped_areas_;
 bitset<65536> automaton::reserved_ports_;
 
 pair<int, lily_error_t>
@@ -333,12 +333,9 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   for (mapped_areas_type::const_iterator pos = mapped_areas_.begin ();
        pos != mapped_areas_.end ();
        ++pos) {
-    physical_address_t pa = (*pos)->physical_begin;
-    for (logical_address_t la = (*pos)->begin ();
-	 la != (*pos)->end ();
-	 la += PAGE_SIZE, pa += PAGE_SIZE) {
-      mmapped_frames_[physical_address_to_frame (pa)] = false;
-    }
+    mapped_areas_type::iterator pos3 = find (all_mapped_areas_.begin (), all_mapped_areas_.end (), *pos);
+    kassert (pos3 != all_mapped_areas_.end ());
+    all_mapped_areas_.erase (pos3);
     memory_map_type::iterator pos2 = find (memory_map_.begin (), memory_map_.end (), *pos);
     kassert (pos2 != memory_map_.end ());
     memory_map_.erase (pos2);

@@ -90,10 +90,9 @@ private:
    */
 
 private:
-  // Bitset marking which frames are used for memory-mapped I/O.
-  // I assume the region from 0x0 to 0x00100000 is used for memory-mapped I/O.
-  // Need one bit for each frame.
-  static bitset<ONE_MEGABYTE / PAGE_SIZE> mmapped_frames_;
+  // Memory mapped areas.
+  typedef vector<mapped_area*> mapped_areas_type;
+  static mapped_areas_type all_mapped_areas_;
 
   // Bitset marking which I/O ports are reserved.
   static bitset<65536> reserved_ports_;
@@ -259,7 +258,6 @@ private:
 
   bool privileged_;
   // Memory mapped areas.
-  typedef vector<mapped_area*> mapped_areas_type;
   mapped_areas_type mapped_areas_;
   // Reserved I/O ports.
   typedef unordered_set<unsigned short> port_set_type;
@@ -305,19 +303,28 @@ public:
   lookup (const char* name,
 	  size_t size)
   {
+    kout << "lookup" << endl;
+
     // Check the name.
     if (!verify_span (name, size) || name[size -1] != 0) {
+      kout << "failed on span or terminator" << endl;
+      kassert (0);
       return make_pair (-1, LILY_ERROR_INVAL);
     }
 
     // Check the name in the map.
     const kstring n (name, size);
 
+    kout << "name = " << n.c_str () << endl;
+
     registry_map_type::const_iterator pos = registry_map_.find (n);
     if (pos != registry_map_.end ()) {
+      kout << "exists" << endl;
       return make_pair (pos->second->aid (), LILY_ERROR_SUCCESS);
     }
     else {
+      kout << "does not exist" << endl;
+      kassert (0);
       return make_pair (-1, LILY_ERROR_SUCCESS);
     }
   }
@@ -564,7 +571,14 @@ public:
     // 	kout << "*";
     // 	break;
     // }
-    // kout << "\t" << aid_ << "\t" << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
+    // kout << " ";
+    // if (name_.c_str () != 0) {
+    //   kout << name_.c_str ();
+    // }
+    // else {
+    //   kout << aid_;
+    // }
+    // kout << "\t" << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
     
     // Switch page directories.
     vm::switch_to_directory (page_directory);
@@ -686,6 +700,25 @@ private:
 		 const vm_area_base* const y) const
     {
       return x->begin () < y->begin ();
+    }
+  };
+
+  struct mapped_area_overlaps {
+    physical_address_t physical_begin;
+    physical_address_t physical_end;
+
+    mapped_area_overlaps (const physical_address_t& begin,
+			  const physical_address_t& end) :
+      physical_begin (begin),
+      physical_end (end)
+    { }
+
+    inline bool
+    operator () (const mapped_area* const x) const
+    {
+      return
+	(x->physical_begin <= physical_begin && physical_begin < x->physical_end) ||
+	(physical_begin <= x->physical_begin && x->physical_begin < physical_end);
     }
   };
 
@@ -1379,15 +1412,8 @@ public:
       return make_pair (-1, LILY_ERROR_INVAL);
     }
 
-    // I assume that all memory mapped I/O involves the region between 0 and 0x00100000.
-    if (source_end > ONE_MEGABYTE) {
-      return make_pair (-1, LILY_ERROR_INVAL);
-    }
-
-    for (physical_address_t address = source_begin; address != source_end; address += PAGE_SIZE) {
-      if (mmapped_frames_[physical_address_to_frame (address)]) {
-  	return make_pair (-1, LILY_ERROR_ALREADY);
-      }
+    if (find_if (all_mapped_areas_.begin (), all_mapped_areas_.end (), mapped_area_overlaps (destination_begin, destination_end)) != all_mapped_areas_.end ()) {
+      return make_pair (-1, LILY_ERROR_ALREADY);
     }
 
     if (!vm_area_is_free (destination_begin, destination_end)) {
@@ -1401,10 +1427,10 @@ public:
 
     insert_vm_area (area);
     mapped_areas_.push_back (area);
+    all_mapped_areas_.push_back (area);
 
     physical_address_t pa = source_begin;
     for (logical_address_t la = destination_begin; la != destination_end; la += PAGE_SIZE, pa += PAGE_SIZE) {
-      mmapped_frames_[physical_address_to_frame (pa)] = true;
       vm::map (la, physical_address_to_frame (pa), vm::USER, vm::MAP_READ_WRITE, false);
     }
 
@@ -1427,11 +1453,12 @@ public:
 	 la != area->end ();
 	 la += PAGE_SIZE, pa += PAGE_SIZE) {
       vm::unmap (la);
-      mmapped_frames_[physical_address_to_frame (pa)] = false;
     }
 
+    mapped_areas_type::iterator pos2 = find (all_mapped_areas_.begin (), mapped_areas_.end (), area);
+    kassert (pos2 != all_mapped_areas_.end ());
+    all_mapped_areas_.erase (pos2);
     mapped_areas_.erase (pos);
-
     remove_vm_area (area);
     
     return make_pair (0, LILY_ERROR_SUCCESS);

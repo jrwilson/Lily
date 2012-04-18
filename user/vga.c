@@ -4,6 +4,7 @@
 #include <description.h>
 #include "vga_msg.h"
 #include "syslog.h"
+#include "kv_parse.h"
 
 #define INIT_NO 1
 #define STOP_NO 2
@@ -54,6 +55,10 @@ static state_t state = RUN;
 static bd_t syslog_bd = -1;
 static buffer_file_t syslog_buffer;
 
+typedef struct {
+  unsigned int ptr;
+} __attribute__((packed)) video_parameter_t;
+
 static void
 set_cursor_location (unsigned short location)
 {
@@ -73,6 +78,8 @@ assign (size_t address,
     memcpy ((void*)address, data, size);
   }
 }
+
+#define USAGE "usage: port=PORT [parameter_table=ADDRESS]\n"
 
 static void
 initialize (void)
@@ -111,7 +118,114 @@ initialize (void)
       description_fini (&syslog_description, 0);
     }
 
-    /* Reserve all of the VGA ports.*/
+    /* bd_t bda = getinita (); */
+    /* bd_t bdb = getinitb (); */
+
+    /* if (bda == -1) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR USAGE); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+
+    /* int port = -1; */
+    /* unsigned int parameter_table = 0; */
+
+    /* /\* Process arguments. *\/ */
+    /* buffer_file_t bf; */
+    /* if (buffer_file_initr (&bf, 0, bda) != 0) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR "could not initialize init buffer\n"); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+
+    /* const size_t size = buffer_file_size (&bf); */
+    /* const char* begin = buffer_file_readp (&bf, size); */
+    /* if (begin == 0) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR "could not read init buffer\n"); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+    /* const char* end = begin + size; */
+    /* const char* ptr = begin; */
+
+    /* bool error = false; */
+
+    /* char* key = 0; */
+    /* char* value = 0; */
+    /* while (!error && ptr != end && kv_parse (0, &key, &value, &ptr, end) == 0) { */
+    /*   if (key != 0) { */
+    /* 	if (strcmp (key, "port") == 0) { */
+    /* 	  if (value != 0) { */
+    /* 	    string_error_t err; */
+    /* 	    char* ptr; */
+    /* 	    unsigned short p = strtoul (&err, value, &ptr, 0); */
+    /* 	    if (err == STRING_SUCCESS && *ptr == '\0') { */
+    /* 	      port = p; */
+    /* 	    } */
+    /* 	    else { */
+    /* 	      bfprintf (&syslog_buffer, 0, ERROR "could not parse port value %s\n", value); */
+    /* 	      error = true; */
+    /* 	    } */
+    /* 	  } */
+    /* 	  else { */
+    /* 	    buffer_file_puts (&syslog_buffer, 0, ERROR "port requires a value\n"); */
+    /* 	    error = true; */
+    /* 	  } */
+    /* 	} */
+    /* 	else if (strcmp (key, "parameter_table") == 0) { */
+    /* 	  if (value != 0) { */
+    /* 	    string_error_t err; */
+    /* 	    char* ptr; */
+    /* 	    unsigned int p = strtoul (&err, value, &ptr, 0); */
+    /* 	    if (err == STRING_SUCCESS && *ptr == '\0') { */
+    /* 	      parameter_table = p; */
+    /* 	    } */
+    /* 	    else { */
+    /* 	      bfprintf (&syslog_buffer, 0, ERROR "could not parse parameter_table value %s\n", value); */
+    /* 	      error = true; */
+    /* 	    } */
+    /* 	  } */
+    /* 	  else { */
+    /* 	    buffer_file_puts (&syslog_buffer, 0, ERROR "parameter_table requires a value\n"); */
+    /* 	    error = true; */
+    /* 	  } */
+    /* 	} */
+    /* 	else { */
+    /* 	  bfprintf (&syslog_buffer, 0, ERROR "unknown option %s\n", key); */
+    /* 	  error = true; */
+    /* 	} */
+    /*   } */
+    /*   free (key); */
+    /*   free (value); */
+    /* } */
+
+    /* if (error) { */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+
+    /* bfprintf (&syslog_buffer, 0, INFO "parameter_table=%#x\n", parameter_table); */
+
+    /* if (port == -1/\* || parameter_table == 0*\/) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR USAGE); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+
+    /* if (bda != -1) { */
+    /*   buffer_destroy (0, bda); */
+    /* } */
+    /* if (bdb != -1) { */
+    /*   buffer_destroy (0, bdb); */
+    /* } */
+
+    /* if (port != CRT_ADDRESS_PORT) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR "port %#x not supported\n"); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+    
+    /* Reserve the VGA ports.*/
     if (reserve_port (0, CRT_ADDRESS_PORT) != 0 ||
 	reserve_port (0, CRT_DATA_PORT) != 0) {
       buffer_file_puts (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
@@ -119,6 +233,21 @@ initialize (void)
       return;
     }
 
+    /* /\* Map in the parameter table below the video memory. *\/ */
+    /* unsigned int parameter_table_begin = parameter_table & 0xFFFFF; */
+    /* unsigned int parameter_table_end = parameter_table_begin + 23 * 64; /\* TODO:  Magic numbers. *\/ */
+    /* if (!(parameter_table_end <= VGA_VIDEO_MEMORY_BEGIN)) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR "parameter table conflicts with video memory\n"); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+
+    /* if (map (0, (const void*)parameter_table_begin, (const void*)parameter_table, 23 * 64) != 0) { */
+    /*   buffer_file_puts (&syslog_buffer, 0, ERROR "could not map parameter table\n"); */
+    /*   state = STOP; */
+    /*   return; */
+    /* } */
+    
     /* Map in the video memory. */
     if (map (0, (const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
       buffer_file_puts (&syslog_buffer, 0, ERROR "could not map vga video memory\n");
@@ -126,7 +255,14 @@ initialize (void)
       return;
     }
     /* Clear the text region. */
-    memset ((void*)VGA_TEXT_MEMORY_BEGIN, 0, VGA_TEXT_MEMORY_SIZE);
+    memset ((void*)VGA_TEXT_MEMORY_BEGIN, 'X', VGA_TEXT_MEMORY_SIZE);
+
+    /* TODO:  Ensure that a VGA exists. */
+    /* bfprintf (&syslog_buffer, 0, INFO "port=%#x\n", port); */
+
+    /* const video_parameter_t* params = (const video_parameter_t*)parameter_table_begin; */
+    /* bfprintf (&syslog_buffer, 0, INFO "ptr=%#x\n", params->ptr); */
+
   }
 }
 
