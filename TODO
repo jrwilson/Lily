@@ -9,6 +9,12 @@ Add time to scheduler
 
 Automata
 ========
+syslog
+vfs
+tmpfs
+jsh
+
+
 Hardware detection
 Graphical shell
 Thread-like abstraction for request-response
