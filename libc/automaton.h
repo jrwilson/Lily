@@ -76,13 +76,7 @@ void
 finish_internal (void);
 
 void
-exit (int code,
-      const char* message,
-      size_t message_size);
-
-void
-exits (int code,
-       const char* message);
+exit (int code);
 
 aid_t
 create (lily_error_t* err,
@@ -137,6 +131,13 @@ subscribe_destroyed (lily_error_t* err,
 int
 unsubscribe_destroyed (lily_error_t* err,
 		       aid_t aid);
+
+void
+log (const char* message,
+     size_t message_size);
+
+void
+logs (const char* message);
 
 void*
 adjust_break (lily_error_t* err,

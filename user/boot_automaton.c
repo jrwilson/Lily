@@ -46,6 +46,11 @@ static vfs_request_queue_t vfs_request_queue;
 /* Callbacks to execute from the vfs. */
 static callback_queue_t vfs_response_queue;
 
+#define LOG_BUFFER_SIZE 128
+static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR "boot_automaton error:"
+#define WARNING "boot_automaton warning: "
+
 static void
 readfile_callback (void* data,
 		   bd_t bda,
@@ -55,33 +60,47 @@ readfile_callback (void* data,
   vfs_error_t error;
   size_t size;
   if (read_vfs_readfile_response (&err, bda, &error, &size) != 0) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read readfile response: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
   if (error != VFS_SUCCESS) {
-    exits (__LINE__, vfs_error_string (error));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs error: %s", vfs_error_string (error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   bd_t bd1 = buffer_create (&err, 0);
   if (bd1 == -1) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create shell argument buffer: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
   buffer_file_t bf;
   if (buffer_file_initw (&bf, &err, bd1) != 0) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize shell argument buffer: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
-  if (bfprintf (&bf, &err, "script=%s\n", SCRIPT_PATH) != 0) {
-    exits (__LINE__, lily_error_string (err));
+  if (bfprintf (&bf, &err, "script=%s\n", SCRIPT_PATH) < 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to shell argument buffer: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
   if (creates (&err, bdb, size, bd1, -1, 0, true) == -1) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create shell automaton: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
   if (buffer_destroy (&err, bd1) != 0) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy shell argument buffer: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
   /* The bdb buffer will be destroyed by the input action that calls this callback. */
@@ -95,19 +114,27 @@ mount_callback (void* data,
   lily_error_t err;
   vfs_error_t error;
   if (read_vfs_mount_response (&err, bda, bdb, &error) != 0) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read readfile response: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 
   if (error != VFS_SUCCESS) {
-    exits (__LINE__, vfs_error_string (error));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs error: %s", vfs_error_string (error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   /* Request the shell. */
   if (vfs_request_queue_push_readfile (&vfs_request_queue, &err, SHELL_PATH) != 0) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push vfs request: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
   if (callback_queue_push (&vfs_response_queue, &err, readfile_callback, 0) != 0) {
-    exits (__LINE__, lily_error_string (err));
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push vfs callback: %s", lily_error_string (err));
+    logs (log_buffer);
+    exit (-1);
   }
 }
 
@@ -120,12 +147,16 @@ initialize (void)
     lily_error_t err;
     vfs_request_bda = buffer_create (&err, 0);
     if (vfs_request_bda == -1) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffer: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
 
     vfs_request_bdb = buffer_create (0, 0);
     if (vfs_request_bdb == -1) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffer: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
 
     vfs_request_queue_init (&vfs_request_queue);
@@ -137,7 +168,9 @@ initialize (void)
 
     cpio_archive_t archive;
     if (cpio_archive_init (&archive, &err, bda) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize cpio archive: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     
     cpio_file_t* syslog_file = 0;
@@ -146,106 +179,146 @@ initialize (void)
     cpio_file_t* file;
     while ((file = cpio_archive_next_file (&archive, &err)) != 0) {
       if (strcmp (file->name, SYSLOG_PATH) == 0) {
-	syslog_file = file;
+    	syslog_file = file;
       }
       else if (strcmp (file->name, VFS_PATH) == 0) {
-	vfs_file = file;
+    	vfs_file = file;
       }
       else if (strcmp (file->name, TMPFS_PATH) == 0) {
-	tmpfs_file = file;
+    	tmpfs_file = file;
       }
       else {
-	/* Destroy the file if we don't need it. */
-	if (cpio_file_destroy (file, &err) != 0) {
-	  exits (__LINE__, lily_error_string (err));
-	}
+    	/* Destroy the file if we don't need it. */
+    	if (cpio_file_destroy (file, &err) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy cpio archive: %s", lily_error_string (err));
+	  logs (log_buffer);
+	  exit (-1);
+    	}
       }
     }
 
     if (err != LILY_ERROR_SUCCESS) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "error parsing cpio archive: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     
     /* Create the syslog. */
     if (syslog_file != 0) {
       aid_t syslog_aid = creates (0, syslog_file->bd, syslog_file->size, -1, -1, SYSLOG_NAME, false);
       if (syslog_aid == -1) {
-	exits (__LINE__, lily_error_string (err));
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create syslog automaton: %s", lily_error_string (err));
+	logs (log_buffer);
+	exit (-1);
       }
       if (cpio_file_destroy (syslog_file, &err) != 0) {
-	exits (__LINE__, lily_error_string (err));
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy cpio archive: %s", lily_error_string (err));
+	logs (log_buffer);
+	exit (-1);
       }
     }
 
     /* Create the vfs. */
     if (vfs_file == 0) {
-      exits (__LINE__, "no vfs file");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "no vfs file");
+      logs (log_buffer);
+      exit (-1);
     }
     aid_t vfs = creates (&err, vfs_file->bd, vfs_file->size, -1, -1, VFS_NAME, false);
     if (vfs == -1) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs automaton: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     if (cpio_file_destroy (vfs_file, &err) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy cpio archive: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     
     /* Bind to the vfs so we can mount the tmpfs. */
     description_t vfs_description;
     if (description_init (&vfs_description, &err, vfs) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs description: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     
     action_desc_t vfs_request;
     if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) {
-      exits (__LINE__, "vfs automaton does not contain request action");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs automaton does not contain request action");
+      logs (log_buffer);
+      exit (-1);
     }
 
     action_desc_t vfs_response;
     if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) {
-      exits (__LINE__, "vfs automaton does not contain response action");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs automaton does not contain response action");
+      logs (log_buffer);
+      exit (-1);
     }
     
     /* We bind the response first so they don't get lost. */
     if (bind (&err, vfs, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to vfs response: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     if (bind (&err, aid, VFS_REQUEST_NO, 0, vfs, vfs_request.number, 0) == -1) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to vfs request: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
 
     if (description_fini (&vfs_description, &err) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy vfs description: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     
     /* Create the tmpfs. */
     if (tmpfs_file == 0) {
-      exits (__LINE__, "no tmpfs file");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "no tmpfs file");
+      logs (log_buffer);
+      exit (-1);
     }
     /* Note:  We pass the buffer containing the cpio archive. */
     aid_t tmpfs = creates (&err, tmpfs_file->bd, tmpfs_file->size, bda, -1, 0, false);
     if (tmpfs == -1) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create tmpfs automaton: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     if (cpio_file_destroy (tmpfs_file, &err) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy cpio archive: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     
     /* Mount tmpfs on ROOT_PATH. */
     if (vfs_request_queue_push_mount (&vfs_request_queue, &err, tmpfs, ROOT_PATH) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push vfs request: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     if (callback_queue_push (&vfs_response_queue, &err, mount_callback, 0) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push vfs callback: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
 
     if (bda != -1) {
       if (buffer_destroy (&err, bda) != 0) {
-	exits (__LINE__, lily_error_string (err));
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (err));
+	logs (log_buffer);
+	exit (-1);
       }
     }
     if (bdb != -1) {
       if (buffer_destroy (&err, bdb) != 0) {
-	exits (__LINE__, lily_error_string (err));
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (err));
+	logs (log_buffer);
+	exit (-1);
       }
     }
   }
@@ -277,7 +350,9 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
   if (vfs_request_precondition ()) {
     lily_error_t err;
     if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, &err, vfs_request_bda, vfs_request_bdb) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not pop vfs request: %s", lily_error_string (err));
+      logs (log_buffer);
+      exit (-1);
     }
     finish_output (true, vfs_request_bda, vfs_request_bdb);
   }
@@ -296,14 +371,18 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
 {
   initialize ();
 
-  if (!callback_queue_empty (&vfs_response_queue)) {
-    const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
-    callback_t callback = callback_queue_item_callback (item);
-    void* data = callback_queue_item_data (item);
-    callback_queue_pop (&vfs_response_queue);
-    
-    callback (data, bda, bdb);
+  if (callback_queue_empty (&vfs_response_queue)) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "spurious vfs response");
+    logs (log_buffer);
+    finish_input (bda, bdb);
   }
+
+  const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
+  callback_t callback = callback_queue_item_callback (item);
+  void* data = callback_queue_item_data (item);
+  callback_queue_pop (&vfs_response_queue);
+  
+  callback (data, bda, bdb);
 
   finish_input (bda, bdb);
 }
@@ -314,7 +393,9 @@ do_schedule (void)
   lily_error_t err;
   if (vfs_request_precondition ()) {
     if (schedule (&err, VFS_REQUEST_NO, 0) != 0) {
-      exits (__LINE__, lily_error_string (err));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not schedule vfs request action");
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }

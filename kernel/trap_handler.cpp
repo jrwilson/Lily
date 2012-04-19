@@ -79,7 +79,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_EXIT:
     {
-      a->exit (a, regs.ebx, reinterpret_cast<const char*> (regs.ecx), regs.edx);
+      a->exit (a, regs.ebx);
       return;
     }
     break;
@@ -152,6 +152,12 @@ trap_dispatch (volatile registers regs)
       pair<int, lily_error_t> r = a->unsubscribe_destroyed (a, regs.ebx);
       regs.eax = r.first;
       regs.ecx = r.second;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_LOG:
+    {
+      a->log (reinterpret_cast<const char*> (regs.ebx), regs.ecx);
       return;
     }
     break;

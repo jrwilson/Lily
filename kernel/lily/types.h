@@ -43,4 +43,11 @@ typedef enum {
   LILY_ERROR_IANODNE,
 } lily_error_t;
 
+typedef struct {
+  aid_t aid;
+  mono_time_t time;
+  size_t message_size;
+  char message[];
+} log_event_t;
+
 #endif /* LILY_TYPES_H */

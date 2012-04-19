@@ -2,6 +2,7 @@
 #include <string.h>
 #include <buffer_file.h>
 #include <dymem.h>
+#include <ctype.h>
 #include "syslog.h"
 #include "kv_parse.h"
 
@@ -16,8 +17,9 @@
 #define INIT_NO 1
 #define COM_IN_NO 2
 #define COM_OUT_NO 3
-#define TEXT_IN_NO 4
-#define TEXT_OUT_NO 5
+#define SYSTEM_EVENT_NO 4
+#define TEXT_IN_NO 5
+#define TEXT_OUT_NO 6
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -47,21 +49,21 @@ initialize (void)
     com_out_bd = buffer_create (0, 0);
     if (com_out_bd == -1) {
       /* Nothing we can do. */
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (buffer_file_initw (&com_out_buffer, 0, com_out_bd) != 0) {
       /* Nothing we can do. */
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
       /* Nothing we can do. */
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
       /* Nothing we can do. */
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
   }
 }
@@ -141,6 +143,40 @@ BEGIN_OUTPUT (NO_PARAMETER, COM_OUT_NO, "com_out", COM_OUT, com_out, ano_t ano, 
   }
 }
 
+/* BEGIN_SYSTEM_INPUT (SYSTEM_EVENT_NO, "system_event", "", system_event, ano_t ano, int param, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
+/*   buffer_file_puts (&text_out_buffer, 0, "system_event\n"); */
+/*   finish_input (bda, bdb); */
+/* } */
+
+BEGIN_SYSTEM_INPUT (SYSTEM_EVENT_NO, "log_event", "", log_event, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  
+  const log_event_t* le = buffer_map (0, bda);
+  bool print_prefix = true;
+
+  for (size_t idx = 0; idx != le->message_size; ++idx) {
+    if (print_prefix) {
+      print_prefix = false;
+      bfprintf (&text_out_buffer, 0, "[%10u.%.3u] %d ", le->time.seconds, le->time.nanoseconds / 1000000, le->aid);
+    }
+
+    if (isprint (le->message[idx])) {
+      buffer_file_put (&text_out_buffer, 0, le->message[idx]);
+    }
+    
+    print_prefix = (le->message[idx] == '\n');
+  }
+
+  if (!print_prefix) {
+    buffer_file_put (&text_out_buffer, 0, '\n');
+  }
+
+  finish_input (bda, bdb);
+}
+
 /* text_in
    -------
    Receive a line to log.
@@ -171,13 +207,13 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
       if (print_prefix) {
 	print_prefix = false;
 	/* Print the prefix. */
-	if (bfprintf (&text_out_buffer, 0, "(%d) ", aid) != 0) {
-	  exit (__LINE__, 0, 0);
+	if (bfprintf (&text_out_buffer, 0, "(%d) ", aid) < 0) {
+	  exit (-1);
 	}
       }
 
       if (buffer_file_put (&text_out_buffer, 0, *begin) != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
 
       print_prefix = (*begin == '\n');
@@ -188,7 +224,7 @@ BEGIN_INPUT (AUTO_PARAMETER, TEXT_IN_NO, SYSLOG_TEXT_IN, "buffer_file_t", text_i
     if (!print_prefix) {
       /* No new line. */
       if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
     }
   }

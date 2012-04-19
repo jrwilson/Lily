@@ -2,6 +2,7 @@
 #include "ctype.h"
 #include <stdbool.h>
 #include <limits.h>
+#include "printf.h"
 
 char*
 strcpy (char* dest,
@@ -441,4 +442,57 @@ strtoul (string_error_t* err,
   else {
     return strtoul_ (err, ptr, nptr, endptr, base, negative);
   }
+}
+
+typedef struct {
+  char* buffer;
+  size_t size;
+  size_t capacity;
+} snprintf_t;
+
+static void
+put (void* aux,
+     unsigned char c)
+{
+  snprintf_t* s = aux;
+ 
+  if (s->size < s->capacity) {
+    s->buffer[s->size] = c;
+  }
+  s->size++;
+}
+
+int
+snprintf (char* str,
+	  size_t size,
+	  const char* format,
+	  ...)
+{
+  snprintf_t s;
+  s.buffer = str;
+  s.size = 0;
+  s.capacity = size;
+  printf_t p;
+  p.aux = &s;
+  p.put = put;
+
+  va_list args;
+  va_start (args, format);
+  int retval = printf (&p, format, args);
+  va_end (args);
+
+  if (retval != 0) {
+    return -1;
+  }
+
+  retval = s.size;
+
+  if (s.size < s.capacity) {
+    put (&s, '\0');
+  }
+  else {
+    str[size - 1] = '\0';
+  }
+
+  return retval;
 }

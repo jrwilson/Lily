@@ -11,7 +11,7 @@ OBJECTS=crt0.o libc.a libdymem.a libbuffer_file.a libdescription.a libcallback_q
 .PHONY : all
 all : $(OBJECTS)
 
-libc.a : automaton.o string.o ctype.o
+libc.a : automaton.o string.o ctype.o printf.o
 
 libdymem.a : dymem.o
 

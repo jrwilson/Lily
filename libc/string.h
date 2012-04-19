@@ -98,4 +98,10 @@ strtoul (string_error_t* err,
 	 char** endptr,
 	 int base);
 
+int
+snprintf (char* str,
+	  size_t size,
+	  const char* format,
+	  ...);
+
 #endif /* STRING_H */

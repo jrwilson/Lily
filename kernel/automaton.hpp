@@ -100,6 +100,9 @@ private:
   /*
    * SUBSCRIPTIONS
    */
+  // Automata subscribing to log events.
+  typedef unordered_map<shared_ptr<automaton>, const paction*> log_event_map_type;
+  static log_event_map_type log_event_map_;
 
   /*
    * CREATION AND DESTRUCTION
@@ -164,6 +167,11 @@ public:
    * SUBSCRIPTIONS
    */
 
+private:
+  static void
+  event (const shared_ptr<buffer>& bda,
+	 const shared_ptr<buffer>& bdb);
+
   /*
    * CREATION AND DESTRUCTION
    */
@@ -194,6 +202,8 @@ private:
   kstring description_;
   // Flag indicating the description should be regenerated from the list of actions.
   bool regenerate_description_;
+  // Pointer to this automaton's system_event action.
+  const paction* system_event_;
 
   /*
    * AUTOMATA HIERARCHY
@@ -465,6 +475,8 @@ public:
     pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
     
     if (r.first.get () != 0) {
+      kout << "TODO:  Generate create event" << endl;
+      event (shared_ptr<buffer> (), shared_ptr<buffer> ());
       return make_pair (r.first->aid (), r.second);
     }
     else {
@@ -661,9 +673,7 @@ public:
   // The automaton would like to no longer exist.
   void
   exit (const shared_ptr<automaton>& ths,
-	int code,
-	const char* message,
-	size_t message_size);
+	int code);
 
   inline void
   unlock_execution ()
@@ -945,7 +955,6 @@ public:
   inline pair<bd_t, lily_error_t>
   buffer_create (size_t size)
   {
-    
     // Generate an id.
     bd_t bd = generate_bd ();
     
@@ -1059,31 +1068,12 @@ public:
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
-  inline pair<void*, lily_error_t>
-  buffer_map (bd_t bd)
+private:
+  inline void*
+  buffer_map (const shared_ptr<buffer>& b)
   {
     kassert (heap_area_ != 0);
     kassert (stack_area_ != 0);
-
-    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
-    if (bpos == bd_to_buffer_map_.end ()) {
-      // The buffer does not exist.
-      return make_pair ((void*)0, LILY_ERROR_BDDNE);
-    }
-
-    shared_ptr<buffer> b = bpos->second;
-    
-    if (b->size () == 0) {
-      // The buffer is empty.
-      return make_pair ((void*)0, LILY_ERROR_INVAL);
-    }
-
-    if (b->begin () != 0) {
-      // The buffer is already mapped.  Return the address.
-      return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_ERROR_SUCCESS);
-    }
-
-    // Map the buffer.
     
     // Find the heap.
     memory_map_type::const_reverse_iterator heap_pos = memory_map_type::const_reverse_iterator (find (memory_map_.begin (), memory_map_.end (), heap_area_));
@@ -1104,14 +1094,62 @@ public:
 	b->map_end ((*stack_pos)->begin ());
 	memory_map_.insert (prev.base (), b.get ());
 	// Success.
-	return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_ERROR_SUCCESS);
+	return (void*)b->begin ();
       }
     }
     
     // Couldn't find a big enough hole.
-    return make_pair ((void*)0, LILY_ERROR_NOMEM);
+    return 0;
   }
 
+public:
+
+  inline pair<void*, lily_error_t>
+  buffer_map (bd_t bd)
+  {
+    bd_to_buffer_map_type::const_iterator bpos = bd_to_buffer_map_.find (bd);
+    if (bpos == bd_to_buffer_map_.end ()) {
+      // The buffer does not exist.
+      return make_pair ((void*)0, LILY_ERROR_BDDNE);
+    }
+
+    shared_ptr<buffer> b = bpos->second;
+    
+    if (b->size () == 0) {
+      // The buffer is empty.
+      return make_pair ((void*)0, LILY_ERROR_INVAL);
+    }
+
+    if (b->begin () != 0) {
+      // The buffer is already mapped.  Return the address.
+      return make_pair (reinterpret_cast<void*> (b->begin ()), LILY_ERROR_SUCCESS);
+    }
+
+    // Map the buffer.
+    void* ptr = buffer_map (b);
+
+    if (ptr != 0) {
+      return make_pair (ptr, LILY_ERROR_SUCCESS);
+    }
+    else {
+      return make_pair ((void*)0, LILY_ERROR_NOMEM);
+    }
+  }
+
+private:
+  inline void
+  buffer_unmap (const shared_ptr<buffer>& b)
+  {
+    if (b->begin () != 0) {
+      // Remove from the memory map.
+      remove_vm_area (b.get ());
+      
+      // Unmap the buffer.	
+      b->unmap ();
+    }
+  }
+
+public:
   inline pair<int, lily_error_t>
   buffer_unmap (bd_t bd)
   {
@@ -1122,14 +1160,7 @@ public:
     }
     
     shared_ptr<buffer> b = bpos->second;
-    
-    if (b->begin () != 0) {
-      // Remove from the memory map.
-      remove_vm_area (b.get ());
-      
-      // Unmap the buffer.	
-      b->unmap ();
-    }
+    buffer_unmap (b);
 
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
@@ -1330,6 +1361,9 @@ public:
       kassert (r.second);
     }
   
+    kout << "TODO:  Generate bind event" << endl;
+    event (shared_ptr<buffer> (), shared_ptr<buffer> ());
+
     return make_pair (b->bid, LILY_ERROR_SUCCESS);
   }
 
@@ -1625,6 +1659,11 @@ public:
    * SUBSCRIPTIONS
    */
 
+public:
+  void
+  log (const char* message,
+       size_t message_size);
+
   inline pair<int, lily_error_t>
   subscribe_unbound (const shared_ptr<automaton>& ths,
 		     bid_t bid,
@@ -1730,6 +1769,7 @@ public:
   automaton () :
     aid_ (-1),
     regenerate_description_ (false),
+    system_event_ (0),
     parent_ (0),
     init_buffer_a_ (-1),
     init_buffer_b_ (-1),

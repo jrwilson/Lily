@@ -10,17 +10,33 @@
 	   "mov %1, %%ebx\n" \
 	   "int $0x80\n" : : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx");
 
+#define syscall2(syscall, p1, p2)		\
+  __asm__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "mov %2, %%ecx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx");
+
 #define syscall3(syscall, p1, p2, p3)		\
   __asm__ ("mov %0, %%eax\n" \
 	   "mov %1, %%ebx\n" \
 	   "mov %2, %%ecx\n" \
 	   "mov %3, %%edx\n" \
-	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx");
+	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx");
 
 #define syscall0r(syscall, retval)	\
   __asm__ ("mov %1, %%eax\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall) : "eax", "ecx" );
+
+#define syscall0re(syscall, retval, err)	\
+  lily_error_t e; \
+  __asm__ ("mov %2, %%eax\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall) : "eax", "ecx" ); \
+  if (err != 0) { \
+    *err = e; \
+  }
 
 #define syscall1re(syscall, retval, p1, err)	\
   lily_error_t e; \
@@ -110,23 +126,9 @@ finish_internal (void)
 }
 
 void
-exit (int code,
-      const char* message,
-      size_t message_size)
+exit (int code)
 {
-  syscall3 (LILY_SYSCALL_EXIT, code, message, message_size);
-}
-
-void
-exits (int code,
-       const char* message)
-{
-  if (message != 0) {
-    exit (code, message, strlen (message) + 1);
-  }
-  else {
-    exit (code, 0, 0);
-  }
+  syscall1 (LILY_SYSCALL_EXIT, code);
 }
 
 aid_t
@@ -229,6 +231,19 @@ unsubscribe_destroyed (lily_error_t* err,
   int retval;
   syscall1re (LILY_SYSCALL_UNSUBSCRIBE_DESTROYED, retval, aid, err);
   return retval;
+}
+
+void
+log (const char* message,
+     size_t message_size)
+{
+  syscall2 (LILY_SYSCALL_LOG, message, message_size);
+}
+
+void
+logs (const char* message)
+{
+  log (message, strlen (message) + 1);
 }
 
 void*

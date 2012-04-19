@@ -12,6 +12,66 @@ automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 automaton::mapped_areas_type automaton::all_mapped_areas_;
 bitset<65536> automaton::reserved_ports_;
 
+automaton::log_event_map_type automaton::log_event_map_;
+
+void
+automaton::log (const char* message,
+		size_t message_size)
+{
+  if (!verify_span (message, message_size)) {
+    kpanic ("TODO:  Bad pointer.");
+  }
+
+  const size_t total_size = sizeof (log_event_t) + message_size;
+  size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
+
+  // Create a buffer for the description.
+  shared_ptr<buffer> b (new buffer (page_count));
+  log_event_t* le = static_cast <log_event_t*> (buffer_map (b));
+  le->aid = aid_;
+  irq_handler::getmonotime (&le->time);
+  le->message_size = message_size;
+  memcpy (&le->message[0], message, message_size);
+
+  console::fmtflags flags = kout.flags ();
+  bool print_header = true;
+  for (size_t idx = 0; idx != message_size; ++idx) {
+    if (print_header) {
+      print_header = false;
+      kout << "[" << setfill (' ') << setw (10) << left << le->time.seconds << "." << setfill ('0') << setw (3) << le->time.nanoseconds / 1000000 << "] " << le->aid << " ";
+    }
+    kout.put (message[idx]);
+    if (message[idx] == '\n') {
+      print_header = true;
+    }
+  }
+  if (!print_header) {
+    kout << endl;
+  }
+  kout.flags (flags);
+  
+  buffer_unmap (b);
+  
+  for (log_event_map_type::const_iterator pos = log_event_map_.begin ();
+       pos != log_event_map_.end ();
+       ++pos) {
+    scheduler::schedule (caction (pos->first, pos->second, 0, b, shared_ptr<buffer> ()));
+  }
+}
+
+void
+automaton::event (const shared_ptr<buffer>& bda,
+		  const shared_ptr<buffer>& bdb)
+{
+  for (aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.begin ();
+       pos != aid_to_automaton_map_.end ();
+       ++pos) {
+    if (pos->second->system_event_ != 0) {
+      scheduler::schedule (caction (pos->second, pos->second->system_event_, 0, bda, bdb));
+    }
+  }
+}
+
 pair<int, lily_error_t>
 automaton::schedule (const shared_ptr<automaton>& ths,
 		     ano_t action_number,
@@ -52,19 +112,9 @@ automaton::schedule (const shared_ptr<automaton>& ths,
 // The automaton would like to no longer exist.
 void
 automaton::exit (const shared_ptr<automaton>& ths,
-		 int code,
-		 const char* message,
-		 size_t message_size)
+		 int code)
 {
   kassert (ths.get () == this);
-
-  if (aid_ == 0) {
-    kout << "automaton 0 exited with code " << code << ": ";
-    if (message != 0 && verify_span (message, message_size) && message[message_size - 1] == '\0') {
-      kout << message;
-    }
-    kout << endl;
-  }
       
   shared_ptr<automaton> parent = parent_;
   
@@ -170,13 +220,21 @@ automaton::create_automaton (const kstring& name,
       child->init_buffer_b_ = child->buffer_create (buffer_b_);
     }
     
-    // Schedule the init action.
+    // Schedule the init action and look for the system_event action.
     const kstring init_name ("init");
+    const kstring system_event_name ("system_event");
+    const kstring log_event_name ("log_event");
     for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
 	 pos != child->ano_to_action_map_.end ();
 	 ++pos) {
       if (pos->second->name == init_name && pos->second->type == INTERNAL) {
 	scheduler::schedule (caction (child, pos->second, child_aid));
+      }
+      else if (pos->second->name == system_event_name && pos->second->type == SYSTEM_INPUT) {
+	child->system_event_ = pos->second;
+      }
+      else if (pos->second->name == log_event_name && pos->second->type == SYSTEM_INPUT) {
+	log_event_map_.insert (make_pair (child, pos->second));
       }
     }
   }
@@ -203,6 +261,9 @@ automaton::unbind (const shared_ptr<binding>& binding,
 		   bool remove_from_input,
 		   bool remove_from_owner)
 {
+  kout << "TODO:  Generate unbind event" << endl;
+  event (shared_ptr<buffer> (), shared_ptr<buffer> ());
+
   // Remove from the map.
   size_t count = bid_to_binding_map_.erase (binding->bid);
   kassert (count == 1);
@@ -253,6 +314,9 @@ automaton::destroy (const shared_ptr<automaton>& ths)
 {
   kassert (ths.get () == this);
   
+  kout << "TODO:  Generate destroy/exit event" << endl;
+  event (shared_ptr<buffer> (), shared_ptr<buffer> ());
+
   /*
     Address the instance variables:
     
@@ -283,6 +347,7 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   */
   
   aid_to_automaton_map_.erase (aid_);
+  log_event_map_.erase (ths);
   aid_ = -1;
   
   if (name_.size () != 0) {

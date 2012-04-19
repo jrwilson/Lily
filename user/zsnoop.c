@@ -55,10 +55,10 @@ initialize (void)
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
   }
 }

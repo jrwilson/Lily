@@ -42,26 +42,26 @@ initialize (void)
 
     text_out_bd = buffer_create (0, 0);
     if (text_out_bd == -1) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
 
     mouse_packets_bd = buffer_create (0, 0);
     if (mouse_packets_bd == -1) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (mouse_packet_list_initw (&mouse_packet_list, 0, mouse_packets_bd) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
 
     text_out_term_bd = buffer_create (0, 0);
     if (text_out_term_bd == -1) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (buffer_file_initw (&text_out_term_buffer, 0, text_out_term_bd) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
   }
 }
@@ -95,12 +95,12 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_TERM_NO, "text_in_term", "buffer_file_t", tex
     /* Convert \r to \n. */
     if (c != '\r') {
       if (buffer_file_put (&text_out_buffer, 0, c) != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
     }
     else {
       if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
     }
   }
@@ -124,7 +124,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_TERM_NO, "mouse_packets_in_term", "m
     }
     
     if (mouse_packet_list_write (&mouse_packet_list, 0, &mp) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
   }
 
@@ -161,7 +161,7 @@ BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packe
 
   if (mouse_packets_out_precondition ()) {
     if (mouse_packet_list_reset (&mouse_packet_list) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     finish_output (true, mouse_packets_bd, -1);
   }
@@ -192,11 +192,11 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
     /* Convert \n to \r\n. */
     if (c == '\n') {
       if (buffer_file_put (&text_out_term_buffer, 0, '\r') != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
     }
     if (buffer_file_put (&text_out_term_buffer, 0, c) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
   }
 

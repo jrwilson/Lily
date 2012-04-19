@@ -187,7 +187,7 @@ serial_port_callback (void* ptr,
     return;
   }
 
-  if (bfprintf (&bf, 0, "port=%#x irq=%d", spc->port, spc->irq) != 0) {
+  if (bfprintf (&bf, 0, "port=%#x irq=%d", spc->port, spc->irq) < 0) {
     buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argument buffer\n");
     spc_destroy (spc);
     state = HALT;
@@ -252,7 +252,7 @@ vga_callback (void* ptr,
     return;
   }
 
-  if (bfprintf (&bf, 0, "port=%#x parameter_table=%#x", vgac.port, vgac.parameter_table) != 0) {
+  if (bfprintf (&bf, 0, "port=%#x parameter_table=%#x", vgac.port, vgac.parameter_table) < 0) {
     buffer_file_puts (&syslog_buffer, 0, ERROR "could not write to argument buffer\n");
     state = HALT;
     return;
@@ -283,15 +283,17 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    logs ("Hello");
+
     aid_t aid = getaid ();
 
     /* Create the syslog buffer. */
     syslog_bd = buffer_create (0, 0);
     if (syslog_bd == -1) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
     if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
-      exit (__LINE__, 0, 0);
+      exit (-1);
     }
 
     aid_t syslog_aid = lookups (0, SYSLOG_NAME);
@@ -300,17 +302,17 @@ initialize (void)
 
       description_t syslog_description;
       if (description_init (&syslog_description, 0, syslog_aid) != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
       
       action_desc_t syslog_text_in;
       if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
             
       /* We bind the response first so they don't get lost. */
       if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
-	exit (__LINE__, 0, 0);
+	exit (-1);
       }
 
       description_fini (&syslog_description, 0);
@@ -431,7 +433,7 @@ BEGIN_INTERNAL (NO_PARAMETER, HALT_NO, "", "", halt, ano_t ano, int param)
   initialize ();
 
   if (halt_precondition ()) {
-    exit (__LINE__, 0, 0);
+    exit (-1);
   }
   finish_internal ();
 }
