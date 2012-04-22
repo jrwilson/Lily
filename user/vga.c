@@ -62,10 +62,10 @@ typedef struct {
 static void
 set_cursor_location (unsigned short location)
 {
-  outb (0, CRT_ADDRESS_PORT, CURSOR_LOCATION_HIGH_REGISTER);
-  outb (0, CRT_DATA_PORT, location >> 8);
-  outb (0, CRT_ADDRESS_PORT, CURSOR_LOCATION_LOW_REGISTER);
-  outb (0, CRT_DATA_PORT, location & 0xFF);
+  outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_HIGH_REGISTER);
+  outb (CRT_DATA_PORT, location >> 8);
+  outb (CRT_ADDRESS_PORT, CURSOR_LOCATION_LOW_REGISTER);
+  outb (CRT_DATA_PORT, location & 0xFF);
 }
 
 static void
@@ -88,20 +88,20 @@ initialize (void)
     initialized = true;
     
     /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0, 0);
+    syslog_bd = buffer_create (0);
     if (syslog_bd == -1) {
       exit (-1);
     }
-    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
+    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
       exit (-1);
     }
 
-    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
+    aid_t syslog_aid = lookups (SYSLOG_NAME);
     if (syslog_aid != -1) {
       /* Bind to the syslog. */
 
       description_t syslog_description;
-      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
+      if (description_init (&syslog_description, syslog_aid) != 0) {
 	exit (-1);
       }
       
@@ -111,11 +111,11 @@ initialize (void)
       }
             
       /* We bind the response first so they don't get lost. */
-      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
+      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
 	exit (-1);
       }
 
-      description_fini (&syslog_description, 0);
+      description_fini (&syslog_description);
     }
 
     /* bd_t bda = getinita (); */
@@ -163,7 +163,7 @@ initialize (void)
     /* 	      port = p; */
     /* 	    } */
     /* 	    else { */
-    /* 	      bfprintf (&syslog_buffer, 0, ERROR "could not parse port value %s\n", value); */
+    /* 	      bfprintf (&syslog_buffer, ERROR "could not parse port value %s\n", value); */
     /* 	      error = true; */
     /* 	    } */
     /* 	  } */
@@ -181,7 +181,7 @@ initialize (void)
     /* 	      parameter_table = p; */
     /* 	    } */
     /* 	    else { */
-    /* 	      bfprintf (&syslog_buffer, 0, ERROR "could not parse parameter_table value %s\n", value); */
+    /* 	      bfprintf (&syslog_buffer, ERROR "could not parse parameter_table value %s\n", value); */
     /* 	      error = true; */
     /* 	    } */
     /* 	  } */
@@ -191,7 +191,7 @@ initialize (void)
     /* 	  } */
     /* 	} */
     /* 	else { */
-    /* 	  bfprintf (&syslog_buffer, 0, ERROR "unknown option %s\n", key); */
+    /* 	  bfprintf (&syslog_buffer, ERROR "unknown option %s\n", key); */
     /* 	  error = true; */
     /* 	} */
     /*   } */
@@ -204,7 +204,7 @@ initialize (void)
     /*   return; */
     /* } */
 
-    /* bfprintf (&syslog_buffer, 0, INFO "parameter_table=%#x\n", parameter_table); */
+    /* bfprintf (&syslog_buffer, INFO "parameter_table=%#x\n", parameter_table); */
 
     /* if (port == -1/\* || parameter_table == 0*\/) { */
     /*   buffer_file_puts (&syslog_buffer, 0, ERROR USAGE); */
@@ -226,9 +226,9 @@ initialize (void)
     /* } */
     
     /* Reserve the VGA ports.*/
-    if (reserve_port (0, CRT_ADDRESS_PORT) != 0 ||
-	reserve_port (0, CRT_DATA_PORT) != 0) {
-      buffer_file_puts (&syslog_buffer, 0, ERROR "could not reserve I/O ports\n");
+    if (reserve_port (CRT_ADDRESS_PORT) != 0 ||
+	reserve_port (CRT_DATA_PORT) != 0) {
+      buffer_file_puts (&syslog_buffer, ERROR "could not reserve I/O ports\n");
       state = STOP;
       return;
     }
@@ -249,8 +249,8 @@ initialize (void)
     /* } */
     
     /* Map in the video memory. */
-    if (map (0, (const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
-      buffer_file_puts (&syslog_buffer, 0, ERROR "could not map vga video memory\n");
+    if (map ((const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
+      buffer_file_puts (&syslog_buffer, ERROR "could not map vga video memory\n");
       state = STOP;
       return;
     }
@@ -258,10 +258,10 @@ initialize (void)
     memset ((void*)VGA_TEXT_MEMORY_BEGIN, 0, VGA_TEXT_MEMORY_SIZE);
 
     /* TODO:  Ensure that a VGA exists. */
-    /* bfprintf (&syslog_buffer, 0, INFO "port=%#x\n", port); */
+    /* bfprintf (&syslog_buffer, INFO "port=%#x\n", port); */
 
     /* const video_parameter_t* params = (const video_parameter_t*)parameter_table_begin; */
-    /* bfprintf (&syslog_buffer, 0, INFO "ptr=%#x\n", params->ptr); */
+    /* bfprintf (&syslog_buffer, INFO "ptr=%#x\n", params->ptr); */
 
   }
 }
@@ -327,7 +327,7 @@ BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_in", "vga_op_list", vga_op, ano_t 
 
   if (state == RUN) {
     vga_op_list_t vol;
-    if (vga_op_list_initr (&vol, 0, bda, bdb) != 0) {
+    if (vga_op_list_initr (&vol, bda, bdb) != 0) {
       finish_input (bda, bdb);
     }
     
@@ -382,9 +382,9 @@ void
 do_schedule (void)
 {
   if (stop_precondition ()) {
-    schedule (0, STOP_NO, 0);
+    schedule (STOP_NO, 0);
   }
   if (syslog_precondition ()) {
-    schedule (0, SYSLOG_NO, 0);
+    schedule (SYSLOG_NO, 0);
   }
 }

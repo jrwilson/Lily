@@ -4,8 +4,6 @@
 #include <buffer_file.h>
 #include "cpio.h"
 #include "vfs_msg.h"
-#include "syslog.h"
-#include <description.h>
 
 /*
   Tmpfs
@@ -67,11 +65,8 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define INIT_NO 1
-#define STOP_NO 2
-#define SYSLOG_NO 3
-#define TMPFS_REQUEST_NO 4
-#define TMPFS_RESPONSE_NO 5
+#define TMPFS_REQUEST_NO 1
+#define TMPFS_RESPONSE_NO 2
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -97,22 +92,16 @@ static inode_t* free_list = 0;
 /* Initialization flag. */
 static bool initialized = false;
 
-#define ERROR "tmpfs: error: "
-
-typedef enum {
-  RUN,
-  STOP,
-} state_t;
-static state_t state = RUN;
-
-/* Output buffer for syslog. */
-static bd_t syslog_bd = -1;
-static buffer_file_t syslog_buffer;
-
 /* Queue of response. */
 static bd_t response_bda = -1;
 static bd_t response_bdb = -1;
 static vfs_fs_response_queue_t response_queue;
+
+#define LOG_BUFFER_SIZE 128
+static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR __FILE__ ": error: "
+#define WARNING __FILE__ ": warning: "
+#define INFO __FILE__ ": info: "
 
 static inode_t*
 inode_create (vfs_fs_node_type_t type,
@@ -133,11 +122,21 @@ inode_create (vfs_fs_node_type_t type,
     /* Expand the vector if necessary. */
     if (nodes_size == nodes_capacity) {
       nodes_capacity *= 2;
-      nodes = realloc (0, nodes, nodes_capacity * sizeof (inode_t*));
+      nodes = realloc (nodes, nodes_capacity * sizeof (inode_t*));
+      if (nodes == 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
     }
 
     /* Create a new node. */
-    node = malloc (0, sizeof (inode_t));
+    node = malloc (sizeof (inode_t));
+    if (node == NULL) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     node->node.id = nodes_size++;
   }
 
@@ -147,7 +146,12 @@ inode_create (vfs_fs_node_type_t type,
   /* Initialize the node. */
   node->node.type = type;
   node->name_size = name_size;
-  node->name = malloc (0, name_size);
+  node->name = malloc (name_size);
+  if (node->name == NULL) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+  }
   memcpy (node->name, name, name_size);
   node->bd = bd;
   node->size = size;
@@ -195,7 +199,7 @@ file_find_or_create (inode_t* parent,
   }
 
   /* Create a node. */
-  *ptr = inode_create (FILE, name, name_size, buffer_copy (0, bd), size, parent);
+  *ptr = inode_create (FILE, name, name_size, buffer_copy (bd), size, parent);
 
   return *ptr;
 }
@@ -229,54 +233,28 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0, 0);
-    if (syslog_bd == -1) {
-      exit (-1);
-    }
-    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
-      exit (-1);
-    }
-
-    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
-    if (syslog_aid != -1) {
-      /* Bind to the syslog. */
-
-      description_t syslog_description;
-      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
-	exit (-1);
-      }
-      
-      action_desc_t syslog_text_in;
-      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
-	exit (-1);
-      }
-            
-      /* We bind the response first so they don't get lost. */
-      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
-	exit (-1);
-      }
-
-      description_fini (&syslog_description, 0);
-    }
-
     /* Allocate the inode vector. */
     nodes_capacity = 1;
     nodes_size = 0;
-    nodes = malloc (0, nodes_capacity * sizeof (inode_t*));
+    nodes = malloc (nodes_capacity * sizeof (inode_t*));
+    if (nodes == NULL) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     
     /* Create the root. */
     nodes[nodes_size++] = inode_create (DIRECTORY, "", 0, -1, 0, 0);
     
     /* TODO:  Do we need to make the root its own parent? */
 
-    response_bda = buffer_create (0, 0);
-    response_bdb = buffer_create (0, 0);
+    response_bda = buffer_create (0);
+    response_bdb = buffer_create (0);
     if (response_bda == -1 ||
 	response_bdb == -1) {
-      buffer_file_puts (&syslog_buffer, 0, ERROR "could not create response buffer\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create response buffers: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
     vfs_fs_response_queue_init (&response_queue);
 
@@ -285,10 +263,10 @@ initialize (void)
 
     /* Parse the cpio archive looking for files that we need. */
     cpio_archive_t archive;
-    if (cpio_archive_init (&archive, 0, bda) == 0) {
+    if (cpio_archive_init (&archive, bda) == 0) {
       
       cpio_file_t* file;
-      while ((file = cpio_archive_next_file (&archive, 0)) != 0) {
+      while ((file = cpio_archive_next_file (&archive)) != 0) {
 	
 	/* Ignore the "." directory. */
 	if (strcmp (file->name, ".") != 0) {
@@ -323,71 +301,16 @@ initialize (void)
 	}
 	
 	/* Destroy the cpio file. */
-	cpio_file_destroy (file, 0);
+	cpio_file_destroy (file);
       }
     }
 
     if (bda != -1) {
-      buffer_destroy (0, bda);
+      buffer_destroy (bda);
     }
     if (bdb != -1) {
-      buffer_destroy (0, bdb);
+      buffer_destroy (bdb);
     }
-  }
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
-{
-  initialize ();
-  finish_internal ();
-}
-
-/* stop
-   ----
-   Stop the automaton.
-   
-   Pre:  state == STOP and syslog_buffer is empty
-   Post: 
-*/
-static bool
-stop_precondition (void)
-{
-  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
-{
-  initialize ();
-
-  if (stop_precondition ()) {
-    exit (-1);
-  }
-  finish_internal ();
-}
-
-/* syslog
-   ------
-   Output error messages.
-   
-   Pre:  syslog_buffer is not empty
-   Post: syslog_buffer is empty
-*/
-static bool
-syslog_precondition (void)
-{
-  return buffer_file_size (&syslog_buffer) != 0;
-}
-
-BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
-{
-  initialize ();
-
-  if (syslog_precondition ()) {
-    buffer_file_truncate (&syslog_buffer);
-    finish_output (true, syslog_bd, -1);
-  }
-  else {
-    finish_output (false, -1, -1);
   }
 }
 
@@ -396,8 +319,12 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
   initialize ();
 
   vfs_fs_type_t type;
-  if (read_vfs_fs_request_type (0, bda, bdb, &type) != 0) {
-    vfs_fs_response_queue_push_bad_request (&response_queue, 0, type);
+  if (read_vfs_fs_request_type (bda, bdb, &type) != 0) {
+    if (vfs_fs_response_queue_push_bad_request (&response_queue, type) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     finish_input (bda, bdb);
   }
   
@@ -408,25 +335,41 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
       const char* name;
       size_t name_size;
       vfs_fs_node_t no_node;
-      if (read_vfs_fs_descend_request (0, bda, bdb, &id, &name, &name_size) != 0) {
-  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_BAD_REQUEST, &no_node);
+      if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) != 0) {
+  	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
       if (id >= nodes_size) {
-  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_BAD_NODE, &no_node);
+  	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_BAD_NODE, &no_node);
+  	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
       if (inode->node.type != DIRECTORY) {
-  	vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_NOT_DIRECTORY, &no_node);
+  	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_NOT_DIRECTORY, &no_node) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
@@ -435,51 +378,79 @@ BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, a
   	if (child->name_size == name_size &&
   	    memcmp (child->name, name, name_size) == 0) {
   	  /* Found the child with the correct name. */
-  	  vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_SUCCESS, &child->node);
+  	  if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_SUCCESS, &child->node) != 0) {
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	    logs (log_buffer);
+	    exit (-1);
+	  }
   	  finish_input (bda, bdb);
   	}
       }
 
       /* Didn't find it. */
-      vfs_fs_response_queue_push_descend (&response_queue, 0, VFS_FS_CHILD_DNE, &no_node);
+      if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_CHILD_DNE, &no_node) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
       finish_input (bda, bdb);
     }
     break;
   case VFS_FS_READFILE:
     {
       size_t id;
-      if (read_vfs_fs_readfile_request (0, bda, bdb, &id) != 0) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_BAD_REQUEST, 0, -1);
+      if (read_vfs_fs_readfile_request (bda, bdb, &id) != 0) {
+  	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
       if (id >= nodes_size) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_BAD_NODE, 0, -1);
+  	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
       inode_t* inode = nodes[id];
 
       if (inode == 0) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_BAD_NODE, 0, -1);
+  	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
       if (inode->node.type != FILE) {
-  	vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_NOT_FILE, 0, -1);
+  	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_NOT_FILE, 0, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
   	finish_input (bda, bdb);
       }
 
-      if (vfs_fs_response_queue_push_readfile (&response_queue, 0, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
-	buffer_file_puts (&syslog_buffer, 0, ERROR "could not enqueue readfile response\n");
-	state = STOP;
-	finish_input (bda, bdb);
+      if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       finish_input (bda, bdb);
     }
     break;
   default:
-    vfs_fs_response_queue_push_bad_request (&response_queue, 0, VFS_UNKNOWN);
+    if (vfs_fs_response_queue_push_bad_request (&response_queue, VFS_UNKNOWN) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     finish_input (bda, bdb);
     break;
   }
@@ -493,15 +464,15 @@ response_precondition (void)
   return !vfs_fs_response_queue_empty (&response_queue);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, ano_t ano, int param, size_t bc)
 {
   initialize ();
 
   if (response_precondition ()) {
-    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, 0, response_bda, response_bdb) != 0) {
-      buffer_file_puts (&syslog_buffer, 0, ERROR "could not enqueue response\n");
-      state = STOP;
-      finish_output (false, -1, -1);
+    if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to response buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
     finish_output (true, response_bda, response_bdb);
   }
@@ -513,13 +484,11 @@ BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", respons
 void
 do_schedule (void)
 {
-  if (stop_precondition ()) {
-    schedule (0, STOP_NO, 0);
-  }
-  if (syslog_precondition ()) {
-    schedule (0, SYSLOG_NO, 0);
-  }
   if (response_precondition ()) {
-    schedule (0, TMPFS_RESPONSE_NO, 0);
+    if (schedule (TMPFS_RESPONSE_NO, 0) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not schedule response action: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
   }
 }

@@ -31,7 +31,6 @@
 #define LILY_SYSCALL_BUFFER_UNMAP          0x48
 
 #define LILY_SYSCALL_SYSCONF               0x50
-#define LILY_SYSCALL_LOOKUP                0x51
 #define LILY_SYSCALL_DESCRIBE              0x52
 #define LILY_SYSCALL_GETAID                0x53
 #define LILY_SYSCALL_GETINITA              0x54

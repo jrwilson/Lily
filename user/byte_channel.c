@@ -30,11 +30,11 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    text_out_bd = buffer_create (0, 0);
+    text_out_bd = buffer_create (0);
     if (text_out_bd == -1) {
       exit (-1);
     }
-    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       exit (-1);
     }
   }
@@ -51,7 +51,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
   
@@ -61,7 +61,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
     finish_input (bda, bdb);
   }
   
-  if (buffer_file_write (&text_out_buffer, 0, data, size) != 0) {
+  if (buffer_file_write (&text_out_buffer, data, size) != 0) {
     finish_input (bda, bdb);
   }
 
@@ -90,6 +90,6 @@ void
 do_schedule (void)
 {
   if (text_out_precondition ()) {
-    schedule (0, TEXT_OUT_NO, 0);
+    schedule (TEXT_OUT_NO, 0);
   }
 }

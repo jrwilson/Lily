@@ -3,10 +3,10 @@ AS=i586-pc-lily-as
 CFLAGS=-MD -O2 -g -Wall -fno-builtin -std=c99
 
 # Headers that will be installed.
-HEADERS=automaton.h string.h ctype.h dymem.h buffer_file.h description.h callback_queue.h
+HEADERS=automaton.h string.h ctype.h dymem.h buffer_file.h description.h
 
 # Loader should be first so the bootloader can find the magic number.
-OBJECTS=crt0.o libc.a libdymem.a libbuffer_file.a libdescription.a libcallback_queue.a
+OBJECTS=crt0.o libc.a libdymem.a libbuffer_file.a libdescription.a
 
 .PHONY : all
 all : $(OBJECTS)
@@ -18,8 +18,6 @@ libdymem.a : dymem.o
 libbuffer_file.a : buffer_file.o
 
 libdescription.a : description.o
-
-libcallback_queue.a : callback_queue.o
 
 %.o : %.s
 	$(AS) $(ASFLAGS) -o $@ $<

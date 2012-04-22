@@ -18,7 +18,6 @@ callback_queue_init (callback_queue_t* bq);
 
 int
 callback_queue_push (callback_queue_t* bq,
-		     lily_error_t* err,
 		     callback_t callback,
 		     void* data);
 

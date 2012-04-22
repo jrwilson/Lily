@@ -4,8 +4,7 @@
 #include <buffer_file.h>
 #include <description.h>
 #include <dymem.h>
-#include <callback_queue.h>
-#include "syslog.h"
+#include "callback_queue.h"
 
 /*
   VFS
@@ -30,24 +29,18 @@
   Thus, instead of having one pair of queues for client requests, one could have a queue for each client.
   Similar optimizations apply for the file systems.
 
-  TODO:  Subscribe to the file systems when mounting to purge if they fail.
   TODO:  We are vunerable to circular mounts.
-  TODO:  Subscribe to the client.
+  TODO:  There are probably system calls and other calls that can fail that are not checked.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define INIT_NO 1
-#define STOP_NO 2
-#define SYSLOG_NO 3
-#define VFS_REQUEST_NO 4
-#define VFS_RESPONSE_NO 5
-#define VFS_FS_REQUEST_NO 6
-#define VFS_FS_RESPONSE_NO 7
-
-#define WARNING "vfs: warning: "
-#define INFO "vfs: info: "
+#define VFS_REQUEST_NO 1
+#define VFS_RESPONSE_NO 2
+#define VFS_FS_REQUEST_NO 3
+#define VFS_FS_RESPONSE_NO 4
+#define SYSTEM_EVENT_NO 5
 
 /* Our aid. */
 static aid_t vfs_aid = -1;
@@ -55,15 +48,11 @@ static aid_t vfs_aid = -1;
 /* Initialization flag. */
 static bool initialized = false;
 
-typedef enum {
-  RUN,
-  STOP,
-} state_t;
-static state_t state = RUN;
-
-/* Syslog buffer. */
-static bd_t syslog_bd = -1;
-static buffer_file_t syslog_buffer;
+#define LOG_BUFFER_SIZE 128
+static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR __FILE__ ": error: "
+#define WARNING __FILE__ ": warning: "
+#define INFO __FILE__ ": info: "
 
 /*
   Begin Path Section
@@ -130,17 +119,25 @@ static file_system_t** request_tail = &request_head;
 static file_system_t*
 file_system_create (aid_t aid)
 {
-  bd_t request_bda = buffer_create (0, 0);
+  bd_t request_bda = buffer_create (0);
   if (request_bda == -1) {
-    return 0;
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create file system request buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
-  bd_t request_bdb = buffer_create (0, 0);
+  bd_t request_bdb = buffer_create (0);
   if (request_bdb == -1) {
-    buffer_destroy (0, request_bda);
-    return 0;
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create file system request buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
-  file_system_t* fs = malloc (0, sizeof (file_system_t));
+  file_system_t* fs = malloc (sizeof (file_system_t));
+  if (fs == NULL) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+  }
   memset (fs, 0, sizeof (file_system_t));
   fs->aid = aid;
   vfs_fs_request_queue_init (&fs->request_queue);
@@ -149,8 +146,6 @@ file_system_create (aid_t aid)
   fs->request_bdb = request_bdb;
   fs->global_next = file_system_head;
   file_system_head = fs;
-
-  buffer_file_puts (&syslog_buffer, 0, INFO "TODO:  subscribe to file system\n");
 
   return fs;
 }
@@ -195,8 +190,10 @@ file_system_pop_request (file_system_t** f)
 {
   file_system_t* fs = *f;
   /* Pop the response. */
-  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, 0, fs->request_bda, fs->request_bdb) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "could not write to file system request buffer\n");
+  if (vfs_fs_request_queue_pop_to_buffer (&fs->request_queue, fs->request_bda, fs->request_bdb) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write file system request: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   /* Remove the file system from the request queue. */
@@ -260,7 +257,12 @@ static mount_item_t*
 mount_item_create (const vnode_t* a,
 		   const vnode_t* b)
 {
-  mount_item_t* item = malloc (0, sizeof (mount_item_t));
+  mount_item_t* item = malloc (sizeof (mount_item_t));
+  if (item == NULL) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+  }
   memset (item, 0, sizeof (mount_item_t));
   item->a = *a;
   item->b = *b;
@@ -329,17 +331,25 @@ find_client_response (aid_t aid)
 static client_t*
 create_client (aid_t aid)
 {
-  bd_t response_bda = buffer_create (0, 0);
+  bd_t response_bda = buffer_create (0);
   if (response_bda == -1) {
-    return 0;
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create client response buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
-  bd_t response_bdb = buffer_create (0, 0);
+  bd_t response_bdb = buffer_create (0);
   if (response_bdb == -1) {
-    buffer_destroy (0, response_bda);
-    return 0;
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create client response buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
-  client_t* client = malloc (0, sizeof (client_t));
+  client_t* client = malloc (sizeof (client_t));
+  if (client == NULL) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+  }
   memset (client, 0, sizeof (client_t));
   client->aid = aid;
   vfs_request_queue_init (&client->request_queue);
@@ -350,8 +360,6 @@ create_client (aid_t aid)
   client_head = client;
   client->on_response_queue = false;
   
-  buffer_file_puts (&syslog_buffer, 0, INFO "TODO:  Subscribe to client\n");
-
   return client;
 }
 
@@ -396,25 +404,30 @@ readfile_callback (void* data,
 
   vfs_fs_error_t error;
   size_t size;
-  if (read_vfs_fs_readfile_response (0, bda, bdb, &error, &size) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "could not read readfile response\n");
-    return;
+  if (read_vfs_fs_readfile_response (bda, bdb, &error, &size) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read file system response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   if (error != VFS_FS_SUCCESS) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "readfile did not succeed\n");
-    return;
+    /* TODO:  This shouldn't be a show stopper.  Rather, disassociate from the file system and move on. */
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "file system error: %s", vfs_fs_error_string (error));
+    logs (log_buffer);
+    exit (-1);
   }
       
-  if (size > buffer_size (0, bdb) * pagesize ()) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "readfile response has bad size\n");
-    return;
+  if (size > buffer_size (bdb) * pagesize ()) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "data returned by file system too small");
+    logs (log_buffer);
+    exit (-1);
   }
 
   /* Answer. */
-  if (vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_SUCCESS, size, bdb) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "could not copy file buffer\n");
-    return;
+  if (vfs_response_queue_push_readfile (&client->response_queue, VFS_SUCCESS, size, bdb) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push client response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
   client_answer (client);
 }
@@ -426,13 +439,19 @@ client_path_lookup_done (client_t* client,
   const vfs_request_queue_item_t* req = vfs_request_queue_front (&client->request_queue);
   switch (req->type) {
   case VFS_UNKNOWN:
-    buffer_file_puts (&syslog_buffer, 0, WARNING "unknown request in client request queue\n");
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "unknown request in client request queue");
+    logs (log_buffer);
+    exit (-1);
     break;
   case VFS_MOUNT:
     /* The path could not be translated. */
     if (fail) {
       /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, 0, VFS_PATH_DNE);
+      if (vfs_response_queue_push_mount (&client->response_queue, VFS_PATH_DNE) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
       client_answer (client);
       return;
     }
@@ -440,16 +459,24 @@ client_path_lookup_done (client_t* client,
     /* The final destination was not a directory. */
     if (client->path_lookup_current.node.type != DIRECTORY) {
       /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_DIRECTORY);
+      if (vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_DIRECTORY) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
       client_answer (client);
       return;
     }
 
     /* Bind to the file system. */
     description_t desc;
-    if (description_init (&desc, 0, req->u.mount.aid) != 0) {
+    if (description_init (&desc, req->u.mount.aid) != 0) {
       /* Answer. */
-      vfs_response_queue_push_mount (&client->response_queue, 0, VFS_AID_DNE);
+      if (vfs_response_queue_push_mount (&client->response_queue, VFS_AID_DNE) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
       client_answer (client);
       return;
     }
@@ -458,8 +485,12 @@ client_path_lookup_done (client_t* client,
       action_desc_t request;
       if (description_read_name (&desc, &request, VFS_FS_REQUEST_NAME) != 0) {
 	/* Answer. */
-	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_FS);
+	description_fini (&desc);
+	if (vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
 	client_answer (client);
 	return;
       }
@@ -467,39 +498,48 @@ client_path_lookup_done (client_t* client,
       action_desc_t response;
       if (description_read_name (&desc, &response, VFS_FS_RESPONSE_NAME) != 0) {
 	/* Answer. */
-	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_FS);
+	description_fini (&desc);
+	if (vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_FS) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
 	client_answer (client);
 	return;
       }
       
       /* Bind to the response first so they don't get lost. */
-      bid_t bid = bind (0, req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
+      bid_t bid = bind (req->u.mount.aid, response.number, 0, vfs_aid, VFS_FS_RESPONSE_NO, 0);
       if (bid == -1) {
 	/* Answer. */
-	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_AVAILABLE);
+	description_fini (&desc);
+	if (vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
 	client_answer (client);
 	return;
       }
       
-      if (bind (0, vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0) == -1) {
-	unbind (0, bid);
+      if (bind (vfs_aid, VFS_FS_REQUEST_NO, 0, req->u.mount.aid, request.number, 0) == -1) {
+	unbind (bid);
 	/* Answer. */
-	description_fini (&desc, 0);
-	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_NOT_AVAILABLE);
+	description_fini (&desc);
+	if (vfs_response_queue_push_mount (&client->response_queue, VFS_NOT_AVAILABLE) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
 	client_answer (client);
 	return;
       }
     }
 
-    description_fini (&desc, 0);
+    description_fini (&desc);
 
     /* The mount succeeded.  Insert an entry into the list. */
     file_system_t* fs = file_system_create (req->u.mount.aid);
-    if (fs == 0) {
-      // TODO
-    }
 
     vnode_t b;
     b.fs = fs;
@@ -510,7 +550,11 @@ client_path_lookup_done (client_t* client,
     mount_head = item;
 
     /* Answer. */
-    vfs_response_queue_push_mount (&client->response_queue, 0, VFS_SUCCESS);
+    if (vfs_response_queue_push_mount (&client->response_queue, VFS_SUCCESS) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     client_answer (client);
     return;
 
@@ -519,7 +563,11 @@ client_path_lookup_done (client_t* client,
     /* The path could not be translated. */
     if (fail) {
       /* Answer. */
-      vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_PATH_DNE, 0, -1);
+      if (vfs_response_queue_push_readfile (&client->response_queue, VFS_PATH_DNE, 0, -1) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
       client_answer (client);
       return;
     }
@@ -527,14 +575,26 @@ client_path_lookup_done (client_t* client,
     /* The final destination was not a file. */
     if (client->path_lookup_current.node.type != FILE) {
       /* Answer. */
-      vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_NOT_FILE, 0, -1);
+      if (vfs_response_queue_push_readfile (&client->response_queue, VFS_NOT_FILE, 0, -1) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
       client_answer (client);
       return;
     }
 
     /* Form a message to a file system. */
-    vfs_fs_request_queue_push_readfile (&client->path_lookup_current.fs->request_queue, 0, client->path_lookup_current.node.id);
-    callback_queue_push (&client->path_lookup_current.fs->callback_queue, 0, readfile_callback, client);
+    if (vfs_fs_request_queue_push_readfile (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write file system request: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    if (callback_queue_push (&client->path_lookup_current.fs->callback_queue, readfile_callback, client) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push callback: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     file_system_put_on_request_queue (client->path_lookup_current.fs);
     return;
 
@@ -555,9 +615,10 @@ descend_callback (void* data,
 
   vfs_fs_error_t error;
   vfs_fs_node_t node;
-  if (read_vfs_fs_descend_response (0, bda, bdb, &error, &node) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "could not read descend response\n");
-    return;
+  if (read_vfs_fs_descend_response (bda, bdb, &error, &node) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read file system response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   if (error != VFS_FS_SUCCESS) {
@@ -617,8 +678,17 @@ client_resume_path_lookup (client_t* client,
   }
   
   /* Form a message to a file system. */
-  vfs_fs_request_queue_push_descend (&client->path_lookup_current.fs->request_queue, 0, client->path_lookup_current.node.id, client->path_lookup_begin, client->path_lookup_end - client->path_lookup_begin);
-  callback_queue_push (&client->path_lookup_current.fs->callback_queue, 0, descend_callback, client);
+  if (vfs_fs_request_queue_push_descend (&client->path_lookup_current.fs->request_queue, client->path_lookup_current.node.id, client->path_lookup_begin, client->path_lookup_end - client->path_lookup_begin) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write file system request: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+  }
+  if (callback_queue_push (&client->path_lookup_current.fs->callback_queue, descend_callback, client) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push callback: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+
+  }
   file_system_put_on_request_queue (client->path_lookup_current.fs);
 }
 
@@ -631,12 +701,18 @@ client_start (client_t* client)
     switch (req->type) {
     case VFS_UNKNOWN:
       /* An unknown request type got on the queue.  This is a logic error. */
-      buffer_file_puts (&syslog_buffer, 0, WARNING "unknown request on client request queue\n");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "unknow request on client request queue");
+      logs (log_buffer);
+      exit (-1);
       break;
     case VFS_MOUNT:
       if (!check_absolute_path (req->u.mount.path, req->u.mount.path_size)) {
 	/* Answer. */
-	vfs_response_queue_push_mount (&client->response_queue, 0, VFS_BAD_PATH);
+	if (vfs_response_queue_push_mount (&client->response_queue, VFS_BAD_PATH) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client request: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
 	client_answer (client);
 	return;
       }
@@ -648,7 +724,11 @@ client_start (client_t* client)
       for (mnt = mount_head; mnt != 0; mnt = mnt->next) {
 	if (mnt->b.fs->aid == req->u.mount.aid) {
 	  /* Answer. */
-	  vfs_response_queue_push_mount (&client->response_queue, 0, VFS_ALREADY_MOUNTED);
+	  if (vfs_response_queue_push_mount (&client->response_queue, VFS_ALREADY_MOUNTED) != 0) {
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	    logs (log_buffer);
+	    exit (-1);
+	  }
 	  client_answer (client);
 	  return;
 	}
@@ -661,7 +741,11 @@ client_start (client_t* client)
     case VFS_READFILE:
       if (!check_absolute_path (req->u.readfile.path, req->u.readfile.path_size)) {
 	/* Answer. */
-	vfs_response_queue_push_readfile (&client->response_queue, 0, VFS_BAD_PATH, 0, -1);
+	if (vfs_response_queue_push_readfile (&client->response_queue, VFS_BAD_PATH, 0, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
 	client_answer (client);
 	return;
       }
@@ -681,14 +765,18 @@ client_push_request (client_t* client,
 {
   vfs_type_t type;
   bool empty = vfs_request_queue_empty (&client->request_queue);
-  if (vfs_request_queue_push_from_buffer (&client->request_queue, 0, bda, bdb, &type) == 0) {
+  if (vfs_request_queue_push_from_buffer (&client->request_queue, bda, bdb, &type) == 0) {
     if (empty) {
       client_start (client);
     }
   }
   else {
     /* Bad request. */
-    vfs_response_queue_push_bad_request (&client->response_queue, 0, type);
+    if (vfs_response_queue_push_bad_request (&client->response_queue, type) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     /* Add to the response queue if not already there. */
     client_put_on_response_queue (client);
   }
@@ -699,8 +787,10 @@ client_pop_response (client_t** c)
 {
   client_t* client = *c;
   /* Pop the response. */
-  if (vfs_response_queue_pop_to_buffer (&client->response_queue, 0, client->response_bda, client->response_bdb) != 0) {
-    buffer_file_puts (&syslog_buffer, 0, WARNING "could not write to client response buffer\n");
+  if (vfs_response_queue_pop_to_buffer (&client->response_queue, client->response_bda, client->response_bdb) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write client response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   /* Remove the client from the response queue. */
@@ -725,98 +815,11 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0, 0);
-    if (syslog_bd == -1) {
-      /* Nothing we can do. */
-      exit (-1);
-    }
-    if (buffer_file_initw (&syslog_buffer, 0, syslog_bd) != 0) {
-      /* Nothing we can do. */
-      exit (-1);
-    }
-
-    aid_t syslog_aid = lookups (0, SYSLOG_NAME);
-    if (syslog_aid != -1) {
-      /* Bind to the syslog. */
-
-      description_t syslog_description;
-      if (description_init (&syslog_description, 0, syslog_aid) != 0) {
-	exit (-1);
-      }
-      
-      action_desc_t syslog_text_in;
-      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
-	exit (-1);
-      }
-      
-      /* We bind the response first so they don't get lost. */
-      if (bind (0, getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
-	exit (-1);
-      }
-
-      description_fini (&syslog_description, 0);
-    }
-
     root.fs = 0;
     root.node.type = DIRECTORY;
     root.node.id = 0;
 
     vfs_aid = getaid ();
-  }
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
-{
-  initialize ();
-  finish_internal ();
-}
-
-/* stop
-   ----
-   Stop the automaton.
-   
-   Pre:  state == STOP and syslog_buffer is empty
-   Post: 
-*/
-static bool
-stop_precondition (void)
-{
-  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
-{
-  initialize ();
-
-  if (stop_precondition ()) {
-    exit (-1);
-  }
-  finish_internal ();
-}
-
-/* syslog
-   ------
-   Output error messages.
-   
-   Pre:  syslog_buffer is not empty
-   Post: syslog_buffer is empty
-*/
-static bool
-syslog_precondition (void)
-{
-  return buffer_file_size (&syslog_buffer) != 0;
-}
-
-BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
-{
-  initialize ();
-
-  if (syslog_precondition ()) {
-    buffer_file_truncate (&syslog_buffer);
-    finish_output (true, syslog_bd, -1);
-  }
-  else {
-    finish_output (false, -1, -1);
   }
 }
 
@@ -832,10 +835,6 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
   client_t* client = find_client (aid);
   if (client == 0) {
     client = create_client (aid);
-    if (client == 0) {
-      buffer_file_puts (&syslog_buffer, 0, WARNING "could not create client\n");
-      finish_input (bda, bdb);
-    }
   }
   client_push_request (client, bda, bdb);
   finish_input (bda, bdb);
@@ -848,7 +847,7 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_REQUEST_NO, VFS_REQUEST_NAME, "", client_reques
    Pre:  The client exists and has a response.
    Post: The first response for the client is removed.
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_response, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
 
@@ -871,7 +870,7 @@ BEGIN_OUTPUT (AUTO_PARAMETER, VFS_RESPONSE_NO, VFS_RESPONSE_NAME, "", client_res
    Pre:  ???
    Post: ???
  */
-BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, VFS_FS_REQUEST_NO, "", "", file_system_request, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
 
@@ -914,19 +913,28 @@ BEGIN_INPUT (AUTO_PARAMETER, VFS_FS_RESPONSE_NO, "", "", file_system_response, a
   finish_input (bda, bdb);
 }
 
+BEGIN_SYSTEM_INPUT (SYSTEM_EVENT_NO, "system_event", "", system_event, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  logs (INFO "look for clients and file systems that have been destroyed");
+  finish_input (bda, bdb);
+}
+
 void
 do_schedule (void)
 {
-  if (stop_precondition ()) {
-    schedule (0, STOP_NO, 0);
-  }
-  if (syslog_precondition ()) {
-    schedule (0, SYSLOG_NO, 0);
-  }
   if (response_head != 0) {
-    schedule (0, VFS_RESPONSE_NO, response_head->aid);
+    if (schedule (VFS_RESPONSE_NO, response_head->aid) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not schedule response action: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
   }
   if (request_head != 0) {
-    schedule (0, VFS_FS_REQUEST_NO, request_head->aid);
+    if (schedule (VFS_FS_REQUEST_NO, request_head->aid) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not schedule request action: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
   }
 }

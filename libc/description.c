@@ -5,25 +5,23 @@
 
 int
 description_init (description_t* d,
-		  lily_error_t* err,
 		  aid_t aid)
 {
   d->aid = aid;
-  bd_t bd = describe (err, aid);
+  bd_t bd = describe (aid);
   if (bd == -1) {
     return -1;
   }
-  if (buffer_file_initr (&d->bf, err, bd) != 0) {
+  if (buffer_file_initr (&d->bf, bd) != 0) {
     return -1;
   }
   return 0;
 }
 
 int
-description_fini (description_t* d,
-		  lily_error_t* err)
+description_fini (description_t* d)
 {
-  return buffer_destroy (err, buffer_file_bd (&d->bf));
+  return buffer_destroy (buffer_file_bd (&d->bf));
 }
 
 size_t

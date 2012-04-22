@@ -73,7 +73,7 @@ private:
       if ((*input_action_pos_)->enabled ()) {
 	action_ = (*input_action_pos_)->input_action;
 	// This does not return.
-	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
+	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_, 1);
       }
       else {
 	++input_action_pos_;
@@ -135,7 +135,7 @@ public:
     kassert (pos != context_map_.end ());
     
     automaton_context* c = pos->second;
-    c->push_back (ad);
+    !c->push_back (ad);
     
     ready_queue_.push_back (c);
   }
@@ -226,6 +226,8 @@ public:
 	action_ = c->front ();
 	c->pop_front ();
 
+	size_t binding_count;
+
 	// The automaton exists.  Continue loading and execute.
 	switch (action_.action->type) {
 	case INPUT:
@@ -262,11 +264,13 @@ public:
 	    }
 	    
 	    input_action_pos_ = input_action_list_.begin ();
+	    binding_count = input_action_list_.size ();
 	  }
 	  break;
 	case INTERNAL:
 	  // +EEE
 	  action_.automaton->lock_execution ();
+	  binding_count = 0;
 	  break;
 	case SYSTEM_INPUT:
 	  // Load the buffer.
@@ -274,6 +278,7 @@ public:
 	  output_buffer_b_ = action_.buffer_b;
 	  // +EEE
 	  action_.automaton->lock_execution ();
+	  binding_count = 0;
 	  break;
 	}
 	
@@ -283,7 +288,7 @@ public:
 	}
 
 	// This call does not return.
-	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
+	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_, binding_count);
       }
 
       // Out of actions.

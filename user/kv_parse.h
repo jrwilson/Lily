@@ -6,8 +6,7 @@
 #include <lily/types.h>
 
 int
-kv_parse (lily_error_t* err,
-	  char** key,
+kv_parse (char** key,
 	  char** value,
 	  const char** ptr,
 	  const char* end);

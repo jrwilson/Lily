@@ -4,8 +4,7 @@
 #include <string.h>
 
 int
-kv_parse (lily_error_t* err,
-	  char** key,
+kv_parse (char** key,
 	  char** value,
 	  const char** ptr,
 	  const char* end)
@@ -39,10 +38,8 @@ kv_parse (lily_error_t* err,
     return 0;
   }
 
-  *key = malloc (err, key_end - key_begin + 1);
-  if (*key == 0) {
-    return -1;
-  }
+  *key = malloc (key_end - key_begin + 1);
+  assert (*key != NULL);
   memcpy (*key, key_begin, key_end - key_begin);
   (*key)[key_end - key_begin] = '\0';
 
@@ -85,12 +82,8 @@ kv_parse (lily_error_t* err,
       return 0;
     }
     
-    *value = malloc (err, value_end - value_begin + 1);
-    if (*value == 0) {
-      free (*key);
-      *key = 0;
-      return -1;
-    }
+    *value = malloc (value_end - value_begin + 1);
+    assert (*value != NULL);
     memcpy (*value, value_begin, value_end - value_begin);
     (*value)[value_end - value_begin] = '\0';
   }

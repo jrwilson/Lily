@@ -4,7 +4,6 @@
 
 aid_t automaton::current_aid_ = 0;
 automaton::aid_to_automaton_map_type automaton::aid_to_automaton_map_;
-automaton::registry_map_type automaton::registry_map_;
 
 bid_t automaton::current_bid_ = 0;
 automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
@@ -13,13 +12,14 @@ automaton::mapped_areas_type automaton::all_mapped_areas_;
 bitset<65536> automaton::reserved_ports_;
 
 automaton::log_event_map_type automaton::log_event_map_;
+automaton::system_event_map_type automaton::system_event_map_;
 
-void
+pair<int, lily_error_t>
 automaton::log (const char* message,
 		size_t message_size)
 {
   if (!verify_span (message, message_size)) {
-    kpanic ("TODO:  Bad pointer.");
+    return make_pair (-1, LILY_ERROR_INVAL);
   }
 
   const size_t total_size = sizeof (log_event_t) + message_size;
@@ -57,19 +57,8 @@ automaton::log (const char* message,
        ++pos) {
     scheduler::schedule (caction (pos->first, pos->second, 0, b, shared_ptr<buffer> ()));
   }
-}
 
-void
-automaton::event (const shared_ptr<buffer>& bda,
-		  const shared_ptr<buffer>& bdb)
-{
-  for (aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.begin ();
-       pos != aid_to_automaton_map_.end ();
-       ++pos) {
-    if (pos->second->system_event_ != 0) {
-      scheduler::schedule (caction (pos->second, pos->second->system_event_, 0, bda, bdb));
-    }
-  }
+  return make_pair (0, LILY_ERROR_SUCCESS);
 }
 
 pair<int, lily_error_t>
@@ -144,8 +133,7 @@ automaton::exit (const shared_ptr<automaton>& ths,
 */
 
 pair<shared_ptr<automaton>, lily_error_t>
-automaton::create_automaton (const kstring& name,
-			     const shared_ptr<automaton>& parent,
+automaton::create_automaton (const shared_ptr<automaton>& parent,
 			     bool privileged,
 			     const shared_ptr<buffer>& text,
 			     size_t text_size,
@@ -194,19 +182,12 @@ automaton::create_automaton (const kstring& name,
     
     aid_to_automaton_map_.insert (make_pair (child_aid, child));
     
-    // Insert into the name map if necessary.
-    if (name.size () != 0) {
-      pair<registry_map_type::iterator, bool> r = registry_map_.insert (make_pair (name, child));
-      kassert (r.second);
-    }
-    
     // Add the child to the parent.
     if (parent.get () != 0) {
       parent->children_.insert (child);
     }
 
     child->aid_ = child_aid;
-    child->name_ = name;
     child->parent_ = parent;
     child->privileged_ = privileged;
     
@@ -222,19 +203,19 @@ automaton::create_automaton (const kstring& name,
     
     // Schedule the init action and look for the system_event action.
     const kstring init_name ("init");
-    const kstring system_event_name ("system_event");
     const kstring log_event_name ("log_event");
+    const kstring system_event_name ("system_event");
     for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
 	 pos != child->ano_to_action_map_.end ();
 	 ++pos) {
       if (pos->second->name == init_name && pos->second->type == INTERNAL) {
 	scheduler::schedule (caction (child, pos->second, child_aid));
       }
-      else if (pos->second->name == system_event_name && pos->second->type == SYSTEM_INPUT) {
-	child->system_event_ = pos->second;
-      }
       else if (pos->second->name == log_event_name && pos->second->type == SYSTEM_INPUT) {
 	log_event_map_.insert (make_pair (child, pos->second));
+      }
+      else if (pos->second->name == system_event_name && pos->second->type == SYSTEM_INPUT) {
+	system_event_map_.insert (make_pair (child, pos->second));
       }
     }
   }
@@ -255,6 +236,142 @@ automaton::create_automaton (const kstring& name,
   }
 }
 
+pair<bid_t, lily_error_t>
+automaton::bind (const shared_ptr<automaton>& ths,
+		 aid_t output_aid,
+		 ano_t output_ano,
+		 int output_parameter,
+		 aid_t input_aid,
+		 ano_t input_ano,
+		 int input_parameter)
+{
+  kassert (ths.get () == this);
+  
+  aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
+  if (output_pos == aid_to_automaton_map_.end ()) {
+    // Output automaton DNE.
+    return make_pair (-1, LILY_ERROR_OAIDDNE);
+  }
+  
+  aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
+  if (input_pos == aid_to_automaton_map_.end ()) {
+    // Input automaton DNE.
+    return make_pair (-1, LILY_ERROR_IAIDDNE);
+  }
+  
+  shared_ptr<automaton> output_automaton = output_pos->second;
+  
+  shared_ptr<automaton> input_automaton = input_pos->second;
+  
+  if (output_automaton == input_automaton) {
+    // The output and input automata must be different.
+    return make_pair (-1, LILY_ERROR_INVAL);
+  }
+  
+  // Check the output action dynamically.
+  const paction* output_action = output_automaton->find_action (output_ano);
+  if (output_action == 0 ||
+      output_action->type != OUTPUT) {
+    // Output action does not exist or has the wrong type.
+    return make_pair (-1, LILY_ERROR_OANODNE);
+  }
+  
+  // Check the input action dynamically.
+  const paction* input_action = input_automaton->find_action (input_ano);
+  if (input_action == 0 ||
+      input_action->type != INPUT) {
+    // Input action does not exist or has the wrong type.
+    return make_pair (-1, LILY_ERROR_IANODNE);
+  }
+  
+  // Correct the parameters.
+  switch (output_action->parameter_mode) {
+  case NO_PARAMETER:
+    output_parameter = 0;
+    break;
+  case PARAMETER:
+    break;
+  case AUTO_PARAMETER:
+    output_parameter = input_automaton->aid ();
+    break;
+  }
+  
+  switch (input_action->parameter_mode) {
+  case NO_PARAMETER:
+    input_parameter = 0;
+    break;
+  case PARAMETER:
+    break;
+  case AUTO_PARAMETER:
+    input_parameter = output_automaton->aid ();
+    break;
+  }
+  
+  // Form complete actions.
+  caction oa (output_automaton, output_action, output_parameter);
+  caction ia (input_automaton, input_action, input_parameter);
+  
+  {
+    // Check that the input action is not bound to an enabled action.
+    // (Also checks that the binding does not exist.)
+    bound_inputs_map_type::const_iterator pos1 = input_automaton->bound_inputs_map_.find (ia);
+    if (pos1 != input_automaton->bound_inputs_map_.end ()) {
+      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	if ((*pos2)->enabled ()) {
+	  // The input is bound to an enabled action.
+	  return make_pair (-1, LILY_ERROR_INVAL);
+	}
+      }
+    }
+  }
+  
+  {
+    // Check that the output action is not bound to an enabled action in the input automaton.
+    bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
+    if (pos1 != output_automaton->bound_outputs_map_.end ()) {
+      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
+	  return make_pair (-1, LILY_ERROR_INVAL);
+	}
+      }
+    }
+  }
+  
+  // Generate an id.
+  bid_t bid = current_bid_;
+  while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
+    bid = max (bid + 1, 0); // Handles overflow.
+  }
+  current_bid_ = max (bid + 1, 0);
+  
+  // Create the binding.
+  shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
+  bid_to_binding_map_.insert (make_pair (bid, b));
+  
+  // Bind.
+  {
+    pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
+    r.first->second.insert (b);
+  }
+  
+  {
+    pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
+    r.first->second.insert (b);
+  }
+  
+  {
+    pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
+    kassert (r.second);
+  }
+
+  // Schedule the output.
+  scheduler::schedule (oa);
+  
+  kout << "TODO:  Generate bind event" << endl;
+
+  return make_pair (b->bid, LILY_ERROR_SUCCESS);
+}
+
 void
 automaton::unbind (const shared_ptr<binding>& binding,
 		   bool remove_from_output,
@@ -262,7 +379,6 @@ automaton::unbind (const shared_ptr<binding>& binding,
 		   bool remove_from_owner)
 {
   kout << "TODO:  Generate unbind event" << endl;
-  event (shared_ptr<buffer> (), shared_ptr<buffer> ());
 
   // Remove from the map.
   size_t count = bid_to_binding_map_.erase (binding->bid);
@@ -315,7 +431,6 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   kassert (ths.get () == this);
   
   kout << "TODO:  Generate destroy/exit event" << endl;
-  event (shared_ptr<buffer> (), shared_ptr<buffer> ());
 
   /*
     Address the instance variables:
@@ -348,11 +463,8 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   
   aid_to_automaton_map_.erase (aid_);
   log_event_map_.erase (ths);
+  system_event_map_.erase (ths);
   aid_ = -1;
-  
-  if (name_.size () != 0) {
-    registry_map_.erase (name_);
-  }
   
   // Leave ano_to_action_map_ for dtor.
   // Leave description_ for dtor.

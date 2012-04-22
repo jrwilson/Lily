@@ -94,7 +94,7 @@ struct caction {
   inline bool
   operator== (const caction& other) const
   {
-    return automaton == other.automaton && action == other.action && parameter == other.parameter;
+    return automaton == other.automaton && action == other.action && parameter == other.parameter && buffer_a.get () == other.buffer_a.get () && buffer_b.get () == other.buffer_b.get ();
   }
 };
 
@@ -102,7 +102,7 @@ struct caction_hash {
   size_t
   operator() (const caction& c) const
   {
-    return reinterpret_cast<size_t> (c.automaton.get ()) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter;
+    return reinterpret_cast<size_t> (c.automaton.get ()) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter ^ reinterpret_cast<size_t> (c.buffer_a.get ()) ^ reinterpret_cast<size_t> (c.buffer_b.get ());
   }
 };
 

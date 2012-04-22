@@ -1,6 +1,8 @@
 #include "automaton.h"
 #include "string.h"
 
+lily_error_t lily_error = LILY_ERROR_SUCCESS;
+
 #define syscall0(syscall)		\
   __asm__ ("mov %0, %%eax\n" \
 	   "int $0x80\n" : : "g"(syscall) : "eax", "ecx");
@@ -28,59 +30,42 @@
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall) : "eax", "ecx" );
 
-#define syscall0re(syscall, retval, err)	\
-  lily_error_t e; \
+#define syscall0re(syscall, retval)	\
   __asm__ ("mov %2, %%eax\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall) : "eax", "ecx" ); \
-  if (err != 0) { \
-    *err = e; \
-  }
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall) : "eax", "ecx" );
 
-#define syscall1re(syscall, retval, p1, err)	\
-  lily_error_t e; \
+#define syscall1re(syscall, retval, p1)	\
   __asm__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" ); \
-  if (err != 0) { \
-    *err = e; \
-  }
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" );
 
-#define syscall2re(syscall, retval, p1, p2, err)	\
-  lily_error_t e; \
+#define syscall2re(syscall, retval, p1, p2)	\
   __asm__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "mov %4, %%ecx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" ); \
-  if (err != 0) { \
-    *err = e; \
-  }
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
 
-#define syscall3re(syscall, retval, p1, p2, p3, err)	\
-  lily_error_t e; \
+#define syscall3re(syscall, retval, p1, p2, p3)	\
   __asm__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "mov %4, %%ecx\n" \
 	   "mov %5, %%edx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(e) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" ); \
-  if (err != 0) { \
-    *err = e; \
-  }
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
 
 int
-schedule (lily_error_t* err,
-	  ano_t action_number,
+schedule (ano_t action_number,
 	  int parameter)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_SCHEDULE, retval, action_number, parameter, err);
+  syscall2re (LILY_SYSCALL_SCHEDULE, retval, action_number, parameter);
   return retval;
 }
 
@@ -100,10 +85,10 @@ finish_input (bd_t bda,
 	      bd_t bdb)
 {
   if (bda != -1) {
-    buffer_destroy (0, bda);
+    buffer_destroy (bda);
   }
   if (bdb != -1) {
-    buffer_destroy (0, bdb);
+    buffer_destroy (bdb);
   }
   do_schedule ();
   finish (false, -1, -1);
@@ -132,40 +117,19 @@ exit (int code)
 }
 
 aid_t
-create (lily_error_t* err,
-	bd_t text_bd,
+create (bd_t text_bd,
 	size_t text_size,
 	bd_t bda,
 	bd_t bdb,
-	const char* name,
-	size_t name_size,
 	bool retain_privilege)
 {
   aid_t retval;
-  syscall1re (LILY_SYSCALL_CREATE, retval, &text_bd, err);
+  syscall1re (LILY_SYSCALL_CREATE, retval, &text_bd);
   return retval;
 }
 
-aid_t
-creates (lily_error_t* err,
-	 bd_t text_bd,
-	 size_t text_size,
-	 bd_t bda,
-	 bd_t bdb,
-	 const char* name,
-	 bool retain_privilege)
-{
-  if (name != 0) {
-    return create (err, text_bd, text_size, bda, bdb, name, strlen (name) + 1, retain_privilege);
-  }
-  else {
-    return create (err, text_bd, text_size, bda, bdb, 0, 0, retain_privilege);
-  }
-}
-
 bid_t
-bind (lily_error_t* err,
-      aid_t output_automaton,
+bind (aid_t output_automaton,
       ano_t output_action,
       int output_parameter,
       aid_t input_automaton,
@@ -173,178 +137,163 @@ bind (lily_error_t* err,
       int input_parameter)
 {
   aid_t retval;
-  syscall1re (LILY_SYSCALL_BIND, retval, &output_automaton, err);
+  syscall1re (LILY_SYSCALL_BIND, retval, &output_automaton);
   return retval;
 }
 
 int
-unbind (lily_error_t* err,
-	bid_t bid)
+unbind (bid_t bid)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNBIND, retval, bid, err);
+  syscall1re (LILY_SYSCALL_UNBIND, retval, bid);
   return retval;
 }
 
 int
-destroy (lily_error_t* err,
-	 aid_t aid)
+destroy (aid_t aid)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_DESTROY, retval, aid, err);
+  syscall1re (LILY_SYSCALL_DESTROY, retval, aid);
   return retval;
 }
 
 int
-subscribe_unbound (lily_error_t* err,
-		   bid_t bid,
+subscribe_unbound (bid_t bid,
 		   ano_t action_number)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_SUBSCRIBE_UNBOUND, retval, bid, action_number, err);
+  syscall2re (LILY_SYSCALL_SUBSCRIBE_UNBOUND, retval, bid, action_number);
   return retval;
 }
 
 int
-unsubscribe_unbound (lily_error_t* err,
-		     bid_t bid)
+unsubscribe_unbound (bid_t bid)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_UNBOUND, retval, bid, err);
+  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_UNBOUND, retval, bid);
   return retval;
 }
 
 int
-subscribe_destroyed (lily_error_t* err,
-		     aid_t aid,
+subscribe_destroyed (aid_t aid,
 		     ano_t action_number)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_SUBSCRIBE_DESTROYED, retval, aid, action_number, err);
+  syscall2re (LILY_SYSCALL_SUBSCRIBE_DESTROYED, retval, aid, action_number);
   return retval;
 }
 
 int
-unsubscribe_destroyed (lily_error_t* err,
-		       aid_t aid)
+unsubscribe_destroyed (aid_t aid)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_DESTROYED, retval, aid, err);
+  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_DESTROYED, retval, aid);
   return retval;
 }
 
-void
+int
 log (const char* message,
      size_t message_size)
 {
-  syscall2 (LILY_SYSCALL_LOG, message, message_size);
+  int retval;
+  syscall2re (LILY_SYSCALL_LOG, retval, message, message_size);
+  return retval;
 }
 
-void
+int
 logs (const char* message)
 {
-  log (message, strlen (message) + 1);
+  return log (message, strlen (message) + 1);
 }
 
 void*
-adjust_break (lily_error_t* err,
-	      ptrdiff_t size)
+adjust_break (ptrdiff_t size)
 {
   void* retval;
-  syscall1re (LILY_SYSCALL_ADJUST_BREAK, retval, size, err);
+  syscall1re (LILY_SYSCALL_ADJUST_BREAK, retval, size);
   return retval;
 }
 
 bd_t
-buffer_create (lily_error_t* err,
-	       size_t size)
+buffer_create (size_t size)
 {
   bd_t retval;
-  syscall1re (LILY_SYSCALL_BUFFER_CREATE, retval, size, err);
+  syscall1re (LILY_SYSCALL_BUFFER_CREATE, retval, size);
   return retval;
 }
 
 bd_t
-buffer_copy (lily_error_t* err,
-	     bd_t bd)
+buffer_copy (bd_t bd)
 {
   bd_t retval;
-  syscall1re (LILY_SYSCALL_BUFFER_COPY, retval, bd, err);
+  syscall1re (LILY_SYSCALL_BUFFER_COPY, retval, bd);
   return retval;
 }
 
 int
-buffer_destroy (lily_error_t* err,
-		bd_t bd)
+buffer_destroy (bd_t bd)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_BUFFER_DESTROY, retval, bd, err);
+  syscall1re (LILY_SYSCALL_BUFFER_DESTROY, retval, bd);
   return retval;
 }
 
 size_t
-buffer_size (lily_error_t* err,
-	     bd_t bd)
+buffer_size (bd_t bd)
 {
   size_t retval;
-  syscall1re (LILY_SYSCALL_BUFFER_SIZE, retval, bd, err);
+  syscall1re (LILY_SYSCALL_BUFFER_SIZE, retval, bd);
   return retval;
 }
 
 size_t
-buffer_resize (lily_error_t* err,
-	       bd_t bd,
+buffer_resize (bd_t bd,
 	       size_t size)
 {
   size_t retval;
-  syscall2re (LILY_SYSCALL_BUFFER_RESIZE, retval, bd, size, err);
+  syscall2re (LILY_SYSCALL_BUFFER_RESIZE, retval, bd, size);
   return retval;
 }
 
 int
-buffer_assign (lily_error_t* err,
-	       bd_t dest,
+buffer_assign (bd_t dest,
 	       bd_t src)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_BUFFER_ASSIGN, retval, dest, src, err);
+  syscall2re (LILY_SYSCALL_BUFFER_ASSIGN, retval, dest, src);
   return retval;
 }
 
 size_t
-buffer_append (lily_error_t* err,
-	       bd_t dest,
+buffer_append (bd_t dest,
 	       bd_t src)
 {
   size_t retval;
-  syscall2re (LILY_SYSCALL_BUFFER_APPEND, retval, dest, src, err);
+  syscall2re (LILY_SYSCALL_BUFFER_APPEND, retval, dest, src);
   return retval;
 }
 
 void*
-buffer_map (lily_error_t* err,
-	    bd_t bd)
+buffer_map (bd_t bd)
 {
   void* retval;
-  syscall1re (LILY_SYSCALL_BUFFER_MAP, retval, bd, err);
+  syscall1re (LILY_SYSCALL_BUFFER_MAP, retval, bd);
   return retval;
 }
 
 int
-buffer_unmap (lily_error_t* err,
-	      bd_t bd)
+buffer_unmap (bd_t bd)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_BUFFER_UNMAP, retval, bd, err);
+  syscall1re (LILY_SYSCALL_BUFFER_UNMAP, retval, bd);
   return retval;
 }
 
 long
-sysconf (lily_error_t* err,
-	 int name)
+sysconf (int name)
 {
   long retval;
-  syscall1re (LILY_SYSCALL_SYSCONF, retval, name, err);
+  syscall1re (LILY_SYSCALL_SYSCONF, retval, name);
   return retval;
 }
 
@@ -354,7 +303,7 @@ size_t
 pagesize (void)
 {
   if (page_size == 0) {
-    page_size = sysconf (SYSCONF_PAGESIZE, 0);
+    page_size = sysconf (SYSCONF_PAGESIZE);
   }
   return page_size;
 }
@@ -366,29 +315,11 @@ size_to_pages (size_t size)
   return ALIGN_UP (size, ps) / ps;
 }
 
-aid_t
-lookup (lily_error_t* err,
-	const char* name,
-	size_t size)
-{
-  aid_t retval;
-  syscall2re (LILY_SYSCALL_LOOKUP, retval, name, size, err);
-  return retval;
-}
-
-aid_t
-lookups (lily_error_t* err,
-	 const char* name)
-{
-  return lookup (err, name, strlen (name) + 1);
-}
-
 bd_t
-describe (lily_error_t* err,
-	  aid_t aid)
+describe (aid_t aid)
 {
   bd_t retval;
-  syscall1re (LILY_SYSCALL_DESCRIBE, retval, aid, err);
+  syscall1re (LILY_SYSCALL_DESCRIBE, retval, aid);
   return retval;
 }
 
@@ -417,126 +348,113 @@ getinitb (void)
 }
 
 int
-getmonotime (lily_error_t* err,
-	     mono_time_t* t)
+getmonotime (mono_time_t* t)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_GETMONOTIME, retval, t, err);
+  syscall1re (LILY_SYSCALL_GETMONOTIME, retval, t);
   return retval;
 }
 
 int
-map (lily_error_t* err,
-     const void* destination,
+map (const void* destination,
      const void* source,
      size_t size)
 {
   int retval;
-  syscall3re (LILY_SYSCALL_MAP, retval, destination, source, size, err);
+  syscall3re (LILY_SYSCALL_MAP, retval, destination, source, size);
   return retval;
 }
 
 int
-unmap (lily_error_t* err,
-       const void* destination)
+unmap (const void* destination)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNMAP, retval, destination, err);
+  syscall1re (LILY_SYSCALL_UNMAP, retval, destination);
   return retval;
 }
 
 int
-reserve_port (lily_error_t* err,
-	      unsigned short port)
+reserve_port (unsigned short port)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_RESERVE_PORT, retval, port, err);
+  syscall1re (LILY_SYSCALL_RESERVE_PORT, retval, port);
   return retval;
 }
 
 int
-unreserve_port (lily_error_t* err,
-		unsigned short port)
+unreserve_port (unsigned short port)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNRESERVE_PORT, retval, port, err);
+  syscall1re (LILY_SYSCALL_UNRESERVE_PORT, retval, port);
   return retval;
 }
 
 unsigned char
-inb (lily_error_t* err,
-     unsigned short port)
+inb (unsigned short port)
 {
   unsigned int retval;
-  syscall1re (LILY_SYSCALL_INB, retval, port, err);
+  syscall1re (LILY_SYSCALL_INB, retval, port);
   return retval;
 }
 
 int
-outb (lily_error_t* err,
-      unsigned short port,
+outb (unsigned short port,
       unsigned char value)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_OUTB, retval, port, value, err);
+  syscall2re (LILY_SYSCALL_OUTB, retval, port, value);
   return retval;
 }
 
 unsigned short
-inw (lily_error_t* err,
-     unsigned short port)
+inw (unsigned short port)
 {
   unsigned int retval;
-  syscall1re (LILY_SYSCALL_INW, retval, port, err);
+  syscall1re (LILY_SYSCALL_INW, retval, port);
   return retval;
 }
 
 int
-outw (lily_error_t* err,
-      unsigned short port,
+outw (unsigned short port,
       unsigned short value)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_OUTW, retval, port, value, err);
+  syscall2re (LILY_SYSCALL_OUTW, retval, port, value);
   return retval;
 }
 
 unsigned long
-inl (lily_error_t* err,
-     unsigned short port)
+inl (unsigned short port)
 {
   unsigned long retval;
-  syscall1re (LILY_SYSCALL_INL, retval, port, err);
+  syscall1re (LILY_SYSCALL_INL, retval, port);
   return retval;
 }
 
 int
-outl (lily_error_t* err,
-      unsigned short port,
+outl (unsigned short port,
       unsigned long value)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_OUTL, retval, port, value, err);
+  syscall2re (LILY_SYSCALL_OUTL, retval, port, value);
   return retval;
 }
 
 int
-subscribe_irq (lily_error_t* err,
-	       int irq,
+subscribe_irq (int irq,
 	       ano_t ano,
 	       int param)
 {
   int retval;
-  syscall3re (LILY_SYSCALL_SUBSCRIBE_IRQ, retval, irq, ano, param, err);
+  syscall3re (LILY_SYSCALL_SUBSCRIBE_IRQ, retval, irq, ano, param);
   return retval;
 }
 
 int
-unsubscribe_irq (lily_error_t* err,
-		 int irq)
+unsubscribe_irq (int irq)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_IRQ, retval, irq, err);
+  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_IRQ, retval, irq);
   return retval;
 }
 

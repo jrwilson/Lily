@@ -6,17 +6,16 @@
 
 int
 buffer_file_initw (buffer_file_t* bf,
-		   lily_error_t* err,
 		   bd_t bd)
 {
   bf->bd = bd;
-  bf->bd_size = buffer_size (err, bd);
+  bf->bd_size = buffer_size (bd);
   if (bf->bd_size == -1) {
     return -1;
   }
   bf->capacity = bf->bd_size * pagesize ();
   if (bf->bd_size != 0) {
-    bf->ptr = buffer_map (err, bd);
+    bf->ptr = buffer_map (bd);
     if (bf->ptr == 0) {
       return -1;
     }
@@ -33,7 +32,6 @@ buffer_file_initw (buffer_file_t* bf,
 
 int
 buffer_file_write (buffer_file_t* bf,
-		   lily_error_t* err,
 		   const void* ptr,
 		   size_t size)
 {
@@ -49,13 +47,13 @@ buffer_file_write (buffer_file_t* bf,
 
   /* Resize if necessary. */
   if (bf->capacity < new_position) {
-    buffer_unmap (err, bf->bd);
+    buffer_unmap (bf->bd);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
-    if (buffer_resize (err, bf->bd, bf->bd_size) != 0) {
+    if (buffer_resize (bf->bd, bf->bd_size) != 0) {
       return -1;
     }
-    bf->ptr = buffer_map (err, bf->bd);
+    bf->ptr = buffer_map (bf->bd);
     if (bf->ptr == 0) {
       return -1;
     }
@@ -73,7 +71,6 @@ buffer_file_write (buffer_file_t* bf,
 
 int
 buffer_file_put (buffer_file_t* bf,
-		 lily_error_t* err,
 		 char c)
 {
   if (!bf->can_update) {
@@ -88,13 +85,13 @@ buffer_file_put (buffer_file_t* bf,
   
   /* Resize if necessary. */
   if (bf->capacity < new_position) {
-    buffer_unmap (err, bf->bd);
+    buffer_unmap (bf->bd);
     bf->capacity = ALIGN_UP (new_position, pagesize ());
     bf->bd_size = bf->capacity / pagesize ();
-    if (buffer_resize (err, bf->bd, bf->bd_size) != 0) {
+    if (buffer_resize (bf->bd, bf->bd_size) != 0) {
       return -1;
     }
-    bf->ptr = buffer_map (err, bf->bd);
+    bf->ptr = buffer_map (bf->bd);
     if (bf->ptr == 0) {
       return -1;
     }
@@ -112,11 +109,10 @@ buffer_file_put (buffer_file_t* bf,
 
 int
 buffer_file_puts (buffer_file_t* bf,
-		  lily_error_t* err,
 		  const char* s)
 {
   while (*s != '\0') {
-    if (buffer_file_put (bf, err, *s) != 0) {
+    if (buffer_file_put (bf, *s) != 0) {
       return -1;
     }
     ++s;
@@ -134,16 +130,15 @@ buffer_file_truncate (buffer_file_t* bf)
 
 int
 buffer_file_initr (buffer_file_t* bf,
-		   lily_error_t* err,
 		   bd_t bd)
 {
   bf->bd = bd;
-  bf->bd_size = buffer_size (err, bd);
+  bf->bd_size = buffer_size (bd);
   if (bf->bd_size == -1) {
     return -1;
   }
   bf->capacity = bf->bd_size * pagesize ();
-  bf->ptr = buffer_map (err, bd);
+  bf->ptr = buffer_map (bd);
   if (bf->ptr == 0) {
     return -1;
   }
@@ -234,7 +229,6 @@ buffer_file_seek (buffer_file_t* bf,
 
 typedef struct {
   buffer_file_t* bf;
-  lily_error_t* err;
   size_t size;
   bool okay;
 } bfprintf_t;
@@ -246,20 +240,18 @@ put (void* aux,
   bfprintf_t* s = aux;
  
   if (s->okay) {
-    s->okay = (buffer_file_put (s->bf, s->err, c) == 0);
+    s->okay = (buffer_file_put (s->bf, c) == 0);
   }
   ++s->size;
 }
 
 int
 bfprintf (buffer_file_t* bf,
-	  lily_error_t* err,
 	  const char* format,
 	  ...)
 {
   bfprintf_t s;
   s.bf = bf;
-  s.err = err;
   s.size = 0;
   s.okay = true;
   printf_t p;

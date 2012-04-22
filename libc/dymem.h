@@ -5,15 +5,13 @@
 #include <lily/types.h>
 
 void*
-malloc (lily_error_t* err,
-	size_t size);
+malloc (size_t size);
 
 void
 free (void* ptr);
 
 void*
-realloc (lily_error_t* err,
-	 void* ptr,
+realloc (void* ptr,
 	 size_t size);
 
 #endif /* DYMEM_H */

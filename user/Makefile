@@ -3,21 +3,23 @@ CFLAGS=-g -Wall -O2 -MD -std=c99
 PROGRAMS=\
 syslog \
 vfs \
-tmpfs \
-jsh \
-ps2_keyboard_mouse \
-terminal \
-vga \
-pci \
-ps2_keyboard_mouse_test \
-frtimer \
-sampler \
-ne2000 \
-serial_port \
-byte_channel \
-ecma2unix \
-zsnoop \
-bios
+tmpfs
+
+#jsh
+
+#ps2_keyboard_mouse \
+#terminal \
+#vga \
+#pci \
+#ps2_keyboard_mouse_test \
+#frtimer \
+#sampler \
+#ne2000 \
+#serial_port \
+#byte_channel \
+#ecma2unix \
+#zsnoop \
+#bios
 
 SCRIPTS=start.jsh
 TARGETS=boot_automaton boot_data
@@ -25,8 +27,8 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
+boot_automaton : boot_automaton.o cpio.o
+	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 	mkdir -p init_fs/bin
@@ -40,18 +42,18 @@ boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 to_buffer_file : to_buffer_file.c
 	gcc -o $@ $^
 
-# registry : registry.o registry_msg.o
-# 	$(CC) -o $@ $^ -lbuffer_file -lbuffer_queue
+syslog : syslog.o
+	$(CC) -o $@ $^ -lbuffer_file
 
-# shell : shell.o
-# 	$(CC) -o $@ $^_buffer -lbuffer_heap
-
-# File systems
-vfs : vfs.o vfs_msg.o
-	$(CC) -o $@ $^ -lcallback_queue -ldescription -lbuffer_file -ldymem
+vfs : vfs.o callback_queue.o vfs_msg.o
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 tmpfs : tmpfs.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -lbuffer_file -ldymem
+
+jsh : jsh.o vfs_msg.o kv_parse.o
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
+
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file
@@ -67,12 +69,6 @@ vga : vga.o vga_msg.o kv_parse.o
 
 pci : pci.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
-
-jsh : jsh.o vfs_msg.o kv_parse.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
-
-syslog : syslog.o kv_parse.o
-	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 frtimer : frtimer.o
 	$(CC) -o $@ $^ -lbuffer_file

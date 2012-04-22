@@ -54,10 +54,6 @@ private:
   typedef unordered_map<aid_t, shared_ptr<automaton> > aid_to_automaton_map_type;
   static aid_to_automaton_map_type aid_to_automaton_map_;
 
-  // A registry that maps a string (name) to an aid.
-  typedef unordered_map<kstring, shared_ptr<automaton>, kstring_hash> registry_map_type;
-  static registry_map_type registry_map_;
-
   /*
    * DESCRIPTION
    */
@@ -103,6 +99,9 @@ private:
   // Automata subscribing to log events.
   typedef unordered_map<shared_ptr<automaton>, const paction*> log_event_map_type;
   static log_event_map_type log_event_map_;
+  // Automata subscribing to system events.
+  typedef unordered_map<shared_ptr<automaton>, const paction*> system_event_map_type;
+  static system_event_map_type system_event_map_;
 
   /*
    * CREATION AND DESTRUCTION
@@ -126,8 +125,7 @@ private:
 
 public:
   static pair<shared_ptr<automaton>, lily_error_t>
-  create_automaton (const kstring& name,
-		    const shared_ptr<automaton>& parent,
+  create_automaton (const shared_ptr<automaton>& parent,
 		    bool privileged,
 		    const shared_ptr<buffer>& text,
 		    size_t text_size,
@@ -167,11 +165,6 @@ public:
    * SUBSCRIPTIONS
    */
 
-private:
-  static void
-  event (const shared_ptr<buffer>& bda,
-	 const shared_ptr<buffer>& bdb);
-
   /*
    * CREATION AND DESTRUCTION
    */
@@ -186,7 +179,6 @@ private:
 
 private:
   aid_t aid_;
-  kstring name_;
 
   /*
    * DESCRIPTION
@@ -202,8 +194,6 @@ private:
   kstring description_;
   // Flag indicating the description should be regenerated from the list of actions.
   bool regenerate_description_;
-  // Pointer to this automaton's system_event action.
-  const paction* system_event_;
 
   /*
    * AUTOMATA HIERARCHY
@@ -307,27 +297,6 @@ public:
   aid () const
   {
     return aid_;
-  }
-
-  inline pair<aid_t, lily_error_t>
-  lookup (const char* name,
-	  size_t size)
-  {
-    // Check the name.
-    if (!verify_span (name, size) || name[size -1] != 0) {
-      return make_pair (-1, LILY_ERROR_INVAL);
-    }
-
-    // Check the name in the map.
-    const kstring n (name, size);
-
-    registry_map_type::const_iterator pos = registry_map_.find (n);
-    if (pos != registry_map_.end ()) {
-      return make_pair (pos->second->aid (), LILY_ERROR_SUCCESS);
-    }
-    else {
-      return make_pair (-1, LILY_ERROR_SUCCESS);
-    }
   }
 
   /*
@@ -437,22 +406,9 @@ public:
 	  size_t /*text_size*/,
 	  bd_t bda,
 	  bd_t bdb,
-	  const char* name,
-	  size_t name_size,
 	  bool retain_privilege)
   {
     kassert (ths.get () == this);
-    
-    // Check the name data.
-    if (name_size != 0 && (!verify_span (name, name_size) || name[name_size - 1] != 0)) {
-      return make_pair (-1, LILY_ERROR_INVAL);
-    }
-    
-    // Check that the name does not exist.
-    kstring name_str (name, name_size);
-    if (name_size != 0 && registry_map_.find (name_str) != registry_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_ALREADY);
-    }
     
     // Find the text buffer.
     shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
@@ -472,11 +428,10 @@ public:
     }
     
     // Create the automaton.
-    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (name_str, ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
     
     if (r.first.get () != 0) {
       kout << "TODO:  Generate create event" << endl;
-      event (shared_ptr<buffer> (), shared_ptr<buffer> ());
       return make_pair (r.first->aid (), r.second);
     }
     else {
@@ -558,7 +513,8 @@ public:
   execute (const paction& action,
 	   int parameter,
 	   const shared_ptr<buffer>& output_buffer_a_,
-	   const shared_ptr<buffer>& output_buffer_b_)
+	   const shared_ptr<buffer>& output_buffer_b_,
+	   size_t binding_count)
   {
     // switch (action.type) {
     // case INPUT:
@@ -615,11 +571,17 @@ public:
       }
       break;
     case OUTPUT:
+      // Push the binding count.
+      *--stack_pointer = binding_count;
+      break;
     case INTERNAL:
       // Do nothing.
       break;
     }
     
+
+
+
     // Push the parameter.
     *--stack_pointer = parameter;
 
@@ -1233,139 +1195,14 @@ public:
     }
   }
 
-  inline pair<bid_t, lily_error_t>
+  pair<bid_t, lily_error_t>
   bind (const shared_ptr<automaton>& ths,
 	aid_t output_aid,
 	ano_t output_ano,
 	int output_parameter,
 	aid_t input_aid,
 	ano_t input_ano,
-	int input_parameter)
-  {
-    kassert (ths.get () == this);
-  
-    aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
-    if (output_pos == aid_to_automaton_map_.end ()) {
-      // Output automaton DNE.
-      return make_pair (-1, LILY_ERROR_OAIDDNE);
-    }
-  
-    aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
-    if (input_pos == aid_to_automaton_map_.end ()) {
-      // Input automaton DNE.
-      return make_pair (-1, LILY_ERROR_IAIDDNE);
-    }
-  
-    shared_ptr<automaton> output_automaton = output_pos->second;
-  
-    shared_ptr<automaton> input_automaton = input_pos->second;
-  
-    if (output_automaton == input_automaton) {
-      // The output and input automata must be different.
-      return make_pair (-1, LILY_ERROR_INVAL);
-    }
-  
-    // Check the output action dynamically.
-    const paction* output_action = output_automaton->find_action (output_ano);
-    if (output_action == 0 ||
-	output_action->type != OUTPUT) {
-      // Output action does not exist or has the wrong type.
-      return make_pair (-1, LILY_ERROR_OANODNE);
-    }
-  
-    // Check the input action dynamically.
-    const paction* input_action = input_automaton->find_action (input_ano);
-    if (input_action == 0 ||
-	input_action->type != INPUT) {
-      // Input action does not exist or has the wrong type.
-      return make_pair (-1, LILY_ERROR_IANODNE);
-    }
-  
-    // Correct the parameters.
-    switch (output_action->parameter_mode) {
-    case NO_PARAMETER:
-      output_parameter = 0;
-      break;
-    case PARAMETER:
-      break;
-    case AUTO_PARAMETER:
-      output_parameter = input_automaton->aid ();
-      break;
-    }
-  
-    switch (input_action->parameter_mode) {
-    case NO_PARAMETER:
-      input_parameter = 0;
-      break;
-    case PARAMETER:
-      break;
-    case AUTO_PARAMETER:
-      input_parameter = output_automaton->aid ();
-      break;
-    }
-  
-    // Form complete actions.
-    caction oa (output_automaton, output_action, output_parameter);
-    caction ia (input_automaton, input_action, input_parameter);
-  
-    {
-      // Check that the input action is not bound to an enabled action.
-      // (Also checks that the binding does not exist.)
-      bound_inputs_map_type::const_iterator pos1 = input_automaton->bound_inputs_map_.find (ia);
-      if (pos1 != input_automaton->bound_inputs_map_.end ()) {
-	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	  if ((*pos2)->enabled ()) {
-	    // The input is bound to an enabled action.
-	    return make_pair (-1, LILY_ERROR_INVAL);
-	  }
-	}
-      }
-    }
-  
-    {
-      // Check that the output action is not bound to an enabled action in the input automaton.
-      bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
-      if (pos1 != output_automaton->bound_outputs_map_.end ()) {
-	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	  if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
-	    return make_pair (-1, LILY_ERROR_INVAL);
-	  }
-	}
-      }
-    }
-  
-    // Generate an id.
-    bid_t bid = current_bid_;
-    while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
-      bid = max (bid + 1, 0); // Handles overflow.
-    }
-    current_bid_ = max (bid + 1, 0);
-  
-    // Create the binding.
-    shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
-    bid_to_binding_map_.insert (make_pair (bid, b));
-  
-    // Bind.
-    {
-      pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
-      r.first->second.insert (b);
-    }
-  
-    {
-      pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
-      r.first->second.insert (b);
-    }
-  
-    {
-      pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
-      kassert (r.second);
-    }
-  
-    kout << "TODO:  Generate bind event" << endl;
-    event (shared_ptr<buffer> (), shared_ptr<buffer> ());
-
-    return make_pair (b->bid, LILY_ERROR_SUCCESS);
-  }
+	int input_parameter);
 
   inline pair<int, lily_error_t>
   unbind (const shared_ptr<automaton>& ths,
@@ -1660,7 +1497,7 @@ public:
    */
 
 public:
-  void
+  pair<int, lily_error_t>
   log (const char* message,
        size_t message_size);
 
@@ -1769,7 +1606,6 @@ public:
   automaton () :
     aid_ (-1),
     regenerate_description_ (false),
-    system_event_ (0),
     parent_ (0),
     init_buffer_a_ (-1),
     init_buffer_b_ (-1),

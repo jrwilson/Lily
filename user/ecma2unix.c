@@ -40,27 +40,27 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    text_out_bd = buffer_create (0, 0);
+    text_out_bd = buffer_create (0);
     if (text_out_bd == -1) {
       exit (-1);
     }
-    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       exit (-1);
     }
 
-    mouse_packets_bd = buffer_create (0, 0);
+    mouse_packets_bd = buffer_create (0);
     if (mouse_packets_bd == -1) {
       exit (-1);
     }
-    if (mouse_packet_list_initw (&mouse_packet_list, 0, mouse_packets_bd) != 0) {
+    if (mouse_packet_list_initw (&mouse_packet_list, mouse_packets_bd) != 0) {
       exit (-1);
     }
 
-    text_out_term_bd = buffer_create (0, 0);
+    text_out_term_bd = buffer_create (0);
     if (text_out_term_bd == -1) {
       exit (-1);
     }
-    if (buffer_file_initw (&text_out_term_buffer, 0, text_out_term_bd) != 0) {
+    if (buffer_file_initw (&text_out_term_buffer, text_out_term_bd) != 0) {
       exit (-1);
     }
   }
@@ -77,7 +77,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_TERM_NO, "text_in_term", "buffer_file_t", tex
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
   
@@ -94,12 +94,12 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_TERM_NO, "text_in_term", "buffer_file_t", tex
     const char c = *begin;
     /* Convert \r to \n. */
     if (c != '\r') {
-      if (buffer_file_put (&text_out_buffer, 0, c) != 0) {
+      if (buffer_file_put (&text_out_buffer, c) != 0) {
 	exit (-1);
       }
     }
     else {
-      if (buffer_file_put (&text_out_buffer, 0, '\n') != 0) {
+      if (buffer_file_put (&text_out_buffer, '\n') != 0) {
 	exit (-1);
       }
     }
@@ -114,7 +114,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_TERM_NO, "mouse_packets_in_term", "m
 
   mouse_packet_t mp;
   mouse_packet_list_t input_buffer;
-  if (mouse_packet_list_initr (&input_buffer, 0, bda) != 0) {
+  if (mouse_packet_list_initr (&input_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
 
@@ -123,7 +123,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_TERM_NO, "mouse_packets_in_term", "m
       finish_input (bda, bdb);
     }
     
-    if (mouse_packet_list_write (&mouse_packet_list, 0, &mp) != 0) {
+    if (mouse_packet_list_write (&mouse_packet_list, &mp) != 0) {
       exit (-1);
     }
   }
@@ -174,7 +174,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
   
@@ -191,11 +191,11 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
     const char c = *begin;
     /* Convert \n to \r\n. */
     if (c == '\n') {
-      if (buffer_file_put (&text_out_term_buffer, 0, '\r') != 0) {
+      if (buffer_file_put (&text_out_term_buffer, '\r') != 0) {
 	exit (-1);
       }
     }
-    if (buffer_file_put (&text_out_term_buffer, 0, c) != 0) {
+    if (buffer_file_put (&text_out_term_buffer, c) != 0) {
       exit (-1);
     }
   }
@@ -225,12 +225,12 @@ void
 do_schedule (void)
 {
   if (text_out_precondition ()) {
-    schedule (0, TEXT_OUT_NO, 0);
+    schedule (TEXT_OUT_NO, 0);
   }
   if (mouse_packets_out_precondition ()) {
-    schedule (0, MOUSE_PACKETS_OUT_NO, 0);
+    schedule (MOUSE_PACKETS_OUT_NO, 0);
   }
   if (text_out_term_precondition ()) {
-    schedule (0, TEXT_OUT_TERM_NO, 0);
+    schedule (TEXT_OUT_TERM_NO, 0);
   }
 }

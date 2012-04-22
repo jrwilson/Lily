@@ -1,7 +1,6 @@
 #include "callback_queue.h"
 #include "dymem.h"
 
-
 struct callback_queue_item_struct {
   callback_t callback;
   void* data;
@@ -17,12 +16,11 @@ callback_queue_init (callback_queue_t* bq)
 
 int
 callback_queue_push (callback_queue_t* bq,
-		     lily_error_t* err,
 		     callback_t callback,
 		     void* data)
 {
   /* Create a queue item. */
-  callback_queue_item_t* item = malloc (err, sizeof (callback_queue_item_t));
+  callback_queue_item_t* item = malloc (sizeof (callback_queue_item_t));
   if (item == 0) {
     return -1;
   }

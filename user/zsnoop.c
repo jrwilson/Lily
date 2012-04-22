@@ -53,11 +53,11 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    text_out_bd = buffer_create (0, 0);
+    text_out_bd = buffer_create (0);
     if (text_out_bd == -1) {
       exit (-1);
     }
-    if (buffer_file_initw (&text_out_buffer, 0, text_out_bd) != 0) {
+    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
       exit (-1);
     }
   }
@@ -74,7 +74,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_A_NO, "text_in_a", "buffer_file_t", text_in_a
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
 
@@ -86,18 +86,18 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_A_NO, "text_in_a", "buffer_file_t", text_in_a
 
   switch (last_host) {
   case HOST_NONE:
-    buffer_file_puts (&text_out_buffer, 0, "A:");
+    buffer_file_puts (&text_out_buffer, "A:");
     break;
   case HOST_A:
     /* Do nothing. */
     break;
   case HOST_B:
-    buffer_file_puts (&text_out_buffer, 0, "\nA:");
+    buffer_file_puts (&text_out_buffer, "\nA:");
     break;
   }
 
   for (size_t idx = 0; idx != size; ++idx) {
-    bfprintf (&text_out_buffer, 0, " %x", str[idx]);
+    bfprintf (&text_out_buffer, " %x", str[idx]);
   }
 
   last_host = HOST_A;
@@ -110,7 +110,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_B_NO, "text_in_b", "buffer_file_t", text_in_b
   initialize ();
 
   buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, 0, bda) != 0) {
+  if (buffer_file_initr (&input_buffer, bda) != 0) {
     finish_input (bda, bdb);
   }
 
@@ -122,10 +122,10 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_B_NO, "text_in_b", "buffer_file_t", text_in_b
 
   switch (last_host) {
   case HOST_NONE:
-    buffer_file_puts (&text_out_buffer, 0, "B:");
+    buffer_file_puts (&text_out_buffer, "B:");
     break;
   case HOST_A:
-    buffer_file_puts (&text_out_buffer, 0, "\nB:");
+    buffer_file_puts (&text_out_buffer, "\nB:");
     break;
   case HOST_B:
     /* Do nothing. */
@@ -133,7 +133,7 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_B_NO, "text_in_b", "buffer_file_t", text_in_b
   }
 
   for (size_t idx = 0; idx != size; ++idx) {
-    bfprintf (&text_out_buffer, 0, " %x", str[idx]);
+    bfprintf (&text_out_buffer, " %x", str[idx]);
   }
 
   last_host = HOST_B;
@@ -164,6 +164,6 @@ void
 do_schedule (void)
 {
   if (text_out_precondition ()) {
-    schedule (0, TEXT_OUT_NO, 0);
+    schedule (TEXT_OUT_NO, 0);
   }
 }

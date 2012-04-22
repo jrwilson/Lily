@@ -28,7 +28,6 @@ typedef struct {
 
 int
 vga_op_list_initw (vga_op_list_t* vol,
-		   lily_error_t* err,
 		   bd_t bda,
 		   bd_t bdb);
 
@@ -37,26 +36,22 @@ vga_op_list_reset (vga_op_list_t* vol);
 
 int
 vga_op_list_write_set_cursor_location (vga_op_list_t* vol,
-				       lily_error_t* err,
 				       size_t location);
 
 int
 vga_op_list_write_assign (vga_op_list_t* vol,
-			  lily_error_t* err,
 			  size_t address,
 			  const void* data,
 			  size_t size);
 
 int
 vga_op_list_write_bassign (vga_op_list_t* vol,
-			   lily_error_t* err,
 			   size_t address,
 			   size_t size,
 			   bd_t bd);
 
 int
 vga_op_list_initr (vga_op_list_t* vol,
-		   lily_error_t* err,
 		   bd_t bda,
 		   bd_t bdb);
 

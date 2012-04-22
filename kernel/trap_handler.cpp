@@ -37,8 +37,6 @@ struct create_args {
   size_t text_size;
   bd_t bda;
   bd_t bdb;
-  const char* name;
-  size_t name_size;
   bool retain_privilege;
 };
 
@@ -89,7 +87,7 @@ trap_dispatch (volatile registers regs)
       if (!a->verify_stack (ptr, sizeof (create_args))) {
 	kpanic ("TODO:  Can't get create arguments from the stack");
       }
-      pair<aid_t, lily_error_t> r = a->create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->name, ptr->name_size, ptr->retain_privilege);
+      pair<aid_t, lily_error_t> r = a->create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->retain_privilege);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -157,7 +155,9 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_LOG:
     {
-      a->log (reinterpret_cast<const char*> (regs.ebx), regs.ecx);
+      pair<int, lily_error_t> r = a->log (reinterpret_cast<const char*> (regs.ebx), regs.ecx);
+      regs.eax = r.first;
+      regs.ecx = r.second;
       return;
     }
     break;
@@ -255,14 +255,6 @@ trap_dispatch (volatile registers regs)
 	return;
 	break;
       }
-      return;
-    }
-    break;
-  case LILY_SYSCALL_LOOKUP:
-    {
-      pair<int, lily_error_t> r = a->lookup (reinterpret_cast<const char*> (regs.ebx), regs.ecx);
-      regs.eax = r.first;
-      regs.ecx = r.second;
       return;
     }
     break;

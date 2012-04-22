@@ -46,10 +46,9 @@ typedef struct {
 
 int
 cpio_archive_init (cpio_archive_t* ar,
-		   lily_error_t* err,
 		   bd_t bd)
 {
-  if (buffer_file_initr (&ar->bf, err, bd) != 0) {
+  if (buffer_file_initr (&ar->bf, bd) != 0) {
     return -1;
   }
 
@@ -57,8 +56,7 @@ cpio_archive_init (cpio_archive_t* ar,
 }
 
 cpio_file_t*
-cpio_archive_next_file (cpio_archive_t* ar,
-			lily_error_t* err)
+cpio_archive_next_file (cpio_archive_t* ar)
 {
   /* Align to a 4-byte boundary. */
   size_t pos = buffer_file_position (&ar->bf);
@@ -114,23 +112,30 @@ cpio_archive_next_file (cpio_archive_t* ar,
   }
 
   /* Create a new entry. */
-  cpio_file_t* f = malloc (err, sizeof (cpio_file_t));
-  
+  cpio_file_t* f = malloc (sizeof (cpio_file_t));
+  if (f == NULL) {
+    return 0;
+  }
   /* Record the name. */
-  f->name = malloc (err, namesize);
-  if (f == 0) {
+  f->name = malloc (namesize);
+  if (f->name == NULL) {
+    free (f);
     return 0;
   }
   memcpy (f->name, name, namesize);
   f->name_size = namesize;
   f->mode = from_hex (h->mode);
   /* Create a buffer and copy the file content. */
-  f->bd = buffer_create (err, size_to_pages (filesize));
+  f->bd = buffer_create (size_to_pages (filesize));
   if (f->bd == -1) {
+    free (f->name);
+    free (f);
     return 0;
   }
-  memcpy (buffer_map (err, f->bd), data, filesize);
-  if (buffer_unmap (err, f->bd) != 0) {
+  memcpy (buffer_map (f->bd), data, filesize);
+  if (buffer_unmap (f->bd) != 0) {
+    free (f->name);
+    free (f);
     return 0;
   }
   f->size = filesize;
@@ -139,10 +144,9 @@ cpio_archive_next_file (cpio_archive_t* ar,
 }
 
 int
-cpio_file_destroy (cpio_file_t* file,
-		   lily_error_t* err)
+cpio_file_destroy (cpio_file_t* file)
 {
-  if (buffer_destroy (err, file->bd) != 0) {
+  if (buffer_destroy (file->bd) != 0) {
     return -1;
   }
   free (file->name);
