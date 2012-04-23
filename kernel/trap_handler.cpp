@@ -32,9 +32,9 @@ trap_handler::install ()
   idt::set (SYSCALL_INTERRUPT, make_trap_gate (trap0, gdt::KERNEL_CODE_SELECTOR, descriptor::RING3, descriptor::PRESENT));
 }
 
+/* TODO:  Pass with registers. */
 struct create_args {
   bd_t text_bd;
-  size_t text_size;
   bd_t bda;
   bd_t bdb;
   bool retain_privilege;
@@ -87,7 +87,7 @@ trap_dispatch (volatile registers regs)
       if (!a->verify_stack (ptr, sizeof (create_args))) {
 	kpanic ("TODO:  Can't get create arguments from the stack");
       }
-      pair<aid_t, lily_error_t> r = a->create (a, ptr->text_bd, ptr->text_size, ptr->bda, ptr->bdb, ptr->retain_privilege);
+      pair<aid_t, lily_error_t> r = a->create (a, ptr->text_bd, ptr->bda, ptr->bdb, ptr->retain_privilege);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -116,38 +116,6 @@ trap_dispatch (volatile registers regs)
   case LILY_SYSCALL_DESTROY:
     {
       pair<int, lily_error_t> r = a->destroy (a, regs.ebx);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-    break;
-  case LILY_SYSCALL_SUBSCRIBE_UNBOUND:
-    {
-      pair<int, lily_error_t> r = a->subscribe_unbound (a, regs.ebx, regs.ecx);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-    break;
-  case LILY_SYSCALL_UNSUBSCRIBE_UNBOUND:
-    {
-      pair<int, lily_error_t> r = a->unsubscribe_unbound (a, regs.ebx);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-    break;
-  case LILY_SYSCALL_SUBSCRIBE_DESTROYED:
-    {
-      pair<int, lily_error_t> r = a->subscribe_destroyed (a, regs.ebx, regs.ecx);
-      regs.eax = r.first;
-      regs.ecx = r.second;
-      return;
-    }
-    break;
-  case LILY_SYSCALL_UNSUBSCRIBE_DESTROYED:
-    {
-      pair<int, lily_error_t> r = a->unsubscribe_destroyed (a, regs.ebx);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

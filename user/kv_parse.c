@@ -39,7 +39,7 @@ kv_parse (char** key,
   }
 
   *key = malloc (key_end - key_begin + 1);
-  assert (*key != NULL);
+  //assert (*key != NULL);
   memcpy (*key, key_begin, key_end - key_begin);
   (*key)[key_end - key_begin] = '\0';
 
@@ -83,7 +83,7 @@ kv_parse (char** key,
     }
     
     *value = malloc (value_end - value_begin + 1);
-    assert (*value != NULL);
+    //assert (*value != NULL);
     memcpy (*value, value_begin, value_end - value_begin);
     (*value)[value_end - value_begin] = '\0';
   }

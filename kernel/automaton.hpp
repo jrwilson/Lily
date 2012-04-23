@@ -270,16 +270,6 @@ private:
    * SUBSCRIPTIONS
    */
 
-  // Automata to which this automaton is subscribed.
-  typedef unordered_set<shared_ptr<automaton> > automaton_subscriptions_type;
-  automaton_subscriptions_type automaton_subscriptions_;
-  // Automata that receive notification when this automaton is destroyed.
-  typedef unordered_map<shared_ptr<automaton>, caction> subscribers_type;
-  subscribers_type subscribers_;
-  // Bindings to which this automaton is subscribed.
-  typedef unordered_set<shared_ptr<binding> > binding_subscriptions_type;
-  binding_subscriptions_type binding_subscriptions_;
-
   /*
    * CREATION AND DESTRUCTION
    */
@@ -403,7 +393,6 @@ public:
   inline pair<aid_t, lily_error_t>
   create (const shared_ptr<automaton>& ths,
 	  bd_t text_bd,
-	  size_t /*text_size*/,
 	  bd_t bda,
 	  bd_t bdb,
 	  bool retain_privilege)
@@ -440,34 +429,6 @@ public:
   }
   
 private:
-  inline void
-  unsubscribe (const shared_ptr<automaton>& ths)
-  {
-    kassert (ths.get () == this);
-
-    for (automaton_subscriptions_type::const_iterator pos = automaton_subscriptions_.begin ();
-	 pos != automaton_subscriptions_.end ();
-	 ++pos) {
-      size_t count = (*pos)->subscribers_.erase (ths);
-      kassert (count == 1);
-    }
-    automaton_subscriptions_.clear ();
-
-    for (binding_subscriptions_type::const_iterator pos = binding_subscriptions_.begin ();
-	 pos != binding_subscriptions_.end ();
-	 ++pos) {
-      size_t count = (*pos)->subscribers.erase (ths);
-      kassert (count == 1);
-    }
-    binding_subscriptions_.clear ();
-
-    for (children_set_type::const_iterator pos = children_.begin ();
-	 pos != children_.end ();
-	 ++pos) {
-      (*pos)->unsubscribe (*pos);
-    }
-  }
-
   void
   destroy (const shared_ptr<automaton>& ths);
 
@@ -488,7 +449,6 @@ public:
       return make_pair (-1, LILY_ERROR_PERMISSION);
     }
 
-    child->unsubscribe (child);
     child->destroy (child);
 
     size_t count = children_.erase (child);
@@ -1501,104 +1461,6 @@ public:
   log (const char* message,
        size_t message_size);
 
-  inline pair<int, lily_error_t>
-  subscribe_unbound (const shared_ptr<automaton>& ths,
-		     bid_t bid,
-		     ano_t action_number)
-  {
-    kassert (ths.get () == this);
-
-    const paction* action = find_action (action_number);
-    if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
-      return make_pair (-1, LILY_ERROR_ANODNE);
-    }
-
-    bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
-    if (subject_pos == bid_to_binding_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_BIDDNE);
-    }
-
-    shared_ptr<binding> subject = subject_pos->second;
-
-    binding_subscriptions_.insert (subject);
-    subject->subscribers.insert (make_pair (ths, caction (ths, action, subject->bid)));
-
-    return make_pair (0, LILY_ERROR_SUCCESS);
-  }
-
-  inline pair<int, lily_error_t>
-  unsubscribe_unbound (const shared_ptr<automaton>& ths,
-		       bid_t bid)
-  {
-    bid_to_binding_map_type::const_iterator subject_pos = bid_to_binding_map_.find (bid);
-    if (subject_pos == bid_to_binding_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_BIDDNE);
-    }
-
-    shared_ptr<binding> subject = subject_pos->second;
-
-    size_t count = binding_subscriptions_.erase (subject);
-    if (count == 0) {
-      return make_pair (-1, LILY_ERROR_NOT);
-    }
-
-    count = subject->subscribers.erase (ths);
-    kassert (count == 1);
-
-    return make_pair (0, LILY_ERROR_SUCCESS);
-  }
-
-  // The automaton wants to receive a notification via action_number when the automaton corresponding to aid is destroyed.
-  // The automaton must have an action for receiving the event.
-  // The automaton corresponding to aid must exist.
-  // Not an error if already subscribed.
-  inline pair<int, lily_error_t>
-  subscribe_destroyed (const shared_ptr<automaton>& ths,
-		       aid_t aid,
-		       ano_t action_number)
-  {
-    kassert (ths.get () == this);
-
-    const paction* action = find_action (action_number);
-    if (action == 0 || action->type != SYSTEM_INPUT || action->parameter_mode != PARAMETER) {
-      return make_pair (-1, LILY_ERROR_ANODNE);
-    }
-
-    aid_to_automaton_map_type::const_iterator subject_pos = aid_to_automaton_map_.find (aid);
-    if (subject_pos == aid_to_automaton_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_AIDDNE);
-    }
-
-    shared_ptr<automaton> subject = subject_pos->second;
-
-    automaton_subscriptions_.insert (subject);
-    subject->subscribers_.insert (make_pair (ths, caction (ths, action, subject->aid_)));
-
-    return make_pair (0, LILY_ERROR_SUCCESS);
-  }
-
-  inline pair<int, lily_error_t>
-  unsubscribe_destroyed (const shared_ptr<automaton>& ths,
-			 aid_t aid)
-  {
-    aid_to_automaton_map_type::const_iterator subject_pos = aid_to_automaton_map_.find (aid);
-    if (subject_pos == aid_to_automaton_map_.end ()) {
-      return make_pair (-1, LILY_ERROR_AIDDNE);
-    }
-
-    shared_ptr<automaton> subject = subject_pos->second;
-
-    size_t count = automaton_subscriptions_.erase (subject);
-    if (count == 0) {
-      return make_pair (-1, LILY_ERROR_NOT);
-    }
-
-    count = subject->subscribers_.erase (ths);
-    kassert (count == 1);
-
-    return make_pair (0, LILY_ERROR_SUCCESS);
-  }
-
   /*
    * CREATION AND DESTRUCTION
    */
@@ -1773,9 +1635,6 @@ public:
     kassert (mapped_areas_.empty ());
     kassert (port_set_.empty ());
     kassert (irq_map_.empty ());
-    kassert (automaton_subscriptions_.empty ());
-    kassert (subscribers_.empty ());
-    kassert (binding_subscriptions_.empty ());
   }
 
 };

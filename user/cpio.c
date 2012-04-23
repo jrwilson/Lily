@@ -1,6 +1,5 @@
 #include "cpio.h"
 #include <string.h>
-#include <dymem.h>
 
 static int
 align_up (int address,
@@ -55,20 +54,21 @@ cpio_archive_init (cpio_archive_t* ar,
   return 0;
 }
 
-cpio_file_t*
-cpio_archive_next_file (cpio_archive_t* ar)
+int
+cpio_archive_read (cpio_archive_t* ar,
+		   cpio_file_t* f)
 {
   /* Align to a 4-byte boundary. */
   size_t pos = buffer_file_position (&ar->bf);
   pos = align_up (pos, 4);
   if (buffer_file_seek (&ar->bf, pos) != 0) {
-    return 0;
+    return -1;
   }
 
   const cpio_header_t* h = buffer_file_readp (&ar->bf, sizeof (cpio_header_t));
   if (h == 0) {
     /* Underflow. */
-    return 0;
+    return -1;
   }
 
   if (memcmp (h->magic, "070701", 6) == 0) {
@@ -79,77 +79,80 @@ cpio_archive_next_file (cpio_archive_t* ar)
   }
   else {
     /* Bad magic number. */
-    return 0;
+    return -1;
   }
-  size_t filesize = from_hex (h->filesize);
-  size_t namesize = from_hex (h->namesize);
+  f->mode = from_hex (h->mode);
+  f->file_size = from_hex (h->filesize);
+  f->name_size = from_hex (h->namesize);
 
-  const char* name = buffer_file_readp (&ar->bf, namesize);
-  if (name == 0) {
-    return 0;
+  f->name = buffer_file_readp (&ar->bf, f->name_size);
+  if (f->name == 0) {
+    return -1;
   }
-  if (name[namesize - 1] != 0) {
+  if (f->name[f->name_size - 1] != 0) {
     /* Name is not null terminated. */
-    return 0;
+    return -1;
+  }
+
+  /* Check for the trailer. */
+  if (strcmp (f->name, "TRAILER!!!") == 0) {
+    /* Done. */
+    return -1;
   }
 
   /* Align to a 4-byte boundary. */
   pos = buffer_file_position (&ar->bf);
   pos = align_up (pos, 4);
   if (buffer_file_seek (&ar->bf, pos) != 0) {
-    return 0;
-  }
-
-  const char* data = buffer_file_readp (&ar->bf, filesize);
-  if (data == 0) {
-    return 0;
-  }
-
-  /* Check for the trailer. */
-  if (strcmp (name, "TRAILER!!!") == 0) {
-    /* Done. */
-    return 0;
-  }
-
-  /* Create a new entry. */
-  cpio_file_t* f = malloc (sizeof (cpio_file_t));
-  if (f == NULL) {
-    return 0;
-  }
-  /* Record the name. */
-  f->name = malloc (namesize);
-  if (f->name == NULL) {
-    free (f);
-    return 0;
-  }
-  memcpy (f->name, name, namesize);
-  f->name_size = namesize;
-  f->mode = from_hex (h->mode);
-  /* Create a buffer and copy the file content. */
-  f->bd = buffer_create (size_to_pages (filesize));
-  if (f->bd == -1) {
-    free (f->name);
-    free (f);
-    return 0;
-  }
-  memcpy (buffer_map (f->bd), data, filesize);
-  if (buffer_unmap (f->bd) != 0) {
-    free (f->name);
-    free (f);
-    return 0;
-  }
-  f->size = filesize;
-
-  return f;
-}
-
-int
-cpio_file_destroy (cpio_file_t* file)
-{
-  if (buffer_destroy (file->bd) != 0) {
     return -1;
   }
-  free (file->name);
-  free (file);
+
+  /* Skip over the data. */
+  f->position = buffer_file_position (&ar->bf);
+  const char* data = buffer_file_readp (&ar->bf, f->file_size);
+  if (data == 0) {
+    return -1;
+  }
+
   return 0;
+}
+
+bd_t
+cpio_file_read (cpio_archive_t* ar,
+		const cpio_file_t* f)
+{
+  /* Get the current position. */
+  size_t position = buffer_file_position (&ar->bf);
+
+  /* Seek to the file. */
+  if (buffer_file_seek (&ar->bf, f->position) != 0) {
+    return -1;
+  }
+
+  /* Read the file. */
+  bd_t bd = buffer_create (size_to_pages (f->file_size));
+  if (bd == -1) {
+    return -1;
+  }
+  void* ptr = buffer_map (bd);
+  if (ptr == 0) {
+    buffer_destroy (bd);
+    return -1;
+  }
+  if (buffer_file_read (&ar->bf, ptr, f->file_size) != 0) {
+    buffer_destroy (bd);
+    return -1;
+  }
+  if (buffer_unmap (bd) != 0) {
+    buffer_destroy (bd);
+    return -1;
+  }
+
+  /* Seek to the original position. */
+  if (buffer_file_seek (&ar->bf, position) != 0) {
+    buffer_destroy (bd);
+    return -1;
+  }
+
+  return bd;
 }

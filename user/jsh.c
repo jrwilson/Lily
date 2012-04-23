@@ -4,10 +4,9 @@
 #include <string.h>
 #include <description.h>
 #include "vfs_msg.h"
-#include <callback_queue.h>
+#include "callback_queue.h"
 #include "kv_parse.h"
-
-#define ERROR "jsh: error: "
+#include "data_stack.h"
 
 /* TODO:  Improve the error handling. */
 
@@ -81,6 +80,9 @@ static buffer_file_t com_out_buffer;
 
 #define LOG_BUFFER_SIZE 128
 static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR __FILE__ ": error: "
+#define WARNING __FILE__ ": warning: "
+#define INFO __FILE__ ": info: "
 
 typedef struct automaton automaton_t;
 typedef struct automaton_item automaton_item_t;
@@ -159,17 +161,17 @@ find_automaton (const char* name)
   return automaton;
 }
 
-static automaton_t*
-find_automaton_aid (aid_t aid)
-{
-  automaton_t* automaton;
-  for (automaton = automata_head; automaton != 0; automaton = automaton->next) {
-    if (automaton->aid == aid) {
-      break;
-    }
-  }
-  return automaton;
-}
+/* static automaton_t* */
+/* find_automaton_aid (aid_t aid) */
+/* { */
+/*   automaton_t* automaton; */
+/*   for (automaton = automata_head; automaton != 0; automaton = automaton->next) { */
+/*     if (automaton->aid == aid) { */
+/*       break; */
+/*     } */
+/*   } */
+/*   return automaton; */
+/* } */
 
 static binding_t*
 create_binding (bid_t bid,
@@ -268,20 +270,20 @@ struct string {
 static string_t* string_head = 0;
 static string_t** string_tail = &string_head;
 
-static void
-string_push_front (char* str,
-		   size_t size)
-{
-  string_t* s = malloc (sizeof (string_t));
-  s->str = str;
-  s->size = size;
-  s->next = string_head;
-  string_head = s;
+/* static void */
+/* string_push_front (char* str, */
+/* 		   size_t size) */
+/* { */
+/*   string_t* s = malloc (sizeof (string_t)); */
+/*   s->str = str; */
+/*   s->size = size; */
+/*   s->next = string_head; */
+/*   string_head = s; */
 
-  if (s->next == 0) {
-    string_tail = &s->next;
-  }
-}
+/*   if (s->next == 0) { */
+/*     string_tail = &s->next; */
+/*   } */
+/* } */
 
 static void
 string_push_back (char* str,
@@ -600,18 +602,18 @@ create_callback (void* data,
     exit (-1);
   }
 
-  aid_t aid = creates (bdb, size, bd1, -1, create_register_name, create_retain_privilege);
+  aid_t aid = create (bdb, bd1, -1, create_retain_privilege);
   if (aid == -1) {
     buffer_destroy (bd1);
     bfprintf (&text_out_buffer, "-> error: create failed: %s\n", lily_error_string (lily_error));
     return;
   }
 
-  if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
-    buffer_destroy (bd1);
-    bfprintf (&text_out_buffer, "-> error: subscribe failed: %s\n", lily_error_string (lily_error));
-    return;
-  }
+  /* if (subscribe_destroyed (aid, DESTROYED_NO) != 0) { */
+  /*   buffer_destroy (bd1); */
+  /*   bfprintf (&text_out_buffer, "-> error: subscribe failed: %s\n", lily_error_string (lily_error)); */
+  /*   return; */
+  /* } */
 
   /* Add to the list of automata we know about. */
   automaton_t* automaton = create_automaton (create_name, aid, create_path);
@@ -775,12 +777,12 @@ single_bind (automaton_t* output_automaton,
     return;
   }
 
-  if (subscribe_unbound (bid, UNBOUND_NO) != 0) {
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n");
-    return;
-  }
+  /* if (subscribe_unbound (bid, UNBOUND_NO) != 0) { */
+  /*   description_fini (&output_description); */
+  /*   description_fini (&input_description); */
+  /*   buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n"); */
+  /*   return; */
+  /* } */
 
   binding_t* binding = create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter);
 
@@ -906,15 +908,15 @@ glob_bind (automaton_t* output_automaton,
 
 	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param);
 	    if (bid != -1) {
-	      if (subscribe_unbound (bid, UNBOUND_NO) == 0) {
-		binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param);
+	      /* if (subscribe_unbound (bid, UNBOUND_NO) == 0) { */
+	      /* 	binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param); */
 
-		binding->next = bindings_head;
-		bindings_head = binding;
-	      }
-	      else {
-		bid = -1;
-	      }
+	      /* 	binding->next = bindings_head; */
+	      /* 	bindings_head = binding; */
+	      /* } */
+	      /* else { */
+	      /* 	bid = -1; */
+	      /* } */
 	    }
 
 	    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param);
@@ -1079,64 +1081,64 @@ destroy_ (void)
   return false;
 }
 
-static void
-lookup_usage (void)
-{
-  buffer_file_puts (&text_out_buffer, "-> usage: NAME = lookup NAME\n");
-}
+/* static void */
+/* lookup_usage (void) */
+/* { */
+/*   buffer_file_puts (&text_out_buffer, "-> usage: NAME = lookup NAME\n"); */
+/* } */
 
-static bool
-lookup_ (void)
-{
-  if (scan_strings_size >= 1) {
-    if (strcmp ("lookup", scan_strings[0]) == 0) {
-      lookup_usage ();
-      return true;
-    }
-  }
-  if (scan_strings_size >= 3 && 
-      strcmp ("=", scan_strings[1]) == 0 &&
-      strcmp ("lookup", scan_strings[2]) == 0) {
-    if (scan_strings_size == 4) {
-      if (find_automaton (scan_strings[0]) != 0) {
-	bfprintf (&text_out_buffer, "-> error: name %s is taken\n", scan_strings[0]);
-	return true;
-      }
+/* static bool */
+/* lookup_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1) { */
+/*     if (strcmp ("lookup", scan_strings[0]) == 0) { */
+/*       lookup_usage (); */
+/*       return true; */
+/*     } */
+/*   } */
+/*   if (scan_strings_size >= 3 &&  */
+/*       strcmp ("=", scan_strings[1]) == 0 && */
+/*       strcmp ("lookup", scan_strings[2]) == 0) { */
+/*     if (scan_strings_size == 4) { */
+/*       if (find_automaton (scan_strings[0]) != 0) { */
+/* 	bfprintf (&text_out_buffer, "-> error: name %s is taken\n", scan_strings[0]); */
+/* 	return true; */
+/*       } */
       
-      /* Perform the lookup. */
-      aid_t aid = lookups (scan_strings[3]);
-      if (aid == -1) {
-	bfprintf (&text_out_buffer, "-> no automaton registered under %s\n", scan_strings[3]);
-	return true;
-      }
+/*       /\* Perform the lookup. *\/ */
+/*       aid_t aid = lookups (scan_strings[3]); */
+/*       if (aid == -1) { */
+/* 	bfprintf (&text_out_buffer, "-> no automaton registered under %s\n", scan_strings[3]); */
+/* 	return true; */
+/*       } */
       
-      automaton_t* a;
-      if ((a = find_automaton_aid (aid)) != 0) {
-	bfprintf (&text_out_buffer, "-> error: automaton already exists with name %s\n", a->name);
-	return true;
-      }
+/*       automaton_t* a; */
+/*       if ((a = find_automaton_aid (aid)) != 0) { */
+/* 	bfprintf (&text_out_buffer, "-> error: automaton already exists with name %s\n", a->name); */
+/* 	return true; */
+/*       } */
       
-      if (subscribe_destroyed (aid, DESTROYED_NO) != 0) {
-	buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n");
-	return true;
-      }
+/*       if (subscribe_destroyed (aid, DESTROYED_NO) != 0) { */
+/* 	buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n"); */
+/* 	return true; */
+/*       } */
 
-      /* Add to the list of automata we know about. */
-      automaton_t* automaton = create_automaton (scan_strings[0], aid, scan_strings[3]);
+/*       /\* Add to the list of automata we know about. *\/ */
+/*       automaton_t* automaton = create_automaton (scan_strings[0], aid, scan_strings[3]); */
       
-      automaton->next = automata_head;
-      automata_head = automaton;
+/*       automaton->next = automata_head; */
+/*       automata_head = automaton; */
 
-      bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid);
-      return true;
-    }
-    else {
-      lookup_usage ();
-      return true;
-    }
-  }
-  return false;
-}
+/*       bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid); */
+/*       return true; */
+/*     } */
+/*     else { */
+/*       lookup_usage (); */
+/*       return true; */
+/*     } */
+/*   } */
+/*   return false; */
+/* } */
 
 static bool
 describe_ (void)
@@ -1327,7 +1329,7 @@ static dispatch_func_t dispatch[] = {
   bind_,
   unbind_,
   destroy_,
-  lookup_,
+  /* lookup_, */
   describe_,
   list_,
   com_,
@@ -1341,39 +1343,65 @@ static dispatch_func_t dispatch[] = {
   ====================
 */
 
-static void
-readscript_callback (void* data,
-		     bd_t bda,
-		     bd_t bdb)
-{
-  vfs_error_t error;
-  size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read vfs readfile response: %s", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/* static void */
+/* readscript_callback (void* data, */
+/* 		     bd_t bda, */
+/* 		     bd_t bdb) */
+/* { */
+/*   vfs_error_t error; */
+/*   size_t size; */
+/*   if (read_vfs_readfile_response (bda, &error, &size) != 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read vfs readfile response: %s", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  if (error != VFS_SUCCESS) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read script: %s", vfs_error_string (error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   if (error != VFS_SUCCESS) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read script: %s", vfs_error_string (error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  const char* str = buffer_map (bdb);
-  if (str == 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   const char* str = buffer_map (bdb); */
+/*   if (str == 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
   
-  char* str_copy = malloc (size + 1);
-  memcpy (str_copy, str, size);
-  /* Terminate with newline. */
-  str_copy[size] = '\n';
-  string_push_front (str_copy, size + 1);
-  buffer_unmap (bdb);
-  process_hold = false;
+/*   char* str_copy = malloc (size + 1); */
+/*   memcpy (str_copy, str, size); */
+/*   /\* Terminate with newline. *\/ */
+/*   str_copy[size] = '\n'; */
+/*   string_push_front (str_copy, size + 1); */
+/*   buffer_unmap (bdb); */
+/*   process_hold = false; */
+/* } */
+
+static void
+print_object (object_t* obj)
+{
+  switch (obj->type) {
+  case TABLE:
+    {
+      logs ("{");
+      for (pair_t* p = obj->u.table.head; p != 0; p = p->next) {
+	print_object (p->key);
+	logs (" = ");
+	print_object (p->value);
+	logs (";");
+      }
+      logs ("}");
+    }
+    break;
+  case STRING:
+    logs (obj->u.string.str);
+    break;
+  case INTEGER:
+    snprintf (log_buffer, LOG_BUFFER_SIZE, "%d", obj->u.integer.i);
+    logs (log_buffer);
+    break;
+  }
 }
 
 static void
@@ -1382,131 +1410,159 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    aid_t aid = getaid ();
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
 
-    this_automaton = create_automaton ("this", aid, "this");
-
-    this_automaton->next = automata_head;
-    automata_head = this_automaton;
-
-    text_out_bd = buffer_create (0);
-    if (text_out_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create text_out buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize text_out buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    com_out_bd = buffer_create (0);
-    if (com_out_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create com_out buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    if (buffer_file_initw (&com_out_buffer, com_out_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize com_out buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    vfs_request_bda = buffer_create (0);
-    vfs_request_bdb = buffer_create (0);
-    if (vfs_request_bda == -1 ||
-    	vfs_request_bdb == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffers: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    vfs_request_queue_init (&vfs_request_queue);
-    callback_queue_init (&vfs_response_queue);
-
-    /* Bind to the vfs. */
-    aid_t vfs_aid = lookups (VFS_NAME);
-    if (vfs_aid == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "no vfs");
-      logs (log_buffer);
-      exit (-1);
-    }
-    
-    description_t vfs_description;
-    if (description_init (&vfs_description, vfs_aid) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not describe vfs: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    action_desc_t vfs_request;
-    if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs does not contain a request action");
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    action_desc_t vfs_response;
-    if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs does not contain a response action");
-      logs (log_buffer);
-      exit (-1);
-    }
-    
-    /* We bind the response first so they don't get lost. */
-    if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 ||
-    	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to vfs: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    description_fini (&vfs_description);
-
     if (bda != -1) {
-      /* Process arguments. */
-      buffer_file_t bf;
-      if (buffer_file_initr (&bf, bda) != 0) {
-	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize argument buffer: %s", lily_error_string (lily_error));
+      data_stack_t ds;
+      if (data_stack_initr (&ds, bda) != 0) {
+    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize ds buffer: %s\n", lily_error_string (lily_error));
+    	logs (log_buffer);
+    	exit (-1);
+      }
+
+      if (ds.stack_size != 1) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "multiple elements on data stack\n");
 	logs (log_buffer);
 	exit (-1);
       }
 
-      const size_t size = buffer_file_size (&bf);
-      const char* begin = buffer_file_readp (&bf, size);
-      if (begin == 0) {
-	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read argument buffer: %s", lily_error_string (lily_error));
-	logs (log_buffer);
-	exit (-1);
-      }
-      const char* end = begin + size;
-      const char* ptr = begin;
+      print_object (ds.stack[0]);
 
-      char* key = 0;
-      char* value = 0;
-      while (ptr != end && kv_parse (&key, &value, &ptr, end) == 0) {
-	if (key != 0) {
-	  if (strcmp (key, "script") == 0) {
-	    if (value != 0) {
-	      vfs_request_queue_push_readfile (&vfs_request_queue, value);
-	      process_hold = true;
-	      callback_queue_push (&vfs_response_queue, readscript_callback, 0);
-	    }
-	  }
-	}
-	free (key);
-	free (value);
-      }
     }
 
     if (bda != -1) {
-      buffer_destroy (bda);
+      if (buffer_destroy (bda) != 0) {
+    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s\n", lily_error_string (lily_error));
+    	logs (log_buffer);
+    	exit (-1);
+      }
     }
     if (bdb != -1) {
-      buffer_destroy (bdb);
+      if (buffer_destroy (bdb) != 0) {
+    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s\n", lily_error_string (lily_error));
+    	logs (log_buffer);
+    	exit (-1);
+      }
     }
+
+
+    /* aid_t aid = getaid (); */
+
+    /* this_automaton = create_automaton ("this", aid, "this"); */
+
+    /* this_automaton->next = automata_head; */
+    /* automata_head = this_automaton; */
+
+    /* text_out_bd = buffer_create (0); */
+    /* if (text_out_bd == -1) { */
+    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create text_out buffer: %s", lily_error_string (lily_error)); */
+    /*   logs (log_buffer); */
+    /*   exit (-1); */
+    /* } */
+    /* if (buffer_file_initw (&text_out_buffer, text_out_bd) != 0) { */
+    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize text_out buffer: %s", lily_error_string (lily_error)); */
+    /*   logs (log_buffer); */
+    /*   exit (-1); */
+    /* } */
+
+    /* com_out_bd = buffer_create (0); */
+    /* if (com_out_bd == -1) { */
+    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create com_out buffer: %s", lily_error_string (lily_error)); */
+    /*   logs (log_buffer); */
+    /*   exit (-1); */
+    /* } */
+    /* if (buffer_file_initw (&com_out_buffer, com_out_bd) != 0) { */
+    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize com_out buffer: %s", lily_error_string (lily_error)); */
+    /*   logs (log_buffer); */
+    /*   exit (-1); */
+    /* } */
+
+    /* vfs_request_bda = buffer_create (0); */
+    /* vfs_request_bdb = buffer_create (0); */
+    /* if (vfs_request_bda == -1 || */
+    /* 	vfs_request_bdb == -1) { */
+    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffers: %s", lily_error_string (lily_error)); */
+    /*   logs (log_buffer); */
+    /*   exit (-1); */
+    /* } */
+    /* vfs_request_queue_init (&vfs_request_queue); */
+    /* callback_queue_init (&vfs_response_queue); */
+
+    /* /\* /\\* Bind to the vfs. *\\/ *\/ */
+    /* /\* aid_t vfs_aid = lookups (VFS_NAME); *\/ */
+    /* /\* if (vfs_aid == -1) { *\/ */
+    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "no vfs"); *\/ */
+    /* /\*   logs (log_buffer); *\/ */
+    /* /\*   exit (-1); *\/ */
+    /* /\* } *\/ */
+    
+    /* /\* description_t vfs_description; *\/ */
+    /* /\* if (description_init (&vfs_description, vfs_aid) != 0) { *\/ */
+    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not describe vfs: %s", lily_error_string (lily_error)); *\/ */
+    /* /\*   logs (log_buffer); *\/ */
+    /* /\*   exit (-1); *\/ */
+    /* /\* } *\/ */
+
+    /* /\* action_desc_t vfs_request; *\/ */
+    /* /\* if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) { *\/ */
+    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs does not contain a request action"); *\/ */
+    /* /\*   logs (log_buffer); *\/ */
+    /* /\*   exit (-1); *\/ */
+    /* /\* } *\/ */
+
+    /* /\* action_desc_t vfs_response; *\/ */
+    /* /\* if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) { *\/ */
+    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs does not contain a response action"); *\/ */
+    /* /\*   logs (log_buffer); *\/ */
+    /* /\*   exit (-1); *\/ */
+    /* /\* } *\/ */
+    
+    /* /\* /\\* We bind the response first so they don't get lost. *\\/ *\/ */
+    /* /\* if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 || *\/ */
+    /* /\* 	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) { *\/ */
+    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to vfs: %s", lily_error_string (lily_error)); *\/ */
+    /* /\*   logs (log_buffer); *\/ */
+    /* /\*   exit (-1); *\/ */
+    /* /\* } *\/ */
+
+    /* /\* description_fini (&vfs_description); *\/ */
+
+    /* if (bda != -1) { */
+    /*   /\* Process arguments. *\/ */
+    /*   buffer_file_t bf; */
+    /*   if (buffer_file_initr (&bf, bda) != 0) { */
+    /* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize argument buffer: %s", lily_error_string (lily_error)); */
+    /* 	logs (log_buffer); */
+    /* 	exit (-1); */
+    /*   } */
+
+    /*   const size_t size = buffer_file_size (&bf); */
+    /*   const char* begin = buffer_file_readp (&bf, size); */
+    /*   if (begin == 0) { */
+    /* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read argument buffer: %s", lily_error_string (lily_error)); */
+    /* 	logs (log_buffer); */
+    /* 	exit (-1); */
+    /*   } */
+    /*   const char* end = begin + size; */
+    /*   const char* ptr = begin; */
+
+    /*   char* key = 0; */
+    /*   char* value = 0; */
+    /*   while (ptr != end && kv_parse (&key, &value, &ptr, end) == 0) { */
+    /* 	if (key != 0) { */
+    /* 	  if (strcmp (key, "script") == 0) { */
+    /* 	    if (value != 0) { */
+    /* 	      vfs_request_queue_push_readfile (&vfs_request_queue, value); */
+    /* 	      process_hold = true; */
+    /* 	      callback_queue_push (&vfs_response_queue, readscript_callback, 0); */
+    /* 	    } */
+    /* 	  } */
+    /* 	} */
+    /* 	free (key); */
+    /* 	free (value); */
+    /*   } */
+    /* } */
   }
 }
 
@@ -1610,7 +1666,7 @@ text_out_precondition (void)
   return buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param, size_t bc)
 {
   initialize ();
 
@@ -1668,7 +1724,7 @@ vfs_request_precondition (void)
   return !vfs_request_queue_empty (&vfs_request_queue);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param, size_t bc)
 {
   initialize ();
 
@@ -1709,7 +1765,7 @@ BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int
   finish_input (bda, bdb);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
 

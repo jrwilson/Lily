@@ -2,11 +2,11 @@ CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
 PROGRAMS=\
 syslog \
-vfs \
-tmpfs
+tmpfs \
+finda \
+jsh
 
-#jsh
-
+#vfs \
 #ps2_keyboard_mouse \
 #terminal \
 #vga \
@@ -27,7 +27,7 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o
+boot_automaton : boot_automaton.o cpio.o data_stack.o
 	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
@@ -45,15 +45,21 @@ to_buffer_file : to_buffer_file.c
 syslog : syslog.o
 	$(CC) -o $@ $^ -lbuffer_file
 
-vfs : vfs.o callback_queue.o vfs_msg.o
+tmpfs : tmpfs.o cpio.o
+	$(CC) -o $@ $^
+
+finda : finda.o
+	$(CC) -o $@ $^
+
+jsh : jsh.o vfs_msg.o kv_parse.o callback_queue.o data_stack.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
-tmpfs : tmpfs.o cpio.o vfs_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
-jsh : jsh.o vfs_msg.o kv_parse.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -lcallback_queue -ldymem
 
+
+
+vfs : vfs.o callback_queue.o vfs_msg.o
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file

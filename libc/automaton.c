@@ -118,7 +118,6 @@ exit (int code)
 
 aid_t
 create (bd_t text_bd,
-	size_t text_size,
 	bd_t bda,
 	bd_t bdb,
 	bool retain_privilege)
@@ -154,40 +153,6 @@ destroy (aid_t aid)
 {
   int retval;
   syscall1re (LILY_SYSCALL_DESTROY, retval, aid);
-  return retval;
-}
-
-int
-subscribe_unbound (bid_t bid,
-		   ano_t action_number)
-{
-  int retval;
-  syscall2re (LILY_SYSCALL_SUBSCRIBE_UNBOUND, retval, bid, action_number);
-  return retval;
-}
-
-int
-unsubscribe_unbound (bid_t bid)
-{
-  int retval;
-  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_UNBOUND, retval, bid);
-  return retval;
-}
-
-int
-subscribe_destroyed (aid_t aid,
-		     ano_t action_number)
-{
-  int retval;
-  syscall2re (LILY_SYSCALL_SUBSCRIBE_DESTROYED, retval, aid, action_number);
-  return retval;
-}
-
-int
-unsubscribe_destroyed (aid_t aid)
-{
-  int retval;
-  syscall1re (LILY_SYSCALL_UNSUBSCRIBE_DESTROYED, retval, aid);
   return retval;
 }
 

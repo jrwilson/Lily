@@ -81,7 +81,6 @@ exit (int code);
 
 aid_t
 create (bd_t text_bd,
-	size_t text_size,
 	bd_t bda,
 	bd_t bdb,
 	bool retain_privilege);
@@ -99,20 +98,6 @@ unbind (bid_t bid);
 
 int
 destroy (aid_t aid);
-
-int
-subscribe_unbound (bid_t bid,
-		   ano_t action_number);
-
-int
-unsubscribe_unbound (bid_t bid);
-
-int
-subscribe_destroyed (aid_t aid,
-		     ano_t action_number);
-
-int
-unsubscribe_destroyed (aid_t aid);
 
 int
 log (const char* message,

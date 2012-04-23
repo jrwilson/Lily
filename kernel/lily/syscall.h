@@ -11,11 +11,7 @@
 #define LILY_SYSCALL_UNBIND                0x12
 #define LILY_SYSCALL_DESTROY               0x13
 
-#define LILY_SYSCALL_SUBSCRIBE_UNBOUND     0x20
-#define LILY_SYSCALL_UNSUBSCRIBE_UNBOUND   0x21
-#define LILY_SYSCALL_SUBSCRIBE_DESTROYED   0x22
-#define LILY_SYSCALL_UNSUBSCRIBE_DESTROYED 0x23
-#define LILY_SYSCALL_LOG                   0x24
+#define LILY_SYSCALL_LOG                   0x20
 
 #define LILY_SYSCALL_ADJUST_BREAK          0x30
 /*#define LILY_SYSCALL_ADJUST_STACK             0x31*/

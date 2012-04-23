@@ -27,8 +27,6 @@ struct binding {
   caction const output_action;
   caction const input_action;
   shared_ptr<automaton> const owner;
-  typedef unordered_map<shared_ptr<automaton>, caction> subscribers_type;
-  subscribers_type subscribers;
 
   binding (bid_t b,
 	   const caction& oa,
@@ -42,7 +40,6 @@ struct binding {
 
   ~binding () {
     kassert (bid == -1);
-    kassert (subscribers.empty ());
   }
 
   bool

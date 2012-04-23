@@ -5,7 +5,6 @@
 #include <automaton.h>
 #include <buffer_file.h>
 
-
 #define CPIO_PERM_MASK  0x000001FF
 #define CPIO_STICKY_BIT 0x00000200
 #define CPIO_SGID_BIT   0x00000400
@@ -21,11 +20,11 @@
 #define CPIO_FIFO       0x00001000
 
 typedef struct {
-  char* name;
-  size_t name_size;
   unsigned int mode;
-  bd_t bd;
-  size_t size;
+  size_t name_size;
+  size_t file_size;
+  const char* name;
+  size_t position;
 } cpio_file_t;
 
 typedef struct {
@@ -36,10 +35,12 @@ int
 cpio_archive_init (cpio_archive_t* ar,
 		   bd_t bd);
 
-cpio_file_t*
-cpio_archive_next_file (cpio_archive_t* ar);
-
 int
-cpio_file_destroy (cpio_file_t* file);
+cpio_archive_read (cpio_archive_t* ar,
+		   cpio_file_t* f);
+
+bd_t
+cpio_file_read (cpio_archive_t* ar,
+		const cpio_file_t* f);
 
 #endif /* CPIO_H */

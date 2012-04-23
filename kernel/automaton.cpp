@@ -22,6 +22,10 @@ automaton::log (const char* message,
     return make_pair (-1, LILY_ERROR_INVAL);
   }
 
+  if (message[message_size - 1] != '\0') {
+    return make_pair (-1, LILY_ERROR_INVAL);
+  }
+  
   const size_t total_size = sizeof (log_event_t) + message_size;
   size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
 
@@ -34,21 +38,13 @@ automaton::log (const char* message,
   memcpy (&le->message[0], message, message_size);
 
   console::fmtflags flags = kout.flags ();
-  bool print_header = true;
-  for (size_t idx = 0; idx != message_size; ++idx) {
-    if (print_header) {
-      print_header = false;
-      kout << "[" << setfill (' ') << setw (10) << left << le->time.seconds << "." << setfill ('0') << setw (3) << le->time.nanoseconds / 1000000 << "] " << le->aid << " ";
-    }
-    kout.put (message[idx]);
-    if (message[idx] == '\n') {
-      print_header = true;
-    }
-  }
-  if (!print_header) {
+  kout << "[" << setfill (' ') << setw (10) << left << le->time.seconds << "." << setfill ('0') << setw (3) << le->time.nanoseconds / 1000000 << "] " << le->aid << " ";
+  kout.flags (flags);
+
+  kout << message;
+  if (message_size < 2 || message[message_size - 2] != '\n') {
     kout << endl;
   }
-  kout.flags (flags);
   
   buffer_unmap (b);
   
@@ -107,7 +103,6 @@ automaton::exit (const shared_ptr<automaton>& ths,
       
   shared_ptr<automaton> parent = parent_;
   
-  unsubscribe (ths);
   destroy (ths);
   
   if (parent.get () != 0) {
@@ -414,15 +409,6 @@ automaton::unbind (const shared_ptr<binding>& binding,
     size_t count = binding->owner->owned_bindings_.erase (binding);
     kassert (count == 1);
   }
-  
-  for (binding::subscribers_type::const_iterator pos = binding->subscribers.begin ();
-       pos != binding->subscribers.end ();
-       ++pos) {
-    scheduler::schedule (pos->second);
-    size_t count = pos->first->binding_subscriptions_.erase (binding);
-    kassert (count == 1);
-  }
-  binding->subscribers.clear ();
 }
 
 void
@@ -544,19 +530,6 @@ automaton::destroy (const shared_ptr<automaton>& ths)
     irq_handler::unsubscribe (pos->first, pos->second);
   }
   irq_map_.clear ();
-  
-  kassert (automaton_subscriptions_.empty ());
-  
-  for (subscribers_type::const_iterator pos = subscribers_.begin ();
-       pos != subscribers_.end ();
-       ++pos) {
-    scheduler::schedule (pos->second);
-    size_t count = pos->first->automaton_subscriptions_.erase (ths);
-    kassert (count == 1);
-  }
-  subscribers_.clear ();
-  
-  kassert (binding_subscriptions_.empty ());
   
   scheduler::remove_automaton (ths);
 }
