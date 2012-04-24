@@ -6,7 +6,8 @@
 #include "vfs_msg.h"
 #include "callback_queue.h"
 #include "kv_parse.h"
-#include "data_stack.h"
+#include "de.h"
+#include "environment.h"
 
 /* TODO:  Improve the error handling. */
 
@@ -1379,32 +1380,6 @@ static dispatch_func_t dispatch[] = {
 /* } */
 
 static void
-print_object (object_t* obj)
-{
-  switch (obj->type) {
-  case TABLE:
-    {
-      logs ("{");
-      for (pair_t* p = obj->u.table.head; p != 0; p = p->next) {
-	print_object (p->key);
-	logs (" = ");
-	print_object (p->value);
-	logs (";");
-      }
-      logs ("}");
-    }
-    break;
-  case STRING:
-    logs (obj->u.string.str);
-    break;
-  case INTEGER:
-    snprintf (log_buffer, LOG_BUFFER_SIZE, "%d", obj->u.integer.i);
-    logs (log_buffer);
-    break;
-  }
-}
-
-static void
 initialize (void)
 {
   if (!initialized) {
@@ -1414,20 +1389,40 @@ initialize (void)
     bd_t bdb = getinitb ();
 
     if (bda != -1) {
-      data_stack_t ds;
-      if (data_stack_initr (&ds, bda) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize ds buffer: %s\n", lily_error_string (lily_error));
-    	logs (log_buffer);
-    	exit (-1);
+      buffer_file_t de_buffer;
+      if (buffer_file_initr (&de_buffer, bda) != 0) {
+      	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize de buffer: %s\n", lily_error_string (lily_error));
+      	logs (log_buffer);
+      	exit (-1);
       }
 
-      if (ds.stack_size != 1) {
-	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "multiple elements on data stack\n");
-	logs (log_buffer);
-	exit (-1);
+      de_val_t* root = de_deserialize (&de_buffer);
+      if (root == 0) {
+      	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not parse de buffer: %s\n", lily_error_string (lily_error));
+      	logs (log_buffer);
+      	exit (-1);
       }
 
-      print_object (ds.stack[0]);
+      snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d\n", de_integer_val (de_get (root, "." FINDA), -1));
+      logs (log_buffer);
+
+      snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "script = %s\n", de_string_val (de_get (root, "." ARGS "." "script"), "(none)"));
+      logs (log_buffer);
+
+      de_val_t* fs = de_get (root, "." FS);
+      if (de_type (fs) == DE_ARRAY) {
+	for (size_t idx = 0; idx != de_array_size (fs); ++idx) {
+	  de_val_t* entry = de_array_at (fs, idx);
+
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "type = %s\n", de_string_val (de_get (entry, "." "type"), "(none)"));
+	  logs (log_buffer);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "inode = %d\n", de_integer_val (de_get (entry, "." "inode"), -1));
+	  logs (log_buffer);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "aid = %d\n", de_integer_val (de_get (entry, "." "aid"), -1));
+	  logs (log_buffer);
+	  
+	}
+      }
 
     }
 

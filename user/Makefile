@@ -27,7 +27,7 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o data_stack.o
+boot_automaton : boot_automaton.o cpio.o de.o
 	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
@@ -46,12 +46,12 @@ syslog : syslog.o
 	$(CC) -o $@ $^ -lbuffer_file
 
 tmpfs : tmpfs.o cpio.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lbuffer_file
 
 finda : finda.o
 	$(CC) -o $@ $^
 
-jsh : jsh.o vfs_msg.o kv_parse.o callback_queue.o data_stack.o
+jsh : jsh.o vfs_msg.o kv_parse.o callback_queue.o de.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 

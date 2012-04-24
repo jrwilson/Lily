@@ -1,7 +1,7 @@
 #include <automaton.h>
 #include <string.h>
 #include "cpio.h"
-#include "data_stack.h"
+#include "de.h"
 #include "environment.h"
 
 /*
@@ -141,122 +141,34 @@ initialize (void)
       }
     }
 
-    bd_t ds_bd = buffer_create (0);
-    data_stack_t ds;
-    if (ds_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create ds buffer: %s\n", lily_error_string (lily_error));
+    bd_t de_bd = buffer_create (0);
+    if (de_bd == -1) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create de buffer: %s\n", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
-    if (data_stack_initw (&ds, ds_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize ds buffer: %s\n", lily_error_string (lily_error));
+    buffer_file_t de_buffer;
+    if (buffer_file_initw (&de_buffer, de_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize de buffer: %s\n", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
 
-    if (data_stack_push_table (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // {}
-    if (data_stack_push_string (&ds, FINDA) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // {} FINDA
-    if (data_stack_push_integer (&ds, finda_aid) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // {} FINDA finda_aid
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid }
-    if (data_stack_push_string (&ds, FS) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS
-    if (data_stack_push_table (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS {}
-    if (data_stack_push_string (&ds, ROOT_PATH) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS {} ROOT_PATH
-    if (data_stack_push_integer (&ds, tmpfs_aid) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS {} ROOT_PATH tmpfs_aid
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS { ROOT_PATH = tmpfs_aid }
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } }
-    if (data_stack_push_string (&ds, ARGS) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS
-    if (data_stack_push_table (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS {}
-    if (data_stack_push_string (&ds, "script") != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS {} "script"
-    if (data_stack_push_string (&ds, "/scr/start.jsh") != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS {} "script" "/scr/start.jsh"
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS { "script" = "/scr/start.jsh" }
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid }; ARGS = { "script" = "/scr/start.jsh" } }
+    de_val_t* root = de_create_object ();
+    de_set (root, "." FINDA, de_create_integer (finda_aid));
+    de_set (root, "." FS "[0].type", de_create_string ("mount"));
+    de_set (root, "." FS "[0].inode", de_create_integer (0));
+    de_set (root, "." FS "[0].aid", de_create_integer (tmpfs_aid));
+    de_set (root, "." ARGS "." "script", de_create_string ("/scr/start.jsh"));
+    de_serialize (root, &de_buffer);
+    de_destroy (root);
 
     if (jsh_bd == -1) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read jsh image: %s\n", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
-    aid_t jsh_aid = create (jsh_bd, ds_bd, -1, false);
+    aid_t jsh_aid = create (jsh_bd, de_bd, -1, false);
     if (jsh_aid == -1) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create jsh automaton: %s\n", lily_error_string (lily_error));
       logs (log_buffer);
@@ -268,8 +180,8 @@ initialize (void)
       exit (-1);
     }
 
-    if (buffer_destroy (ds_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy ds buffer: %s\n", lily_error_string (lily_error));
+    if (buffer_destroy (de_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy de buffer: %s\n", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }

@@ -4,6 +4,8 @@
 #include <limits.h>
 #include "printf.h"
 
+string_error_t string_error = STRING_SUCCESS;
+
 char*
 strcpy (char* dest,
 	const char* src)
@@ -94,7 +96,7 @@ strncmp (const char* s1,
 	 const char* s2,
 	 size_t n)
 {
-  for (; n != 0; --n) {
+  for (; n != 0; --n, ++s1, ++s2) {
     if (*s1 != *s2 || *s1 == '\0' || *s2 == '\0') {
       return *s1 - *s2;
     }
@@ -292,14 +294,13 @@ toval (char c)
 }
 
 static unsigned long int
-strtoul_ (string_error_t* err,
-	  const char* ptr,
+strtoul_ (const char* ptr,
 	  const char* nptr,
 	  char** endptr,
 	  int base,
-	  bool negative)
+	  bool negative,
+	  bool once)
 {
-  bool once = false;
   unsigned long int retval = 0;
   bool overflow = false;
 
@@ -308,9 +309,7 @@ strtoul_ (string_error_t* err,
     if (val == -1 || val >= base) {
       if (!once) {
 	/* No digits. */
-	if (err != 0) {
-	  *err = STRING_INVAL;
-	}
+	string_error = STRING_INVAL;
 	if (endptr != 0) {
 	  *endptr = (char*)nptr;
 	}
@@ -332,9 +331,7 @@ strtoul_ (string_error_t* err,
   }
 
   if (!overflow) {
-    if (err != 0) {
-      *err = STRING_SUCCESS;
-    }
+    string_error = STRING_SUCCESS;
     if (endptr != 0) {
       *endptr = (char*)ptr;
     }
@@ -346,9 +343,7 @@ strtoul_ (string_error_t* err,
     }
   }
   else {
-    if (err != 0) {
-      *err = STRING_RANGE;
-    }
+    string_error = STRING_RANGE;
     if (endptr != 0) {
       *endptr = (char*)ptr;
     }
@@ -357,16 +352,13 @@ strtoul_ (string_error_t* err,
 }
 
 unsigned long int
-strtoul (string_error_t* err,
-	 const char* nptr,
+strtoul (const char* nptr,
 	 char** endptr,
 	 int base)
 {
   if (!(base == 0 || (base >= 2 && base <= 36))) {
     /* Bad base. */
-    if (err != 0) {
-      *err = STRING_INVAL;
-    }
+    string_error = STRING_INVAL;
     if (endptr != 0) {
       *endptr = (char*)nptr;
     }
@@ -382,9 +374,7 @@ strtoul (string_error_t* err,
 
   if (*ptr == '\0') {
     /* No digits. */
-    if (err != 0) {
-      *err = STRING_INVAL;
-    }
+    string_error = STRING_INVAL;
     if (endptr != 0) {
       *endptr = (char*)nptr;
     }
@@ -402,9 +392,7 @@ strtoul (string_error_t* err,
 
   if (*ptr == '\0') {
     /* No digits. */
-    if (err != 0) {
-      *err = STRING_INVAL;
-    }
+    string_error = STRING_INVAL;
     if (endptr != 0) {
       *endptr = (char*)nptr;
     }
@@ -416,9 +404,7 @@ strtoul (string_error_t* err,
       ++ptr;
       if (*ptr == '\0') {
 	/* Zero. */
-	if (err != 0) {
-	  *err = STRING_SUCCESS;
-	}
+	string_error = STRING_SUCCESS;
 	if (endptr != 0) {
 	  *endptr = (char*)ptr;
 	}
@@ -427,20 +413,166 @@ strtoul (string_error_t* err,
       else if (*ptr == 'x') {
 	++ptr;
 	/* Number is hex. */
-	return strtoul_ (err, ptr, nptr, endptr, 16, negative);
+	return strtoul_ (ptr, nptr, endptr, 16, negative, false);
       }
       else {
 	/* Number is octal. */
-	return strtoul_ (err, ptr, nptr, endptr, 8, negative);
+	return strtoul_ (ptr, nptr, endptr, 8, negative, true);
       }
     }
     else {
       /* Number is decimal. */
-      return strtoul_ (err, ptr, nptr, endptr, 10, negative);
+      return strtoul_ (ptr, nptr, endptr, 10, negative, false);
     }
   }
   else {
-    return strtoul_ (err, ptr, nptr, endptr, base, negative);
+    return strtoul_ (ptr, nptr, endptr, base, negative, false);
+  }
+}
+
+static long int
+strtol_ (const char* ptr,
+	 const char* nptr,
+	 char** endptr,
+	 int base,
+	 bool negative,
+	 bool once)
+{
+  unsigned long int retval = 0;
+  bool overflow = false;
+  bool underflow = false;
+
+  while (*ptr != '\0') {
+    int val = toval (*ptr);
+    if (val == -1 || val >= base) {
+      if (!once) {
+	/* No digits. */
+	string_error = STRING_INVAL;
+	if (endptr != 0) {
+	  *endptr = (char*)nptr;
+	}
+	return 0;
+      }
+      else {
+	break;
+      }
+    }
+
+    unsigned long int n = retval * base + val;
+    if (n > LONG_MAX) {
+      overflow = true;
+    }
+    if (-n < LONG_MIN) {
+      underflow = true;
+    }
+
+    retval = n;
+    ++ptr;
+    once = true;
+  }
+
+  if (!overflow && !underflow) {
+    string_error = STRING_SUCCESS;
+    if (endptr != 0) {
+      *endptr = (char*)ptr;
+    }
+    if (negative) {
+      return -retval;
+    }
+    else {
+      return retval;
+    }
+  }
+  else {
+    string_error = STRING_RANGE;
+    if (endptr != 0) {
+      *endptr = (char*)ptr;
+    }
+    if (overflow) {
+      return LONG_MAX;
+    }
+    else {
+      return LONG_MIN;
+    }
+  }
+}
+
+long int
+strtol (const char* nptr,
+	char** endptr,
+	int base)
+{
+  if (!(base == 0 || (base >= 2 && base <= 36))) {
+    /* Bad base. */
+    string_error = STRING_INVAL;
+    if (endptr != 0) {
+      *endptr = (char*)nptr;
+    }
+    return 0;
+  }
+
+  const char* ptr = nptr;
+
+  /* Skip white space. */
+  while (*ptr != '\0' && isspace (*ptr)) {
+    ++ptr;
+  }
+
+  if (*ptr == '\0') {
+    /* No digits. */
+    string_error = STRING_INVAL;
+    if (endptr != 0) {
+      *endptr = (char*)nptr;
+    }
+    return 0;
+  }
+
+  bool negative = false;
+  if (*ptr == '+') {
+    ++ptr;
+  }
+  else if (*ptr == '-') {
+    ++ptr;
+    negative = true;
+  }
+
+  if (*ptr == '\0') {
+    /* No digits. */
+    string_error = STRING_INVAL;
+    if (endptr != 0) {
+      *endptr = (char*)nptr;
+    }
+    return 0;
+  }
+
+  if (base == 0 || base == 8 || base == 16) {
+    if (*ptr == '0') {
+      ++ptr;
+      if (*ptr == '\0') {
+	/* Zero. */
+	string_error = STRING_SUCCESS;
+	if (endptr != 0) {
+	  *endptr = (char*)ptr;
+	}
+	return 0;
+      }
+      else if (*ptr == 'x') {
+	++ptr;
+	/* Number is hex. */
+	return strtol_ (ptr, nptr, endptr, 16, negative, false);
+      }
+      else {
+	/* Number is octal. */
+	return strtol_ (ptr, nptr, endptr, 8, negative, true);
+      }
+    }
+    else {
+      /* Number is decimal. */
+      return strtol_ (ptr, nptr, endptr, 10, negative, false);
+    }
+  }
+  else {
+    return strtol_ (ptr, nptr, endptr, base, negative, false);
   }
 }
 
@@ -482,6 +614,7 @@ snprintf (char* str,
   va_end (args);
 
   if (retval != 0) {
+    string_error = STRING_FORMAT;
     return -1;
   }
 
@@ -494,5 +627,6 @@ snprintf (char* str,
     str[size - 1] = '\0';
   }
 
+  string_error = STRING_SUCCESS;
   return retval;
 }
