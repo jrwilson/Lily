@@ -75,12 +75,10 @@ BEGIN_SYSTEM_INPUT (LOG_EVENT_NO, "log_event", "", log_event, ano_t ano, int par
     exit (-1);
   }
   
-  if (le->message_size < 2 || le->message[le->message_size - 2] != '\n') {
-    if (buffer_file_put (&text_out_buffer, '\n') != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
+  if (buffer_file_put (&text_out_buffer, '\n') != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
   }
 
   finish_input (bda, bdb);

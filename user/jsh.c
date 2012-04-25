@@ -3,47 +3,78 @@
 #include <dymem.h>
 #include <string.h>
 #include <description.h>
-#include "vfs_msg.h"
+#include "fs_msg.h"
 #include "callback_queue.h"
 #include "kv_parse.h"
 #include "de.h"
 #include "environment.h"
 
-/* An inode represents an entry in a file system. */
-typedef size_t inode_t;
-
-/* A vnode represents an entry in a virtual file system. */
-typedef struct {
-  aid_t aid;
-  inode_t inode;
-} vnode_t;
-
+typedef struct fs_op fs_op_t;
 typedef struct fs fs_t;
 typedef struct redirect redirect_t;
+typedef struct vfs vfs_t;
+
+typedef void (*descend_callback_t) (void* arg, fs_error_t error, fs_nodeid_t nodeid);
+typedef void (*readfile_callback_t) (void* arg, fs_error_t error, size_t size, bd_t bd);
+
+struct fs_op {
+  fs_type_t type;
+  union {
+    struct {
+      fs_nodeid_t nodeid;
+      const char* begin;
+      const char* end;
+      descend_callback_t callback;
+      void* arg;
+    } descend;
+    struct {
+      fs_nodeid_t nodeid;
+      readfile_callback_t callback;
+      void* arg;
+    } readfile;
+  } u;
+  fs_op_t* next;
+};
 
 struct fs {
   size_t refcount;
   aid_t aid;
   bool bound;
-  /* request queue */
-  /* callback queue */
+  bd_t request_bda;
+  bd_t request_bdb;
+  buffer_file_t request_buffer;
+  bool sent;
+  fs_op_t* op_head;
+  fs_op_t** op_tail;
   fs_t* next;
 };
+
+/* A vnode represents an entry in a virtual file system. */
+typedef struct {
+  aid_t aid;
+  fs_nodeid_t nodeid;
+} vnode_t;
 
 struct redirect {
   vnode_t from;
   vnode_t to;
-  fs_t* to_fs;
   redirect_t* next;
 };
 
-typedef struct {
+struct vfs {
   ano_t request;
   ano_t response;
   fs_t* fs_head;
   redirect_t* redirect_head;
   redirect_t** redirect_tail;
-} vfs_t;
+};
+
+static bool
+vnode_equal (const vnode_t* x,
+	     const vnode_t* y)
+{
+  return x->aid == y->aid && x->nodeid == y->nodeid;
+}
 
 static fs_t*
 find_fs (const vfs_t* vfs,
@@ -66,44 +97,217 @@ create_fs (vfs_t* vfs,
   /* Create the file system. */
   fs_t* fs = malloc (sizeof (fs_t));
   memset (fs, 0, sizeof (fs_t));
-  fs->refcount = 1;
+  fs->refcount = 0;
   fs->aid = aid;
-  fs->bound = false;
+  fs->bound = true;
+  fs->op_tail = &fs->op_head;
+  fs->request_bda = buffer_create (0);
+  fs->request_bdb = buffer_create (0);
+  buffer_file_initw (&fs->request_buffer, fs->request_bda);
+  fs->sent = false;
 
   /* Insert into the list. */
   fs->next = vfs->fs_head;
   vfs->fs_head = fs;
 
+  /* Bind. */
   description_t description;
   if (description_init (&description, aid) != 0) {
     /* Could not describe. */
-    return fs;
+    fs->bound = false;
   }
 
   action_desc_t request;
   if (description_read_name (&description, &request, FS_REQUEST_NAME) != 0) {
-    description_fini (&description);
-    return fs;
+    fs->bound = false;
   }
   
   action_desc_t response;
   if (description_read_name (&description, &response, FS_RESPONSE_NAME) != 0) {
-    description_fini (&description);
-    return fs;
+    fs->bound = false;
   }
   
   aid_t this_aid = getaid ();
   if (bind (aid, response.number, 0, this_aid, vfs->response, 0) == -1 ||
       bind (this_aid, vfs->request, 0, aid, request.number, 0) == -1) {
-    description_fini (&description);
-    return fs;
+    fs->bound = false;
   }
   
   description_fini (&description);
 
-  fs->bound = true;
-  
   return fs;
+}
+
+static void
+fs_incref (fs_t* fs)
+{
+  ++fs->refcount;
+}
+
+static void
+fs_decref (fs_t* fs)
+{
+  /* TODO */
+  --fs->refcount;
+}
+
+static void
+fs_op_push (fs_t* fs,
+	    fs_op_t* op)
+{
+  *fs->op_tail = op;
+  fs->op_tail = &op->next;
+  fs_incref (fs);
+}
+
+static void
+fs_op_pop (fs_t* fs)
+{
+  fs_op_t* op = fs->op_head;
+  fs->op_head = op->next;
+  if (fs->op_head == 0) {
+    fs->op_tail = &fs->op_head;
+  }
+  free (op);
+  fs_decref (fs);
+}
+
+static bool
+fs_op_empty (const fs_t* fs)
+{
+  return fs->op_head == 0;
+}
+
+static bool
+fs_request_precondition (const fs_t* fs)
+{
+  return !fs->sent && !fs_op_empty (fs);
+}
+
+static void
+fs_request (fs_t* fs)
+{
+  if (fs_request_precondition (fs)) {
+    buffer_file_truncate (&fs->request_buffer);
+    /* TODO */
+    buffer_resize (fs->request_bdb, 0);
+
+    fs_op_t* op = fs->op_head;
+    switch (op->type) {
+    case FS_DESCEND:
+      /* TODO */
+      fs_descend_request_write (&fs->request_buffer, op->u.descend.nodeid, op->u.descend.begin, op->u.descend.end - op->u.descend.begin);
+      break;
+    case FS_READFILE:
+      /* TODO */
+      fs_readfile_request_write (&fs->request_buffer, op->u.readfile.nodeid);
+      break;
+    }
+
+    fs->sent = true;
+    finish_output (true, fs->request_bda, fs->request_bdb);
+  }
+  else {
+    finish_output (false, -1, -1);
+  }
+}
+
+static void
+fs_response (fs_t* fs,
+	     bd_t bda,
+	     bd_t bdb)
+{
+  if (!fs->sent) {
+    /* Response when none was expected. */
+    finish_input (bda, bdb);
+  }
+
+  buffer_file_t buffer;
+  if (buffer_file_initr (&buffer, bda) != 0) {
+    /* TODO */
+    finish_input (bda, bdb);
+  }    
+
+  fs_op_t* op = fs->op_head;
+  switch (op->type) {
+  case FS_DESCEND:
+    {
+      fs_error_t error;
+      fs_nodeid_t nodeid;
+      if (fs_descend_response_read (&buffer, &error, &nodeid) == 0) {
+	op->u.descend.callback (op->u.descend.arg, error, nodeid);
+      }
+      else {
+	/* TODO */
+      }
+    }
+    break;
+  case FS_READFILE:
+  {
+      fs_error_t error;
+      size_t size;
+      if (fs_readfile_response_read (&buffer, &error, &size) == 0 &&
+	  buffer_size (bdb) >= size_to_pages (size)) {
+	op->u.readfile.callback (op->u.readfile.arg, error, size, bdb);
+      }
+      else {
+	/* TODO */
+      }
+    }
+      break;
+  }
+  
+  fs_op_pop (fs);
+  fs->sent = false;
+
+  finish_input (bda, bdb);
+}
+
+static void
+fs_schedule (const vfs_t* vfs,
+	     const fs_t* fs)
+{
+  if (fs_request_precondition (fs)) {
+    schedule (vfs->request, fs->aid);
+  }
+}
+
+static void
+fs_descend (fs_t* fs,
+	    fs_nodeid_t nodeid,
+	    const char* begin,
+	    const char* end,
+	    descend_callback_t callback,
+	    void* arg)
+{
+  /* TODO:  What if we aren't bound? */
+
+  fs_op_t* op = malloc (sizeof (fs_op_t));
+  memset (op, 0, sizeof (fs_op_t));
+  op->type = FS_DESCEND;
+  op->u.descend.nodeid = nodeid;
+  op->u.descend.begin = begin;
+  op->u.descend.end = end;
+  op->u.descend.callback = callback;
+  op->u.descend.arg = arg;
+  fs_op_push (fs, op);
+}
+
+static void
+fs_readfile (fs_t* fs,
+	     fs_nodeid_t nodeid,
+	     readfile_callback_t callback,
+	     void* arg)
+{
+  /* TODO:  What if we aren't bound? */
+
+  fs_op_t* op = malloc (sizeof (fs_op_t));
+  memset (op, 0, sizeof (fs_op_t));
+  op->type = FS_READFILE;
+  op->u.readfile.nodeid = nodeid;
+  op->u.readfile.callback = callback;
+  op->u.readfile.arg = arg;
+  fs_op_push (fs, op);
 }
 
 static void
@@ -119,35 +323,178 @@ vfs_init (vfs_t* vfs,
 static int
 vfs_append (vfs_t* vfs,
 	    aid_t from_aid,
-	    inode_t from_inode,
+	    fs_nodeid_t from_nodeid,
 	    aid_t to_aid,
-	    inode_t to_inode)
+	    fs_nodeid_t to_nodeid)
 {
-  int retval = 0;
-
   /* Do we have a file system for to_aid? */
   fs_t* to_fs = find_fs (vfs, to_aid);
   if (to_fs == 0) {
     to_fs = create_fs (vfs, to_aid);
-    if (!to_fs->bound) {
-      retval = -1;
-    }
   }
+  fs_incref (to_fs);
 
   /* Create the redirect. */
   redirect_t* r = malloc (sizeof (redirect_t));
   memset (r, 0, sizeof (redirect_t));
   r->from.aid = from_aid;
-  r->from.inode = from_inode;
+  r->from.nodeid = from_nodeid;
   r->to.aid = to_aid;
-  r->to.inode = to_inode;
-  r->to_fs = to_fs;
+  r->to.nodeid = to_nodeid;
 
   /* Insert into the list. */
   *vfs->redirect_tail = r;
   vfs->redirect_tail = &r->next;
 
-  return retval;
+  if (to_fs->bound) {
+    return 0;
+  }
+  else {
+    return -1;
+  }
+}
+
+typedef struct {
+  vfs_t* vfs;
+  char* path;
+  vnode_t vnode;
+  const char* begin;
+} readfile_context_t;
+
+static readfile_context_t*
+create_readfile_context (vfs_t* vfs,
+			 const char* path)
+{
+  size_t path_size = strlen (path) + 1;
+  readfile_context_t* c = malloc (sizeof (readfile_context_t));
+  memset (c, 0, sizeof (readfile_context_t));
+  c->vfs = vfs;
+  c->path = malloc (path_size);
+  memcpy (c->path, path, path_size);
+
+  /* Start at the top of the tree. */
+  c->vnode.aid = -1;
+  c->vnode.nodeid = -1;
+  c->begin = c->path;
+
+  return c;
+}
+
+static void
+readfile_readfile (void* arg,
+		   fs_error_t error,
+		   size_t size,
+		   bd_t bdb)
+{
+  logs ("READFILE_READFILE\n");
+}
+
+static void
+process_readfile_context (readfile_context_t* c);
+
+static void
+readfile_descend (void* arg,
+		  fs_error_t error,
+		  fs_nodeid_t nodeid)
+{
+  readfile_context_t* c = arg;
+  switch (error) {
+  case FS_SUCCESS:
+    c->vnode.nodeid = nodeid;
+    process_readfile_context (c);
+    break;
+  default:
+    /* TODO */
+    break;
+  }
+}
+
+static void
+process_readfile_context (readfile_context_t* c)
+{
+  if (*c->begin == '\0') {
+    fs_t* fs = find_fs (c->vfs, c->vnode.aid);
+    fs_readfile (fs, c->vnode.nodeid, readfile_readfile, c);
+  }
+  else if (*c->begin == '/') {
+    ++c->begin;
+    /* Redirect. */
+    /* TODO: Add a counter to avoid infinite loop. */
+    redirect_t* r = c->vfs->redirect_head;;
+    while (r != 0) {
+      if (vnode_equal (&r->from, &c->vnode)) {
+	c->vnode = r->to;
+	/* Start over. */
+	r = c->vfs->redirect_head;
+      }
+      else {
+	r = r->next;
+      }
+    }
+
+    fs_t* fs = find_fs (c->vfs, c->vnode.aid);
+    
+    const char* end = strchr (c->begin, '/');
+    if (end == NULL) {
+      end = c->begin + strlen (c->begin);
+    }
+    
+    fs_descend (fs, c->vnode.nodeid, c->begin, end, readfile_descend, c);
+    c->begin = end;
+  }
+  else {
+    /* TODO */ 
+    logs ("BAD PATH\n");
+  }
+}
+
+static void
+vfs_readfile (vfs_t* vfs,
+	      const char* path,
+	      callback_t callback,
+	      void* arg)
+{
+  readfile_context_t* c = create_readfile_context (vfs, path);
+  process_readfile_context (c);
+}
+
+static void
+vfs_schedule (const vfs_t* vfs)
+{
+  /* Schedule file systems with an op. */
+  for (fs_t* fs = vfs->fs_head; fs != 0; fs = fs->next) {
+    fs_schedule (vfs, fs);
+  }
+}
+
+static void
+vfs_request (vfs_t* vfs,
+	     aid_t aid)
+{
+  fs_t* fs = find_fs (vfs, aid);
+
+  if (fs != 0) {
+    fs_request (fs);
+  }
+  else {
+    finish_output (false, -1, -1);
+  }
+}
+
+static void
+vfs_response (vfs_t* vfs,
+	      aid_t aid,
+	      bd_t bda,
+	      bd_t bdb)
+{
+  fs_t* fs = find_fs (vfs, aid);
+
+  if (fs != 0) {
+    fs_response (fs, bda, bdb);
+  }
+  else {
+    finish_input (bda, bdb);
+  }
 }
 
 /* TODO:  Improve the error handling. */
@@ -200,8 +547,8 @@ atoi (const char* s)
 #define TEXT_OUT_NO 5
 #define DESTROYED_NO 6
 #define UNBOUND_NO 7
-#define VFS_RESPONSE_NO 8
-#define VFS_REQUEST_NO 9
+#define FS_RESPONSE_NO 8
+#define FS_REQUEST_NO 9
 #define COM_OUT_NO 12
 #define COM_IN_NO 13
 
@@ -214,9 +561,7 @@ static vfs_t vfs;
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
 
-static bd_t vfs_request_bda = -1;
-static bd_t vfs_request_bdb = -1;
-static vfs_request_queue_t vfs_request_queue;
+/* static vfs_request_queue_t vfs_request_queue; */
 static callback_queue_t vfs_response_queue;
 static bool process_hold = false;
 
@@ -709,143 +1054,143 @@ static const char* create_register_name = 0;
 static const char* create_path = 0;
 static size_t create_argv_idx = 0;
 
-static void
-create_callback (void* data,
-		 bd_t bda,
-		 bd_t bdb)
-{
-  vfs_error_t error;
-  size_t size;
-  if (read_vfs_readfile_response (bda, &error, &size) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read vfs readfile response: %s", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/* static void */
+/* create_callback (void* data, */
+/* 		 bd_t bda, */
+/* 		 bd_t bdb) */
+/* { */
+/*   vfs_error_t error; */
+/*   size_t size; */
+/*   if (read_vfs_readfile_response (bda, &error, &size) != 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read vfs readfile response: %s", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  if (error != VFS_SUCCESS) {
-    bfprintf (&text_out_buffer, "-> file %s could not be read: %s\n", create_path, vfs_error_string (error));
-    return;
-  }
+/*   if (error != VFS_SUCCESS) { */
+/*     bfprintf (&text_out_buffer, "-> file %s could not be read: %s\n", create_path, vfs_error_string (error)); */
+/*     return; */
+/*   } */
 
-  bd_t bd1 = buffer_create (0);
-  if (bd1 == -1) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create argument buffer: %s", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   bd_t bd1 = buffer_create (0); */
+/*   if (bd1 == -1) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create argument buffer: %s", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  buffer_file_t bf;
-  if (buffer_file_initw (&bf, bd1) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize argument buffer: %s", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   buffer_file_t bf; */
+/*   if (buffer_file_initw (&bf, bd1) != 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize argument buffer: %s", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  if (buffer_file_puts (&bf, current_line + (scan_strings[create_argv_idx] - scan_string_copy)) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to argument buffer: %s", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   if (buffer_file_puts (&bf, current_line + (scan_strings[create_argv_idx] - scan_string_copy)) != 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to argument buffer: %s", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  aid_t aid = create (bdb, bd1, -1, create_retain_privilege);
-  if (aid == -1) {
-    buffer_destroy (bd1);
-    bfprintf (&text_out_buffer, "-> error: create failed: %s\n", lily_error_string (lily_error));
-    return;
-  }
+/*   aid_t aid = create (bdb, bd1, -1, create_retain_privilege); */
+/*   if (aid == -1) { */
+/*     buffer_destroy (bd1); */
+/*     bfprintf (&text_out_buffer, "-> error: create failed: %s\n", lily_error_string (lily_error)); */
+/*     return; */
+/*   } */
 
-  /* if (subscribe_destroyed (aid, DESTROYED_NO) != 0) { */
-  /*   buffer_destroy (bd1); */
-  /*   bfprintf (&text_out_buffer, "-> error: subscribe failed: %s\n", lily_error_string (lily_error)); */
-  /*   return; */
-  /* } */
+/*   /\* if (subscribe_destroyed (aid, DESTROYED_NO) != 0) { *\/ */
+/*   /\*   buffer_destroy (bd1); *\/ */
+/*   /\*   bfprintf (&text_out_buffer, "-> error: subscribe failed: %s\n", lily_error_string (lily_error)); *\/ */
+/*   /\*   return; *\/ */
+/*   /\* } *\/ */
 
-  /* Add to the list of automata we know about. */
-  automaton_t* automaton = create_automaton (create_name, aid, create_path);
+/*   /\* Add to the list of automata we know about. *\/ */
+/*   automaton_t* automaton = create_automaton (create_name, aid, create_path); */
 
-  automaton->next = automata_head;
-  automata_head = automaton;
+/*   automaton->next = automata_head; */
+/*   automata_head = automaton; */
 
-  buffer_destroy (bd1);
+/*   buffer_destroy (bd1); */
   
-  bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid);
-}
+/*   bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid); */
+/* } */
 
-static void
-create_usage (void)
-{
-  buffer_file_puts (&text_out_buffer, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n");
-}
+/* static void */
+/* create_usage (void) */
+/* { */
+/*   buffer_file_puts (&text_out_buffer, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n"); */
+/* } */
 
-static bool
-create_ (void)
-{
-  if (scan_strings_size >= 1) {
-    if (strcmp ("create", scan_strings[0]) == 0) {
-      create_usage ();
-      return true;
-    }
-  }
-  if (scan_strings_size >= 3 &&
-      strcmp ("=", scan_strings[1]) == 0 &&
-      strcmp ("create", scan_strings[2]) == 0) {
+/* static bool */
+/* create_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1) { */
+/*     if (strcmp ("create", scan_strings[0]) == 0) { */
+/*       create_usage (); */
+/*       return true; */
+/*     } */
+/*   } */
+/*   if (scan_strings_size >= 3 && */
+/*       strcmp ("=", scan_strings[1]) == 0 && */
+/*       strcmp ("create", scan_strings[2]) == 0) { */
 
-    create_name = scan_strings[0];
+/*     create_name = scan_strings[0]; */
 
-    if (find_automaton (create_name) != 0) {
-      bfprintf (&text_out_buffer, "-> error: name %s is taken\n", create_name);
-      return true;
-    }
+/*     if (find_automaton (create_name) != 0) { */
+/*       bfprintf (&text_out_buffer, "-> error: name %s is taken\n", create_name); */
+/*       return true; */
+/*     } */
 
-    size_t idx = 3;
+/*     size_t idx = 3; */
     
-    /* Parse the options. */
-    create_retain_privilege = false;
-    create_register_name = 0;
+/*     /\* Parse the options. *\/ */
+/*     create_retain_privilege = false; */
+/*     create_register_name = 0; */
     
-    for (;;) {
-      if (idx >= scan_strings_size) {
-	create_usage ();
-	return -1;
-      }
+/*     for (;;) { */
+/*       if (idx >= scan_strings_size) { */
+/* 	create_usage (); */
+/* 	return -1; */
+/*       } */
       
-      if (strcmp (scan_strings[idx], "-p") == 0) {
-	create_retain_privilege = true;
-	++idx;
-	continue;
-      }
+/*       if (strcmp (scan_strings[idx], "-p") == 0) { */
+/* 	create_retain_privilege = true; */
+/* 	++idx; */
+/* 	continue; */
+/*       } */
       
-      if (strcmp (scan_strings[idx], "-n") == 0) {
-	++idx;
-	if (idx >= scan_strings_size) {
-	  create_usage ();
-	  return -1;
-	}
+/*       if (strcmp (scan_strings[idx], "-n") == 0) { */
+/* 	++idx; */
+/* 	if (idx >= scan_strings_size) { */
+/* 	  create_usage (); */
+/* 	  return -1; */
+/* 	} */
 	
-	create_register_name = scan_strings[idx];
-	++idx;
-      }
+/* 	create_register_name = scan_strings[idx]; */
+/* 	++idx; */
+/*       } */
       
-      break;
-    }
+/*       break; */
+/*     } */
 
-    if (idx >= scan_strings_size) {
-      create_usage ();
-      return -1;
-    }
-    create_path = scan_strings[idx];
-    create_argv_idx = idx;
-    ++idx;
+/*     if (idx >= scan_strings_size) { */
+/*       create_usage (); */
+/*       return -1; */
+/*     } */
+/*     create_path = scan_strings[idx]; */
+/*     create_argv_idx = idx; */
+/*     ++idx; */
 
-    /* Request the file. */
+/*     /\* Request the file. *\/ */
 
-    vfs_request_queue_push_readfile (&vfs_request_queue, create_path);
-    callback_queue_push (&vfs_response_queue, create_callback, 0);
+/*     vfs_request_queue_push_readfile (&vfs_request_queue, create_path); */
+/*     callback_queue_push (&vfs_response_queue, create_callback, 0); */
 
-    return true;
-  }
-  return false;
-}
+/*     return true; */
+/*   } */
+/*   return false; */
+/* } */
 
 static void
 bind_usage (void)
@@ -1470,7 +1815,7 @@ error_ (void)
 typedef bool (*dispatch_func_t) (void);
 
 static dispatch_func_t dispatch[] = {
-  create_,
+  /* create_, */
   bind_,
   unbind_,
   destroy_,
@@ -1488,11 +1833,11 @@ static dispatch_func_t dispatch[] = {
   ====================
 */
 
-/* static void */
-/* readscript_callback (void* data, */
-/* 		     bd_t bda, */
-/* 		     bd_t bdb) */
-/* { */
+static void
+readscript_callback (void* data,
+		     bd_t bda,
+		     bd_t bdb)
+{
 /*   vfs_error_t error; */
 /*   size_t size; */
 /*   if (read_vfs_readfile_response (bda, &error, &size) != 0) { */
@@ -1521,7 +1866,7 @@ static dispatch_func_t dispatch[] = {
 /*   string_push_front (str_copy, size + 1); */
 /*   buffer_unmap (bdb); */
 /*   process_hold = false; */
-/* } */
+}
 
 static void
 initialize (void)
@@ -1529,7 +1874,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    vfs_init (&vfs, VFS_REQUEST_NO, VFS_RESPONSE_NO);
+    vfs_init (&vfs, FS_REQUEST_NO, FS_RESPONSE_NO);
 
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
@@ -1549,29 +1894,31 @@ initialize (void)
       	exit (-1);
       }
 
-      snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d\n", de_integer_val (de_get (root, "." FINDA), -1));
-      logs (log_buffer);
-
-      snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "script = %s\n", de_string_val (de_get (root, "." ARGS "." "script"), "(none)"));
-      logs (log_buffer);
-
       de_val_t* fs = de_get (root, "." FS);
       if (de_type (fs) == DE_ARRAY) {
 	for (size_t idx = 0; idx != de_array_size (fs); ++idx) {
 	  de_val_t* entry = de_array_at (fs, idx);
 
 	  aid_t from_aid = de_integer_val (de_get (entry, ".from.aid"), -1);
-	  inode_t from_inode = de_integer_val (de_get (entry, ".from.inode"), -1);
+	  fs_nodeid_t from_nodeid = de_integer_val (de_get (entry, ".from.nodeid"), -1);
 	  aid_t to_aid = de_integer_val (de_get (entry, ".to.aid"), -1);
-	  inode_t to_inode = de_integer_val (de_get (entry, ".to.inode"), -1);
-	  if (to_aid != -1 && to_inode != -1) {
-	    if (vfs_append (&vfs, from_aid, from_inode, to_aid, to_inode) != 0) {
+	  fs_nodeid_t to_nodeid = de_integer_val (de_get (entry, ".to.nodeid"), -1);
+	  if (to_aid != -1 && to_nodeid != -1) {
+	    if (vfs_append (&vfs, from_aid, from_nodeid, to_aid, to_nodeid) != 0) {
 	      snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "(vfs) could not bind to %d: %s\n", to_aid, lily_error_string (lily_error));
 	      logs (log_buffer);
 	    }
 	  }
 	}
       }
+
+      const char* script_name = de_string_val (de_get (root, "." ARGS "." "script"), 0);
+      if (script_name != 0) {
+	vfs_readfile (&vfs, script_name, readscript_callback, 0);
+      }
+
+      snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d", de_integer_val (de_get (root, "." FINDA), -1));
+      logs (log_buffer);
     }
 
     if (bda != -1) {
@@ -1589,6 +1936,16 @@ initialize (void)
       }
     }
 
+    /* vfs_request_bda = buffer_create (0); */
+    /* vfs_request_bdb = buffer_create (0); */
+    /* if (vfs_request_bda == -1 || */
+    /* 	vfs_request_bdb == -1) { */
+    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffers: %s", lily_error_string (lily_error)); */
+    /*   logs (log_buffer); */
+    /*   exit (-1); */
+    /* } */
+    /* vfs_request_queue_init (&vfs_request_queue); */
+    /* callback_queue_init (&vfs_response_queue); */
 
     /* aid_t aid = getaid (); */
 
@@ -1619,92 +1976,6 @@ initialize (void)
     /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize com_out buffer: %s", lily_error_string (lily_error)); */
     /*   logs (log_buffer); */
     /*   exit (-1); */
-    /* } */
-
-    /* vfs_request_bda = buffer_create (0); */
-    /* vfs_request_bdb = buffer_create (0); */
-    /* if (vfs_request_bda == -1 || */
-    /* 	vfs_request_bdb == -1) { */
-    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffers: %s", lily_error_string (lily_error)); */
-    /*   logs (log_buffer); */
-    /*   exit (-1); */
-    /* } */
-    /* vfs_request_queue_init (&vfs_request_queue); */
-    /* callback_queue_init (&vfs_response_queue); */
-
-    /* /\* /\\* Bind to the vfs. *\\/ *\/ */
-    /* /\* aid_t vfs_aid = lookups (VFS_NAME); *\/ */
-    /* /\* if (vfs_aid == -1) { *\/ */
-    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "no vfs"); *\/ */
-    /* /\*   logs (log_buffer); *\/ */
-    /* /\*   exit (-1); *\/ */
-    /* /\* } *\/ */
-    
-    /* /\* description_t vfs_description; *\/ */
-    /* /\* if (description_init (&vfs_description, vfs_aid) != 0) { *\/ */
-    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not describe vfs: %s", lily_error_string (lily_error)); *\/ */
-    /* /\*   logs (log_buffer); *\/ */
-    /* /\*   exit (-1); *\/ */
-    /* /\* } *\/ */
-
-    /* /\* action_desc_t vfs_request; *\/ */
-    /* /\* if (description_read_name (&vfs_description, &vfs_request, VFS_REQUEST_NAME) != 0) { *\/ */
-    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs does not contain a request action"); *\/ */
-    /* /\*   logs (log_buffer); *\/ */
-    /* /\*   exit (-1); *\/ */
-    /* /\* } *\/ */
-
-    /* /\* action_desc_t vfs_response; *\/ */
-    /* /\* if (description_read_name (&vfs_description, &vfs_response, VFS_RESPONSE_NAME) != 0) { *\/ */
-    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "vfs does not contain a response action"); *\/ */
-    /* /\*   logs (log_buffer); *\/ */
-    /* /\*   exit (-1); *\/ */
-    /* /\* } *\/ */
-    
-    /* /\* /\\* We bind the response first so they don't get lost. *\\/ *\/ */
-    /* /\* if (bind (vfs_aid, vfs_response.number, 0, aid, VFS_RESPONSE_NO, 0) == -1 || *\/ */
-    /* /\* 	bind (aid, VFS_REQUEST_NO, 0, vfs_aid, vfs_request.number, 0) == -1) { *\/ */
-    /* /\*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to vfs: %s", lily_error_string (lily_error)); *\/ */
-    /* /\*   logs (log_buffer); *\/ */
-    /* /\*   exit (-1); *\/ */
-    /* /\* } *\/ */
-
-    /* /\* description_fini (&vfs_description); *\/ */
-
-    /* if (bda != -1) { */
-    /*   /\* Process arguments. *\/ */
-    /*   buffer_file_t bf; */
-    /*   if (buffer_file_initr (&bf, bda) != 0) { */
-    /* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize argument buffer: %s", lily_error_string (lily_error)); */
-    /* 	logs (log_buffer); */
-    /* 	exit (-1); */
-    /*   } */
-
-    /*   const size_t size = buffer_file_size (&bf); */
-    /*   const char* begin = buffer_file_readp (&bf, size); */
-    /*   if (begin == 0) { */
-    /* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read argument buffer: %s", lily_error_string (lily_error)); */
-    /* 	logs (log_buffer); */
-    /* 	exit (-1); */
-    /*   } */
-    /*   const char* end = begin + size; */
-    /*   const char* ptr = begin; */
-
-    /*   char* key = 0; */
-    /*   char* value = 0; */
-    /*   while (ptr != end && kv_parse (&key, &value, &ptr, end) == 0) { */
-    /* 	if (key != 0) { */
-    /* 	  if (strcmp (key, "script") == 0) { */
-    /* 	    if (value != 0) { */
-    /* 	      vfs_request_queue_push_readfile (&vfs_request_queue, value); */
-    /* 	      process_hold = true; */
-    /* 	      callback_queue_push (&vfs_response_queue, readscript_callback, 0); */
-    /* 	    } */
-    /* 	  } */
-    /* 	} */
-    /* 	free (key); */
-    /* 	free (value); */
-    /*   } */
     /* } */
   }
 }
@@ -1854,34 +2125,11 @@ BEGIN_SYSTEM_INPUT (UNBOUND_NO, "", "", unbound, ano_t ano, bid_t bid, bd_t bda,
   finish_input (bda, bdb);
 }
 
-/* vfs_request
-   -------------
-   Send a request to the vfs.
-
-   Pre:  vfs_request_queue is not empty
-   Post: vfs_request_queue has one item removed
- */
-static bool
-vfs_request_precondition (void)
-{
-  return !vfs_request_queue_empty (&vfs_request_queue);
-}
-
-BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_requestx, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
 
-  if (vfs_request_precondition ()) {
-    if (vfs_request_queue_pop_to_buffer (&vfs_request_queue, vfs_request_bda, vfs_request_bdb) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could pop vfs request: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    finish_output (true, vfs_request_bda, vfs_request_bdb);
-  }
-  else {
-    finish_output (false, -1, -1);
-  }
+  vfs_request (&vfs, aid);
 }
 
 /* vfs_response
@@ -1890,22 +2138,11 @@ BEGIN_OUTPUT (NO_PARAMETER, VFS_REQUEST_NO, "", "", vfs_request, ano_t ano, int 
 
    Post: the callback queue has one item removed
  */
-BEGIN_INPUT (NO_PARAMETER, VFS_RESPONSE_NO, "", "", vfs_response, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_responsex, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  if (callback_queue_empty (&vfs_response_queue)) {
-    finish_input (bda, bdb);
-  }
-
-  const callback_queue_item_t* item = callback_queue_front (&vfs_response_queue);
-  callback_t callback = callback_queue_item_callback (item);
-  void* data = callback_queue_item_data (item);
-  callback_queue_pop (&vfs_response_queue);
-
-  callback (data, bda, bdb);
-
-  finish_input (bda, bdb);
+  vfs_response (&vfs, aid, bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid, size_t bc)
@@ -1953,10 +2190,8 @@ do_schedule (void)
   if (text_out_precondition ()) {
     schedule (TEXT_OUT_NO, 0);
   }
-  if (vfs_request_precondition ()) {
-    schedule (VFS_REQUEST_NO, 0);
-  }
   if (!com_queue_empty ()) {
     schedule (COM_OUT_NO, com_queue_front ());
   }
+  vfs_schedule (&vfs);
 }

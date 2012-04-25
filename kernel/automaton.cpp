@@ -22,10 +22,6 @@ automaton::log (const char* message,
     return make_pair (-1, LILY_ERROR_INVAL);
   }
 
-  if (message[message_size - 1] != '\0') {
-    return make_pair (-1, LILY_ERROR_INVAL);
-  }
-  
   const size_t total_size = sizeof (log_event_t) + message_size;
   size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
 
@@ -41,10 +37,11 @@ automaton::log (const char* message,
   kout << "[" << setfill (' ') << setw (10) << left << le->time.seconds << "." << setfill ('0') << setw (3) << le->time.nanoseconds / 1000000 << "] " << le->aid << " ";
   kout.flags (flags);
 
-  kout << message;
-  if (message_size < 2 || message[message_size - 2] != '\n') {
-    kout << endl;
+  for (size_t idx = 0; idx != message_size; ++idx) {
+    kout.put (message[idx]);
   }
+
+  kout << endl;
   
   buffer_unmap (b);
   

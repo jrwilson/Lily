@@ -45,13 +45,13 @@ to_buffer_file : to_buffer_file.c
 syslog : syslog.o
 	$(CC) -o $@ $^ -lbuffer_file
 
-tmpfs : tmpfs.o cpio.o
-	$(CC) -o $@ $^ -lbuffer_file
+tmpfs : tmpfs.o cpio.o fs_msg.o
+	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 finda : finda.o
 	$(CC) -o $@ $^
 
-jsh : jsh.o vfs_msg.o kv_parse.o callback_queue.o de.o
+jsh : jsh.o fs_msg.o kv_parse.o callback_queue.o de.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 

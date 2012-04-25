@@ -3,7 +3,7 @@
 #include <dymem.h>
 #include <buffer_file.h>
 #include "cpio.h"
-#include "vfs_msg.h"
+#include "fs_msg.h"
 
 /*
   Tmpfs
@@ -68,26 +68,27 @@
 #define REQUEST_NO 1
 #define RESPONSE_NO 2
 
-/* /\* Every inode in the filesystem is either a file or directory. *\/ */
-/* typedef struct inode inode_t; */
-/* struct inode { */
-/*   vfs_fs_node_t node; */
-/*   size_t name_size; */
-/*   char* name; /\* Does not contain a terminating 0. *\/ */
-/*   bd_t bd; */
-/*   size_t size; */
-/*   inode_t* parent; */
-/*   inode_t* first_child; */
-/*   inode_t* next_sibling; */
-/* }; */
+/* Every inode in the filesystem is either a file or directory. */
+typedef struct inode inode_t;
+struct inode {
+  fs_nodeid_t nodeid;
+  fs_node_type_t type;
+  char* name; /* Not 0 terminated. */
+  size_t name_size;
+  bd_t bd;
+  size_t size;
+  inode_t* parent;
+  inode_t* first_child;
+  inode_t* next_sibling;
+};
 
-/* /\* A vector that maps id to inode. *\/ */
-/* static size_t nodes_capacity = 0; */
-/* static size_t nodes_size = 0; */
-/* static inode_t** nodes = 0; */
+/* A vector that maps id to inode. */
+static size_t nodes_capacity = 0;
+static size_t nodes_size = 0;
+static inode_t** nodes = 0;
 
-/* /\* A list of free inodes. *\/ */
-/* static inode_t* free_list = 0; */
+/* A list of free inodes. */
+static inode_t* free_list = 0;
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -103,129 +104,149 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define WARNING __FILE__ ": warning: "
 #define INFO __FILE__ ": info: "
 
-/* static inode_t* */
-/* inode_create (vfs_fs_node_type_t type, */
-/* 	     const char* name, */
-/* 	     size_t name_size, */
-/* 	     bd_t bd, */
-/* 	     size_t size, */
-/* 	     inode_t* parent) */
+/* static void */
+/* print (const inode_t* inode) */
 /* { */
-/*   inode_t* node; */
-
-/*   if (free_list != 0) { */
-/*     /\* Take a node from the free list. *\/ */
-/*     node = free_list; */
-/*     free_list = node->next_sibling; */
+/*   snprintf (log_buffer, LOG_BUFFER_SIZE, "nodeid=%d\n", inode->nodeid); */
+/*   logs (log_buffer); */
+/*   for (const inode_t* c = inode->first_child; c != 0; c = c->next_sibling) { */
+/*     print (c); */
 /*   } */
-/*   else { */
-/*     /\* Expand the vector if necessary. *\/ */
-/*     if (nodes_size == nodes_capacity) { */
-/*       nodes_capacity *= 2; */
-/*       nodes = realloc (nodes, nodes_capacity * sizeof (inode_t*)); */
-/*       if (nodes == 0) { */
-/* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error)); */
-/* 	logs (log_buffer); */
-/* 	exit (-1); */
-/*       } */
-/*     } */
-
-/*     /\* Create a new node. *\/ */
-/*     node = malloc (sizeof (inode_t)); */
-/*     if (node == NULL) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
-/*     node->node.id = nodes_size++; */
-/*   } */
-
-/*   /\* Place the node in the index. *\/ */
-/*   nodes[node->node.id] = node; */
-
-/*   /\* Initialize the node. *\/ */
-/*   node->node.type = type; */
-/*   node->name_size = name_size; */
-/*   node->name = malloc (name_size); */
-/*   if (node->name == NULL) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
-/*   memcpy (node->name, name, name_size); */
-/*   node->bd = bd; */
-/*   node->size = size; */
-/*   node->parent = parent; */
-/*   node->first_child = 0; */
-/*   node->next_sibling = 0; */
-
-/*   return node; */
 /* } */
 
-/* static inode_t* */
-/* directory_find_or_create (inode_t* parent, */
-/* 			  const char* name, */
-/* 			  size_t name_size) */
-/* { */
-/*   /\* Iterate over the parent's children looking for the name. *\/ */
-/*   inode_t** ptr; */
-/*   for (ptr = &parent->first_child; *ptr != 0; ptr = &(*ptr)->next_sibling) { */
-/*     if ((*ptr)->name_size == name_size && */
-/*   	memcmp ((*ptr)->name, name, name_size) == 0) { */
-/*       return *ptr; */
-/*     } */
-/*   } */
+static inode_t*
+inode_create (fs_node_type_t type,
+	      const char* name,
+	      size_t name_size,
+	      bd_t bd,
+	      size_t size,
+	      inode_t* parent)
+{
+  inode_t* node;
 
-/*   /\* Create a node. *\/ */
-/*   *ptr = inode_create (DIRECTORY, name, name_size, -1, 0, parent); */
+  if (free_list != 0) {
+    /* Take a node from the free list. */
+    node = free_list;
+    free_list = node->next_sibling;
+  }
+  else {
+    /* Expand the vector if necessary. */
+    if (nodes_size == nodes_capacity) {
+      nodes_capacity = nodes_capacity * 2 + 1;
+      nodes = realloc (nodes, nodes_capacity * sizeof (inode_t*));
+      if (nodes == 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
+    }
 
-/*   return *ptr; */
-/* } */
+    /* Create a new node. */
+    node = malloc (sizeof (inode_t));
+    if (node == NULL) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    node->nodeid = nodes_size++;
+  }
 
-/* static inode_t* */
-/* file_find_or_create (inode_t* parent, */
-/* 		     const char* name, */
-/* 		     size_t name_size, */
-/* 		     bd_t bd, */
-/* 		     size_t size) */
-/* { */
-/*   /\* Iterate over the parent's children looking for the name. *\/ */
-/*   inode_t** ptr; */
-/*   for (ptr = &parent->first_child; *ptr != 0; ptr = &(*ptr)->next_sibling) { */
-/*     if ((*ptr)->name_size == name_size && */
-/*   	memcmp ((*ptr)->name, name, name_size) == 0) { */
-/*       return *ptr; */
-/*     } */
-/*   } */
+  /* Place the node in the index. */
+  nodes[node->nodeid] = node;
 
-/*   /\* Create a node. *\/ */
-/*   *ptr = inode_create (FILE, name, name_size, buffer_copy (bd), size, parent); */
+  /* Initialize the node. */
+  node->type = type;
+  node->name = malloc (name_size);
+  memcpy (node->name, name, name_size);
+  node->name_size = name_size;
+  node->bd = bd;
+  node->size = size;
+  node->parent = parent;
+  node->first_child = 0;
+  node->next_sibling = 0;
 
-/*   return *ptr; */
-/* } */
+  return node;
+}
 
-/* /\* static void *\/ */
-/* /\* print (inode_t* node) *\/ */
-/* /\* { *\/ */
-/* /\*   if (node != 0) { *\/ */
-/* /\*     /\\* Print this node. *\\/ *\/ */
-/* /\*     switch (node->node.type) { *\/ */
-/* /\*     case FILE: *\/ */
-/* /\*       bfprintf (&syslog_buffer, "FILE "); *\/ */
-/* /\*       break; *\/ */
-/* /\*     case DIRECTORY: *\/ */
-/* /\*       bfprintf (&syslog_buffer, "DIRECTORY "); *\/ */
-/* /\*       break; *\/ */
-/* /\*     } *\/ */
-/* /\*     buffer_file_write (&syslog_buffer, node->name, node->name_size); *\/ */
-/* /\*     buffer_file_put (&syslog_buffer, '\n'); *\/ */
+static inode_t*
+directory_find_or_create (inode_t* parent,
+			  const char* name,
+			  size_t name_size)
+{
+  /* Iterate over the parent's children looking for the name. */
+  inode_t** ptr;
+  for (ptr = &parent->first_child; *ptr != 0; ptr = &(*ptr)->next_sibling) {
+    if ((*ptr)->name_size == name_size &&
+  	memcmp ((*ptr)->name, name, name_size) == 0) {
+      return *ptr;
+    }
+  }
 
-/* /\*     /\\* Print the children. *\\/ *\/ */
-/* /\*     for (inode_t* child = node->first_child; child != 0; child = child->next_sibling) { *\/ */
-/* /\*       print (child); *\/ */
-/* /\*     } *\/ */
-/* /\*   } *\/ */
-/* /\* } *\/ */
+  /* Create a node. */
+  *ptr = inode_create (DIRECTORY, name, name_size, -1, 0, parent);
+
+  return *ptr;
+}
+
+static inode_t*
+file_find_or_create (inode_t* parent,
+		     const char* name,
+		     size_t name_size,
+		     bd_t bd,
+		     size_t size)
+{
+  /* Iterate over the parent's children looking for the name. */
+  inode_t** ptr;
+  for (ptr = &parent->first_child; *ptr != 0; ptr = &(*ptr)->next_sibling) {
+    if ((*ptr)->name_size == name_size &&
+  	memcmp ((*ptr)->name, name, name_size) == 0) {
+      return *ptr;
+    }
+  }
+
+  /* Create a node. */
+  *ptr = inode_create (FILE, name, name_size, bd, size, parent);
+
+  return *ptr;
+}
+
+typedef struct client client_t;
+struct client {
+  aid_t aid;
+  bd_t response_bda;
+  bd_t response_bdb;
+  buffer_file_t response_buffer;
+  client_t* next;
+};
+
+static client_t* client_head = 0;
+
+static client_t*
+find_client (aid_t aid)
+{
+  client_t* client;
+  for (client = client_head; client != 0; client = client->next) {
+    if (client->aid == aid) {
+      break;
+    }
+  }
+
+  return client;
+}
+
+static client_t*
+create_client (aid_t aid)
+{
+  client_t* client = malloc (sizeof (client_t));
+  memset (client, 0, sizeof (client_t));
+  client->aid = aid;
+  client->response_bda = buffer_create (0);
+  client->response_bdb = buffer_create (0);
+  buffer_file_initw (&client->response_buffer, client->response_bda);
+  client->next = client_head;
+  client_head = client;
+  return client;
+}
 
 static void
 initialize (void)
@@ -233,20 +254,20 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-/*     /\* Allocate the inode vector. *\/ */
-/*     nodes_capacity = 1; */
-/*     nodes_size = 0; */
-/*     nodes = malloc (nodes_capacity * sizeof (inode_t*)); */
-/*     if (nodes == NULL) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
+    /* Allocate the inode vector. */
+    nodes_capacity = 1;
+    nodes_size = 0;
+    nodes = malloc (nodes_capacity * sizeof (inode_t*));
+    if (nodes == NULL) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "out of memory: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
     
-/*     /\* Create the root. *\/ */
-/*     nodes[nodes_size++] = inode_create (DIRECTORY, "", 0, -1, 0, 0); */
+    /* Create the root. */
+    inode_create (DIRECTORY, 0, 0, -1, 0, 0);
     
-/*     /\* TODO:  Do we need to make the root its own parent? *\/ */
+    /* TODO:  Do we need to make the root its own parent? */
 
 /*     response_bda = buffer_create (0); */
 /*     response_bdb = buffer_create (0); */
@@ -258,230 +279,231 @@ initialize (void)
 /*     } */
 /*     vfs_fs_response_queue_init (&response_queue); */
 
-/*     bd_t bda = getinita (); */
-/*     bd_t bdb = getinitb (); */
+    bd_t bda = getinita ();
+    bd_t bdb = getinitb ();
 
-/*     /\* Parse the cpio archive looking for files that we need. *\/ */
-/*     cpio_archive_t archive; */
-/*     if (cpio_archive_init (&archive, bda) == 0) { */
-      
-/*       cpio_file_t* file; */
-/*       while ((file = cpio_archive_next_file (&archive)) != 0) { */
-	
-/* 	/\* Ignore the "." directory. *\/ */
-/* 	if (strcmp (file->name, ".") != 0) { */
+    /* Parse the cpio archive looking for files that we need. */
+    cpio_archive_t archive;
+    if (cpio_archive_init (&archive, bda) == 0) {
+      cpio_file_t file;
+      while (cpio_archive_read (&archive, &file) == 0) {
+	/* Ignore the "." directory. */
+	if (strcmp (file.name, ".") != 0) {
 	  
-/* 	  /\* Start at the root. *\/ */
-/* 	  inode_t* parent = nodes[0]; */
+	  /* Start at the root. */
+	  inode_t* parent = nodes[0];
 	  
-/* 	  const char* begin; */
-/* 	  for (begin = file->name; begin < file->name + file->name_size;) { */
-/* 	    /\* Find the delimiter. *\/ */
-/* 	    const char* end = memchr (begin, '/', file->name_size - (begin - file->name)); */
+	  const char* begin;
+	  for (begin = file.name; begin < file.name + file.name_size;) {
+	    /* Find the delimiter. */
+	    const char* end = memchr (begin, '/', file.name_size - (begin - file.name));
 	    
-/* 	    if (end != 0) { */
-/* 	      /\* Process part of the path. *\/ */
-/* 	      parent = directory_find_or_create (parent, begin, end - begin); */
-/* 	      /\* Update the beginning. *\/ */
-/* 	      begin = end + 1; */
-/* 	    } */
-/* 	    else { */
-/* 	      break; */
-/* 	    } */
-/* 	  } */
+	    if (end != 0) {
+	      /* Process part of the path. */
+	      parent = directory_find_or_create (parent, begin, end - begin);
+	      /* Update the beginning. */
+	      begin = end + 1;
+	    }
+	    else {
+	      break;
+	    }
+	  }
 	  
-/* 	  switch (file->mode & CPIO_TYPE_MASK) { */
-/* 	  case CPIO_REGULAR: */
-/* 	    file_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name), file->bd, file->size); */
-/* 	    break; */
-/* 	  case CPIO_DIRECTORY: */
-/* 	    directory_find_or_create (parent, begin, file->name_size - 1 - (begin - file->name)); */
-/* 	    break; */
-/* 	  } */
-/* 	} */
-	
-/* 	/\* Destroy the cpio file. *\/ */
-/* 	cpio_file_destroy (file); */
-/*       } */
-/*     } */
+	  switch (file.mode & CPIO_TYPE_MASK) {
+	  case CPIO_REGULAR:
+	    file_find_or_create (parent, begin, file.name_size - 1 - (begin - file.name), cpio_file_read (&archive, &file), file.file_size);
+	    break;
+	  case CPIO_DIRECTORY:
+	    directory_find_or_create (parent, begin, file.name_size - 1 - (begin - file.name));
+	    break;
+	  }
+	}
+      }
+    }
 
-/*     if (bda != -1) { */
-/*       buffer_destroy (bda); */
-/*     } */
-/*     if (bdb != -1) { */
-/*       buffer_destroy (bdb); */
-/*     } */
+    /* print (nodes[0]); */
+
+    if (bda != -1) {
+      buffer_destroy (bda);
+    }
+    if (bdb != -1) {
+      buffer_destroy (bdb);
+    }
   }
 }
 
-BEGIN_INPUT (NO_PARAMETER, REQUEST_NO, FS_REQUEST_NAME, "", request, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, REQUEST_NO, FS_REQUEST_NAME, "", request, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "TODO request\n");
-  logs (log_buffer);
+  client_t* client = find_client (aid);
+  if (client == 0) {
+    client = create_client (aid);
+  }
 
-/*   vfs_fs_type_t type; */
-/*   if (read_vfs_fs_request_type (bda, bdb, &type) != 0) { */
-/*     if (vfs_fs_response_queue_push_bad_request (&response_queue, type) != 0) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
-/*     finish_input (bda, bdb); */
-/*   } */
-  
-/*   switch (type) { */
-/*   case VFS_FS_DESCEND: */
-/*     { */
-/*       size_t id; */
-/*       const char* name; */
-/*       size_t name_size; */
-/*       vfs_fs_node_t no_node; */
-/*       if (read_vfs_fs_descend_request (bda, bdb, &id, &name, &name_size) != 0) { */
-/*   	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_REQUEST, &no_node) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+  buffer_file_t buffer;
+  if (buffer_file_initr (&buffer, bda) != 0) {
+    if (fs_descend_response_write (&client->response_buffer, FS_BAD_REQUEST, -1) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    finish_input (bda, bdb);
+  }
 
-/*       if (id >= nodes_size) { */
-/*   	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+  fs_type_t type;
+  if (fs_request_type_read (&buffer, &type) != 0) {
+    if (fs_descend_response_write (&client->response_buffer, FS_BAD_REQUEST, -1) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    finish_input (bda, bdb);
+  }
 
-/*       inode_t* inode = nodes[id]; */
+  switch (type) {
+  case FS_DESCEND:
+    {
+      fs_nodeid_t nodeid;
+      const char* name;
+      size_t name_size;
+      if (fs_descend_request_read (&buffer, &nodeid, &name, &name_size) != 0) {
+	if (fs_descend_response_write (&client->response_buffer, FS_BAD_REQUEST, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
 
-/*       if (inode == 0) { */
-/*   	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_BAD_NODE, &no_node) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+      if (nodeid >= nodes_size) {
+	if (fs_descend_response_write (&client->response_buffer, FS_NODE_DNE, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
 
-/*       if (inode->node.type != DIRECTORY) { */
-/*   	if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_NOT_DIRECTORY, &no_node) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+      inode_t* inode = nodes[nodeid];
 
-/*       inode_t* child; */
-/*       for (child = inode->first_child; child != 0; child = child->next_sibling) { */
-/*   	if (child->name_size == name_size && */
-/*   	    memcmp (child->name, name, name_size) == 0) { */
-/*   	  /\* Found the child with the correct name. *\/ */
-/*   	  if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_SUCCESS, &child->node) != 0) { */
-/* 	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	    logs (log_buffer); */
-/* 	    exit (-1); */
-/* 	  } */
-/*   	  finish_input (bda, bdb); */
-/*   	} */
-/*       } */
+      if (inode == 0) {
+	if (fs_descend_response_write (&client->response_buffer, FS_NODE_DNE, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
 
-/*       /\* Didn't find it. *\/ */
-/*       if (vfs_fs_response_queue_push_descend (&response_queue, VFS_FS_CHILD_DNE, &no_node) != 0) { */
-/* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	logs (log_buffer); */
-/* 	exit (-1); */
-/*       } */
-/*       finish_input (bda, bdb); */
-/*     } */
-/*     break; */
-/*   case VFS_FS_READFILE: */
-/*     { */
-/*       size_t id; */
-/*       if (read_vfs_fs_readfile_request (bda, bdb, &id) != 0) { */
-/*   	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_REQUEST, 0, -1) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+      if (inode->type != DIRECTORY) {
+	if (fs_descend_response_write (&client->response_buffer, FS_NOT_DIRECTORY, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
 
-/*       if (id >= nodes_size) { */
-/*   	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+      for (inode_t* child = inode->first_child; child != 0; child = child->next_sibling) {
+  	if (child->name_size == name_size &&
+  	    memcmp (child->name, name, name_size) == 0) {
+  	  /* Found the child with the correct name. */
+	  if (fs_descend_response_write (&client->response_buffer, FS_SUCCESS, child->nodeid) != 0) {
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	    logs (log_buffer);
+	    exit (-1);
+	  }
+  	  finish_input (bda, bdb);
+  	}
+      }
 
-/*       inode_t* inode = nodes[id]; */
+      /* Didn't find it. */
+      if (fs_descend_response_write (&client->response_buffer, FS_CHILD_DNE, -1) != 0) {
+      	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+      	logs (log_buffer);
+      	exit (-1);
+      }
 
-/*       if (inode == 0) { */
-/*   	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_BAD_NODE, 0, -1) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+      finish_input (bda, bdb);
+    }
+    break;
+  case FS_READFILE:
+    {
+      fs_nodeid_t nodeid;
+      if (fs_readfile_request_read (&buffer, &nodeid) != 0) {
+	if (fs_readfile_response_write (&client->response_buffer, FS_BAD_REQUEST, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
+      
+      if (nodeid >= nodes_size) {
+	if (fs_readfile_response_write (&client->response_buffer, FS_NODE_DNE, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
+      
+      inode_t* inode = nodes[nodeid];
+      
+      if (inode == 0) {
+	if (fs_readfile_response_write (&client->response_buffer, FS_NODE_DNE, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
+      
+      if (inode->type != FILE) {
+	if (fs_readfile_response_write (&client->response_buffer, FS_NOT_FILE, -1) != 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	finish_input (bda, bdb);
+      }
 
-/*       if (inode->node.type != FILE) { */
-/*   	if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_NOT_FILE, 0, -1) != 0) { */
-/* 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	  logs (log_buffer); */
-/* 	  exit (-1); */
-/* 	} */
-/*   	finish_input (bda, bdb); */
-/*       } */
+      if (buffer_assign (client->response_bdb, inode->bd) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not assign buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
 
-/*       if (vfs_fs_response_queue_push_readfile (&response_queue, VFS_FS_SUCCESS, inode->size, inode->bd) != 0) { */
-/* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/* 	logs (log_buffer); */
-/* 	exit (-1); */
-/*       } */
-/*       finish_input (bda, bdb); */
-/*     } */
-/*     break; */
-/*   default: */
-/*     if (vfs_fs_response_queue_push_bad_request (&response_queue, VFS_UNKNOWN) != 0) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not push response: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
-/*     finish_input (bda, bdb); */
-/*     break; */
-/*   } */
+      if (fs_readfile_response_write (&client->response_buffer, FS_SUCCESS, inode->size) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
+      finish_input (bda, bdb);
+    }
+    break;
+  }
+
+  /* The response type doesn't matter. */
+  if (fs_readfile_response_write (&client->response_buffer, FS_BAD_REQUEST, -1) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    exit (-1);
+  }
 
   finish_input (bda, bdb);
 }
 
-/* static bool */
-/* response_precondition (void) */
-/* { */
-/*   return !vfs_fs_response_queue_empty (&response_queue); */
-/* } */
-
-BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
 
-  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "TODO response\n");
-  logs (log_buffer);
-
-/*   if (response_precondition ()) { */
-/*     if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to response buffer: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
-/*     finish_output (true, response_bda, response_bdb); */
-/*   } */
+  client_t* client = find_client (aid);
+  if (client != 0 && buffer_file_size (&client->response_buffer) != 0) {
+    buffer_file_truncate (&client->response_buffer);
+    finish_output (true, client->response_bda, client->response_bdb);
+  }
 
   finish_output (false, -1, -1);
 }
@@ -489,11 +511,13 @@ BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t a
 void
 do_schedule (void)
 {
-/*   if (response_precondition ()) { */
-/*     if (schedule (TMPFS_RESPONSE_NO, 0) != 0) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not schedule response action: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
-/*   } */
+  for (client_t* client = client_head; client != 0; client = client->next) {
+    if (buffer_file_size (&client->response_buffer) != 0) {
+      if (schedule (RESPONSE_NO, client->aid) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not schedule response action: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
+    }
+  }
 }
