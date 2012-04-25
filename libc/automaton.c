@@ -70,7 +70,7 @@ schedule (ano_t action_number,
 }
 
 void
-finish (bool output_fired,
+finish (int output_fired,
 	bd_t bda,
 	bd_t bdb)
 {
@@ -91,14 +91,17 @@ finish_input (bd_t bda,
     buffer_destroy (bdb);
   }
   do_schedule ();
-  finish (false, -1, -1);
+  finish (0, -1, -1);
 }
 
 void
-finish_output (bool output_fired,
+finish_output (int output_fired,
 	       bd_t bda,
 	       bd_t bdb)
 {
+  /* char buffer[64]; */
+  /* snprintf (buffer, 64, "finish_output output_fired = %d\n", output_fired); */
+  /* logs (buffer); */
   do_schedule ();
   finish (output_fired, bda, bdb);
 }
@@ -107,7 +110,7 @@ void
 finish_internal (void)
 {
   do_schedule ();
-  finish (false, -1, -1);
+  finish (0, -1, -1);
 }
 
 void
@@ -120,7 +123,7 @@ aid_t
 create (bd_t text_bd,
 	bd_t bda,
 	bd_t bdb,
-	bool retain_privilege)
+	int retain_privilege)
 {
   aid_t retval;
   syscall1re (LILY_SYSCALL_CREATE, retval, &text_bd);

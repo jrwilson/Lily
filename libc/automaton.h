@@ -5,7 +5,6 @@
 #include <lily/types.h>
 #include <lily/action.h>
 #include <stddef.h>
-#include <stdbool.h>
 
 /* Import the Lily namespace. */
 #define NO_PARAMETER LILY_ACTION_NO_PARAMETER
@@ -60,7 +59,7 @@ schedule (ano_t action_number,
 	  int parameter);
 
 void
-finish (bool output_fired,
+finish (int output_fired,
 	bd_t bda,
 	bd_t bdb);
 
@@ -69,7 +68,7 @@ finish_input (bd_t bda,
 	      bd_t bdb);
 
 void
-finish_output (bool output_fired,
+finish_output (int output_fired,
 	       bd_t bda,
 	       bd_t bdb);
 
@@ -83,7 +82,7 @@ aid_t
 create (bd_t text_bd,
 	bd_t bda,
 	bd_t bdb,
-	bool retain_privilege);
+	int retain_privilege);
 
 bid_t
 bind (aid_t output_automaton,

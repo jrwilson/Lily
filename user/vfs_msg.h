@@ -11,8 +11,8 @@
 */
 
 /* Action names. */
-#define VFS_REQUEST_NAME "request"
-#define VFS_RESPONSE_NAME "response"
+#define FS_REQUEST_NAME "request"
+#define FS_RESPONSE_NAME "response"
 
 /* Request types. */
 typedef enum {
@@ -138,9 +138,6 @@ read_vfs_readfile_response (bd_t bd,
   File System Section
   ===================
 */
-
-#define VFS_FS_REQUEST_NAME "vfs_request"
-#define VFS_FS_RESPONSE_NAME "vfs_response"
 
 typedef enum {
   FILE,

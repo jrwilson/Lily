@@ -9,6 +9,147 @@
 #include "de.h"
 #include "environment.h"
 
+/* An inode represents an entry in a file system. */
+typedef size_t inode_t;
+
+/* A vnode represents an entry in a virtual file system. */
+typedef struct {
+  aid_t aid;
+  inode_t inode;
+} vnode_t;
+
+typedef struct fs fs_t;
+typedef struct redirect redirect_t;
+
+struct fs {
+  size_t refcount;
+  aid_t aid;
+  bool bound;
+  /* request queue */
+  /* callback queue */
+  fs_t* next;
+};
+
+struct redirect {
+  vnode_t from;
+  vnode_t to;
+  fs_t* to_fs;
+  redirect_t* next;
+};
+
+typedef struct {
+  ano_t request;
+  ano_t response;
+  fs_t* fs_head;
+  redirect_t* redirect_head;
+  redirect_t** redirect_tail;
+} vfs_t;
+
+static fs_t*
+find_fs (const vfs_t* vfs,
+	 aid_t aid)
+{
+  fs_t* fs;
+  for (fs = vfs->fs_head; fs != 0; fs = fs->next) {
+    if (fs->aid == aid) {
+      break;
+    }
+  }
+
+  return fs;
+}
+
+static fs_t*
+create_fs (vfs_t* vfs,
+	   aid_t aid)
+{
+  /* Create the file system. */
+  fs_t* fs = malloc (sizeof (fs_t));
+  memset (fs, 0, sizeof (fs_t));
+  fs->refcount = 1;
+  fs->aid = aid;
+  fs->bound = false;
+
+  /* Insert into the list. */
+  fs->next = vfs->fs_head;
+  vfs->fs_head = fs;
+
+  description_t description;
+  if (description_init (&description, aid) != 0) {
+    /* Could not describe. */
+    return fs;
+  }
+
+  action_desc_t request;
+  if (description_read_name (&description, &request, FS_REQUEST_NAME) != 0) {
+    description_fini (&description);
+    return fs;
+  }
+  
+  action_desc_t response;
+  if (description_read_name (&description, &response, FS_RESPONSE_NAME) != 0) {
+    description_fini (&description);
+    return fs;
+  }
+  
+  aid_t this_aid = getaid ();
+  if (bind (aid, response.number, 0, this_aid, vfs->response, 0) == -1 ||
+      bind (this_aid, vfs->request, 0, aid, request.number, 0) == -1) {
+    description_fini (&description);
+    return fs;
+  }
+  
+  description_fini (&description);
+
+  fs->bound = true;
+  
+  return fs;
+}
+
+static void
+vfs_init (vfs_t* vfs,
+	  ano_t request,
+	  ano_t response)
+{
+  vfs->request = request;
+  vfs->response = response;
+  vfs->redirect_tail = &vfs->redirect_head;
+}
+
+static int
+vfs_append (vfs_t* vfs,
+	    aid_t from_aid,
+	    inode_t from_inode,
+	    aid_t to_aid,
+	    inode_t to_inode)
+{
+  int retval = 0;
+
+  /* Do we have a file system for to_aid? */
+  fs_t* to_fs = find_fs (vfs, to_aid);
+  if (to_fs == 0) {
+    to_fs = create_fs (vfs, to_aid);
+    if (!to_fs->bound) {
+      retval = -1;
+    }
+  }
+
+  /* Create the redirect. */
+  redirect_t* r = malloc (sizeof (redirect_t));
+  memset (r, 0, sizeof (redirect_t));
+  r->from.aid = from_aid;
+  r->from.inode = from_inode;
+  r->to.aid = to_aid;
+  r->to.inode = to_inode;
+  r->to_fs = to_fs;
+
+  /* Insert into the list. */
+  *vfs->redirect_tail = r;
+  vfs->redirect_tail = &r->next;
+
+  return retval;
+}
+
 /* TODO:  Improve the error handling. */
 
 /* TODO:  This is wrong on multiple levels. */
@@ -66,6 +207,9 @@ atoi (const char* s)
 
 /* Initialization flag. */
 static bool initialized = false;
+
+/* Virtual file system. */
+static vfs_t vfs;
 
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
@@ -1385,6 +1529,8 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    vfs_init (&vfs, VFS_REQUEST_NO, VFS_RESPONSE_NO);
+
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
 
@@ -1414,16 +1560,18 @@ initialize (void)
 	for (size_t idx = 0; idx != de_array_size (fs); ++idx) {
 	  de_val_t* entry = de_array_at (fs, idx);
 
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "type = %s\n", de_string_val (de_get (entry, "." "type"), "(none)"));
-	  logs (log_buffer);
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "inode = %d\n", de_integer_val (de_get (entry, "." "inode"), -1));
-	  logs (log_buffer);
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "aid = %d\n", de_integer_val (de_get (entry, "." "aid"), -1));
-	  logs (log_buffer);
-	  
+	  aid_t from_aid = de_integer_val (de_get (entry, ".from.aid"), -1);
+	  inode_t from_inode = de_integer_val (de_get (entry, ".from.inode"), -1);
+	  aid_t to_aid = de_integer_val (de_get (entry, ".to.aid"), -1);
+	  inode_t to_inode = de_integer_val (de_get (entry, ".to.inode"), -1);
+	  if (to_aid != -1 && to_inode != -1) {
+	    if (vfs_append (&vfs, from_aid, from_inode, to_aid, to_inode) != 0) {
+	      snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "(vfs) could not bind to %d: %s\n", to_aid, lily_error_string (lily_error));
+	      logs (log_buffer);
+	    }
+	  }
 	}
       }
-
     }
 
     if (bda != -1) {

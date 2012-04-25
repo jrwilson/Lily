@@ -153,7 +153,7 @@ public:
   }
   
   static inline void
-  finish (bool output_fired,
+  finish (int output_fired,
 	  bd_t bda,
 	  bd_t bdb)
   {

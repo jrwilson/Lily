@@ -14,6 +14,8 @@
     3.  finda - The finda automaton allows automata to find each other.
   After attempting to create these automata, the boot automaton loads a shell automaton to continue the boot process.
 
+  TODO:  Use the configuration library to create the automata.
+
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
 */
@@ -156,9 +158,10 @@ initialize (void)
 
     de_val_t* root = de_create_object ();
     de_set (root, "." FINDA, de_create_integer (finda_aid));
-    de_set (root, "." FS "[0].type", de_create_string ("mount"));
-    de_set (root, "." FS "[0].inode", de_create_integer (0));
-    de_set (root, "." FS "[0].aid", de_create_integer (tmpfs_aid));
+    de_set (root, "." FS "[0].from.aid", de_create_integer (-1));
+    de_set (root, "." FS "[0].from.inode", de_create_integer (-1));
+    de_set (root, "." FS "[0].to.aid", de_create_integer (tmpfs_aid));
+    de_set (root, "." FS "[0].to.inode", de_create_integer (0));
     de_set (root, "." ARGS "." "script", de_create_string ("/scr/start.jsh"));
     de_serialize (root, &de_buffer);
     de_destroy (root);

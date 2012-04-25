@@ -65,8 +65,8 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
-/* #define TMPFS_REQUEST_NO 1 */
-/* #define TMPFS_RESPONSE_NO 2 */
+#define REQUEST_NO 1
+#define RESPONSE_NO 2
 
 /* /\* Every inode in the filesystem is either a file or directory. *\/ */
 /* typedef struct inode inode_t; */
@@ -89,19 +89,19 @@
 /* /\* A list of free inodes. *\/ */
 /* static inode_t* free_list = 0; */
 
-/* /\* Initialization flag. *\/ */
-/* static bool initialized = false; */
+/* Initialization flag. */
+static bool initialized = false;
 
 /* /\* Queue of response. *\/ */
 /* static bd_t response_bda = -1; */
 /* static bd_t response_bdb = -1; */
 /* static vfs_fs_response_queue_t response_queue; */
 
-/* #define LOG_BUFFER_SIZE 128 */
-/* static char log_buffer[LOG_BUFFER_SIZE]; */
-/* #define ERROR __FILE__ ": error: " */
-/* #define WARNING __FILE__ ": warning: " */
-/* #define INFO __FILE__ ": info: " */
+#define LOG_BUFFER_SIZE 128
+static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR __FILE__ ": error: "
+#define WARNING __FILE__ ": warning: "
+#define INFO __FILE__ ": info: "
 
 /* static inode_t* */
 /* inode_create (vfs_fs_node_type_t type, */
@@ -227,11 +227,11 @@
 /* /\*   } *\/ */
 /* /\* } *\/ */
 
-/* static void */
-/* initialize (void) */
-/* { */
-/*   if (!initialized) { */
-/*     initialized = true; */
+static void
+initialize (void)
+{
+  if (!initialized) {
+    initialized = true;
 
 /*     /\* Allocate the inode vector. *\/ */
 /*     nodes_capacity = 1; */
@@ -311,12 +311,15 @@
 /*     if (bdb != -1) { */
 /*       buffer_destroy (bdb); */
 /*     } */
-/*   } */
-/* } */
+  }
+}
 
-/* BEGIN_INPUT (NO_PARAMETER, TMPFS_REQUEST_NO, VFS_FS_REQUEST_NAME, "", request, ano_t ano, int param, bd_t bda, bd_t bdb) */
-/* { */
-/*   initialize (); */
+BEGIN_INPUT (NO_PARAMETER, REQUEST_NO, FS_REQUEST_NAME, "", request, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "TODO request\n");
+  logs (log_buffer);
 
 /*   vfs_fs_type_t type; */
 /*   if (read_vfs_fs_request_type (bda, bdb, &type) != 0) { */
@@ -455,8 +458,8 @@
 /*     break; */
 /*   } */
 
-/*   finish_input (bda, bdb); */
-/* } */
+  finish_input (bda, bdb);
+}
 
 /* static bool */
 /* response_precondition (void) */
@@ -464,9 +467,12 @@
 /*   return !vfs_fs_response_queue_empty (&response_queue); */
 /* } */
 
-/* BEGIN_OUTPUT (NO_PARAMETER, TMPFS_RESPONSE_NO, VFS_FS_RESPONSE_NAME, "", response, ano_t ano, int param, size_t bc) */
-/* { */
-/*   initialize (); */
+BEGIN_OUTPUT (NO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t ano, int param, size_t bc)
+{
+  initialize ();
+
+  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "TODO response\n");
+  logs (log_buffer);
 
 /*   if (response_precondition ()) { */
 /*     if (vfs_fs_response_queue_pop_to_buffer (&response_queue, response_bda, response_bdb) != 0) { */
@@ -476,10 +482,9 @@
 /*     } */
 /*     finish_output (true, response_bda, response_bdb); */
 /*   } */
-/*   else { */
-/*     finish_output (false, -1, -1); */
-/*   } */
-/* } */
+
+  finish_output (false, -1, -1);
+}
 
 void
 do_schedule (void)
