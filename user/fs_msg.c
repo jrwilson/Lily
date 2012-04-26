@@ -4,6 +4,8 @@
 #include <automaton.h>
 #include <description.h>
 
+/* TODO: Error handling. */
+
 typedef void (*descend_callback_t) (void* arg, fs_error_t error, fs_nodeid_t nodeid);
 
 typedef struct fs_op fs_op_t;
@@ -28,8 +30,11 @@ struct fs_op {
 
 struct fs {
   size_t refcount;
+  vfs_t* vfs;
   aid_t aid;
   bool bound;
+  bid_t request_bid;
+  bid_t response_bid;
   bd_t request_bda;
   bd_t request_bdb;
   buffer_file_t request_buffer;
@@ -80,8 +85,11 @@ create_fs (vfs_t* vfs,
   fs_t* fs = malloc (sizeof (fs_t));
   memset (fs, 0, sizeof (fs_t));
   fs->refcount = 0;
+  fs->vfs = vfs;
   fs->aid = aid;
-  fs->bound = true;
+  fs->bound = false;
+  fs->request_bid = -1;
+  fs->response_bid = -1;
   fs->op_tail = &fs->op_head;
   fs->request_bda = buffer_create (0);
   fs->request_bdb = buffer_create (0);
@@ -93,28 +101,17 @@ create_fs (vfs_t* vfs,
   vfs->fs_head = fs;
 
   /* Bind. */
-  description_t description;
-  if (description_init (&description, aid) != 0) {
-    /* Could not describe. */
-    fs->bound = false;
-  }
-
-  action_desc_t request;
-  if (description_read_name (&description, &request, FS_REQUEST_NAME) != 0) {
-    fs->bound = false;
-  }
-  
-  action_desc_t response;
-  if (description_read_name (&description, &response, FS_RESPONSE_NAME) != 0) {
-    fs->bound = false;
-  }
-  
   aid_t this_aid = getaid ();
-  if (bind (aid, response.number, 0, this_aid, vfs->response, 0) == -1 ||
-      bind (this_aid, vfs->request, 0, aid, request.number, 0) == -1) {
-    fs->bound = false;
+  description_t description;
+  action_desc_t request;
+  action_desc_t response;
+  if (description_init (&description, aid) == 0 &&
+      description_read_name (&description, &request, FS_REQUEST_NAME) == 0 &&
+      description_read_name (&description, &response, FS_RESPONSE_NAME) == 0 &&
+      (fs->response_bid = bind (aid, response.number, 0, this_aid, vfs->response, 0)) != -1 &&
+      (fs->request_bid = bind (this_aid, vfs->request, 0, aid, request.number, 0)) != -1) {
+    fs->bound = true;
   }
-  
   description_fini (&description);
 
   return fs;
@@ -129,8 +126,22 @@ fs_incref (fs_t* fs)
 static void
 fs_decref (fs_t* fs)
 {
-  /* TODO */
   --fs->refcount;
+  if (fs->refcount == 0) {
+    buffer_destroy (fs->request_bda);
+    buffer_destroy (fs->request_bdb);
+    unbind (fs->response_bid);
+    unbind (fs->request_bid);
+
+    for (fs_t** ptr = &fs->vfs->fs_head; *ptr != 0; ptr = &(*ptr)->next) {
+      if (*ptr == fs) {
+	*ptr = fs->next;
+	break;
+      }
+    }
+    
+    free (fs);
+  }
 }
 
 static void
@@ -246,11 +257,10 @@ fs_response (fs_t* fs,
 }
 
 static void
-fs_schedule (const vfs_t* vfs,
-	     const fs_t* fs)
+fs_schedule (const fs_t* fs)
 {
   if (fs_request_precondition (fs)) {
-    schedule (vfs->request, fs->aid);
+    schedule (fs->vfs->request, fs->aid);
   }
 }
 
@@ -303,16 +313,18 @@ typedef struct {
 
 static readfile_context_t*
 create_readfile_context (vfs_t* vfs,
-			 const char* path,
+			 const char* path_begin,
+			 const char* path_end,
 			 readfile_callback_t callback,
 			 void* arg)
 {
-  size_t path_size = strlen (path) + 1;
+  size_t path_size = path_end - path_begin + 1;
   readfile_context_t* c = malloc (sizeof (readfile_context_t));
   memset (c, 0, sizeof (readfile_context_t));
   c->vfs = vfs;
   c->path = malloc (path_size);
-  memcpy (c->path, path, path_size);
+  memcpy (c->path, path_begin, path_size - 1);
+  c->path[path_size - 1] = '\0';
 
   /* Start at the top of the tree. */
   c->vnode.aid = -1;
@@ -357,7 +369,8 @@ readfile_descend (void* arg,
     process_readfile_context (c);
     break;
   default:
-    /* TODO */
+    c->callback (c->arg, error, -1, -1);
+    destroy_readfile_context (c);
     break;
   }
 }
@@ -447,11 +460,12 @@ vfs_append (vfs_t* vfs,
 
 void
 vfs_readfile (vfs_t* vfs,
-	      const char* path,
+	      const char* path_begin,
+	      const char* path_end,
 	      readfile_callback_t callback,
 	      void* arg)
 {
-  readfile_context_t* c = create_readfile_context (vfs, path, callback, arg);
+  readfile_context_t* c = create_readfile_context (vfs, path_begin, path_end, callback, arg);
   process_readfile_context (c);
 }
 
@@ -460,7 +474,7 @@ vfs_schedule (const vfs_t* vfs)
 {
   /* Schedule file systems with an op. */
   for (fs_t* fs = vfs->fs_head; fs != 0; fs = fs->next) {
-    fs_schedule (vfs, fs);
+    fs_schedule (fs);
   }
 }
 

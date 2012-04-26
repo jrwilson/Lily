@@ -4,13 +4,11 @@
 # Copyright (C) 2012 Justin R. Wilson
 
 # Syntax:
-# name = create [-p] [-n name] path [OPTIONS...]
+# create [-p] name path [OPTIONS...]
 #   -p        Retain the permission of the parent
-#   -n name   Register the automaton with the given name
 # bind [-o param] [-i param] output oaction input iaction
 #   -o param  Specify the output parameter
 #   -i param  Specify the input parameter
-# name = lookup registry_name
 
 #
 #                      +-----------------+
@@ -25,11 +23,11 @@
 
 #bios = create -p /bin/bios
 
-#ps2_keyboard_mouse = create -p /bin/ps2_keyboard_mouse
-#terminal = create /bin/terminal
-#vga = create -p /bin/vga
+create -p ps2_keyboard_mouse /bin/ps2_keyboard_mouse
+create terminal /bin/terminal
+#create -p vga /bin/vga
 
-#bind ps2_keyboard_mouse *_out terminal *_in
+bind ps2_keyboard_mouse *_out terminal *_in
 #bind terminal *_out vga *_in
 
 #terminal1 = create /bin/ecma2unix

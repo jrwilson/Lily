@@ -269,16 +269,6 @@ initialize (void)
     
     /* TODO:  Do we need to make the root its own parent? */
 
-/*     response_bda = buffer_create (0); */
-/*     response_bdb = buffer_create (0); */
-/*     if (response_bda == -1 || */
-/* 	response_bdb == -1) { */
-/*       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create response buffers: %s", lily_error_string (lily_error)); */
-/*       logs (log_buffer); */
-/*       exit (-1); */
-/*     } */
-/*     vfs_fs_response_queue_init (&response_queue); */
-
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
 

@@ -3,13 +3,9 @@
 #include <string.h>
 #include <description.h>
 #include "vga_msg.h"
-#include "syslog.h"
-#include "kv_parse.h"
 
 #define INIT_NO 1
-#define STOP_NO 2
-#define SYSLOG_NO 3
-#define VGA_OP_NO 4
+#define VGA_OP_NO 2
 
 /* Assuming color. */
 #define CRT_ADDRESS_PORT 0x3D4
@@ -43,17 +39,11 @@
 /* Initialization flag. */
 static bool initialized = false;
 
-#define ERROR "vga: error: "
-#define INFO "info: error: "
-
-typedef enum {
-  RUN,
-  STOP,
-} state_t;
-static state_t state = RUN;
-
-static bd_t syslog_bd = -1;
-static buffer_file_t syslog_buffer;
+#define LOG_BUFFER_SIZE 128
+static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR __FILE__ ": error: "
+#define WARNING __FILE__ ": warning: "
+#define INFO __FILE__ ": info: "
 
 typedef struct {
   unsigned int ptr;
@@ -87,37 +77,6 @@ initialize (void)
   if (!initialized) {
     initialized = true;
     
-    /* Create the syslog buffer. */
-    syslog_bd = buffer_create (0);
-    if (syslog_bd == -1) {
-      exit (-1);
-    }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
-      exit (-1);
-    }
-
-    aid_t syslog_aid = lookups (SYSLOG_NAME);
-    if (syslog_aid != -1) {
-      /* Bind to the syslog. */
-
-      description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
-	exit (-1);
-      }
-      
-      action_desc_t syslog_text_in;
-      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
-	exit (-1);
-      }
-            
-      /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
-	exit (-1);
-      }
-
-      description_fini (&syslog_description);
-    }
-
     /* bd_t bda = getinita (); */
     /* bd_t bdb = getinitb (); */
 
@@ -228,9 +187,9 @@ initialize (void)
     /* Reserve the VGA ports.*/
     if (reserve_port (CRT_ADDRESS_PORT) != 0 ||
 	reserve_port (CRT_DATA_PORT) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not reserve I/O ports\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not reserve I/O ports: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
 
     /* /\* Map in the parameter table below the video memory. *\/ */
@@ -250,9 +209,9 @@ initialize (void)
     
     /* Map in the video memory. */
     if (map ((const void*)VGA_VIDEO_MEMORY_BEGIN, (const void*)VGA_VIDEO_MEMORY_BEGIN, VGA_VIDEO_MEMORY_SIZE) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not map vga video memory\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map vga video memory: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
     /* Clear the text region. */
     memset ((void*)VGA_TEXT_MEMORY_BEGIN, 0, VGA_TEXT_MEMORY_SIZE);
@@ -272,119 +231,61 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-/* stop
-   ----
-   Stop the automaton.
-   
-   Pre:  state == STOP and syslog_buffer is empty
-   Post: 
-*/
-static bool
-stop_precondition (void)
-{
-  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
-{
-  initialize ();
-
-  if (stop_precondition ()) {
-    exit (-1);
-  }
-  finish_internal ();
-}
-
-/* syslog
-   ------
-   Output error messages.
-   
-   Pre:  syslog_buffer is not empty
-   Post: syslog_buffer is empty
-*/
-static bool
-syslog_precondition (void)
-{
-  return buffer_file_size (&syslog_buffer) != 0;
-}
-
-BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
-{
-  initialize ();
-
-  if (syslog_precondition ()) {
-    buffer_file_truncate (&syslog_buffer);
-    finish_output (true, syslog_bd, -1);
-  }
-  else {
-    finish_output (false, -1, -1);
-  }
-}
-
 BEGIN_INPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_in", "vga_op_list", vga_op, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
-
-  if (state == RUN) {
-    vga_op_list_t vol;
-    if (vga_op_list_initr (&vol, bda, bdb) != 0) {
+  
+  vga_op_list_t vol;
+  if (vga_op_list_initr (&vol, bda, bdb) != 0) {
+    finish_input (bda, bdb);
+  }
+  
+  for (size_t i = 0; i != vol.count; ++i) {
+    vga_op_type_t type;
+    if (vga_op_list_next_op_type (&vol, &type) != 0) {
       finish_input (bda, bdb);
     }
     
-    for (size_t i = 0; i != vol.count; ++i) {
-      vga_op_type_t type;
-      if (vga_op_list_next_op_type (&vol, &type) != 0) {
-	finish_input (bda, bdb);
+    switch (type) {
+    case VGA_SET_CURSOR_LOCATION:
+      {
+	size_t location;
+	if (vga_op_list_read_set_cursor_location (&vol, &location) != 0) {
+	  finish_input (bda, bdb);
+	}
+	set_cursor_location (location);
       }
-      
-      switch (type) {
-      case VGA_SET_CURSOR_LOCATION:
-	{
-	  size_t location;
-	  if (vga_op_list_read_set_cursor_location (&vol, &location) != 0) {
-	    finish_input (bda, bdb);
-	  }
-	  set_cursor_location (location);
+      break;
+    case VGA_ASSIGN:
+      {
+	size_t address;
+	const void* data;
+	size_t size;
+	if (vga_op_list_read_assign (&vol, &address, &data, &size) != 0) {
+	  finish_input (bda, bdb);
 	}
-	break;
-      case VGA_ASSIGN:
-	{
-	  size_t address;
-	  const void* data;
-	  size_t size;
-	  if (vga_op_list_read_assign (&vol, &address, &data, &size) != 0) {
-	    finish_input (bda, bdb);
-	  }
-	  assign (address, data, size);
-	}
-	break;
-      case VGA_BASSIGN:
-	{
-	  size_t address;
-	  const void* data;
-	  size_t size;
-	  if (vga_op_list_read_bassign (&vol, &address, &data, &size) != 0) {
-	    finish_input (bda, bdb);
-	  }
-	  assign (address, data, size);
-	}
-	break;
-      default:
-	finish_input (bda, bdb);
+	assign (address, data, size);
       }
+      break;
+    case VGA_BASSIGN:
+      {
+	size_t address;
+	const void* data;
+	size_t size;
+	if (vga_op_list_read_bassign (&vol, &address, &data, &size) != 0) {
+	  finish_input (bda, bdb);
+	}
+	assign (address, data, size);
+      }
+      break;
+    default:
+      finish_input (bda, bdb);
     }
   }
-
+  
   finish_input (bda, bdb);
 }
 
 void
 do_schedule (void)
-{
-  if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
-  }
-  if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
-  }
-}
+{ }

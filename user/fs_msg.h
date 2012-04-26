@@ -49,7 +49,8 @@ vfs_append (vfs_t* vfs,
 
 void
 vfs_readfile (vfs_t* vfs,
-	      const char* path,
+	      const char* path_begin,
+	      const char* path_end,
 	      readfile_callback_t callback,
 	      void* arg);
 

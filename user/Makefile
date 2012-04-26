@@ -4,11 +4,12 @@ PROGRAMS=\
 syslog \
 tmpfs \
 finda \
-jsh
+jsh \
+ps2_keyboard_mouse \
+terminal \
+vga
 
-#ps2_keyboard_mouse \
-#terminal \
-#vga \
+
 #pci \
 #ps2_keyboard_mouse_test \
 #frtimer \
@@ -50,24 +51,23 @@ tmpfs : tmpfs.o cpio.o fs_msg.o
 finda : finda.o
 	$(CC) -o $@ $^
 
-jsh : jsh.o fs_msg.o de.o
+jsh : jsh.o fs_msg.o de.o constellation.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
-
-
-
-
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file
 
-ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
-	$(CC) -o $@ $^ -lbuffer_file
-
 terminal : terminal.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
-vga : vga.o vga_msg.o kv_parse.o
-	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
+vga : vga.o vga_msg.o
+	$(CC) -o $@ $^  -ldescription -lbuffer_file
+
+
+
+
+ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
 
 pci : pci.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem

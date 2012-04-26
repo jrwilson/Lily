@@ -3,9 +3,11 @@
 #include <dymem.h>
 #include <string.h>
 #include <description.h>
+#include <ctype.h>
 #include "fs_msg.h"
 #include "de.h"
 #include "environment.h"
+#include "constellation.h"
 
 /* TODO:  Improve the error handling. */
 
@@ -23,16 +25,19 @@
 /* Initialization flag. */
 static bool initialized = false;
 
+/* Constellation management. */
+static constellation_t constellation;
+
 /* Virtual file system. */
 static vfs_t vfs;
 
-static bd_t text_out_bd = -1;
-static buffer_file_t text_out_buffer;
+/* static bd_t text_out_bd = -1; */
+/* static buffer_file_t text_out_buffer; */
 
 /* static bool process_hold = false; */
 
-static bd_t com_out_bd = -1;
-static buffer_file_t com_out_buffer;
+/* static bd_t com_out_bd = -1; */
+/* static buffer_file_t com_out_buffer; */
 
 #define LOG_BUFFER_SIZE 128
 static char log_buffer[LOG_BUFFER_SIZE];
@@ -40,62 +45,56 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define WARNING __FILE__ ": warning: "
 #define INFO __FILE__ ": info: "
 
-typedef struct automaton automaton_t;
 typedef struct automaton_item automaton_item_t;
-typedef struct binding binding_t;
-typedef struct binding_item binding_item_t;
-
-struct automaton {
-  char* name;
-  aid_t aid;
-  char* path;
-  automaton_t* next;
-};
+/* typedef struct binding_item binding_item_t; */
 
 struct automaton_item {
   automaton_t* automaton;
+  char* name_begin;
+  char* name_end;
   automaton_item_t* next;
 };
 
-struct binding {
-  bid_t bid;
-  automaton_t* output_automaton;
-  ano_t output_action;
-  char* output_action_name;
-  int output_parameter;
-  automaton_t* input_automaton;
-  ano_t input_action;
-  char* input_action_name;
-  int input_parameter;
-  binding_t* next;
-};
+/* struct binding { */
+/*   bid_t bid; */
+/*   automaton_t* output_automaton; */
+/*   ano_t output_action; */
+/*   char* output_action_name; */
+/*   int output_parameter; */
+/*   automaton_t* input_automaton; */
+/*   ano_t input_action; */
+/*   char* input_action_name; */
+/*   int input_parameter; */
+/*   binding_t* next; */
+/* }; */
 
-struct binding_item {
-  binding_t* binding;
-  binding_item_t* next;
-};
+/* struct binding_item { */
+/*   binding_t* binding; */
+/*   binding_item_t* next; */
+/* }; */
 
 /* static automaton_t* this_automaton = 0; */
-/* static automaton_t* automata_head = 0; */
+static automaton_item_t* automaton_head = 0;
 /* static binding_t* bindings_head = 0; */
 
-/* static automaton_t* */
-/* create_automaton (const char* name, */
-/* 		  aid_t aid, */
-/* 		  const char* path) */
-/* { */
-/*   automaton_t* automaton = malloc (sizeof (automaton_t)); */
-/*   memset (automaton, 0, sizeof (automaton_t)); */
-/*   automaton->aid = aid; */
-/*   size_t size = strlen (name) + 1; */
-/*   automaton->name = malloc (size); */
-/*   memcpy (automaton->name, name, size); */
-/*   size = strlen (path) + 1; */
-/*   automaton->path = malloc (size); */
-/*   memcpy (automaton->path, path, size); */
-  
-/*   return automaton; */
-/* } */
+static automaton_item_t*
+create_automaton (automaton_t* a,
+		  const char* name_begin,
+		  const char* name_end)
+{
+  automaton_item_t* ai = malloc (sizeof (automaton_item_t));
+  memset (ai, 0, sizeof (automaton_item_t));
+  ai->automaton = a;
+  size_t name_size = name_end - name_begin;
+  ai->name_begin = malloc (name_size);
+  memcpy (ai->name_begin, name_begin, name_size);
+  ai->name_end = ai->name_begin + name_size;
+
+  ai->next = automaton_head;
+  automaton_head = ai;
+
+  return ai;
+}
 
 /* static void */
 /* destroy_automaton (automaton_t* automaton) */
@@ -105,17 +104,18 @@ struct binding_item {
 /*   free (automaton); */
 /* } */
 
-/* static automaton_t* */
-/* find_automaton (const char* name) */
-/* { */
-/*   automaton_t* automaton; */
-/*   for (automaton = automata_head; automaton != 0; automaton = automaton->next) { */
-/*     if (strcmp (automaton->name, name) == 0) { */
-/*       break; */
-/*     } */
-/*   } */
-/*   return automaton; */
-/* } */
+static automaton_item_t*
+find_automaton (const char* name_begin,
+		const char* name_end)
+{
+  automaton_item_t* automaton;
+  for (automaton = automaton_head; automaton != 0; automaton = automaton->next) {
+    if (pstrcmp (automaton->name_begin, automaton->name_end, name_begin, name_end) == 0) {
+      break;
+    }
+  }
+  return automaton;
+}
 
 /* static automaton_t* */
 /* find_automaton_aid (aid_t aid) */
@@ -216,15 +216,15 @@ struct binding_item {
   ========================
 */
 
-typedef struct string string_t;
-struct string {
-  char* str;
-  size_t size;
-  string_t* next;
-};
+/* typedef struct string string_t; */
+/* struct string { */
+/*   char* str; */
+/*   size_t size; */
+/*   string_t* next; */
+/* }; */
 
-static string_t* string_head = 0;
-static string_t** string_tail = &string_head;
+/* static string_t* string_head = 0; */
+/* static string_t** string_tail = &string_head; */
 
 /* static void */
 /* string_push_front (char* str, */
@@ -241,17 +241,17 @@ static string_t** string_tail = &string_head;
 /*   } */
 /* } */
 
-static void
-string_push_back (char* str,
-		  size_t size)
-{
-  string_t* s = malloc (sizeof (string_t));
-  s->str = str;
-  s->size = size;
-  s->next = 0;
-  *string_tail = s;
-  string_tail = &s->next;
-}
+/* static void */
+/* string_push_back (char* str, */
+/* 		  size_t size) */
+/* { */
+/*   string_t* s = malloc (sizeof (string_t)); */
+/*   s->str = str; */
+/*   s->size = size; */
+/*   s->next = 0; */
+/*   *string_tail = s; */
+/*   string_tail = &s->next; */
+/* } */
 
 /* static void */
 /* string_front (char** str, */
@@ -314,178 +314,37 @@ string_push_back (char* str,
   ======================
 */
 
-/*
-  Begin Scanner Section
-  =====================
-*/
-
-typedef enum {
-  SCAN_START,
-  SCAN_STRING,
-  SCAN_COMMENT,
-  SCAN_ERROR,
-} scan_state_t;
-
-/* static scan_state_t scan_state = SCAN_START; */
-/* static char* scan_string_copy = 0; */
-/* static char** scan_strings = 0; */
-/* static size_t scan_strings_size = 0; */
-/* static size_t scan_strings_capacity = 0; */
-
-/* Tokens
-
-   string - [a-zA-Z0-9_/-=*?!]+
-
-   whitespace - [ \t\0]
-
-   comment - #[^\n]*
- */
-
-/* static void */
-/* scanner_enter_string (char* str) */
-/* { */
-/*   if (scan_strings_size == scan_strings_capacity) { */
-/*     scan_strings_capacity = scan_strings_capacity * 2 + 1; */
-/*     scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (char*)); */
-/*   } */
-/*   scan_strings[scan_strings_size++] = str; */
-/* } */
-
-/* static void */
-/* scanner_put (char* ptr) */
-/* { */
-/*   const char c = *ptr; */
-
-/*   switch (scan_state) { */
-/*   case SCAN_START: */
-/*     if ((c >= 'a' && c <= 'z') || */
-/* 	(c >= 'A' && c <= 'Z') || */
-/* 	(c >= '0' && c <= '9') || */
-/* 	(c == '_') || */
-/* 	(c == '/') || */
-/* 	(c == '-') || */
-/* 	(c == '=') || */
-/* 	(c == '*') || */
-/* 	(c == '?') || */
-/* 	(c == '!')) { */
-/*       scanner_enter_string (ptr); */
-/*       scan_state = SCAN_STRING; */
-/*       break; */
-/*     } */
-
-/*     switch (c) { */
-/*     case '#': */
-/*       scan_state = SCAN_COMMENT; */
-/*       break; */
-/*     case ' ': */
-/*     case '\t': */
-/*     case 0: */
-/*       /\* Eat whitespace. *\/ */
-/*       scan_state = SCAN_START; */
-/*       break; */
-/*     default: */
-/*       scan_state = SCAN_ERROR; */
-/*     } */
-/*     break; */
-
-/*   case SCAN_STRING: */
-/*     if ((c >= 'a' && c <= 'z') || */
-/* 	(c >= 'A' && c <= 'Z') || */
-/* 	(c >= '0' && c <= '9') || */
-/* 	(c == '_') || */
-/* 	(c == '/') || */
-/* 	(c == '-') || */
-/* 	(c == '=') || */
-/* 	(c == '*') || */
-/* 	(c == '?') || */
-/* 	(c == '!')) { */
-/*       /\* Still scanning a string. *\/ */
-/*       scan_state = SCAN_STRING; */
-/*       break; */
-/*     } */
-
-/*     switch (c) { */
-/*     case '#': */
-/*       /\* Terminate the string. *\/ */
-/*       *ptr = 0; */
-/*       scan_state = SCAN_COMMENT; */
-/*       break; */
-/*     case ' ': */
-/*     case '\t': */
-/*     case 0: */
-/*       /\* Terminate the string. *\/ */
-/*       *ptr = 0; */
-/*       scan_state = SCAN_START; */
-/*       break; */
-/*     default: */
-/*       scan_state = SCAN_ERROR; */
-/*     } */
-/*     break; */
-
-/*   case SCAN_COMMENT: */
-/*     /\* Do nothing. *\/ */
-/*     break; */
-
-/*   case SCAN_ERROR: */
-/*     /\* Do nothing. *\/ */
-/*     break; */
-/*   } */
-/* } */
-
-/* static int */
-/* scanner_process (char* string, */
-/* 		 size_t size) */
-/* { */
-/*   scan_state = SCAN_START; */
-/*   free (scan_string_copy); */
-/*   scan_string_copy = malloc (size); */
-/*   memcpy (scan_string_copy, string, size); */
-
-/*   scan_strings_size = 0; */
-
-/*   size_t idx; */
-/*   for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) { */
-/*     scanner_put (scan_string_copy + idx); */
-/*     if (scan_state == SCAN_ERROR) { */
-/*       bfprintf (&text_out_buffer, "-> error near: %s\n", string + idx); */
-/*       return -1; */
-/*     } */
-/*   } */
-
-/*   return 0; */
-/* } */
-
-/*
-  End Scanner Section
-  ===================
-*/
+typedef struct {
+  const char* begin;
+  const char* end;
+} string_t;
 
 /*
   Begin Dispatch Section
   ======================
 */
 
-typedef struct com_item com_item_t;
-struct com_item {
-  aid_t aid;
-  char* str;
-  com_item_t* next;
-};
+/* typedef struct com_item com_item_t; */
+/* struct com_item { */
+/*   aid_t aid; */
+/*   char* str; */
+/*   com_item_t* next; */
+/* }; */
 
-static com_item_t* com_head = 0;
-static com_item_t** com_tail = &com_head;
+/* static com_item_t* com_head = 0; */
+/* static com_item_t** com_tail = &com_head; */
 
-static bool
-com_queue_empty (void)
-{
-  return com_head == 0;
-}
+/* static bool */
+/* com_queue_empty (void) */
+/* { */
+/*   return com_head == 0; */
+/* } */
 
-static aid_t
-com_queue_front (void)
-{
-  return com_head->aid;
-}
+/* static aid_t */
+/* com_queue_front (void) */
+/* { */
+/*   return com_head->aid; */
+/* } */
 
 /* static void */
 /* com_queue_push (aid_t aid, */
@@ -501,18 +360,18 @@ com_queue_front (void)
 /*   com_tail = &item->next; */
 /* } */
 
-static void
-com_queue_pop (void)
-{
-  com_item_t* item = com_head;
-  com_head = item->next;
-  if (com_head == 0) {
-    com_tail = &com_head;
-  }
+/* static void */
+/* com_queue_pop (void) */
+/* { */
+/*   com_item_t* item = com_head; */
+/*   com_head = item->next; */
+/*   if (com_head == 0) { */
+/*     com_tail = &com_head; */
+/*   } */
 
-  free (item->str);
-  free (item);
-}
+/*   free (item->str); */
+/*   free (item); */
+/* } */
 
 /* static const char* create_name = 0; */
 /* static bool create_retain_privilege = false; */
@@ -520,149 +379,93 @@ com_queue_pop (void)
 /* static const char* create_path = 0; */
 /* static size_t create_argv_idx = 0; */
 
-/* static void */
-/* create_callback (void* data, */
-/* 		 bd_t bda, */
-/* 		 bd_t bdb) */
-/* { */
-/*   vfs_error_t error; */
-/*   size_t size; */
-/*   if (read_vfs_readfile_response (bda, &error, &size) != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read vfs readfile response: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
+static void
+create_readfile_callback (void* arg,
+			  fs_error_t error,
+			  size_t size,
+			  bd_t bd)
+{
+  automaton_t* a = arg;
+  switch (error) {
+  case FS_SUCCESS:
+    automaton_create (a, bd);
+    buffer_destroy (bd);
+    break;
+  default:
+    /* TODO */
+    logs (ERROR "TODO:  could not read file");
+    break;
+  }
+}
 
-/*   if (error != VFS_SUCCESS) { */
-/*     bfprintf (&text_out_buffer, "-> file %s could not be read: %s\n", create_path, vfs_error_string (error)); */
-/*     return; */
-/*   } */
+static void
+create_usage (void)
+{
+  /* TODO */
+  logs (ERROR "TODO:  create_usage");
+  /* buffer_file_puts (&text_out_buffer, "-> usage: create [-p ] NAME PATH [OPTIONS...]\n"); */
+}
 
-/*   bd_t bd1 = buffer_create (0); */
-/*   if (bd1 == -1) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create argument buffer: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
+static bool
+create_ (const string_t* strings,
+	 size_t size)
+{
+  if (pstrcmp ("create", 0, strings[0].begin, strings[0].end) == 0) {
+    bool retain_privilege = false;
+    size_t name_idx;
+    size_t path_idx;
 
-/*   buffer_file_t bf; */
-/*   if (buffer_file_initw (&bf, bd1) != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize argument buffer: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
+    size_t idx = 1;
+    if (size > idx && pstrcmp ("-p", 0, strings[idx].begin, strings[idx].end) == 0) {
+      retain_privilege = true;
+      ++idx;
+    }
 
-/*   if (buffer_file_puts (&bf, current_line + (scan_strings[create_argv_idx] - scan_string_copy)) != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to argument buffer: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
+    /* The name should be next. */
+    if (size > idx) {
+      name_idx = idx;
+      ++idx;
+    }
+    else {
+      create_usage ();
+      return true;
+    }
 
-/*   aid_t aid = create (bdb, bd1, -1, create_retain_privilege); */
-/*   if (aid == -1) { */
-/*     buffer_destroy (bd1); */
-/*     bfprintf (&text_out_buffer, "-> error: create failed: %s\n", lily_error_string (lily_error)); */
-/*     return; */
-/*   } */
+    /* The path should be next. */
+    if (size > idx) {
+      path_idx = idx;
+      ++idx;
+    }
+    else {
+      create_usage ();
+      return true;
+    }
 
-/*   /\* if (subscribe_destroyed (aid, DESTROYED_NO) != 0) { *\/ */
-/*   /\*   buffer_destroy (bd1); *\/ */
-/*   /\*   bfprintf (&text_out_buffer, "-> error: subscribe failed: %s\n", lily_error_string (lily_error)); *\/ */
-/*   /\*   return; *\/ */
-/*   /\* } *\/ */
+    /* The rest are arguments. */
+    /* TODO:  Pass the arguments. */
 
-/*   /\* Add to the list of automata we know about. *\/ */
-/*   automaton_t* automaton = create_automaton (create_name, aid, create_path); */
+    if (find_automaton (strings[name_idx].begin, strings[name_idx].end) == 0) {
+      automaton_t* a = constellation_add_managed_automaton (&constellation, -1, retain_privilege);
+      vfs_readfile (&vfs, strings[path_idx].begin, strings[path_idx].end, create_readfile_callback, a);
+      create_automaton (a, strings[name_idx].begin, strings[name_idx].end);
+    }
+    else {
+      logs (ERROR "TODO:  name already taken");
+    }
 
-/*   automaton->next = automata_head; */
-/*   automata_head = automaton; */
+    return true;
+  }
 
-/*   buffer_destroy (bd1); */
-  
-/*   bfprintf (&text_out_buffer, "-> %s = %d\n", scan_strings[0], aid); */
-/* } */
+  return false;
+}
 
-/* static void */
-/* create_usage (void) */
-/* { */
-/*   buffer_file_puts (&text_out_buffer, "-> usage: NAME = create [-p -n NAME] create PATH [OPTIONS...]\n"); */
-/* } */
-
-/* static bool */
-/* create_ (void) */
-/* { */
-/*   if (scan_strings_size >= 1) { */
-/*     if (strcmp ("create", scan_strings[0]) == 0) { */
-/*       create_usage (); */
-/*       return true; */
-/*     } */
-/*   } */
-/*   if (scan_strings_size >= 3 && */
-/*       strcmp ("=", scan_strings[1]) == 0 && */
-/*       strcmp ("create", scan_strings[2]) == 0) { */
-
-/*     create_name = scan_strings[0]; */
-
-/*     if (find_automaton (create_name) != 0) { */
-/*       bfprintf (&text_out_buffer, "-> error: name %s is taken\n", create_name); */
-/*       return true; */
-/*     } */
-
-/*     size_t idx = 3; */
-    
-/*     /\* Parse the options. *\/ */
-/*     create_retain_privilege = false; */
-/*     create_register_name = 0; */
-    
-/*     for (;;) { */
-/*       if (idx >= scan_strings_size) { */
-/* 	create_usage (); */
-/* 	return -1; */
-/*       } */
-      
-/*       if (strcmp (scan_strings[idx], "-p") == 0) { */
-/* 	create_retain_privilege = true; */
-/* 	++idx; */
-/* 	continue; */
-/*       } */
-      
-/*       if (strcmp (scan_strings[idx], "-n") == 0) { */
-/* 	++idx; */
-/* 	if (idx >= scan_strings_size) { */
-/* 	  create_usage (); */
-/* 	  return -1; */
-/* 	} */
-	
-/* 	create_register_name = scan_strings[idx]; */
-/* 	++idx; */
-/*       } */
-      
-/*       break; */
-/*     } */
-
-/*     if (idx >= scan_strings_size) { */
-/*       create_usage (); */
-/*       return -1; */
-/*     } */
-/*     create_path = scan_strings[idx]; */
-/*     create_argv_idx = idx; */
-/*     ++idx; */
-
-/*     /\* Request the file. *\/ */
-
-/*     vfs_request_queue_push_readfile (&vfs_request_queue, create_path); */
-/*     callback_queue_push (&vfs_response_queue, create_callback, 0); */
-
-/*     return true; */
-/*   } */
-/*   return false; */
-/* } */
-
-/* static void */
-/* bind_usage (void) */
-/* { */
-/*   buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n"); */
-/* } */
+static void
+bind_usage (void)
+{
+  /* TODO */
+  logs (ERROR "TODO:  bind_usage");
+  /* buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n"); */
+}
 
 /* static void */
 /* single_bind (automaton_t* output_automaton, */
@@ -889,93 +692,119 @@ com_queue_pop (void)
 /*   description_fini (&input_description); */
 /* } */
 
-/* static bool */
-/* bind_ (void) */
-/* { */
-/*   if (scan_strings_size >= 1) { */
-/*     if (strcmp (scan_strings[0], "bind") == 0) { */
-/*       size_t idx = 1; */
+static bool
+bind_ (const string_t* strings,
+       size_t size)
+{
+  if (pstrcmp ("bind", 0, strings[0].begin, strings[0].end) == 0) {
+    automaton_item_t* output_automaton;
+    size_t output_action_idx;
+    int output_parameter = 0;
+    automaton_item_t* input_automaton;
+    size_t input_action_idx;
+    int input_parameter = 0;
 
-/*       /\* Parse the parameters. *\/ */
-/*       int output_parameter = 0; */
-/*       int input_parameter = 0; */
-      
-/*       for (;;) { */
-/* 	if (idx >= scan_strings_size) { */
-/* 	  bind_usage (); */
-/* 	  return true; */
-/* 	} */
-	
-/* 	if (strcmp (scan_strings[idx], "-o") == 0) { */
-/* 	  ++idx; */
-/* 	  if (idx >= scan_strings_size) { */
-/* 	    bind_usage (); */
-/* 	    return true; */
-/* 	  } */
-	  
-/* 	  output_parameter = atoi (scan_strings[idx]); */
-/* 	  ++idx; */
-/* 	  continue; */
-/* 	} */
-	
-/* 	if (strcmp (scan_strings[idx], "-i") == 0) { */
-/* 	  ++idx; */
-/* 	  if (idx >= scan_strings_size) { */
-/* 	    bind_usage (); */
-/* 	    return true; */
-/* 	  } */
-	  
-/* 	  input_parameter = atoi (scan_strings[idx]); */
-/* 	  ++idx; */
-/* 	} */
-	
-/* 	break; */
-/*       } */
-      
-/*       if (idx + 4 != scan_strings_size) { */
-/* 	bind_usage (); */
-/* 	return true; */
-/*       } */
-      
-/*       automaton_t* output_automaton = find_automaton (scan_strings[idx]); */
-/*       if (output_automaton == 0) { */
-/* 	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]); */
-/* 	return true; */
-/*       } */
-/*       ++idx; */
-      
-/*       const char* output_action_name = scan_strings[idx++]; */
-      
-/*       automaton_t* input_automaton = find_automaton (scan_strings[idx]); */
-/*       if (input_automaton == 0) { */
-/* 	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]); */
-/* 	return true; */
-/*       } */
-/*       ++idx; */
-      
-/*       const char* input_action_name = scan_strings[idx++]; */
+    size_t idx = 1;
+    if (size > idx && pstrcmp ("-o", 0, strings[idx].begin, strings[idx].end) == 0) {
+      ++idx;
 
-/*       /\* Are we globbing? *\/ */
-/*       const char* output_glob = strchr (output_action_name, '*'); */
-/*       const char* input_glob = strchr (input_action_name, '*'); */
+      if (size > idx) {
+	output_parameter = pstrtol (strings[idx].begin, strings[idx].end, 0, 0);
+	if (string_error != STRING_SUCCESS) {
+	  logs (ERROR "TODO:  could not parse output parameter");
+	  return true;
+	}
+	++idx;
+      }
+      else {
+	bind_usage ();
+	return true;
+      }
+    }
 
-/*       if (!((output_glob == 0 && input_glob == 0) || */
-/* 	   (output_glob != 0 && input_glob != 0))) { */
-/* 	buffer_file_puts (&text_out_buffer, "-> error: glob disagreement\n"); */
-/* 	return true; */
-/*       } */
+    if (size > idx && pstrcmp ("-i", 0, strings[idx].begin, strings[idx].end) == 0) {
+      ++idx;
 
-/*       if (output_glob != 0) { */
-/* 	glob_bind (output_automaton, output_action_name, output_glob, output_parameter, input_automaton, input_action_name, input_glob, input_parameter); */
-/*       } */
-/*       else { */
-/* 	single_bind (output_automaton, output_action_name, output_parameter, input_automaton, input_action_name, input_parameter); */
-/*       } */
-/*       return true; */
-/*     } */
-/*   } */
-/*   return false; */
-/* } */
+      if (size > idx) {
+	input_parameter = pstrtol (strings[idx].begin, strings[idx].end, 0, 0);
+	if (string_error != STRING_SUCCESS) {
+	  logs (ERROR "TODO:  could not parse input parameter");
+	  return true;
+	}
+	++idx;
+      }
+      else {
+	bind_usage ();
+	return true;
+      }
+    }
+
+    if (size > idx) {
+      output_automaton = find_automaton (strings[idx].begin, strings[idx].end);
+      if (output_automaton == 0) {
+	logs (ERROR "TODO:  output automaton not declared");
+	return true;
+      }
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
+
+    if (size > idx) {
+      output_action_idx = idx;
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
+
+    if (size > idx) {
+      input_automaton = find_automaton (strings[idx].begin, strings[idx].end);
+      if (input_automaton == 0) {
+	logs (ERROR "TODO:  input automaton not declared");
+	return true;
+      }
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
+
+    if (size > idx) {
+      input_action_idx = idx;
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
+    
+    /* Are we globbing? */
+    const char* output_glob = pstrchr (strings[output_action_idx].begin, strings[output_action_idx].end,'*');
+    const char* input_glob = pstrchr (strings[input_action_idx].begin, strings[input_action_idx].end, '*');
+
+    if (!((output_glob == strings[output_action_idx].end && input_glob == strings[input_action_idx].end) ||
+	  (output_glob != strings[output_action_idx].end && input_glob != strings[input_action_idx].end))) {
+      logs (ERROR "TODO:  glob disagreement");
+      return true;
+    }
+
+    if (output_glob == strings[output_action_idx].end) {
+      constellation_add_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, input_parameter);
+    }
+    else {
+      constellation_add_globbed_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, input_parameter);
+    }
+
+    return true;
+  }
+
+  return false;
+}
 
 /* static bool */
 /* unbind_ (void) */
@@ -1268,35 +1097,188 @@ com_queue_pop (void)
 /*   return false; */
 /* } */
 
-/* static bool */
-/* error_ (void) */
-/* { */
-/*   if (scan_strings_size != 0) { */
-/*     /\* Catch all. *\/ */
-/*     bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]); */
-/*   } */
-/*   return true; */
-/* } */
+static bool
+error_ (const string_t* strings,
+	size_t size)
+{
+  /* TODO */
+  logs ("error_");
+  /* if (scan_strings_size != 0) { */
+  /*   /\* Catch all. *\/ */
+  /*   bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]); */
+  /* } */
+  return true;
+}
 
-typedef bool (*dispatch_func_t) (void);
+typedef bool (*dispatch_func_t) (const string_t* strings,
+				 size_t size);
 
-/* static dispatch_func_t dispatch[] = { */
-/*   /\* create_, *\/ */
-/*   bind_, */
-/*   unbind_, */
-/*   destroy_, */
-/*   /\* lookup_, *\/ */
-/*   describe_, */
-/*   list_, */
-/*   com_, */
-/*   /\* Catch errors. *\/ */
-/*   error_, */
-/*   0 */
-/* }; */
+static dispatch_func_t dispatch[] = {
+  create_,
+  bind_,
+  /* unbind_, */
+  /* destroy_, */
+  /* /\* lookup_, *\/ */
+  /* describe_, */
+  /* list_, */
+  /* com_, */
+  /* Catch errors. */
+  error_,
+  0
+};
 
 /*
   End Dispatch Section
   ====================
+*/
+
+/*
+  Begin Scanner Section
+  =====================
+*/
+
+typedef enum {
+  SCAN_START,
+  SCAN_STRING,
+  SCAN_COMMENT,
+  SCAN_ACCEPT,
+} scan_state_t;
+
+static scan_state_t scan_state;
+static const char* scan_string_begin;
+static string_t* scan_strings;
+static size_t scan_strings_size = 0;
+static size_t scan_strings_capacity = 0;
+
+/* Tokens
+
+   string - [a-zA-Z0-9_/-=*?!]+
+
+   whitespace - [ \t\0]
+
+   comment - #[^\n]*
+ */
+
+static void
+scanner_reset (void)
+{
+  scan_state = SCAN_START;
+  scan_string_begin = 0;
+  scan_strings_size = 0;
+}
+
+static void
+scanner_push_string (const char* end)
+{
+  if (scan_strings_size == scan_strings_capacity) {
+    scan_strings_capacity = 2 * scan_strings_capacity + 1;
+    scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (string_t));
+  }
+  scan_strings[scan_strings_size].begin = scan_string_begin;
+  scan_strings[scan_strings_size].end = end;
+  ++scan_strings_size;
+  scan_string_begin = 0;
+}
+
+static void
+scanner_put (const char* ptr)
+{
+  const char c = *ptr;
+
+  switch (scan_state) {
+  case SCAN_START:
+    if (c == '\n') {
+      scan_state = SCAN_ACCEPT;
+    }
+    else if (c == '#') {
+      scan_state = SCAN_COMMENT;
+    }
+    else if (isalnum (c) || ispunct (c)) {
+      scan_string_begin = ptr;
+      scan_state = SCAN_STRING;
+    }
+    else {
+      scan_state = SCAN_START;
+    }
+    break;
+  case SCAN_STRING:
+    if (c == '\n') {
+      scanner_push_string (ptr);
+      scan_state = SCAN_ACCEPT;
+    }
+    else if (c == '#') {
+      scanner_push_string (ptr);
+      scan_state = SCAN_COMMENT;
+    }
+    else if (isalnum (c) || ispunct (c)) {
+      scan_state = SCAN_STRING;
+    }
+    else {
+      scanner_push_string (ptr);
+      scan_state = SCAN_START;
+    }
+    break;
+  case SCAN_COMMENT:
+    if (c == '\n') {
+      scan_state = SCAN_ACCEPT;
+    }
+    /* Otherwise, stay in SCAN_COMMENT. */
+    break;
+  case SCAN_ACCEPT:
+    /* Do nothing. */
+    break;
+  }
+}
+
+static void
+scanner_finalize (const char* end)
+{
+  if (scan_state == SCAN_STRING) {
+    /* We were in the middle of a string. */
+    scanner_push_string (end);
+  }
+  scan_state = SCAN_ACCEPT;
+}
+
+static int
+process (void)
+{
+  if (scan_strings_size != 0) {
+    for (size_t idx = 0; dispatch[idx] != 0; ++idx) {
+      if (dispatch[idx] (scan_strings, scan_strings_size)) {
+	break;
+      }
+    }
+  }
+  return 0;
+}
+
+static void
+interpret (const char* begin,
+	   size_t size)
+{
+  scanner_reset ();
+  const char* end = begin + size;
+  for (const char* ptr = begin; ptr != end; ++ptr) {
+    scanner_put (ptr);
+    if (scan_state == SCAN_ACCEPT) {
+      if (process () != 0) {
+	/* Error. */
+	return;
+      }
+      scanner_reset ();
+    }
+  }
+  scanner_finalize (end);
+  if (process () != 0) {
+    /* Error. */
+    return;
+  }
+}
+
+/*
+  End Scanner Section
+  ===================
 */
 
 static void
@@ -1308,43 +1290,21 @@ readscript_callback (void* arg,
   switch (error) {
   case FS_SUCCESS:
     {
-      const char* ptr = buffer_map (bd);
-      log (ptr, size);
+      const char* str = buffer_map (bd);
+      if (str == 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
+      
+      interpret (str, size);
+      buffer_unmap (bd);
     }
     break;
   default:
     /* TODO */
     break;
   }
-
-/*   vfs_error_t error; */
-/*   size_t size; */
-/*   if (read_vfs_readfile_response (bda, &error, &size) != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read vfs readfile response: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
-
-/*   if (error != VFS_SUCCESS) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read script: %s", vfs_error_string (error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
-
-/*   const char* str = buffer_map (bdb); */
-/*   if (str == 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
-  
-/*   char* str_copy = malloc (size + 1); */
-/*   memcpy (str_copy, str, size); */
-/*   /\* Terminate with newline. *\/ */
-/*   str_copy[size] = '\n'; */
-/*   string_push_front (str_copy, size + 1); */
-/*   buffer_unmap (bdb); */
-/*   process_hold = false; */
 }
 
 static void
@@ -1353,6 +1313,7 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    constellation_init (&constellation);
     vfs_init (&vfs, FS_REQUEST_NO, FS_RESPONSE_NO);
 
     bd_t bda = getinita ();
@@ -1393,7 +1354,7 @@ initialize (void)
 
       const char* script_name = de_string_val (de_get (root, "." ARGS "." "script"), 0);
       if (script_name != 0) {
-	vfs_readfile (&vfs, script_name, readscript_callback, 0);
+	vfs_readfile (&vfs, script_name, script_name + strlen (script_name), readscript_callback, 0);
       }
 
       snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d", de_integer_val (de_get (root, "." FINDA), -1));
@@ -1414,17 +1375,6 @@ initialize (void)
     	exit (-1);
       }
     }
-
-    /* vfs_request_bda = buffer_create (0); */
-    /* vfs_request_bdb = buffer_create (0); */
-    /* if (vfs_request_bda == -1 || */
-    /* 	vfs_request_bdb == -1) { */
-    /*   snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create vfs request buffers: %s", lily_error_string (lily_error)); */
-    /*   logs (log_buffer); */
-    /*   exit (-1); */
-    /* } */
-    /* vfs_request_queue_init (&vfs_request_queue); */
-    /* callback_queue_init (&vfs_response_queue); */
 
     /* aid_t aid = getaid (); */
 
@@ -1465,28 +1415,28 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
+/* BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
 
-  buffer_file_t input_buffer;
-  if (buffer_file_initr (&input_buffer, bda) != 0) {
-    finish_input (bda, bdb);
-  }
+/*   buffer_file_t input_buffer; */
+/*   if (buffer_file_initr (&input_buffer, bda) != 0) { */
+/*     finish_input (bda, bdb); */
+/*   } */
 
-  size_t size = buffer_file_size (&input_buffer);
-  const char* str = buffer_file_readp (&input_buffer, size);
-  if (str == 0) {
-    finish_input (bda, bdb);
-  }
+/*   size_t size = buffer_file_size (&input_buffer); */
+/*   const char* str = buffer_file_readp (&input_buffer, size); */
+/*   if (str == 0) { */
+/*     finish_input (bda, bdb); */
+/*   } */
 
-  char* str_copy = malloc (size);
-  memcpy (str_copy, str, size);
+/*   char* str_copy = malloc (size); */
+/*   memcpy (str_copy, str, size); */
 
-  string_push_back (str_copy, size);
+/*   string_push_back (str_copy, size); */
 
-  finish_input (bda, bdb);
-}
+/*   finish_input (bda, bdb); */
+/* } */
 
 /* static bool */
 /* process_line_precondition (void) */
@@ -1553,24 +1503,24 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
 /*   finish_internal (); */
 /* } */
 
-static bool
-text_out_precondition (void)
-{
-  return buffer_file_size (&text_out_buffer) != 0;
-}
+/* static bool */
+/* text_out_precondition (void) */
+/* { */
+/*   return buffer_file_size (&text_out_buffer) != 0; */
+/* } */
 
-BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param, size_t bc)
-{
-  initialize ();
+/* BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param, size_t bc) */
+/* { */
+/*   initialize (); */
 
-  if (text_out_precondition ()) {
-    buffer_file_truncate (&text_out_buffer);
-    finish_output (true, text_out_bd, -1);
-  }
-  else {
-    finish_output (false, -1, -1);
-  }
-}
+/*   if (text_out_precondition ()) { */
+/*     buffer_file_truncate (&text_out_buffer); */
+/*     finish_output (true, text_out_bd, -1); */
+/*   } */
+/*   else { */
+/*     finish_output (false, -1, -1); */
+/*   } */
+/* } */
 
 /* BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb) */
 /* { */
@@ -1604,53 +1554,53 @@ BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, 
 /*   finish_input (bda, bdb); */
 /* } */
 
-BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_requestx, ano_t ano, aid_t aid, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_request, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
   vfs_request (&vfs, aid);
 }
 
-BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_responsex, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_response, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
   vfs_response (&vfs, aid, bda, bdb);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid, size_t bc)
-{
-  initialize ();
+/* BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid, size_t bc) */
+/* { */
+/*   initialize (); */
 
-  if (!com_queue_empty () && aid == com_queue_front ()) {
-    buffer_file_truncate (&com_out_buffer);
-    buffer_file_puts (&com_out_buffer, com_head->str);
-    com_queue_pop ();
-    finish_output (true, com_out_bd, -1);
-  }
-  finish_output (false, -1, -1);
-}
+/*   if (!com_queue_empty () && aid == com_queue_front ()) { */
+/*     buffer_file_truncate (&com_out_buffer); */
+/*     buffer_file_puts (&com_out_buffer, com_head->str); */
+/*     com_queue_pop (); */
+/*     finish_output (true, com_out_bd, -1); */
+/*   } */
+/*   finish_output (false, -1, -1); */
+/* } */
 
-BEGIN_INPUT (AUTO_PARAMETER, COM_IN_NO, "com_in", "", com_in, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
+/* BEGIN_INPUT (AUTO_PARAMETER, COM_IN_NO, "com_in", "", com_in, ano_t ano, int param, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
 
-  buffer_file_t bf;
-  if (buffer_file_initr (&bf, bda) != 0) {
-    finish_input (bda, bdb);
-  }
+/*   buffer_file_t bf; */
+/*   if (buffer_file_initr (&bf, bda) != 0) { */
+/*     finish_input (bda, bdb); */
+/*   } */
 
-  size_t size = buffer_file_size (&bf);
-  if (size == 0) {
-    finish_input (bda, bdb);
-  }
-  const char* begin = buffer_file_readp (&bf, size);
-  if (begin == 0) {
-    finish_input (bda, bdb);
-  }
+/*   size_t size = buffer_file_size (&bf); */
+/*   if (size == 0) { */
+/*     finish_input (bda, bdb); */
+/*   } */
+/*   const char* begin = buffer_file_readp (&bf, size); */
+/*   if (begin == 0) { */
+/*     finish_input (bda, bdb); */
+/*   } */
 
-  buffer_file_write (&text_out_buffer, begin, size);
+/*   buffer_file_write (&text_out_buffer, begin, size); */
 
-  finish_input (bda, bdb);
-}
+/*   finish_input (bda, bdb); */
+/* } */
 
 void
 do_schedule (void)
@@ -1658,11 +1608,11 @@ do_schedule (void)
   /* if (process_line_precondition ()) { */
   /*   schedule (PROCESS_LINE_NO, 0); */
   /* } */
-  if (text_out_precondition ()) {
-    schedule (TEXT_OUT_NO, 0);
-  }
-  if (!com_queue_empty ()) {
-    schedule (COM_OUT_NO, com_queue_front ());
-  }
+  /* if (text_out_precondition ()) { */
+  /*   schedule (TEXT_OUT_NO, 0); */
+  /* } */
+  /* if (!com_queue_empty ()) { */
+  /*   schedule (COM_OUT_NO, com_queue_front ()); */
+  /* } */
   vfs_schedule (&vfs);
 }

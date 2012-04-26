@@ -412,9 +412,27 @@ printf (printf_t* ptr,
 	fbuf_reset (&fbuf);
 	++format;
       	break;
-      /* case 'p': */
-      /* 	/\* TODO *\/ */
-      /* 	break; */
+      case 'p':
+    	{
+    	  unsigned int num = va_arg (ap, unsigned int);
+	  puts (ptr, "0x");
+    	  if (num == 0) {
+    	    put (ptr, '0');
+    	  }
+    	  else {
+    	    while (num != 0) {
+    	      fbuf_push_right (&fbuf, to_hex (num % 16));
+    	      num /= 16;
+    	    }
+	    
+    	    while (!fbuf_empty_right (&fbuf)) {
+    	      put (ptr, fbuf_pop_right (&fbuf));
+    	    }
+    	  }
+    	}
+	fbuf_reset (&fbuf);
+        ++format;
+      	break;
       /* case 'n': */
       /* 	break; */
       case '%':

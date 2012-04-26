@@ -12,6 +12,30 @@ typedef enum {
 
 extern string_error_t string_error;
 
+int
+pstrcmp (const char* s1_begin,
+	 const char* s1_end,
+	 const char* s2_begin,
+	 const char* s2_end);
+
+int
+pstrncmp (const char* s1_begin,
+	  const char* s1_end,
+	  const char* s2_begin,
+	  const char* s2_end,
+	  size_t n);
+
+char*
+pstrchr (const char* s_begin,
+	 const char* s_end,
+	 int c);
+
+long int
+pstrtol (const char* begin,
+	 const char* end,
+	 char** endptr,
+	 int base);
+
 char*
 strcpy (char* dest,
 	const char* src);

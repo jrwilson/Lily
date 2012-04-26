@@ -171,7 +171,7 @@ initialize (void)
       logs (log_buffer);
       exit (-1);
     }
-    aid_t jsh_aid = create (jsh_bd, de_bd, -1, false);
+    aid_t jsh_aid = create (jsh_bd, de_bd, -1, true);
     if (jsh_aid == -1) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create jsh automaton: %s", lily_error_string (lily_error));
       logs (log_buffer);
