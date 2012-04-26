@@ -6,7 +6,6 @@ tmpfs \
 finda \
 jsh
 
-#vfs \
 #ps2_keyboard_mouse \
 #terminal \
 #vga \
@@ -46,20 +45,17 @@ syslog : syslog.o
 	$(CC) -o $@ $^ -lbuffer_file
 
 tmpfs : tmpfs.o cpio.o fs_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 finda : finda.o
 	$(CC) -o $@ $^
 
-jsh : jsh.o fs_msg.o kv_parse.o callback_queue.o de.o
+jsh : jsh.o fs_msg.o de.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 
 
 
-
-vfs : vfs.o callback_queue.o vfs_msg.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file

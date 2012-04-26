@@ -4,542 +4,10 @@
 #include <string.h>
 #include <description.h>
 #include "fs_msg.h"
-#include "callback_queue.h"
-#include "kv_parse.h"
 #include "de.h"
 #include "environment.h"
 
-typedef struct fs_op fs_op_t;
-typedef struct fs fs_t;
-typedef struct redirect redirect_t;
-typedef struct vfs vfs_t;
-
-typedef void (*descend_callback_t) (void* arg, fs_error_t error, fs_nodeid_t nodeid);
-typedef void (*readfile_callback_t) (void* arg, fs_error_t error, size_t size, bd_t bd);
-
-struct fs_op {
-  fs_type_t type;
-  union {
-    struct {
-      fs_nodeid_t nodeid;
-      const char* begin;
-      const char* end;
-      descend_callback_t callback;
-      void* arg;
-    } descend;
-    struct {
-      fs_nodeid_t nodeid;
-      readfile_callback_t callback;
-      void* arg;
-    } readfile;
-  } u;
-  fs_op_t* next;
-};
-
-struct fs {
-  size_t refcount;
-  aid_t aid;
-  bool bound;
-  bd_t request_bda;
-  bd_t request_bdb;
-  buffer_file_t request_buffer;
-  bool sent;
-  fs_op_t* op_head;
-  fs_op_t** op_tail;
-  fs_t* next;
-};
-
-/* A vnode represents an entry in a virtual file system. */
-typedef struct {
-  aid_t aid;
-  fs_nodeid_t nodeid;
-} vnode_t;
-
-struct redirect {
-  vnode_t from;
-  vnode_t to;
-  redirect_t* next;
-};
-
-struct vfs {
-  ano_t request;
-  ano_t response;
-  fs_t* fs_head;
-  redirect_t* redirect_head;
-  redirect_t** redirect_tail;
-};
-
-static bool
-vnode_equal (const vnode_t* x,
-	     const vnode_t* y)
-{
-  return x->aid == y->aid && x->nodeid == y->nodeid;
-}
-
-static fs_t*
-find_fs (const vfs_t* vfs,
-	 aid_t aid)
-{
-  fs_t* fs;
-  for (fs = vfs->fs_head; fs != 0; fs = fs->next) {
-    if (fs->aid == aid) {
-      break;
-    }
-  }
-
-  return fs;
-}
-
-static fs_t*
-create_fs (vfs_t* vfs,
-	   aid_t aid)
-{
-  /* Create the file system. */
-  fs_t* fs = malloc (sizeof (fs_t));
-  memset (fs, 0, sizeof (fs_t));
-  fs->refcount = 0;
-  fs->aid = aid;
-  fs->bound = true;
-  fs->op_tail = &fs->op_head;
-  fs->request_bda = buffer_create (0);
-  fs->request_bdb = buffer_create (0);
-  buffer_file_initw (&fs->request_buffer, fs->request_bda);
-  fs->sent = false;
-
-  /* Insert into the list. */
-  fs->next = vfs->fs_head;
-  vfs->fs_head = fs;
-
-  /* Bind. */
-  description_t description;
-  if (description_init (&description, aid) != 0) {
-    /* Could not describe. */
-    fs->bound = false;
-  }
-
-  action_desc_t request;
-  if (description_read_name (&description, &request, FS_REQUEST_NAME) != 0) {
-    fs->bound = false;
-  }
-  
-  action_desc_t response;
-  if (description_read_name (&description, &response, FS_RESPONSE_NAME) != 0) {
-    fs->bound = false;
-  }
-  
-  aid_t this_aid = getaid ();
-  if (bind (aid, response.number, 0, this_aid, vfs->response, 0) == -1 ||
-      bind (this_aid, vfs->request, 0, aid, request.number, 0) == -1) {
-    fs->bound = false;
-  }
-  
-  description_fini (&description);
-
-  return fs;
-}
-
-static void
-fs_incref (fs_t* fs)
-{
-  ++fs->refcount;
-}
-
-static void
-fs_decref (fs_t* fs)
-{
-  /* TODO */
-  --fs->refcount;
-}
-
-static void
-fs_op_push (fs_t* fs,
-	    fs_op_t* op)
-{
-  *fs->op_tail = op;
-  fs->op_tail = &op->next;
-  fs_incref (fs);
-}
-
-static void
-fs_op_pop (fs_t* fs)
-{
-  fs_op_t* op = fs->op_head;
-  fs->op_head = op->next;
-  if (fs->op_head == 0) {
-    fs->op_tail = &fs->op_head;
-  }
-  free (op);
-  fs_decref (fs);
-}
-
-static bool
-fs_op_empty (const fs_t* fs)
-{
-  return fs->op_head == 0;
-}
-
-static bool
-fs_request_precondition (const fs_t* fs)
-{
-  return !fs->sent && !fs_op_empty (fs);
-}
-
-static void
-fs_request (fs_t* fs)
-{
-  if (fs_request_precondition (fs)) {
-    buffer_file_truncate (&fs->request_buffer);
-    /* TODO */
-    buffer_resize (fs->request_bdb, 0);
-
-    fs_op_t* op = fs->op_head;
-    switch (op->type) {
-    case FS_DESCEND:
-      /* TODO */
-      fs_descend_request_write (&fs->request_buffer, op->u.descend.nodeid, op->u.descend.begin, op->u.descend.end - op->u.descend.begin);
-      break;
-    case FS_READFILE:
-      /* TODO */
-      fs_readfile_request_write (&fs->request_buffer, op->u.readfile.nodeid);
-      break;
-    }
-
-    fs->sent = true;
-    finish_output (true, fs->request_bda, fs->request_bdb);
-  }
-  else {
-    finish_output (false, -1, -1);
-  }
-}
-
-static void
-fs_response (fs_t* fs,
-	     bd_t bda,
-	     bd_t bdb)
-{
-  if (!fs->sent) {
-    /* Response when none was expected. */
-    finish_input (bda, bdb);
-  }
-
-  buffer_file_t buffer;
-  if (buffer_file_initr (&buffer, bda) != 0) {
-    /* TODO */
-    finish_input (bda, bdb);
-  }    
-
-  fs_op_t* op = fs->op_head;
-  switch (op->type) {
-  case FS_DESCEND:
-    {
-      fs_error_t error;
-      fs_nodeid_t nodeid;
-      if (fs_descend_response_read (&buffer, &error, &nodeid) == 0) {
-	op->u.descend.callback (op->u.descend.arg, error, nodeid);
-      }
-      else {
-	/* TODO */
-      }
-    }
-    break;
-  case FS_READFILE:
-  {
-      fs_error_t error;
-      size_t size;
-      if (fs_readfile_response_read (&buffer, &error, &size) == 0 &&
-	  buffer_size (bdb) >= size_to_pages (size)) {
-	op->u.readfile.callback (op->u.readfile.arg, error, size, bdb);
-      }
-      else {
-	/* TODO */
-      }
-    }
-      break;
-  }
-  
-  fs_op_pop (fs);
-  fs->sent = false;
-
-  finish_input (bda, bdb);
-}
-
-static void
-fs_schedule (const vfs_t* vfs,
-	     const fs_t* fs)
-{
-  if (fs_request_precondition (fs)) {
-    schedule (vfs->request, fs->aid);
-  }
-}
-
-static void
-fs_descend (fs_t* fs,
-	    fs_nodeid_t nodeid,
-	    const char* begin,
-	    const char* end,
-	    descend_callback_t callback,
-	    void* arg)
-{
-  /* TODO:  What if we aren't bound? */
-
-  fs_op_t* op = malloc (sizeof (fs_op_t));
-  memset (op, 0, sizeof (fs_op_t));
-  op->type = FS_DESCEND;
-  op->u.descend.nodeid = nodeid;
-  op->u.descend.begin = begin;
-  op->u.descend.end = end;
-  op->u.descend.callback = callback;
-  op->u.descend.arg = arg;
-  fs_op_push (fs, op);
-}
-
-static void
-fs_readfile (fs_t* fs,
-	     fs_nodeid_t nodeid,
-	     readfile_callback_t callback,
-	     void* arg)
-{
-  /* TODO:  What if we aren't bound? */
-
-  fs_op_t* op = malloc (sizeof (fs_op_t));
-  memset (op, 0, sizeof (fs_op_t));
-  op->type = FS_READFILE;
-  op->u.readfile.nodeid = nodeid;
-  op->u.readfile.callback = callback;
-  op->u.readfile.arg = arg;
-  fs_op_push (fs, op);
-}
-
-static void
-vfs_init (vfs_t* vfs,
-	  ano_t request,
-	  ano_t response)
-{
-  vfs->request = request;
-  vfs->response = response;
-  vfs->redirect_tail = &vfs->redirect_head;
-}
-
-static int
-vfs_append (vfs_t* vfs,
-	    aid_t from_aid,
-	    fs_nodeid_t from_nodeid,
-	    aid_t to_aid,
-	    fs_nodeid_t to_nodeid)
-{
-  /* Do we have a file system for to_aid? */
-  fs_t* to_fs = find_fs (vfs, to_aid);
-  if (to_fs == 0) {
-    to_fs = create_fs (vfs, to_aid);
-  }
-  fs_incref (to_fs);
-
-  /* Create the redirect. */
-  redirect_t* r = malloc (sizeof (redirect_t));
-  memset (r, 0, sizeof (redirect_t));
-  r->from.aid = from_aid;
-  r->from.nodeid = from_nodeid;
-  r->to.aid = to_aid;
-  r->to.nodeid = to_nodeid;
-
-  /* Insert into the list. */
-  *vfs->redirect_tail = r;
-  vfs->redirect_tail = &r->next;
-
-  if (to_fs->bound) {
-    return 0;
-  }
-  else {
-    return -1;
-  }
-}
-
-typedef struct {
-  vfs_t* vfs;
-  char* path;
-  vnode_t vnode;
-  const char* begin;
-} readfile_context_t;
-
-static readfile_context_t*
-create_readfile_context (vfs_t* vfs,
-			 const char* path)
-{
-  size_t path_size = strlen (path) + 1;
-  readfile_context_t* c = malloc (sizeof (readfile_context_t));
-  memset (c, 0, sizeof (readfile_context_t));
-  c->vfs = vfs;
-  c->path = malloc (path_size);
-  memcpy (c->path, path, path_size);
-
-  /* Start at the top of the tree. */
-  c->vnode.aid = -1;
-  c->vnode.nodeid = -1;
-  c->begin = c->path;
-
-  return c;
-}
-
-static void
-readfile_readfile (void* arg,
-		   fs_error_t error,
-		   size_t size,
-		   bd_t bdb)
-{
-  logs ("READFILE_READFILE\n");
-}
-
-static void
-process_readfile_context (readfile_context_t* c);
-
-static void
-readfile_descend (void* arg,
-		  fs_error_t error,
-		  fs_nodeid_t nodeid)
-{
-  readfile_context_t* c = arg;
-  switch (error) {
-  case FS_SUCCESS:
-    c->vnode.nodeid = nodeid;
-    process_readfile_context (c);
-    break;
-  default:
-    /* TODO */
-    break;
-  }
-}
-
-static void
-process_readfile_context (readfile_context_t* c)
-{
-  if (*c->begin == '\0') {
-    fs_t* fs = find_fs (c->vfs, c->vnode.aid);
-    fs_readfile (fs, c->vnode.nodeid, readfile_readfile, c);
-  }
-  else if (*c->begin == '/') {
-    ++c->begin;
-    /* Redirect. */
-    /* TODO: Add a counter to avoid infinite loop. */
-    redirect_t* r = c->vfs->redirect_head;;
-    while (r != 0) {
-      if (vnode_equal (&r->from, &c->vnode)) {
-	c->vnode = r->to;
-	/* Start over. */
-	r = c->vfs->redirect_head;
-      }
-      else {
-	r = r->next;
-      }
-    }
-
-    fs_t* fs = find_fs (c->vfs, c->vnode.aid);
-    
-    const char* end = strchr (c->begin, '/');
-    if (end == NULL) {
-      end = c->begin + strlen (c->begin);
-    }
-    
-    fs_descend (fs, c->vnode.nodeid, c->begin, end, readfile_descend, c);
-    c->begin = end;
-  }
-  else {
-    /* TODO */ 
-    logs ("BAD PATH\n");
-  }
-}
-
-static void
-vfs_readfile (vfs_t* vfs,
-	      const char* path,
-	      callback_t callback,
-	      void* arg)
-{
-  readfile_context_t* c = create_readfile_context (vfs, path);
-  process_readfile_context (c);
-}
-
-static void
-vfs_schedule (const vfs_t* vfs)
-{
-  /* Schedule file systems with an op. */
-  for (fs_t* fs = vfs->fs_head; fs != 0; fs = fs->next) {
-    fs_schedule (vfs, fs);
-  }
-}
-
-static void
-vfs_request (vfs_t* vfs,
-	     aid_t aid)
-{
-  fs_t* fs = find_fs (vfs, aid);
-
-  if (fs != 0) {
-    fs_request (fs);
-  }
-  else {
-    finish_output (false, -1, -1);
-  }
-}
-
-static void
-vfs_response (vfs_t* vfs,
-	      aid_t aid,
-	      bd_t bda,
-	      bd_t bdb)
-{
-  fs_t* fs = find_fs (vfs, aid);
-
-  if (fs != 0) {
-    fs_response (fs, bda, bdb);
-  }
-  else {
-    finish_input (bda, bdb);
-  }
-}
-
 /* TODO:  Improve the error handling. */
-
-/* TODO:  This is wrong on multiple levels. */
-static int
-atoi (const char* s)
-{
-  bool negate = false;
-  int retval = 0;
-
-  if (*s == '-') {
-    negate = true;
-  }
-
-  while (*s != 0) {
-    switch (*s) {
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-      retval *= 10;
-      retval += (*s - '0');
-      break;
-    default:
-      goto out;
-    }
-    ++s;
-  }
-
- out:
-
-  if (negate) {
-    return -retval;
-  }
-  else {
-    return retval;
-  }
-}
 
 #define INIT_NO 1
 #define TEXT_IN_NO 3
@@ -561,9 +29,7 @@ static vfs_t vfs;
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
 
-/* static vfs_request_queue_t vfs_request_queue; */
-static callback_queue_t vfs_response_queue;
-static bool process_hold = false;
+/* static bool process_hold = false; */
 
 static bd_t com_out_bd = -1;
 static buffer_file_t com_out_buffer;
@@ -609,47 +75,47 @@ struct binding_item {
   binding_item_t* next;
 };
 
-static automaton_t* this_automaton = 0;
-static automaton_t* automata_head = 0;
-static binding_t* bindings_head = 0;
+/* static automaton_t* this_automaton = 0; */
+/* static automaton_t* automata_head = 0; */
+/* static binding_t* bindings_head = 0; */
 
-static automaton_t*
-create_automaton (const char* name,
-		  aid_t aid,
-		  const char* path)
-{
-  automaton_t* automaton = malloc (sizeof (automaton_t));
-  memset (automaton, 0, sizeof (automaton_t));
-  automaton->aid = aid;
-  size_t size = strlen (name) + 1;
-  automaton->name = malloc (size);
-  memcpy (automaton->name, name, size);
-  size = strlen (path) + 1;
-  automaton->path = malloc (size);
-  memcpy (automaton->path, path, size);
+/* static automaton_t* */
+/* create_automaton (const char* name, */
+/* 		  aid_t aid, */
+/* 		  const char* path) */
+/* { */
+/*   automaton_t* automaton = malloc (sizeof (automaton_t)); */
+/*   memset (automaton, 0, sizeof (automaton_t)); */
+/*   automaton->aid = aid; */
+/*   size_t size = strlen (name) + 1; */
+/*   automaton->name = malloc (size); */
+/*   memcpy (automaton->name, name, size); */
+/*   size = strlen (path) + 1; */
+/*   automaton->path = malloc (size); */
+/*   memcpy (automaton->path, path, size); */
   
-  return automaton;
-}
+/*   return automaton; */
+/* } */
 
-static void
-destroy_automaton (automaton_t* automaton)
-{
-  free (automaton->name);
-  free (automaton->path);
-  free (automaton);
-}
+/* static void */
+/* destroy_automaton (automaton_t* automaton) */
+/* { */
+/*   free (automaton->name); */
+/*   free (automaton->path); */
+/*   free (automaton); */
+/* } */
 
-static automaton_t*
-find_automaton (const char* name)
-{
-  automaton_t* automaton;
-  for (automaton = automata_head; automaton != 0; automaton = automaton->next) {
-    if (strcmp (automaton->name, name) == 0) {
-      break;
-    }
-  }
-  return automaton;
-}
+/* static automaton_t* */
+/* find_automaton (const char* name) */
+/* { */
+/*   automaton_t* automaton; */
+/*   for (automaton = automata_head; automaton != 0; automaton = automaton->next) { */
+/*     if (strcmp (automaton->name, name) == 0) { */
+/*       break; */
+/*     } */
+/*   } */
+/*   return automaton; */
+/* } */
 
 /* static automaton_t* */
 /* find_automaton_aid (aid_t aid) */
@@ -663,87 +129,87 @@ find_automaton (const char* name)
 /*   return automaton; */
 /* } */
 
-static binding_t*
-create_binding (bid_t bid,
-		automaton_t* output_automaton,
-		ano_t output_action,
-		const char* output_action_name,
-		int output_parameter,
-		automaton_t* input_automaton,
-		ano_t input_action,
-		const char* input_action_name,
-		int input_parameter)
-{
-  binding_t* binding = malloc (sizeof (binding_t));
-  memset (binding, 0, sizeof (binding_t));
+/* static binding_t* */
+/* create_binding (bid_t bid, */
+/* 		automaton_t* output_automaton, */
+/* 		ano_t output_action, */
+/* 		const char* output_action_name, */
+/* 		int output_parameter, */
+/* 		automaton_t* input_automaton, */
+/* 		ano_t input_action, */
+/* 		const char* input_action_name, */
+/* 		int input_parameter) */
+/* { */
+/*   binding_t* binding = malloc (sizeof (binding_t)); */
+/*   memset (binding, 0, sizeof (binding_t)); */
 
-  binding->bid = bid;
-  binding->output_automaton = output_automaton;
-  binding->output_action = output_action;
-  size_t size = strlen (output_action_name) + 1;
-  binding->output_action_name = malloc (size);
-  memcpy (binding->output_action_name, output_action_name, size);
-  binding->output_parameter = output_parameter;
-  binding->input_automaton = input_automaton;
-  binding->input_action = input_action;
-  size = strlen (input_action_name) + 1;
-  binding->input_action_name = malloc (size);
-  memcpy (binding->input_action_name, input_action_name, size);
-  binding->input_parameter = input_parameter;
+/*   binding->bid = bid; */
+/*   binding->output_automaton = output_automaton; */
+/*   binding->output_action = output_action; */
+/*   size_t size = strlen (output_action_name) + 1; */
+/*   binding->output_action_name = malloc (size); */
+/*   memcpy (binding->output_action_name, output_action_name, size); */
+/*   binding->output_parameter = output_parameter; */
+/*   binding->input_automaton = input_automaton; */
+/*   binding->input_action = input_action; */
+/*   size = strlen (input_action_name) + 1; */
+/*   binding->input_action_name = malloc (size); */
+/*   memcpy (binding->input_action_name, input_action_name, size); */
+/*   binding->input_parameter = input_parameter; */
 
-  return binding;
-}
+/*   return binding; */
+/* } */
 
-static void
-destroy_binding (binding_t* binding)
-{
-  free (binding->output_action_name);
-  free (binding->input_action_name);
-  free (binding);
-}
+/* static void */
+/* destroy_binding (binding_t* binding) */
+/* { */
+/*   free (binding->output_action_name); */
+/*   free (binding->input_action_name); */
+/*   free (binding); */
+/* } */
 
-static void
-unbound_ (binding_t** ptr)
-{
-  if (*ptr != 0) {
-    binding_t* binding = *ptr;
-    *ptr = binding->next;
+/* static void */
+/* unbound_ (binding_t** ptr) */
+/* { */
+/*   if (*ptr != 0) { */
+/*     binding_t* binding = *ptr; */
+/*     *ptr = binding->next; */
     
-    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+/*     bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter); */
     
-    destroy_binding (binding);
-  }
-}
+/*     destroy_binding (binding); */
+/*   } */
+/* } */
 
-static void
-destroyed_ (automaton_t** aptr)
-{
-  if (*aptr != 0) {
-    automaton_t* automaton = *aptr;
-    *aptr = automaton->next;
+/* static void */
+/* destroyed_ (automaton_t** aptr) */
+/* { */
+/*   if (*aptr != 0) { */
+/*     automaton_t* automaton = *aptr; */
+/*     *aptr = automaton->next; */
 
-    /* Remove the bindings. */
-    binding_t** bptr = &bindings_head;
-    while (*bptr != 0) {
-      if ((*bptr)->output_automaton == automaton ||
-	  (*bptr)->input_automaton == automaton) {
-	binding_t* binding = *bptr;
-	*bptr = binding->next;
+/*     /\* Remove the bindings. *\/ */
+/*     binding_t** bptr = &bindings_head; */
+/*     while (*bptr != 0) { */
+/*       if ((*bptr)->output_automaton == automaton || */
+/* 	  (*bptr)->input_automaton == automaton) { */
+/* 	binding_t* binding = *bptr; */
+/* 	*bptr = binding->next; */
 
-	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
+/* 	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d) unbound\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter); */
 
-	destroy_binding (binding);
-      }
-      else {
-	bptr = &(*bptr)->next;
-      }
-    }
+/* 	destroy_binding (binding); */
+/*       } */
+/*       else { */
+/* 	bptr = &(*bptr)->next; */
+/*       } */
+/*     } */
 
-    bfprintf (&text_out_buffer, "-> %d: destroyed\n", automaton->aid);
+/*     bfprintf (&text_out_buffer, "-> %d: destroyed\n", automaton->aid); */
 
-    destroy_automaton (automaton);
-  }
-}
+/*     destroy_automaton (automaton); */
+/*   } */
+/* } */
 
 /*
   Begin Line Queue Section
@@ -787,61 +253,61 @@ string_push_back (char* str,
   string_tail = &s->next;
 }
 
-static void
-string_front (char** str,
-	      size_t* size)
-{
-  *str = string_head->str;
-  *size = string_head->size;
-}
+/* static void */
+/* string_front (char** str, */
+/* 	      size_t* size) */
+/* { */
+/*   *str = string_head->str; */
+/*   *size = string_head->size; */
+/* } */
 
-static void
-string_pop (void)
-{
-  string_t* s = string_head;
-  string_head = s->next;
-  if (string_head == 0) {
-    string_tail = &string_head;
-  }
+/* static void */
+/* string_pop (void) */
+/* { */
+/*   string_t* s = string_head; */
+/*   string_head = s->next; */
+/*   if (string_head == 0) { */
+/*     string_tail = &string_head; */
+/*   } */
 
-  free (s);
-}
+/*   free (s); */
+/* } */
 
-static bool
-string_empty (void)
-{
-  return string_head == 0;
-}
+/* static bool */
+/* string_empty (void) */
+/* { */
+/*   return string_head == 0; */
+/* } */
 
-static size_t current_string_idx = 0;
+/* static size_t current_string_idx = 0; */
 
-static char* current_line = 0;
-static size_t current_line_size = 0;
-static size_t current_line_capacity = 0;
+/* static char* current_line = 0; */
+/* static size_t current_line_size = 0; */
+/* static size_t current_line_capacity = 0; */
 
-static void
-line_append (char c)
-{
-  if (current_line_size == current_line_capacity) {
-    current_line_capacity = 2 * current_line_capacity + 1;
-    current_line = realloc (current_line, current_line_capacity);
-  }
-  current_line[current_line_size++] = c;
-}
+/* static void */
+/* line_append (char c) */
+/* { */
+/*   if (current_line_size == current_line_capacity) { */
+/*     current_line_capacity = 2 * current_line_capacity + 1; */
+/*     current_line = realloc (current_line, current_line_capacity); */
+/*   } */
+/*   current_line[current_line_size++] = c; */
+/* } */
 
-static void
-line_back (void)
-{
-  if (current_line_size != 0) {
-    --current_line_size;
-  }
-}
+/* static void */
+/* line_back (void) */
+/* { */
+/*   if (current_line_size != 0) { */
+/*     --current_line_size; */
+/*   } */
+/* } */
 
-static void
-line_reset (void)
-{
-  current_line_size = 0;
-}
+/* static void */
+/* line_reset (void) */
+/* { */
+/*   current_line_size = 0; */
+/* } */
 
 /*
   End Line Queue Section
@@ -860,11 +326,11 @@ typedef enum {
   SCAN_ERROR,
 } scan_state_t;
 
-static scan_state_t scan_state = SCAN_START;
-static char* scan_string_copy = 0;
-static char** scan_strings = 0;
-static size_t scan_strings_size = 0;
-static size_t scan_strings_capacity = 0;
+/* static scan_state_t scan_state = SCAN_START; */
+/* static char* scan_string_copy = 0; */
+/* static char** scan_strings = 0; */
+/* static size_t scan_strings_size = 0; */
+/* static size_t scan_strings_capacity = 0; */
 
 /* Tokens
 
@@ -875,119 +341,119 @@ static size_t scan_strings_capacity = 0;
    comment - #[^\n]*
  */
 
-static void
-scanner_enter_string (char* str)
-{
-  if (scan_strings_size == scan_strings_capacity) {
-    scan_strings_capacity = scan_strings_capacity * 2 + 1;
-    scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (char*));
-  }
-  scan_strings[scan_strings_size++] = str;
-}
+/* static void */
+/* scanner_enter_string (char* str) */
+/* { */
+/*   if (scan_strings_size == scan_strings_capacity) { */
+/*     scan_strings_capacity = scan_strings_capacity * 2 + 1; */
+/*     scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (char*)); */
+/*   } */
+/*   scan_strings[scan_strings_size++] = str; */
+/* } */
 
-static void
-scanner_put (char* ptr)
-{
-  const char c = *ptr;
+/* static void */
+/* scanner_put (char* ptr) */
+/* { */
+/*   const char c = *ptr; */
 
-  switch (scan_state) {
-  case SCAN_START:
-    if ((c >= 'a' && c <= 'z') ||
-	(c >= 'A' && c <= 'Z') ||
-	(c >= '0' && c <= '9') ||
-	(c == '_') ||
-	(c == '/') ||
-	(c == '-') ||
-	(c == '=') ||
-	(c == '*') ||
-	(c == '?') ||
-	(c == '!')) {
-      scanner_enter_string (ptr);
-      scan_state = SCAN_STRING;
-      break;
-    }
+/*   switch (scan_state) { */
+/*   case SCAN_START: */
+/*     if ((c >= 'a' && c <= 'z') || */
+/* 	(c >= 'A' && c <= 'Z') || */
+/* 	(c >= '0' && c <= '9') || */
+/* 	(c == '_') || */
+/* 	(c == '/') || */
+/* 	(c == '-') || */
+/* 	(c == '=') || */
+/* 	(c == '*') || */
+/* 	(c == '?') || */
+/* 	(c == '!')) { */
+/*       scanner_enter_string (ptr); */
+/*       scan_state = SCAN_STRING; */
+/*       break; */
+/*     } */
 
-    switch (c) {
-    case '#':
-      scan_state = SCAN_COMMENT;
-      break;
-    case ' ':
-    case '\t':
-    case 0:
-      /* Eat whitespace. */
-      scan_state = SCAN_START;
-      break;
-    default:
-      scan_state = SCAN_ERROR;
-    }
-    break;
+/*     switch (c) { */
+/*     case '#': */
+/*       scan_state = SCAN_COMMENT; */
+/*       break; */
+/*     case ' ': */
+/*     case '\t': */
+/*     case 0: */
+/*       /\* Eat whitespace. *\/ */
+/*       scan_state = SCAN_START; */
+/*       break; */
+/*     default: */
+/*       scan_state = SCAN_ERROR; */
+/*     } */
+/*     break; */
 
-  case SCAN_STRING:
-    if ((c >= 'a' && c <= 'z') ||
-	(c >= 'A' && c <= 'Z') ||
-	(c >= '0' && c <= '9') ||
-	(c == '_') ||
-	(c == '/') ||
-	(c == '-') ||
-	(c == '=') ||
-	(c == '*') ||
-	(c == '?') ||
-	(c == '!')) {
-      /* Still scanning a string. */
-      scan_state = SCAN_STRING;
-      break;
-    }
+/*   case SCAN_STRING: */
+/*     if ((c >= 'a' && c <= 'z') || */
+/* 	(c >= 'A' && c <= 'Z') || */
+/* 	(c >= '0' && c <= '9') || */
+/* 	(c == '_') || */
+/* 	(c == '/') || */
+/* 	(c == '-') || */
+/* 	(c == '=') || */
+/* 	(c == '*') || */
+/* 	(c == '?') || */
+/* 	(c == '!')) { */
+/*       /\* Still scanning a string. *\/ */
+/*       scan_state = SCAN_STRING; */
+/*       break; */
+/*     } */
 
-    switch (c) {
-    case '#':
-      /* Terminate the string. */
-      *ptr = 0;
-      scan_state = SCAN_COMMENT;
-      break;
-    case ' ':
-    case '\t':
-    case 0:
-      /* Terminate the string. */
-      *ptr = 0;
-      scan_state = SCAN_START;
-      break;
-    default:
-      scan_state = SCAN_ERROR;
-    }
-    break;
+/*     switch (c) { */
+/*     case '#': */
+/*       /\* Terminate the string. *\/ */
+/*       *ptr = 0; */
+/*       scan_state = SCAN_COMMENT; */
+/*       break; */
+/*     case ' ': */
+/*     case '\t': */
+/*     case 0: */
+/*       /\* Terminate the string. *\/ */
+/*       *ptr = 0; */
+/*       scan_state = SCAN_START; */
+/*       break; */
+/*     default: */
+/*       scan_state = SCAN_ERROR; */
+/*     } */
+/*     break; */
 
-  case SCAN_COMMENT:
-    /* Do nothing. */
-    break;
+/*   case SCAN_COMMENT: */
+/*     /\* Do nothing. *\/ */
+/*     break; */
 
-  case SCAN_ERROR:
-    /* Do nothing. */
-    break;
-  }
-}
+/*   case SCAN_ERROR: */
+/*     /\* Do nothing. *\/ */
+/*     break; */
+/*   } */
+/* } */
 
-static int
-scanner_process (char* string,
-		 size_t size)
-{
-  scan_state = SCAN_START;
-  free (scan_string_copy);
-  scan_string_copy = malloc (size);
-  memcpy (scan_string_copy, string, size);
+/* static int */
+/* scanner_process (char* string, */
+/* 		 size_t size) */
+/* { */
+/*   scan_state = SCAN_START; */
+/*   free (scan_string_copy); */
+/*   scan_string_copy = malloc (size); */
+/*   memcpy (scan_string_copy, string, size); */
 
-  scan_strings_size = 0;
+/*   scan_strings_size = 0; */
 
-  size_t idx;
-  for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) {
-    scanner_put (scan_string_copy + idx);
-    if (scan_state == SCAN_ERROR) {
-      bfprintf (&text_out_buffer, "-> error near: %s\n", string + idx);
-      return -1;
-    }
-  }
+/*   size_t idx; */
+/*   for (idx = 0; idx != size && scan_state != SCAN_ERROR; ++idx) { */
+/*     scanner_put (scan_string_copy + idx); */
+/*     if (scan_state == SCAN_ERROR) { */
+/*       bfprintf (&text_out_buffer, "-> error near: %s\n", string + idx); */
+/*       return -1; */
+/*     } */
+/*   } */
 
-  return 0;
-}
+/*   return 0; */
+/* } */
 
 /*
   End Scanner Section
@@ -1021,19 +487,19 @@ com_queue_front (void)
   return com_head->aid;
 }
 
-static void
-com_queue_push (aid_t aid,
-		const char* str)
-{
-  com_item_t* item = malloc (sizeof (com_item_t));
-  memset (item, 0, sizeof (com_item_t));
-  item->aid = aid;
-  size_t len = strlen (str) + 1;
-  item->str = malloc (len);
-  memcpy (item->str, str, len);
-  *com_tail = item;
-  com_tail = &item->next;
-}
+/* static void */
+/* com_queue_push (aid_t aid, */
+/* 		const char* str) */
+/* { */
+/*   com_item_t* item = malloc (sizeof (com_item_t)); */
+/*   memset (item, 0, sizeof (com_item_t)); */
+/*   item->aid = aid; */
+/*   size_t len = strlen (str) + 1; */
+/*   item->str = malloc (len); */
+/*   memcpy (item->str, str, len); */
+/*   *com_tail = item; */
+/*   com_tail = &item->next; */
+/* } */
 
 static void
 com_queue_pop (void)
@@ -1048,11 +514,11 @@ com_queue_pop (void)
   free (item);
 }
 
-static const char* create_name = 0;
-static bool create_retain_privilege = false;
-static const char* create_register_name = 0;
-static const char* create_path = 0;
-static size_t create_argv_idx = 0;
+/* static const char* create_name = 0; */
+/* static bool create_retain_privilege = false; */
+/* static const char* create_register_name = 0; */
+/* static const char* create_path = 0; */
+/* static size_t create_argv_idx = 0; */
 
 /* static void */
 /* create_callback (void* data, */
@@ -1192,384 +658,384 @@ static size_t create_argv_idx = 0;
 /*   return false; */
 /* } */
 
-static void
-bind_usage (void)
-{
-  buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n");
-}
+/* static void */
+/* bind_usage (void) */
+/* { */
+/*   buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n"); */
+/* } */
 
-static void
-single_bind (automaton_t* output_automaton,
-	     const char* output_action_name,
-	     int output_parameter,
-	     automaton_t* input_automaton,
-	     const char* input_action_name,
-	     int input_parameter)
-{
-  /* Describe the output and input automaton. */
-  description_t output_description;
-  description_t input_description;
-  if (description_init (&output_description, output_automaton->aid) != 0) {
-    buffer_file_puts (&text_out_buffer, "-> error: could not describe output\n");
-    return;
-  }
-  if (description_init (&input_description, input_automaton->aid) != 0) {
-    description_fini (&output_description);
-    buffer_file_puts (&text_out_buffer, "-> error: could not describe input\n");
-    return;
-  }
+/* static void */
+/* single_bind (automaton_t* output_automaton, */
+/* 	     const char* output_action_name, */
+/* 	     int output_parameter, */
+/* 	     automaton_t* input_automaton, */
+/* 	     const char* input_action_name, */
+/* 	     int input_parameter) */
+/* { */
+/*   /\* Describe the output and input automaton. *\/ */
+/*   description_t output_description; */
+/*   description_t input_description; */
+/*   if (description_init (&output_description, output_automaton->aid) != 0) { */
+/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe output\n"); */
+/*     return; */
+/*   } */
+/*   if (description_init (&input_description, input_automaton->aid) != 0) { */
+/*     description_fini (&output_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe input\n"); */
+/*     return; */
+/*   } */
       
-  /* Look up the actions. */
-  action_desc_t output_action;
-  if (description_read_name (&output_description, &output_action, output_action_name) != 0) {
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: output action does not exist\n");
-    return;
-  }
+/*   /\* Look up the actions. *\/ */
+/*   action_desc_t output_action; */
+/*   if (description_read_name (&output_description, &output_action, output_action_name) != 0) { */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: output action does not exist\n"); */
+/*     return; */
+/*   } */
 
-  action_desc_t input_action;
-  if (description_read_name (&input_description, &input_action, input_action_name) != 0) {
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: input action does not exist\n");
-    return;
-  }
+/*   action_desc_t input_action; */
+/*   if (description_read_name (&input_description, &input_action, input_action_name) != 0) { */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: input action does not exist\n"); */
+/*     return; */
+/*   } */
 
-  /* Correct the parameters. */
-  switch (output_action.parameter_mode) {
-  case NO_PARAMETER:
-    output_parameter = 0;
-    break;
-  case PARAMETER:
-    break;
-  case AUTO_PARAMETER:
-    output_parameter = input_automaton->aid;
-    break;
-  }
+/*   /\* Correct the parameters. *\/ */
+/*   switch (output_action.parameter_mode) { */
+/*   case NO_PARAMETER: */
+/*     output_parameter = 0; */
+/*     break; */
+/*   case PARAMETER: */
+/*     break; */
+/*   case AUTO_PARAMETER: */
+/*     output_parameter = input_automaton->aid; */
+/*     break; */
+/*   } */
 
-  switch (input_action.parameter_mode) {
-  case NO_PARAMETER:
-    input_parameter = 0;
-    break;
-  case PARAMETER:
-    break;
-  case AUTO_PARAMETER:
-    input_parameter = output_automaton->aid;
-    break;
-  }
+/*   switch (input_action.parameter_mode) { */
+/*   case NO_PARAMETER: */
+/*     input_parameter = 0; */
+/*     break; */
+/*   case PARAMETER: */
+/*     break; */
+/*   case AUTO_PARAMETER: */
+/*     input_parameter = output_automaton->aid; */
+/*     break; */
+/*   } */
       
-  bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter);
-  if (bid == -1) {
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: bind failed\n");
-    return;
-  }
+/*   bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter); */
+/*   if (bid == -1) { */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: bind failed\n"); */
+/*     return; */
+/*   } */
 
-  /* if (subscribe_unbound (bid, UNBOUND_NO) != 0) { */
-  /*   description_fini (&output_description); */
-  /*   description_fini (&input_description); */
-  /*   buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n"); */
-  /*   return; */
-  /* } */
+/*   /\* if (subscribe_unbound (bid, UNBOUND_NO) != 0) { *\/ */
+/*   /\*   description_fini (&output_description); *\/ */
+/*   /\*   description_fini (&input_description); *\/ */
+/*   /\*   buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n"); *\/ */
+/*   /\*   return; *\/ */
+/*   /\* } *\/ */
 
-  binding_t* binding = create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter);
+/*   binding_t* binding = create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter); */
 
-  binding->next = bindings_head;
-  bindings_head = binding;
+/*   binding->next = bindings_head; */
+/*   bindings_head = binding; */
 
-  description_fini (&output_description);
-  description_fini (&input_description);
+/*   description_fini (&output_description); */
+/*   description_fini (&input_description); */
 
-  bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_action_name, output_parameter, input_automaton->name, input_action_name, input_parameter);
-}
+/*   bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_action_name, output_parameter, input_automaton->name, input_action_name, input_parameter); */
+/* } */
 
-static void
-glob_bind (automaton_t* output_automaton,
-	   const char* output_action_name,
-	   const char* output_glob,
-	   int output_parameter,
-	   automaton_t* input_automaton,
-	   const char* input_action_name,
-	   const char* input_glob,
-	   int input_parameter)
-{
-  /* Describe the output and input automaton. */
-  description_t output_description;
-  description_t input_description;
-  if (description_init (&output_description, output_automaton->aid) != 0) {
-    buffer_file_puts (&text_out_buffer, "-> error: could not describe output\n");
-    return;
-  }
-  if (description_init (&input_description, input_automaton->aid) != 0) {
-    description_fini (&output_description);
-    buffer_file_puts (&text_out_buffer, "-> error: could not describe input\n");
-    return;
-  }
+/* static void */
+/* glob_bind (automaton_t* output_automaton, */
+/* 	   const char* output_action_name, */
+/* 	   const char* output_glob, */
+/* 	   int output_parameter, */
+/* 	   automaton_t* input_automaton, */
+/* 	   const char* input_action_name, */
+/* 	   const char* input_glob, */
+/* 	   int input_parameter) */
+/* { */
+/*   /\* Describe the output and input automaton. *\/ */
+/*   description_t output_description; */
+/*   description_t input_description; */
+/*   if (description_init (&output_description, output_automaton->aid) != 0) { */
+/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe output\n"); */
+/*     return; */
+/*   } */
+/*   if (description_init (&input_description, input_automaton->aid) != 0) { */
+/*     description_fini (&output_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe input\n"); */
+/*     return; */
+/*   } */
 
-  size_t output_action_count = description_action_count (&output_description);
-  if (output_action_count == -1) {
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: bad output description\n");
-    return;
-  }
+/*   size_t output_action_count = description_action_count (&output_description); */
+/*   if (output_action_count == -1) { */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: bad output description\n"); */
+/*     return; */
+/*   } */
 
-  size_t input_action_count = description_action_count (&input_description);
-  if (output_action_count == -1) {
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: bad input description\n");
-    return;
-  }
+/*   size_t input_action_count = description_action_count (&input_description); */
+/*   if (output_action_count == -1) { */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: bad input description\n"); */
+/*     return; */
+/*   } */
 
-  action_desc_t* output_actions = malloc (output_action_count * sizeof (action_desc_t));
-  action_desc_t* input_actions = malloc (input_action_count * sizeof (action_desc_t));
+/*   action_desc_t* output_actions = malloc (output_action_count * sizeof (action_desc_t)); */
+/*   action_desc_t* input_actions = malloc (input_action_count * sizeof (action_desc_t)); */
         
-  if (description_read_all (&output_description, output_actions) != 0) {
-    free (output_actions);
-    free (input_actions);
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: bad output description\n");
-  }
+/*   if (description_read_all (&output_description, output_actions) != 0) { */
+/*     free (output_actions); */
+/*     free (input_actions); */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: bad output description\n"); */
+/*   } */
 
-  if (description_read_all (&input_description, input_actions) != 0) {
-    free (output_actions);
-    free (input_actions);
-    description_fini (&output_description);
-    description_fini (&input_description);
-    buffer_file_puts (&text_out_buffer, "-> error: bad input description\n");
-    return;
-  }
+/*   if (description_read_all (&input_description, input_actions) != 0) { */
+/*     free (output_actions); */
+/*     free (input_actions); */
+/*     description_fini (&output_description); */
+/*     description_fini (&input_description); */
+/*     buffer_file_puts (&text_out_buffer, "-> error: bad input description\n"); */
+/*     return; */
+/*   } */
 
-  /* How many characters must match before the glob? */
-  const size_t output_prefix_size = output_glob - output_action_name;
-  const size_t output_suffix_size = strlen (output_action_name) - output_prefix_size - 1;
-  const size_t input_prefix_size = input_glob - input_action_name;
-  const size_t input_suffix_size = strlen (input_action_name) - input_prefix_size - 1;
+/*   /\* How many characters must match before the glob? *\/ */
+/*   const size_t output_prefix_size = output_glob - output_action_name; */
+/*   const size_t output_suffix_size = strlen (output_action_name) - output_prefix_size - 1; */
+/*   const size_t input_prefix_size = input_glob - input_action_name; */
+/*   const size_t input_suffix_size = strlen (input_action_name) - input_prefix_size - 1; */
 
-  for (size_t out_idx = 0; out_idx != output_action_count; ++out_idx) {
-    if (output_actions[out_idx].type == LILY_ACTION_OUTPUT &&
-	output_actions[out_idx].name_size >= (output_prefix_size + output_suffix_size + 1) &&
-	strncmp (output_action_name, output_actions[out_idx].name, output_prefix_size) == 0 &&
-	strncmp (output_glob + 1, output_actions[out_idx].name + output_actions[out_idx].name_size - 1 - output_suffix_size, output_suffix_size) == 0) {
+/*   for (size_t out_idx = 0; out_idx != output_action_count; ++out_idx) { */
+/*     if (output_actions[out_idx].type == LILY_ACTION_OUTPUT && */
+/* 	output_actions[out_idx].name_size >= (output_prefix_size + output_suffix_size + 1) && */
+/* 	strncmp (output_action_name, output_actions[out_idx].name, output_prefix_size) == 0 && */
+/* 	strncmp (output_glob + 1, output_actions[out_idx].name + output_actions[out_idx].name_size - 1 - output_suffix_size, output_suffix_size) == 0) { */
 
-      const char* output_name = output_actions[out_idx].name + output_prefix_size;
-      size_t output_size = output_actions[out_idx].name_size - 1 - output_suffix_size;
+/*       const char* output_name = output_actions[out_idx].name + output_prefix_size; */
+/*       size_t output_size = output_actions[out_idx].name_size - 1 - output_suffix_size; */
 
-      for (size_t in_idx = 0; in_idx != input_action_count; ++in_idx) {
-      	if (input_actions[in_idx].type == LILY_ACTION_INPUT &&
-	    input_actions[in_idx].name_size >= (input_prefix_size + input_suffix_size + 1) &&
-	    strncmp (input_action_name, input_actions[in_idx].name, input_prefix_size) == 0 &&
-	    strncmp (input_glob + 1, input_actions[in_idx].name + input_actions[in_idx].name_size - 1 - input_suffix_size, input_suffix_size) == 0) {
+/*       for (size_t in_idx = 0; in_idx != input_action_count; ++in_idx) { */
+/*       	if (input_actions[in_idx].type == LILY_ACTION_INPUT && */
+/* 	    input_actions[in_idx].name_size >= (input_prefix_size + input_suffix_size + 1) && */
+/* 	    strncmp (input_action_name, input_actions[in_idx].name, input_prefix_size) == 0 && */
+/* 	    strncmp (input_glob + 1, input_actions[in_idx].name + input_actions[in_idx].name_size - 1 - input_suffix_size, input_suffix_size) == 0) { */
 
-	  const char* input_name = input_actions[in_idx].name + input_prefix_size;
-	  size_t input_size = input_actions[in_idx].name_size - 1 - input_suffix_size;
+/* 	  const char* input_name = input_actions[in_idx].name + input_prefix_size; */
+/* 	  size_t input_size = input_actions[in_idx].name_size - 1 - input_suffix_size; */
 
-	  if (output_size == input_size && strncmp (output_name, input_name, output_size) == 0) {
-	    int output_param = 0;
-	    int input_param = 0;
+/* 	  if (output_size == input_size && strncmp (output_name, input_name, output_size) == 0) { */
+/* 	    int output_param = 0; */
+/* 	    int input_param = 0; */
 
-	    switch (output_actions[out_idx].parameter_mode) {
-	    case NO_PARAMETER:
-	      output_param = 0;
-	      break;
-	    case PARAMETER:
-	      output_param = output_parameter;
-	      break;
-	    case AUTO_PARAMETER:
-	      output_param = input_automaton->aid;
-	      break;
-	    }
+/* 	    switch (output_actions[out_idx].parameter_mode) { */
+/* 	    case NO_PARAMETER: */
+/* 	      output_param = 0; */
+/* 	      break; */
+/* 	    case PARAMETER: */
+/* 	      output_param = output_parameter; */
+/* 	      break; */
+/* 	    case AUTO_PARAMETER: */
+/* 	      output_param = input_automaton->aid; */
+/* 	      break; */
+/* 	    } */
 
-	    switch (input_actions[in_idx].parameter_mode) {
-	    case NO_PARAMETER:
-	      input_param = 0;
-	      break;
-	    case PARAMETER:
-	      input_param = input_parameter;
-	      break;
-	    case AUTO_PARAMETER:
-	      input_param = output_automaton->aid;
-	      break;
-	    }
+/* 	    switch (input_actions[in_idx].parameter_mode) { */
+/* 	    case NO_PARAMETER: */
+/* 	      input_param = 0; */
+/* 	      break; */
+/* 	    case PARAMETER: */
+/* 	      input_param = input_parameter; */
+/* 	      break; */
+/* 	    case AUTO_PARAMETER: */
+/* 	      input_param = output_automaton->aid; */
+/* 	      break; */
+/* 	    } */
 
-	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param);
-	    if (bid != -1) {
-	      /* if (subscribe_unbound (bid, UNBOUND_NO) == 0) { */
-	      /* 	binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param); */
+/* 	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param); */
+/* 	    if (bid != -1) { */
+/* 	      /\* if (subscribe_unbound (bid, UNBOUND_NO) == 0) { *\/ */
+/* 	      /\* 	binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param); *\/ */
 
-	      /* 	binding->next = bindings_head; */
-	      /* 	bindings_head = binding; */
-	      /* } */
-	      /* else { */
-	      /* 	bid = -1; */
-	      /* } */
-	    }
+/* 	      /\* 	binding->next = bindings_head; *\/ */
+/* 	      /\* 	bindings_head = binding; *\/ */
+/* 	      /\* } *\/ */
+/* 	      /\* else { *\/ */
+/* 	      /\* 	bid = -1; *\/ */
+/* 	      /\* } *\/ */
+/* 	    } */
 
-	    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param);
-	  }
-      	}
-      }
-    }
-  }
+/* 	    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param); */
+/* 	  } */
+/*       	} */
+/*       } */
+/*     } */
+/*   } */
 
-  free (output_actions);
-  free (input_actions);
+/*   free (output_actions); */
+/*   free (input_actions); */
       
-  description_fini (&output_description);
-  description_fini (&input_description);
-}
+/*   description_fini (&output_description); */
+/*   description_fini (&input_description); */
+/* } */
 
-static bool
-bind_ (void)
-{
-  if (scan_strings_size >= 1) {
-    if (strcmp (scan_strings[0], "bind") == 0) {
-      size_t idx = 1;
+/* static bool */
+/* bind_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1) { */
+/*     if (strcmp (scan_strings[0], "bind") == 0) { */
+/*       size_t idx = 1; */
 
-      /* Parse the parameters. */
-      int output_parameter = 0;
-      int input_parameter = 0;
+/*       /\* Parse the parameters. *\/ */
+/*       int output_parameter = 0; */
+/*       int input_parameter = 0; */
       
-      for (;;) {
-	if (idx >= scan_strings_size) {
-	  bind_usage ();
-	  return true;
-	}
+/*       for (;;) { */
+/* 	if (idx >= scan_strings_size) { */
+/* 	  bind_usage (); */
+/* 	  return true; */
+/* 	} */
 	
-	if (strcmp (scan_strings[idx], "-o") == 0) {
-	  ++idx;
-	  if (idx >= scan_strings_size) {
-	    bind_usage ();
-	    return true;
-	  }
+/* 	if (strcmp (scan_strings[idx], "-o") == 0) { */
+/* 	  ++idx; */
+/* 	  if (idx >= scan_strings_size) { */
+/* 	    bind_usage (); */
+/* 	    return true; */
+/* 	  } */
 	  
-	  output_parameter = atoi (scan_strings[idx]);
-	  ++idx;
-	  continue;
-	}
+/* 	  output_parameter = atoi (scan_strings[idx]); */
+/* 	  ++idx; */
+/* 	  continue; */
+/* 	} */
 	
-	if (strcmp (scan_strings[idx], "-i") == 0) {
-	  ++idx;
-	  if (idx >= scan_strings_size) {
-	    bind_usage ();
-	    return true;
-	  }
+/* 	if (strcmp (scan_strings[idx], "-i") == 0) { */
+/* 	  ++idx; */
+/* 	  if (idx >= scan_strings_size) { */
+/* 	    bind_usage (); */
+/* 	    return true; */
+/* 	  } */
 	  
-	  input_parameter = atoi (scan_strings[idx]);
-	  ++idx;
-	}
+/* 	  input_parameter = atoi (scan_strings[idx]); */
+/* 	  ++idx; */
+/* 	} */
 	
-	break;
-      }
+/* 	break; */
+/*       } */
       
-      if (idx + 4 != scan_strings_size) {
-	bind_usage ();
-	return true;
-      }
+/*       if (idx + 4 != scan_strings_size) { */
+/* 	bind_usage (); */
+/* 	return true; */
+/*       } */
       
-      automaton_t* output_automaton = find_automaton (scan_strings[idx]);
-      if (output_automaton == 0) {
-	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]);
-	return true;
-      }
-      ++idx;
+/*       automaton_t* output_automaton = find_automaton (scan_strings[idx]); */
+/*       if (output_automaton == 0) { */
+/* 	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]); */
+/* 	return true; */
+/*       } */
+/*       ++idx; */
       
-      const char* output_action_name = scan_strings[idx++];
+/*       const char* output_action_name = scan_strings[idx++]; */
       
-      automaton_t* input_automaton = find_automaton (scan_strings[idx]);
-      if (input_automaton == 0) {
-	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]);
-	return true;
-      }
-      ++idx;
+/*       automaton_t* input_automaton = find_automaton (scan_strings[idx]); */
+/*       if (input_automaton == 0) { */
+/* 	bfprintf (&text_out_buffer, "-> error: %s does not refer to a known automaton\n", scan_strings[idx]); */
+/* 	return true; */
+/*       } */
+/*       ++idx; */
       
-      const char* input_action_name = scan_strings[idx++];
+/*       const char* input_action_name = scan_strings[idx++]; */
 
-      /* Are we globbing? */
-      const char* output_glob = strchr (output_action_name, '*');
-      const char* input_glob = strchr (input_action_name, '*');
+/*       /\* Are we globbing? *\/ */
+/*       const char* output_glob = strchr (output_action_name, '*'); */
+/*       const char* input_glob = strchr (input_action_name, '*'); */
 
-      if (!((output_glob == 0 && input_glob == 0) ||
-	   (output_glob != 0 && input_glob != 0))) {
-	buffer_file_puts (&text_out_buffer, "-> error: glob disagreement\n");
-	return true;
-      }
+/*       if (!((output_glob == 0 && input_glob == 0) || */
+/* 	   (output_glob != 0 && input_glob != 0))) { */
+/* 	buffer_file_puts (&text_out_buffer, "-> error: glob disagreement\n"); */
+/* 	return true; */
+/*       } */
 
-      if (output_glob != 0) {
-	glob_bind (output_automaton, output_action_name, output_glob, output_parameter, input_automaton, input_action_name, input_glob, input_parameter);
-      }
-      else {
-	single_bind (output_automaton, output_action_name, output_parameter, input_automaton, input_action_name, input_parameter);
-      }
-      return true;
-    }
-  }
-  return false;
-}
+/*       if (output_glob != 0) { */
+/* 	glob_bind (output_automaton, output_action_name, output_glob, output_parameter, input_automaton, input_action_name, input_glob, input_parameter); */
+/*       } */
+/*       else { */
+/* 	single_bind (output_automaton, output_action_name, output_parameter, input_automaton, input_action_name, input_parameter); */
+/*       } */
+/*       return true; */
+/*     } */
+/*   } */
+/*   return false; */
+/* } */
 
-static bool
-unbind_ (void)
-{
-  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "unbind") == 0) {
-    if (scan_strings_size != 2) {
-      buffer_file_puts (&text_out_buffer, "-> usage: unbind BID\n");
-      return true;
-    }
+/* static bool */
+/* unbind_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "unbind") == 0) { */
+/*     if (scan_strings_size != 2) { */
+/*       buffer_file_puts (&text_out_buffer, "-> usage: unbind BID\n"); */
+/*       return true; */
+/*     } */
   
-    bid_t bid = atoi (scan_strings[1]);
+/*     bid_t bid = atoi (scan_strings[1]); */
 
-    binding_t** ptr;
-    for (ptr = &bindings_head; *ptr != 0; ptr = &(*ptr)->next) {
-      if ((*ptr)->bid == bid) {
-	break;
-      }
-    }
+/*     binding_t** ptr; */
+/*     for (ptr = &bindings_head; *ptr != 0; ptr = &(*ptr)->next) { */
+/*       if ((*ptr)->bid == bid) { */
+/* 	break; */
+/*       } */
+/*     } */
 
-    if (*ptr == 0) {
-      bfprintf (&text_out_buffer, "-> error: %s does not refer to a binding", scan_strings[1]);
-      return true;
-    }
+/*     if (*ptr == 0) { */
+/*       bfprintf (&text_out_buffer, "-> error: %s does not refer to a binding", scan_strings[1]); */
+/*       return true; */
+/*     } */
 
-    unbind ((*ptr)->bid);
-    unbound_ (ptr);
+/*     unbind ((*ptr)->bid); */
+/*     unbound_ (ptr); */
 
-    return true;
-  }
-  return false;
-}
+/*     return true; */
+/*   } */
+/*   return false; */
+/* } */
 
-static bool
-destroy_ (void)
-{
-  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "destroy") == 0) {
-    if (scan_strings_size != 2) {
-      buffer_file_puts (&text_out_buffer, "-> usage: destroy NAME\n");
-      return true;
-    }
+/* static bool */
+/* destroy_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "destroy") == 0) { */
+/*     if (scan_strings_size != 2) { */
+/*       buffer_file_puts (&text_out_buffer, "-> usage: destroy NAME\n"); */
+/*       return true; */
+/*     } */
   
-    automaton_t** aptr;
-    for (aptr = &automata_head; *aptr != 0; aptr = &(*aptr)->next) {
-      if (strcmp ((*aptr)->name, scan_strings[1]) == 0) {
-	break;
-      }
-    }
+/*     automaton_t** aptr; */
+/*     for (aptr = &automata_head; *aptr != 0; aptr = &(*aptr)->next) { */
+/*       if (strcmp ((*aptr)->name, scan_strings[1]) == 0) { */
+/* 	break; */
+/*       } */
+/*     } */
 
-    if (*aptr == 0) {
-      bfprintf (&text_out_buffer, "-> error: %s does not name an automaton", scan_strings[1]);
-      return true;
-    }
+/*     if (*aptr == 0) { */
+/*       bfprintf (&text_out_buffer, "-> error: %s does not name an automaton", scan_strings[1]); */
+/*       return true; */
+/*     } */
 
-    destroy ((*aptr)->aid);
-    destroyed_ (aptr);
+/*     destroy ((*aptr)->aid); */
+/*     destroyed_ (aptr); */
 
-    return true;
-  }
-  return false;
-}
+/*     return true; */
+/*   } */
+/*   return false; */
+/* } */
 
 /* static void */
 /* lookup_usage (void) */
@@ -1630,203 +1096,203 @@ destroy_ (void)
 /*   return false; */
 /* } */
 
-static bool
-describe_ (void)
-{
-  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "describe") == 0) {
-    if (scan_strings_size != 2) {
-      buffer_file_puts (&text_out_buffer, "-> usage: describe NAME\n");
-      return true;
-    }
+/* static bool */
+/* describe_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "describe") == 0) { */
+/*     if (scan_strings_size != 2) { */
+/*       buffer_file_puts (&text_out_buffer, "-> usage: describe NAME\n"); */
+/*       return true; */
+/*     } */
 
-    automaton_t* automaton = find_automaton (scan_strings[1]);
-    if (automaton == 0) {
-      bfprintf (&text_out_buffer, "-> error: name %s not recognized\n", scan_strings[1]);
-      return true;
-    }
+/*     automaton_t* automaton = find_automaton (scan_strings[1]); */
+/*     if (automaton == 0) { */
+/*       bfprintf (&text_out_buffer, "-> error: name %s not recognized\n", scan_strings[1]); */
+/*       return true; */
+/*     } */
 
-    description_t description;
-    if (description_init (&description, automaton->aid) != 0) {
-      buffer_file_puts (&text_out_buffer, "-> error: bad description\n");
-      return true;
-    }
+/*     description_t description; */
+/*     if (description_init (&description, automaton->aid) != 0) { */
+/*       buffer_file_puts (&text_out_buffer, "-> error: bad description\n"); */
+/*       return true; */
+/*     } */
 
-    size_t action_count = description_action_count (&description);
-    if (action_count == -1) {
-      buffer_file_puts (&text_out_buffer, "-> error: bad description\n");
-      description_fini (&description);
-      return true;
-    }
+/*     size_t action_count = description_action_count (&description); */
+/*     if (action_count == -1) { */
+/*       buffer_file_puts (&text_out_buffer, "-> error: bad description\n"); */
+/*       description_fini (&description); */
+/*       return true; */
+/*     } */
     
-    action_desc_t* actions = malloc (action_count * sizeof (action_desc_t));
-    if (description_read_all (&description, actions) != 0) {
-      buffer_file_puts (&text_out_buffer, "-> error: bad description\n");
-      description_fini (&description);
-      free (actions);
-      return true;
-    }
+/*     action_desc_t* actions = malloc (action_count * sizeof (action_desc_t)); */
+/*     if (description_read_all (&description, actions) != 0) { */
+/*       buffer_file_puts (&text_out_buffer, "-> error: bad description\n"); */
+/*       description_fini (&description); */
+/*       free (actions); */
+/*       return true; */
+/*     } */
 
-    bfprintf (&text_out_buffer, "-> aid=%d path=%s\n", automaton->aid, automaton->path);
+/*     bfprintf (&text_out_buffer, "-> aid=%d path=%s\n", automaton->aid, automaton->path); */
     
-    /* Print the actions. */
-    for (size_t action = 0; action != action_count; ++action) {
+/*     /\* Print the actions. *\/ */
+/*     for (size_t action = 0; action != action_count; ++action) { */
 
-      buffer_file_puts (&text_out_buffer, "-> ");
+/*       buffer_file_puts (&text_out_buffer, "-> "); */
 
-      switch (actions[action].type) {
-      case LILY_ACTION_INPUT:
-	buffer_file_puts (&text_out_buffer, " IN ");
-	break;
-      case LILY_ACTION_OUTPUT:
-	buffer_file_puts (&text_out_buffer, "OUT ");
-	break;
-      case LILY_ACTION_INTERNAL:
-	buffer_file_puts (&text_out_buffer, "INT ");
-	break;
-      case LILY_ACTION_SYSTEM_INPUT:
-	buffer_file_puts (&text_out_buffer, "SYS ");
-	break;
-      default:
-	buffer_file_puts (&text_out_buffer, "??? ");
-	break;
-      }
+/*       switch (actions[action].type) { */
+/*       case LILY_ACTION_INPUT: */
+/* 	buffer_file_puts (&text_out_buffer, " IN "); */
+/* 	break; */
+/*       case LILY_ACTION_OUTPUT: */
+/* 	buffer_file_puts (&text_out_buffer, "OUT "); */
+/* 	break; */
+/*       case LILY_ACTION_INTERNAL: */
+/* 	buffer_file_puts (&text_out_buffer, "INT "); */
+/* 	break; */
+/*       case LILY_ACTION_SYSTEM_INPUT: */
+/* 	buffer_file_puts (&text_out_buffer, "SYS "); */
+/* 	break; */
+/*       default: */
+/* 	buffer_file_puts (&text_out_buffer, "??? "); */
+/* 	break; */
+/*       } */
       
-      switch (actions[action].parameter_mode) {
-      case NO_PARAMETER:
-	buffer_file_puts (&text_out_buffer, "  ");
-	break;
-      case PARAMETER:
-	buffer_file_puts (&text_out_buffer, "* ");
-	break;
-      case AUTO_PARAMETER:
-	buffer_file_puts (&text_out_buffer, "@ ");
-	break;
-      default:
-	buffer_file_puts (&text_out_buffer, "? ");
-	break;
-      }
+/*       switch (actions[action].parameter_mode) { */
+/*       case NO_PARAMETER: */
+/* 	buffer_file_puts (&text_out_buffer, "  "); */
+/* 	break; */
+/*       case PARAMETER: */
+/* 	buffer_file_puts (&text_out_buffer, "* "); */
+/* 	break; */
+/*       case AUTO_PARAMETER: */
+/* 	buffer_file_puts (&text_out_buffer, "@ "); */
+/* 	break; */
+/*       default: */
+/* 	buffer_file_puts (&text_out_buffer, "? "); */
+/* 	break; */
+/*       } */
       
-      bfprintf (&text_out_buffer, "%d\t%s\t%s\n", actions[action].number, actions[action].name, actions[action].description);
-    }
+/*       bfprintf (&text_out_buffer, "%d\t%s\t%s\n", actions[action].number, actions[action].name, actions[action].description); */
+/*     } */
     
-    free (actions);
+/*     free (actions); */
     
-    description_fini (&description);
+/*     description_fini (&description); */
 
-    /* Print the input bindings. */
-    for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
-      if (binding->input_automaton == automaton) {
-	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
-      }
-    }
+/*     /\* Print the input bindings. *\/ */
+/*     for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) { */
+/*       if (binding->input_automaton == automaton) { */
+/* 	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter); */
+/*       } */
+/*     } */
 
-    for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) {
-      if (binding->output_automaton == automaton) {
-	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter);
-      }
-    }
+/*     for (binding_t* binding = bindings_head; binding != 0; binding = binding->next) { */
+/*       if (binding->output_automaton == automaton) { */
+/* 	bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", binding->bid, binding->output_automaton->name, binding->output_action_name, binding->output_parameter, binding->input_automaton->name, binding->input_action_name, binding->input_parameter); */
+/*       } */
+/*     } */
     
-    return true;
-  }
-  return false;
-}
+/*     return true; */
+/*   } */
+/*   return false; */
+/* } */
 
-static bool
-list_ (void)
-{
-  if (scan_strings_size >= 1) {
-    if (strcmp ("list", scan_strings[0]) == 0) {
-      if (scan_strings_size == 1) {
+/* static bool */
+/* list_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1) { */
+/*     if (strcmp ("list", scan_strings[0]) == 0) { */
+/*       if (scan_strings_size == 1) { */
 
-	for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) {
- 	  bfprintf (&text_out_buffer, "-> %s\n", automaton->name);
-	}
+/* 	for (automaton_t* automaton = automata_head; automaton != 0; automaton = automaton->next) { */
+/*  	  bfprintf (&text_out_buffer, "-> %s\n", automaton->name); */
+/* 	} */
 	
-	return true;
-      }
-      else {
-	buffer_file_puts (&text_out_buffer, "-> usage: list\n");
-	return true;
-      }
-    }
-  }
-  return false;
-}
+/* 	return true; */
+/*       } */
+/*       else { */
+/* 	buffer_file_puts (&text_out_buffer, "-> usage: list\n"); */
+/* 	return true; */
+/*       } */
+/*     } */
+/*   } */
+/*   return false; */
+/* } */
 
-static bool
-com_ (void)
-{
-  if (scan_strings_size >= 1 && strcmp (scan_strings[0], "com") == 0) {
-    if (scan_strings_size < 3) {
-      buffer_file_puts (&text_out_buffer, "-> usage: com ID ARGS...\n");
-      return true;
-    }
+/* static bool */
+/* com_ (void) */
+/* { */
+/*   if (scan_strings_size >= 1 && strcmp (scan_strings[0], "com") == 0) { */
+/*     if (scan_strings_size < 3) { */
+/*       buffer_file_puts (&text_out_buffer, "-> usage: com ID ARGS...\n"); */
+/*       return true; */
+/*     } */
 
-    automaton_t* automaton = find_automaton (scan_strings[1]);
-    if (automaton == 0) {
-      bfprintf (&text_out_buffer, "-> warning: automaton %s\n", scan_strings[1]);
-      return true;
-    }
+/*     automaton_t* automaton = find_automaton (scan_strings[1]); */
+/*     if (automaton == 0) { */
+/*       bfprintf (&text_out_buffer, "-> warning: automaton %s\n", scan_strings[1]); */
+/*       return true; */
+/*     } */
 
-    /* Check if we are already bound. */
-    binding_t* b;
-    for (b = bindings_head; b != 0; b = b->next) {
-      if (b->output_automaton == this_automaton &&
-	  b->input_automaton == automaton &&
-	  b->output_action == COM_OUT_NO) {
-	break;
-      }
-    }
-    if (b == 0) {
-      /* Bind to com. */
-      single_bind (this_automaton, "com_out", 0, automaton, "com_in", 0);
-    }
+/*     /\* Check if we are already bound. *\/ */
+/*     binding_t* b; */
+/*     for (b = bindings_head; b != 0; b = b->next) { */
+/*       if (b->output_automaton == this_automaton && */
+/* 	  b->input_automaton == automaton && */
+/* 	  b->output_action == COM_OUT_NO) { */
+/* 	break; */
+/*       } */
+/*     } */
+/*     if (b == 0) { */
+/*       /\* Bind to com. *\/ */
+/*       single_bind (this_automaton, "com_out", 0, automaton, "com_in", 0); */
+/*     } */
 
-    for (b = bindings_head; b != 0; b = b->next) {
-      if (b->output_automaton == automaton &&
-	  b->input_automaton == this_automaton &&
-	  b->input_action == COM_IN_NO) {
-	break;
-      }
-    }
-    if (b == 0) {
-      /* Bind to com. */
-      single_bind (automaton, "com_out", 0, this_automaton, "com_in", 0);
-    }
+/*     for (b = bindings_head; b != 0; b = b->next) { */
+/*       if (b->output_automaton == automaton && */
+/* 	  b->input_automaton == this_automaton && */
+/* 	  b->input_action == COM_IN_NO) { */
+/* 	break; */
+/*       } */
+/*     } */
+/*     if (b == 0) { */
+/*       /\* Bind to com. *\/ */
+/*       single_bind (automaton, "com_out", 0, this_automaton, "com_in", 0); */
+/*     } */
 	
-    /* Add to the COM queue. */
-    com_queue_push (automaton->aid, current_line + (scan_strings[2] - scan_string_copy));
+/*     /\* Add to the COM queue. *\/ */
+/*     com_queue_push (automaton->aid, current_line + (scan_strings[2] - scan_string_copy)); */
 
-    return true;
-  }
-  return false;
-}
+/*     return true; */
+/*   } */
+/*   return false; */
+/* } */
 
-static bool
-error_ (void)
-{
-  if (scan_strings_size != 0) {
-    /* Catch all. */
-    bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]);
-  }
-  return true;
-}
+/* static bool */
+/* error_ (void) */
+/* { */
+/*   if (scan_strings_size != 0) { */
+/*     /\* Catch all. *\/ */
+/*     bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]); */
+/*   } */
+/*   return true; */
+/* } */
 
 typedef bool (*dispatch_func_t) (void);
 
-static dispatch_func_t dispatch[] = {
-  /* create_, */
-  bind_,
-  unbind_,
-  destroy_,
-  /* lookup_, */
-  describe_,
-  list_,
-  com_,
-  /* Catch errors. */
-  error_,
-  0
-};
+/* static dispatch_func_t dispatch[] = { */
+/*   /\* create_, *\/ */
+/*   bind_, */
+/*   unbind_, */
+/*   destroy_, */
+/*   /\* lookup_, *\/ */
+/*   describe_, */
+/*   list_, */
+/*   com_, */
+/*   /\* Catch errors. *\/ */
+/*   error_, */
+/*   0 */
+/* }; */
 
 /*
   End Dispatch Section
@@ -1834,10 +1300,23 @@ static dispatch_func_t dispatch[] = {
 */
 
 static void
-readscript_callback (void* data,
-		     bd_t bda,
-		     bd_t bdb)
+readscript_callback (void* arg,
+		     fs_error_t error,
+		     size_t size,
+		     bd_t bd)
 {
+  switch (error) {
+  case FS_SUCCESS:
+    {
+      const char* ptr = buffer_map (bd);
+      log (ptr, size);
+    }
+    break;
+  default:
+    /* TODO */
+    break;
+  }
+
 /*   vfs_error_t error; */
 /*   size_t size; */
 /*   if (read_vfs_readfile_response (bda, &error, &size) != 0) { */
@@ -2009,70 +1488,70 @@ BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_
   finish_input (bda, bdb);
 }
 
-static bool
-process_line_precondition (void)
-{
-  return !process_hold && !string_empty () && com_queue_empty () && callback_queue_empty (&vfs_response_queue);
-}
+/* static bool */
+/* process_line_precondition (void) */
+/* { */
+/*   return !process_hold && !string_empty () && com_queue_empty () && callback_queue_empty (&vfs_response_queue); */
+/* } */
 
-BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, int param)
-{
-  initialize ();
+/* BEGIN_INTERNAL (NO_PARAMETER, PROCESS_LINE_NO, "", "", process_line, ano_t ano, int param) */
+/* { */
+/*   initialize (); */
 
-  if (process_line_precondition ()) {
-    char* current_string;
-    size_t current_string_size;
-    string_front (&current_string, &current_string_size);
+/*   if (process_line_precondition ()) { */
+/*     char* current_string; */
+/*     size_t current_string_size; */
+/*     string_front (&current_string, &current_string_size); */
 
-    for (; current_string_idx != current_string_size; ++current_string_idx) {
-      const char c = current_string[current_string_idx];
-      if (c >= ' ' && c < 127) {
-	/* Printable character. */
-	line_append (c);
-	buffer_file_put (&text_out_buffer, c);
-      }
-      else {
-	/* Control character. */
-	switch (c) {
-	case '\b':
-	  line_back ();
-	  buffer_file_put (&text_out_buffer, '\b');
-	  buffer_file_put (&text_out_buffer, ' ');
-	  buffer_file_put (&text_out_buffer, '\b');
-	  break;
-	case '\n':
-	  /* Terminate. */
-	  line_append (0);
-	  buffer_file_put (&text_out_buffer, '\n');
+/*     for (; current_string_idx != current_string_size; ++current_string_idx) { */
+/*       const char c = current_string[current_string_idx]; */
+/*       if (c >= ' ' && c < 127) { */
+/* 	/\* Printable character. *\/ */
+/* 	line_append (c); */
+/* 	buffer_file_put (&text_out_buffer, c); */
+/*       } */
+/*       else { */
+/* 	/\* Control character. *\/ */
+/* 	switch (c) { */
+/* 	case '\b': */
+/* 	  line_back (); */
+/* 	  buffer_file_put (&text_out_buffer, '\b'); */
+/* 	  buffer_file_put (&text_out_buffer, ' '); */
+/* 	  buffer_file_put (&text_out_buffer, '\b'); */
+/* 	  break; */
+/* 	case '\n': */
+/* 	  /\* Terminate. *\/ */
+/* 	  line_append (0); */
+/* 	  buffer_file_put (&text_out_buffer, '\n'); */
 
-	  if (scanner_process (current_line, current_line_size) == 0) {
-	    /* Scanning succeeded.  Interpret. */
-	    for (size_t idx = 0; dispatch[idx] != 0; ++idx) {
-	      if (dispatch[idx] ()) {
-		break;
-	      }
-	    }
-	  }
+/* 	  if (scanner_process (current_line, current_line_size) == 0) { */
+/* 	    /\* Scanning succeeded.  Interpret. *\/ */
+/* 	    for (size_t idx = 0; dispatch[idx] != 0; ++idx) { */
+/* 	      if (dispatch[idx] ()) { */
+/* 		break; */
+/* 	      } */
+/* 	    } */
+/* 	  } */
 
-	  /* Reset the line. */
-	  line_reset ();
+/* 	  /\* Reset the line. *\/ */
+/* 	  line_reset (); */
 
-	  ++current_string_idx;
+/* 	  ++current_string_idx; */
 
-	  /* Done. */
-	  finish_internal ();
+/* 	  /\* Done. *\/ */
+/* 	  finish_internal (); */
 
-	  break;
-	}
-      }
-    }
+/* 	  break; */
+/* 	} */
+/*       } */
+/*     } */
 
-    string_pop ();
-    free (current_string);
-    current_string_idx = 0;
-  }
-  finish_internal ();
-}
+/*     string_pop (); */
+/*     free (current_string); */
+/*     current_string_idx = 0; */
+/*   } */
+/*   finish_internal (); */
+/* } */
 
 static bool
 text_out_precondition (void)
@@ -2093,55 +1572,47 @@ BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, 
   }
 }
 
-BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
+/* BEGIN_SYSTEM_INPUT (DESTROYED_NO, "", "", destroyed, ano_t ano, aid_t aid, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
   
-  automaton_t** aptr;
-  for (aptr = &automata_head; *aptr != 0; aptr = &(*aptr)->next) {
-    if ((*aptr)->aid == aid) {
-      break;
-    }
-  }
+/*   automaton_t** aptr; */
+/*   for (aptr = &automata_head; *aptr != 0; aptr = &(*aptr)->next) { */
+/*     if ((*aptr)->aid == aid) { */
+/*       break; */
+/*     } */
+/*   } */
 
-  destroyed_ (aptr);
+/*   destroyed_ (aptr); */
 
-  finish_input (bda, bdb);
-}
+/*   finish_input (bda, bdb); */
+/* } */
 
-BEGIN_SYSTEM_INPUT (UNBOUND_NO, "", "", unbound, ano_t ano, bid_t bid, bd_t bda, bd_t bdb)
-{
-  initialize ();
+/* BEGIN_SYSTEM_INPUT (UNBOUND_NO, "", "", unbound, ano_t ano, bid_t bid, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
 
-  binding_t** ptr;
-  for (ptr = &bindings_head; *ptr != 0; ptr = &(*ptr)->next) {
-    if ((*ptr)->bid == bid) {
-      break;
-    }
-  }
+/*   binding_t** ptr; */
+/*   for (ptr = &bindings_head; *ptr != 0; ptr = &(*ptr)->next) { */
+/*     if ((*ptr)->bid == bid) { */
+/*       break; */
+/*     } */
+/*   } */
 
-  unbound_ (ptr);
+/*   unbound_ (ptr); */
 
-  finish_input (bda, bdb);
-}
+/*   finish_input (bda, bdb); */
+/* } */
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_requestx, ano_t ano, aid_t aid, size_t bc)
 {
   initialize ();
-
   vfs_request (&vfs, aid);
 }
 
-/* vfs_response
-   --------------
-   Invoke the callback for a response from the vfs.
-
-   Post: the callback queue has one item removed
- */
 BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_responsex, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-
   vfs_response (&vfs, aid, bda, bdb);
 }
 
@@ -2184,9 +1655,9 @@ BEGIN_INPUT (AUTO_PARAMETER, COM_IN_NO, "com_in", "", com_in, ano_t ano, int par
 void
 do_schedule (void)
 {
-  if (process_line_precondition ()) {
-    schedule (PROCESS_LINE_NO, 0);
-  }
+  /* if (process_line_precondition ()) { */
+  /*   schedule (PROCESS_LINE_NO, 0); */
+  /* } */
   if (text_out_precondition ()) {
     schedule (TEXT_OUT_NO, 0);
   }
