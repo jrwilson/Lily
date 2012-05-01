@@ -498,7 +498,7 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
    
    Post: scan_codes_buffer is not empty
 */
-BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano, aid_t aid)
 {
   initialize ();
   if (byte_ready ()) {
@@ -508,7 +508,7 @@ BEGIN_SYSTEM_INPUT (KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano
       exit (-1);
     }
   }
-  finish_input (bda, bdb);
+  finish_internal ();
 }
 
 /* scan_code
@@ -524,7 +524,7 @@ scan_codes_precondition (void)
   return buffer_file_size (&scan_codes_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes_out", "buffer_file_t", scan_codes, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes_out", "buffer_file_t", scan_codes, ano_t ano, int param)
 {
   initialize ();
 
@@ -543,7 +543,7 @@ BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes_out", "buffer_file_t", sc
    
    Post: advances the mouse state machine
 */
-BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INTERNAL (NO_PARAMETER, MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int param)
 {
   initialize ();
 
@@ -575,7 +575,7 @@ BEGIN_SYSTEM_INPUT (MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int 
       exit (-1);
     }
   }
-  finish_input (bda, bdb);
+  finish_internal ();
 }
 
 /* mouse_packets
@@ -591,7 +591,7 @@ mouse_packets_out_precondition (void)
   return mouse_packet_list.count != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param)
 {
   initialize ();
 

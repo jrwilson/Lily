@@ -485,7 +485,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REQUEST_NO, FS_REQUEST_NAME, "", request, ano_t ano
   finish_input (bda, bdb);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t ano, aid_t aid, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t ano, aid_t aid)
 {
   initialize ();
 

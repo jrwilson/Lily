@@ -1388,7 +1388,7 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 /*   finish_input (bda, bdb); */
 /* } */
 
-BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_request, ano_t ano, aid_t aid, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_request, ano_t ano, aid_t aid)
 {
   initialize ();
   vfs_request (&vfs, aid);
@@ -1406,7 +1406,7 @@ BEGIN_INPUT (NO_PARAMETER, RECV_NO, "", "", recv, ano_t ano, int param, bd_t bda
   finda_recv (&finda, bda, bdb);
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, SEND_NO, "", "", send, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, SEND_NO, "", "", send, ano_t ano, int param)
 {
   initialize ();
   finda_send (&finda);

@@ -146,7 +146,7 @@ BEGIN_INPUT (AUTO_PARAMETER, SEND_IN_NO, FINDA_SEND_NAME, "", send_in, ano_t ano
   finish_input (bda, bdb);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, RECV_OUT_NO, FINDA_RECV_NAME, "", recv_out, ano_t ano, aid_t aid, size_t bc)
+BEGIN_OUTPUT (AUTO_PARAMETER, RECV_OUT_NO, FINDA_RECV_NAME, "", recv_out, ano_t ano, aid_t aid)
 {
   initialize ();
   

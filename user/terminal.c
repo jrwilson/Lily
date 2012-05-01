@@ -2198,7 +2198,7 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
   TERMINAL -> CLIENT
 */
 
-BEGIN_OUTPUT (PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int client, size_t bc)
+BEGIN_OUTPUT (PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int client)
 {
   initialize ();
 
@@ -2215,7 +2215,7 @@ BEGIN_OUTPUT (PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano
   finish_output (false, -1, -1);
 }
 
-BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int client, size_t bc)
+BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int client)
 {
   initialize ();
 
@@ -2327,7 +2327,7 @@ vga_op_precondition (void)
   return vga_op_list.count != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_out", "vga_op_list", vga_op, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_out", "vga_op_list", vga_op, ano_t ano, int param)
 {
   initialize ();
 

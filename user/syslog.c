@@ -7,7 +7,8 @@
   Syslog
   ======
   This automaton receives logging and system events from the kernel and formats them for output.
-  The automaton does not produce output until its text_out output is bound.
+
+  TODO:  The automaton should not produce output until its text_out output is bound.
 */
 
 #define INIT_NO 1
@@ -17,7 +18,6 @@
 /* Initialization flag. */
 static bool initialized = false;
 
-static bool text_out_bound = true;
 static bd_t text_out_bd = -1;
 static buffer_file_t text_out_buffer;
 
@@ -52,49 +52,47 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-BEGIN_SYSTEM_INPUT (LOG_EVENT_NO, "log_event", "", log_event, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
+/* BEGIN_INTERNAL (LOG_EVENT_NO, "log_event", "", log_event, ano_t ano, int param, bd_t bda, bd_t bdb) */
+/* { */
+/*   initialize (); */
   
-  const log_event_t* le = buffer_map (bda);
-  if (le == 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map log event buffer: %s\n", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   const log_event_t* le = buffer_map (bda); */
+/*   if (le == 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map log event buffer: %s\n", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  if (bfprintf (&text_out_buffer, "[%10u.%.3u] %d ", le->time.seconds, le->time.nanoseconds / 1000000, le->aid) < 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   if (bfprintf (&text_out_buffer, "[%10u.%.3u] %d ", le->time.seconds, le->time.nanoseconds / 1000000, le->aid) < 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  if (buffer_file_write (&text_out_buffer, le->message, le->message_size) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   if (buffer_file_write (&text_out_buffer, le->message, le->message_size) != 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
   
-  if (buffer_file_put (&text_out_buffer, '\n') != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error));
-    logs (log_buffer);
-    exit (-1);
-  }
+/*   if (buffer_file_put (&text_out_buffer, '\n') != 0) { */
+/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error)); */
+/*     logs (log_buffer); */
+/*     exit (-1); */
+/*   } */
 
-  finish_input (bda, bdb);
-}
+/*   finish_input (bda, bdb); */
+/* } */
 
 static bool
 text_out_precondition (void)
 {
-  return text_out_bound && buffer_file_size (&text_out_buffer) != 0;
+  return buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param, size_t bc)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
   initialize ();
-
-  text_out_bound = (bc != 0);
 
   if (text_out_precondition ()) {
     buffer_file_truncate (&text_out_buffer);

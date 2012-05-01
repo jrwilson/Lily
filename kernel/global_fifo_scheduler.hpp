@@ -73,7 +73,7 @@ private:
       if ((*input_action_pos_)->enabled ()) {
 	action_ = (*input_action_pos_)->input_action;
 	// This does not return.
-	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_, 1);
+	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
       else {
 	++input_action_pos_;
@@ -196,17 +196,6 @@ public:
 	// -EEE
 	action_.automaton->unlock_execution ();
 	break;
-      case SYSTEM_INPUT:
-	// -EEE
-	action_.automaton->unlock_execution ();
-	// Destroy the buffers.
-	if (output_buffer_a_.get () != 0) {
-	  output_buffer_a_ = shared_ptr<buffer> ();
-	}
-	if (output_buffer_b_.get () != 0) {
-	  output_buffer_b_ = shared_ptr<buffer> ();
-	}
-	break;
       }
     }
 
@@ -225,8 +214,6 @@ public:
 	// Load the action.
 	action_ = c->front ();
 	c->pop_front ();
-
-	size_t binding_count;
 
 	// The automaton exists.  Continue loading and execute.
 	switch (action_.action->type) {
@@ -264,21 +251,11 @@ public:
 	    }
 	    
 	    input_action_pos_ = input_action_list_.begin ();
-	    binding_count = input_action_list_.size ();
 	  }
 	  break;
 	case INTERNAL:
 	  // +EEE
 	  action_.automaton->lock_execution ();
-	  binding_count = 0;
-	  break;
-	case SYSTEM_INPUT:
-	  // Load the buffer.
-	  output_buffer_a_ = action_.buffer_a;
-	  output_buffer_b_ = action_.buffer_b;
-	  // +EEE
-	  action_.automaton->lock_execution ();
-	  binding_count = 0;
 	  break;
 	}
 	
@@ -288,7 +265,7 @@ public:
 	}
 
 	// This call does not return.
-	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_, binding_count);
+	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
 
       // Out of actions.

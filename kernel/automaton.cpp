@@ -11,48 +11,7 @@ automaton::bid_to_binding_map_type automaton::bid_to_binding_map_;
 automaton::mapped_areas_type automaton::all_mapped_areas_;
 bitset<65536> automaton::reserved_ports_;
 
-automaton::log_event_map_type automaton::log_event_map_;
-automaton::system_event_map_type automaton::system_event_map_;
-
-pair<int, lily_error_t>
-automaton::log (const char* message,
-		size_t message_size)
-{
-  if (!verify_span (message, message_size)) {
-    return make_pair (-1, LILY_ERROR_INVAL);
-  }
-
-  const size_t total_size = sizeof (log_event_t) + message_size;
-  size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
-
-  // Create a buffer for the description.
-  shared_ptr<buffer> b (new buffer (page_count));
-  log_event_t* le = static_cast <log_event_t*> (buffer_map (b));
-  le->aid = aid_;
-  irq_handler::getmonotime (&le->time);
-  le->message_size = message_size;
-  memcpy (&le->message[0], message, message_size);
-
-  console::fmtflags flags = kout.flags ();
-  kout << "[" << setfill (' ') << setw (10) << left << le->time.seconds << "." << setfill ('0') << setw (3) << le->time.nanoseconds / 1000000 << "] " << le->aid << " ";
-  kout.flags (flags);
-
-  for (size_t idx = 0; idx != message_size; ++idx) {
-    kout.put (message[idx]);
-  }
-
-  kout << endl;
-  
-  buffer_unmap (b);
-  
-  for (log_event_map_type::const_iterator pos = log_event_map_.begin ();
-       pos != log_event_map_.end ();
-       ++pos) {
-    scheduler::schedule (caction (pos->first, pos->second, 0, b, shared_ptr<buffer> ()));
-  }
-
-  return make_pair (0, LILY_ERROR_SUCCESS);
-}
+// automaton::log_event_map_type automaton::log_event_map_;
 
 pair<int, lily_error_t>
 automaton::schedule (const shared_ptr<automaton>& ths,
@@ -81,14 +40,12 @@ automaton::schedule (const shared_ptr<automaton>& ths,
       return make_pair (0, LILY_ERROR_SUCCESS);
       break;
     case INPUT:
-    case SYSTEM_INPUT:
       return make_pair (-1, LILY_ERROR_INVAL);
       break;
     }
   }
-  else {
-    return make_pair (-1, LILY_ERROR_ANODNE);
-  }
+
+  return make_pair (-1, LILY_ERROR_ANODNE);
 }
 
 // The automaton would like to no longer exist.
@@ -98,14 +55,7 @@ automaton::exit (const shared_ptr<automaton>& ths,
 {
   kassert (ths.get () == this);
       
-  shared_ptr<automaton> parent = parent_;
-  
   destroy (ths);
-  
-  if (parent.get () != 0) {
-    size_t count = parent->children_.erase (ths);
-    kassert (count == 1);
-  }
   
   scheduler::finish (false, -1, -1);
 }
@@ -125,8 +75,7 @@ automaton::exit (const shared_ptr<automaton>& ths,
 */
 
 pair<shared_ptr<automaton>, lily_error_t>
-automaton::create_automaton (const shared_ptr<automaton>& parent,
-			     bool privileged,
+automaton::create_automaton (bool privileged,
 			     const shared_ptr<buffer>& text,
 			     size_t text_size,
 			     const shared_ptr<buffer>& buffer_a_,
@@ -174,13 +123,7 @@ automaton::create_automaton (const shared_ptr<automaton>& parent,
     
     aid_to_automaton_map_.insert (make_pair (child_aid, child));
     
-    // Add the child to the parent.
-    if (parent.get () != 0) {
-      parent->children_.insert (child);
-    }
-
     child->aid_ = child_aid;
-    child->parent_ = parent;
     child->privileged_ = privileged;
     
     // Add to the scheduler.
@@ -193,21 +136,13 @@ automaton::create_automaton (const shared_ptr<automaton>& parent,
       child->init_buffer_b_ = child->buffer_create (buffer_b_);
     }
     
-    // Schedule the init action and look for the system_event action.
+    // Schedule the init action.
     const kstring init_name ("init");
-    const kstring log_event_name ("log_event");
-    const kstring system_event_name ("system_event");
     for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
 	 pos != child->ano_to_action_map_.end ();
 	 ++pos) {
       if (pos->second->name == init_name && pos->second->type == INTERNAL) {
 	scheduler::schedule (caction (child, pos->second, child_aid));
-      }
-      else if (pos->second->name == log_event_name && pos->second->type == SYSTEM_INPUT) {
-	log_event_map_.insert (make_pair (child, pos->second));
-      }
-      else if (pos->second->name == system_event_name && pos->second->type == SYSTEM_INPUT) {
-	system_event_map_.insert (make_pair (child, pos->second));
       }
     }
   }
@@ -225,186 +160,6 @@ automaton::create_automaton (const shared_ptr<automaton>& parent,
   }
   else {
     return make_pair (shared_ptr<automaton> (), LILY_ERROR_INVAL);
-  }
-}
-
-pair<bid_t, lily_error_t>
-automaton::bind (const shared_ptr<automaton>& ths,
-		 aid_t output_aid,
-		 ano_t output_ano,
-		 int output_parameter,
-		 aid_t input_aid,
-		 ano_t input_ano,
-		 int input_parameter)
-{
-  kassert (ths.get () == this);
-  
-  aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
-  if (output_pos == aid_to_automaton_map_.end ()) {
-    // Output automaton DNE.
-    return make_pair (-1, LILY_ERROR_OAIDDNE);
-  }
-  
-  aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
-  if (input_pos == aid_to_automaton_map_.end ()) {
-    // Input automaton DNE.
-    return make_pair (-1, LILY_ERROR_IAIDDNE);
-  }
-  
-  shared_ptr<automaton> output_automaton = output_pos->second;
-  
-  shared_ptr<automaton> input_automaton = input_pos->second;
-  
-  if (output_automaton == input_automaton) {
-    // The output and input automata must be different.
-    return make_pair (-1, LILY_ERROR_INVAL);
-  }
-  
-  // Check the output action dynamically.
-  const paction* output_action = output_automaton->find_action (output_ano);
-  if (output_action == 0 ||
-      output_action->type != OUTPUT) {
-    // Output action does not exist or has the wrong type.
-    return make_pair (-1, LILY_ERROR_OANODNE);
-  }
-  
-  // Check the input action dynamically.
-  const paction* input_action = input_automaton->find_action (input_ano);
-  if (input_action == 0 ||
-      input_action->type != INPUT) {
-    // Input action does not exist or has the wrong type.
-    return make_pair (-1, LILY_ERROR_IANODNE);
-  }
-  
-  // Correct the parameters.
-  switch (output_action->parameter_mode) {
-  case NO_PARAMETER:
-    output_parameter = 0;
-    break;
-  case PARAMETER:
-    break;
-  case AUTO_PARAMETER:
-    output_parameter = input_automaton->aid ();
-    break;
-  }
-  
-  switch (input_action->parameter_mode) {
-  case NO_PARAMETER:
-    input_parameter = 0;
-    break;
-  case PARAMETER:
-    break;
-  case AUTO_PARAMETER:
-    input_parameter = output_automaton->aid ();
-    break;
-  }
-  
-  // Form complete actions.
-  caction oa (output_automaton, output_action, output_parameter);
-  caction ia (input_automaton, input_action, input_parameter);
-  
-  {
-    // Check that the input action is not bound to an enabled action.
-    // (Also checks that the binding does not exist.)
-    bound_inputs_map_type::const_iterator pos1 = input_automaton->bound_inputs_map_.find (ia);
-    if (pos1 != input_automaton->bound_inputs_map_.end ()) {
-      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if ((*pos2)->enabled ()) {
-	  // The input is bound to an enabled action.
-	  return make_pair (-1, LILY_ERROR_INVAL);
-	}
-      }
-    }
-  }
-  
-  {
-    // Check that the output action is not bound to an enabled action in the input automaton.
-    bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
-    if (pos1 != output_automaton->bound_outputs_map_.end ()) {
-      for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
-	if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
-	  return make_pair (-1, LILY_ERROR_INVAL);
-	}
-      }
-    }
-  }
-  
-  // Generate an id.
-  bid_t bid = current_bid_;
-  while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
-    bid = max (bid + 1, 0); // Handles overflow.
-  }
-  current_bid_ = max (bid + 1, 0);
-  
-  // Create the binding.
-  shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
-  bid_to_binding_map_.insert (make_pair (bid, b));
-  
-  // Bind.
-  {
-    pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
-    r.first->second.insert (b);
-  }
-  
-  {
-    pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
-    r.first->second.insert (b);
-  }
-  
-  {
-    pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
-    kassert (r.second);
-  }
-
-  // Schedule the output.
-  scheduler::schedule (oa);
-  
-  kout << "TODO:  Generate bind event" << endl;
-
-  return make_pair (b->bid, LILY_ERROR_SUCCESS);
-}
-
-void
-automaton::unbind (const shared_ptr<binding>& binding,
-		   bool remove_from_output,
-		   bool remove_from_input,
-		   bool remove_from_owner)
-{
-  kout << "TODO:  Generate unbind event" << endl;
-
-  // Remove from the map.
-  size_t count = bid_to_binding_map_.erase (binding->bid);
-  kassert (count == 1);
-  
-  // Disable the binding.
-  binding->bid = -1;
-  
-  // Unbind.
-  if (remove_from_output) {
-    shared_ptr<automaton> output_automaton = binding->output_action.automaton;
-    bound_outputs_map_type::iterator pos = output_automaton->bound_outputs_map_.find (binding->output_action);
-    kassert (pos != output_automaton->bound_outputs_map_.end ());
-    size_t count = pos->second.erase (binding);
-    kassert (count == 1);
-    if (pos->second.empty ()) {
-      output_automaton->bound_outputs_map_.erase (pos);
-    }
-  }
-  
-  if (remove_from_input) {
-    shared_ptr<automaton> input_automaton = binding->input_action.automaton;
-    bound_inputs_map_type::iterator pos = input_automaton->bound_inputs_map_.find (binding->input_action);
-    kassert (pos != input_automaton->bound_inputs_map_.end ());
-    size_t count = pos->second.erase (binding);
-    kassert (count == 1);
-    if (pos->second.empty ()) {
-      input_automaton->bound_inputs_map_.erase (pos);
-    }
-  }
-  
-  if (remove_from_owner) {
-    size_t count = binding->owner->owned_bindings_.erase (binding);
-    kassert (count == 1);
   }
 }
 
@@ -445,22 +200,12 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   */
   
   aid_to_automaton_map_.erase (aid_);
-  log_event_map_.erase (ths);
-  system_event_map_.erase (ths);
+  // log_event_map_.erase (ths);
   aid_ = -1;
   
   // Leave ano_to_action_map_ for dtor.
   // Leave description_ for dtor.
   // Leave regenterate_description_ for dtor.
-  
-  parent_ = shared_ptr<automaton> ();
-  
-  for (children_set_type::const_iterator pos = children_.begin ();
-       pos != children_.end ();
-       ++pos) {
-    (*pos)->destroy (*pos);
-  }
-  children_.clear ();
   
   // Leave execution_mutex_ for dtor.
   // Leave page_directory_ for dtor.
