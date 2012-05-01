@@ -25,14 +25,14 @@
 
 create -p ps2_keyboard_mouse /bin/ps2_keyboard_mouse
 create terminal /bin/terminal
-create -p vga /bin/vga
+#create -p vga /bin/vga
 
 bind ps2_keyboard_mouse *_out terminal *_in
-bind terminal *_out vga *_in
+#bind terminal *_out vga *_in
 
 create terminal1 /bin/ecma2unix
 bind -o 1 terminal *_out terminal1 *_in_term
-bind -i 1 terminal1 text_out_term terminal text_in
+bind -i 1 terminal1 *_term terminal *_in
 
 create terminal2 /bin/ecma2unix
 bind -o 2 terminal *_out terminal2 *_in_term
@@ -51,7 +51,7 @@ bind -o 5 terminal *_out terminal5 *_in_term
 bind -i 5 terminal5 *_out_term terminal *_in
 
 # Put the syslog on terminal1.
-#syslog = lookup syslog
+find syslog syslog
 #bind syslog *_out terminal1 *_in
 #com syslog enable!
 

@@ -106,8 +106,8 @@ create_fs (vfs_t* vfs,
   action_desc_t request;
   action_desc_t response;
   if (description_init (&description, aid) == 0 &&
-      description_read_name (&description, &request, FS_REQUEST_NAME) == 0 &&
-      description_read_name (&description, &response, FS_RESPONSE_NAME) == 0 &&
+      description_read_name (&description, &request, FS_REQUEST_NAME, 0) == 0 &&
+      description_read_name (&description, &response, FS_RESPONSE_NAME, 0) == 0 &&
       (fs->response_bid = bind (aid, response.number, 0, this_aid, vfs->response, 0)) != -1 &&
       (fs->request_bid = bind (this_aid, vfs->request, 0, aid, request.number, 0)) != -1) {
     fs->bound = true;

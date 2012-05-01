@@ -64,6 +64,13 @@ constellation_init (constellation_t* c)
 {
   c->automaton_head = 0;
   c->binding_head = 0;
+  c->this = constellation_add_unmanaged_automaton (c, getaid ());
+}
+
+automaton_t*
+constellation_get_this (constellation_t* c)
+{
+  return c->this;
 }
 
 automaton_t*
@@ -100,30 +107,74 @@ constellation_add_unmanaged_automaton (constellation_t* c,
   return a;
 }
 
-binding_t*
-constellation_add_binding (constellation_t* c,
-			   automaton_t* output_automaton,
-			   const char* output_action_begin,
-			   const char* output_end_end,
-			   int output_parameter,
-			   automaton_t* input_automaton,
-			   const char* input_action_begin,
-			   const char* input_end_end,
-			   int input_parameter)
-{
-  /* TODO */
-  logs (__func__);
-  return 0;
-}
-
 static void
 binding_bind (binding_t* b)
 {
   if (b->output_automaton->aid != -1 && b->input_automaton->aid != -1) {
-    if (b->output_action == -1 || b->input_action == -1) {
-      /* TODO:  Get the action numbers. */
-      logs ("GET THE ACTION NUMBERS");
-      exit (-1);
+    if (b->output_action == -1) {
+      /* Describe the output automaton. */
+      description_t output_description;
+      if (description_init (&output_description, b->output_automaton->aid) != 0) {
+	b->error = lily_error;
+	return;
+      }
+      
+      /* Look up the actions. */
+      action_desc_t output_action;
+      if (description_read_name (&output_description, &output_action, b->output_action_begin, b->output_action_end) != 0) {
+	b->error = lily_error;
+	description_fini (&output_description);
+	return;
+      }
+      
+      b->output_action = output_action.number;
+      
+      switch (output_action.parameter_mode) {
+      case NO_PARAMETER:
+	b->output_parameter = 0;
+	break;
+      case PARAMETER:
+	/* Okay. */
+	break;
+      case AUTO_PARAMETER:
+	b->output_parameter = b->input_automaton->aid;
+	break;
+      }
+      
+      description_fini (&output_description);
+    }
+
+    if (b->input_action == -1) {
+      /* Describe the input automaton. */
+      description_t input_description;
+      if (description_init (&input_description, b->input_automaton->aid) != 0) {
+	b->error = lily_error;
+	return;
+      }
+      
+      /* Look up the actions. */
+      action_desc_t input_action;
+      if (description_read_name (&input_description, &input_action, b->input_action_begin, b->input_action_end) != 0) {
+	b->error = lily_error;
+	description_fini (&input_description);
+	return;
+      }
+
+      b->input_action = input_action.number;
+      
+      switch (input_action.parameter_mode) {
+      case NO_PARAMETER:
+	b->input_parameter = 0;
+	break;
+      case PARAMETER:
+	/* Okay. */
+	break;
+      case AUTO_PARAMETER:
+	b->input_parameter = b->output_automaton->aid;
+	break;
+      }
+
+      description_fini (&input_description);
     }
 
     b->bid = bind (b->output_automaton->aid, b->output_action, b->output_parameter, b->input_automaton->aid, b->input_action, b->input_parameter);
@@ -156,16 +207,70 @@ create_binding (automaton_t* output_automaton,
   b->output_action = output_action;
   b->output_parameter = output_parameter;
   b->input_automaton = input_automaton;
-  b->input_action = input_action;
   size = input_action_end - input_action_begin;
   b->input_action_begin = malloc (size);
   memcpy (b->input_action_begin, input_action_begin, size);
   b->input_action_end = b->input_action_begin + size;
+  b->input_action = input_action;
   b->input_parameter = input_parameter;
 
   binding_bind (b);
 
   return b;
+}
+
+static void
+automaton_subscribe (automaton_t* a,
+		     event_handler_t event_handler,
+		     void* arg)
+{
+  event_handler_item_t* item = malloc (sizeof (event_handler_item_t));
+  memset (item, 0, sizeof (event_handler_item_t));
+  item->event_handler = event_handler;
+  item->arg = arg;
+
+  item->next = a->event_handler_head;
+  a->event_handler_head = item;
+}
+
+static void
+binding_automaton_event (void* arg)
+{
+  binding_t* b = arg;
+  binding_bind (b);
+}
+
+binding_t*
+constellation_add_binding (constellation_t* c,
+			   automaton_t* output_automaton,
+			   const char* output_action_begin,
+			   const char* output_action_end,
+			   ano_t output_action,
+			   int output_parameter,
+			   automaton_t* input_automaton,
+			   const char* input_action_begin,
+			   const char* input_action_end,
+			   ano_t input_action,
+			   int input_parameter)
+{
+  if (output_action_begin != 0 && output_action_end == 0) {
+    output_action_end = output_action_begin + strlen (output_action_begin);
+  }
+  if (input_action_begin != 0 && input_action_end == 0) {
+    input_action_end = input_action_begin + strlen (input_action_begin);
+  }
+
+  binding_t* binding = create_binding (output_automaton, output_action_begin, output_action_end, output_action, output_parameter, input_automaton, input_action_begin, input_action_end, input_action, input_parameter);
+
+  binding->next = c->binding_head;
+  c->binding_head = binding;
+
+  automaton_subscribe (output_automaton, binding_automaton_event, binding);
+  automaton_subscribe (input_automaton, binding_automaton_event, binding);
+
+  binding_bind (binding);
+
+  return binding;
 }
 
 static void
@@ -301,19 +406,6 @@ globbed_binding_bind (globbed_binding_t* b)
   }
 }
 
-static void
-automaton_subscribe (automaton_t* a,
-		     event_handler_t event_handler,
-		     void* arg)
-{
-  event_handler_item_t* item = malloc (sizeof (event_handler_item_t));
-  memset (item, 0, sizeof (event_handler_item_t));
-  item->event_handler = event_handler;
-  item->arg = arg;
-
-  item->next = a->event_handler_head;
-  a->event_handler_head = item;
-}
 
 static void
 globbed_binding_automaton_event (void* arg)
@@ -333,6 +425,13 @@ constellation_add_globbed_binding (constellation_t* c,
 				   const char* input_action_end,
 				   int input_parameter)
 {
+  if (output_action_end == 0) {
+    output_action_end = output_action_begin + strlen (output_action_begin);
+  }
+  if (input_action_end == 0) {
+    input_action_end = input_action_begin + strlen (input_action_begin);
+  }
+
   globbed_binding_t* b = malloc (sizeof (globbed_binding_t));
   memset (b, 0, sizeof (globbed_binding_t));
 

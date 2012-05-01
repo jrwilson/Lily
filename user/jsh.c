@@ -8,6 +8,7 @@
 #include "de.h"
 #include "environment.h"
 #include "constellation.h"
+#include "finda_msg.h"
 
 /* TODO:  Improve the error handling. */
 
@@ -21,6 +22,8 @@
 #define FS_REQUEST_NO 9
 #define COM_OUT_NO 12
 #define COM_IN_NO 13
+#define RECV_NO 14
+#define SEND_NO 15
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -30,6 +33,9 @@ static constellation_t constellation;
 
 /* Virtual file system. */
 static vfs_t vfs;
+
+/* Discovery. */
+static finda_t finda;
 
 /* static bd_t text_out_bd = -1; */
 /* static buffer_file_t text_out_buffer; */
@@ -467,231 +473,6 @@ bind_usage (void)
   /* buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n"); */
 }
 
-/* static void */
-/* single_bind (automaton_t* output_automaton, */
-/* 	     const char* output_action_name, */
-/* 	     int output_parameter, */
-/* 	     automaton_t* input_automaton, */
-/* 	     const char* input_action_name, */
-/* 	     int input_parameter) */
-/* { */
-/*   /\* Describe the output and input automaton. *\/ */
-/*   description_t output_description; */
-/*   description_t input_description; */
-/*   if (description_init (&output_description, output_automaton->aid) != 0) { */
-/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe output\n"); */
-/*     return; */
-/*   } */
-/*   if (description_init (&input_description, input_automaton->aid) != 0) { */
-/*     description_fini (&output_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe input\n"); */
-/*     return; */
-/*   } */
-      
-/*   /\* Look up the actions. *\/ */
-/*   action_desc_t output_action; */
-/*   if (description_read_name (&output_description, &output_action, output_action_name) != 0) { */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: output action does not exist\n"); */
-/*     return; */
-/*   } */
-
-/*   action_desc_t input_action; */
-/*   if (description_read_name (&input_description, &input_action, input_action_name) != 0) { */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: input action does not exist\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* Correct the parameters. *\/ */
-/*   switch (output_action.parameter_mode) { */
-/*   case NO_PARAMETER: */
-/*     output_parameter = 0; */
-/*     break; */
-/*   case PARAMETER: */
-/*     break; */
-/*   case AUTO_PARAMETER: */
-/*     output_parameter = input_automaton->aid; */
-/*     break; */
-/*   } */
-
-/*   switch (input_action.parameter_mode) { */
-/*   case NO_PARAMETER: */
-/*     input_parameter = 0; */
-/*     break; */
-/*   case PARAMETER: */
-/*     break; */
-/*   case AUTO_PARAMETER: */
-/*     input_parameter = output_automaton->aid; */
-/*     break; */
-/*   } */
-      
-/*   bid_t bid = bind (output_automaton->aid, output_action.number, output_parameter, input_automaton->aid, input_action.number, input_parameter); */
-/*   if (bid == -1) { */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: bind failed\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* if (subscribe_unbound (bid, UNBOUND_NO) != 0) { *\/ */
-/*   /\*   description_fini (&output_description); *\/ */
-/*   /\*   description_fini (&input_description); *\/ */
-/*   /\*   buffer_file_puts (&text_out_buffer, "-> error: subscribe failed\n"); *\/ */
-/*   /\*   return; *\/ */
-/*   /\* } *\/ */
-
-/*   binding_t* binding = create_binding (bid, output_automaton, output_action.number, output_action_name, output_parameter, input_automaton, input_action.number, input_action_name, input_parameter); */
-
-/*   binding->next = bindings_head; */
-/*   bindings_head = binding; */
-
-/*   description_fini (&output_description); */
-/*   description_fini (&input_description); */
-
-/*   bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_action_name, output_parameter, input_automaton->name, input_action_name, input_parameter); */
-/* } */
-
-/* static void */
-/* glob_bind (automaton_t* output_automaton, */
-/* 	   const char* output_action_name, */
-/* 	   const char* output_glob, */
-/* 	   int output_parameter, */
-/* 	   automaton_t* input_automaton, */
-/* 	   const char* input_action_name, */
-/* 	   const char* input_glob, */
-/* 	   int input_parameter) */
-/* { */
-/*   /\* Describe the output and input automaton. *\/ */
-/*   description_t output_description; */
-/*   description_t input_description; */
-/*   if (description_init (&output_description, output_automaton->aid) != 0) { */
-/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe output\n"); */
-/*     return; */
-/*   } */
-/*   if (description_init (&input_description, input_automaton->aid) != 0) { */
-/*     description_fini (&output_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: could not describe input\n"); */
-/*     return; */
-/*   } */
-
-/*   size_t output_action_count = description_action_count (&output_description); */
-/*   if (output_action_count == -1) { */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: bad output description\n"); */
-/*     return; */
-/*   } */
-
-/*   size_t input_action_count = description_action_count (&input_description); */
-/*   if (output_action_count == -1) { */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: bad input description\n"); */
-/*     return; */
-/*   } */
-
-/*   action_desc_t* output_actions = malloc (output_action_count * sizeof (action_desc_t)); */
-/*   action_desc_t* input_actions = malloc (input_action_count * sizeof (action_desc_t)); */
-        
-/*   if (description_read_all (&output_description, output_actions) != 0) { */
-/*     free (output_actions); */
-/*     free (input_actions); */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: bad output description\n"); */
-/*   } */
-
-/*   if (description_read_all (&input_description, input_actions) != 0) { */
-/*     free (output_actions); */
-/*     free (input_actions); */
-/*     description_fini (&output_description); */
-/*     description_fini (&input_description); */
-/*     buffer_file_puts (&text_out_buffer, "-> error: bad input description\n"); */
-/*     return; */
-/*   } */
-
-/*   /\* How many characters must match before the glob? *\/ */
-/*   const size_t output_prefix_size = output_glob - output_action_name; */
-/*   const size_t output_suffix_size = strlen (output_action_name) - output_prefix_size - 1; */
-/*   const size_t input_prefix_size = input_glob - input_action_name; */
-/*   const size_t input_suffix_size = strlen (input_action_name) - input_prefix_size - 1; */
-
-/*   for (size_t out_idx = 0; out_idx != output_action_count; ++out_idx) { */
-/*     if (output_actions[out_idx].type == LILY_ACTION_OUTPUT && */
-/* 	output_actions[out_idx].name_size >= (output_prefix_size + output_suffix_size + 1) && */
-/* 	strncmp (output_action_name, output_actions[out_idx].name, output_prefix_size) == 0 && */
-/* 	strncmp (output_glob + 1, output_actions[out_idx].name + output_actions[out_idx].name_size - 1 - output_suffix_size, output_suffix_size) == 0) { */
-
-/*       const char* output_name = output_actions[out_idx].name + output_prefix_size; */
-/*       size_t output_size = output_actions[out_idx].name_size - 1 - output_suffix_size; */
-
-/*       for (size_t in_idx = 0; in_idx != input_action_count; ++in_idx) { */
-/*       	if (input_actions[in_idx].type == LILY_ACTION_INPUT && */
-/* 	    input_actions[in_idx].name_size >= (input_prefix_size + input_suffix_size + 1) && */
-/* 	    strncmp (input_action_name, input_actions[in_idx].name, input_prefix_size) == 0 && */
-/* 	    strncmp (input_glob + 1, input_actions[in_idx].name + input_actions[in_idx].name_size - 1 - input_suffix_size, input_suffix_size) == 0) { */
-
-/* 	  const char* input_name = input_actions[in_idx].name + input_prefix_size; */
-/* 	  size_t input_size = input_actions[in_idx].name_size - 1 - input_suffix_size; */
-
-/* 	  if (output_size == input_size && strncmp (output_name, input_name, output_size) == 0) { */
-/* 	    int output_param = 0; */
-/* 	    int input_param = 0; */
-
-/* 	    switch (output_actions[out_idx].parameter_mode) { */
-/* 	    case NO_PARAMETER: */
-/* 	      output_param = 0; */
-/* 	      break; */
-/* 	    case PARAMETER: */
-/* 	      output_param = output_parameter; */
-/* 	      break; */
-/* 	    case AUTO_PARAMETER: */
-/* 	      output_param = input_automaton->aid; */
-/* 	      break; */
-/* 	    } */
-
-/* 	    switch (input_actions[in_idx].parameter_mode) { */
-/* 	    case NO_PARAMETER: */
-/* 	      input_param = 0; */
-/* 	      break; */
-/* 	    case PARAMETER: */
-/* 	      input_param = input_parameter; */
-/* 	      break; */
-/* 	    case AUTO_PARAMETER: */
-/* 	      input_param = output_automaton->aid; */
-/* 	      break; */
-/* 	    } */
-
-/* 	    bid_t bid = bind (output_automaton->aid, output_actions[out_idx].number, output_param, input_automaton->aid, input_actions[in_idx].number, input_param); */
-/* 	    if (bid != -1) { */
-/* 	      /\* if (subscribe_unbound (bid, UNBOUND_NO) == 0) { *\/ */
-/* 	      /\* 	binding_t* binding = create_binding (bid, output_automaton, output_actions[out_idx].number, output_actions[out_idx].name, output_param, input_automaton, input_actions[in_idx].number, input_actions[in_idx].name, input_param); *\/ */
-
-/* 	      /\* 	binding->next = bindings_head; *\/ */
-/* 	      /\* 	bindings_head = binding; *\/ */
-/* 	      /\* } *\/ */
-/* 	      /\* else { *\/ */
-/* 	      /\* 	bid = -1; *\/ */
-/* 	      /\* } *\/ */
-/* 	    } */
-
-/* 	    bfprintf (&text_out_buffer, "-> %d: (%s, %s, %d) -> (%s, %s, %d)\n", bid, output_automaton->name, output_actions[out_idx].name, output_param, input_automaton->name, input_actions[in_idx].name, input_param); */
-/* 	  } */
-/*       	} */
-/*       } */
-/*     } */
-/*   } */
-
-/*   free (output_actions); */
-/*   free (input_actions); */
-      
-/*   description_fini (&output_description); */
-/*   description_fini (&input_description); */
-/* } */
-
 static bool
 bind_ (const string_t* strings,
        size_t size)
@@ -794,7 +575,7 @@ bind_ (const string_t* strings,
     }
 
     if (output_glob == strings[output_action_idx].end) {
-      constellation_add_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, input_parameter);
+      constellation_add_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, -1, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, -1, input_parameter);
     }
     else {
       constellation_add_globbed_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, input_parameter);
@@ -866,15 +647,64 @@ bind_ (const string_t* strings,
 /*   return false; */
 /* } */
 
-/* static void */
-/* lookup_usage (void) */
-/* { */
-/*   buffer_file_puts (&text_out_buffer, "-> usage: NAME = lookup NAME\n"); */
-/* } */
+static void
+finda_found_callback (void* arg)
+{
 
-/* static bool */
-/* lookup_ (void) */
-/* { */
+}
+
+static void
+find_usage (void)
+{
+  /* TODO */
+  logs (ERROR "TODO:  find_usage");
+  /* buffer_file_puts (&text_out_buffer, "-> usage: NAME = lookup NAME\n"); */
+}
+
+static bool
+find_ (const string_t* strings,
+       size_t size)
+{
+  if (pstrcmp ("find", 0, strings[0].begin, strings[0].end) == 0) {
+    size_t local_name_idx;
+    size_t remote_name_idx;
+
+    size_t idx = 1;
+
+    /* The local name should be next. */
+    if (size > idx) {
+      local_name_idx = idx;
+      ++idx;
+    }
+    else {
+      find_usage ();
+      return true;
+    }
+
+    /* The remove name should be next. */
+    if (size > idx) {
+      remote_name_idx = idx;
+      ++idx;
+    }
+    else {
+      find_usage ();
+      return true;
+    }
+
+    if (find_automaton (strings[local_name_idx].begin, strings[local_name_idx].end) == 0) {
+      automaton_t* a = constellation_add_unmanaged_automaton (&constellation, -1);
+      finda_find (&finda, strings[remote_name_idx].begin, strings[remote_name_idx].end, finda_found_callback, a);
+      create_automaton (a, strings[local_name_idx].begin, strings[local_name_idx].end);
+    }
+    else {
+      logs (ERROR "TODO:  name already taken");
+    }
+
+    return true;
+  }
+
+  return false;
+
 /*   if (scan_strings_size >= 1) { */
 /*     if (strcmp ("lookup", scan_strings[0]) == 0) { */
 /*       lookup_usage (); */
@@ -922,8 +752,8 @@ bind_ (const string_t* strings,
 /*       return true; */
 /*     } */
 /*   } */
-/*   return false; */
-/* } */
+  return false;
+}
 
 /* static bool */
 /* describe_ (void) */
@@ -1103,6 +933,7 @@ error_ (const string_t* strings,
 {
   /* TODO */
   logs ("error_");
+  //exit (-1);
   /* if (scan_strings_size != 0) { */
   /*   /\* Catch all. *\/ */
   /*   bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]); */
@@ -1118,7 +949,7 @@ static dispatch_func_t dispatch[] = {
   bind_,
   /* unbind_, */
   /* destroy_, */
-  /* /\* lookup_, *\/ */
+  find_,
   /* describe_, */
   /* list_, */
   /* com_, */
@@ -1313,6 +1144,8 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
+    aid_t finda_aid = -1;
+
     constellation_init (&constellation);
     vfs_init (&vfs, FS_REQUEST_NO, FS_RESPONSE_NO);
 
@@ -1357,9 +1190,10 @@ initialize (void)
 	vfs_readfile (&vfs, script_name, script_name + strlen (script_name), readscript_callback, 0);
       }
 
-      snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d", de_integer_val (de_get (root, "." FINDA), -1));
-      logs (log_buffer);
+      finda_aid = de_integer_val (de_get (root, "." FINDA), -1);
     }
+
+    finda_init (&finda, &constellation, finda_aid, SEND_NO, RECV_NO);
 
     if (bda != -1) {
       if (buffer_destroy (bda) != 0) {
@@ -1566,6 +1400,18 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_response, ano_t ano, aid
   vfs_response (&vfs, aid, bda, bdb);
 }
 
+BEGIN_INPUT (NO_PARAMETER, RECV_NO, "", "", recv, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  finda_recv (&finda, bda, bdb);
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SEND_NO, "", "", send, ano_t ano, int param, size_t bc)
+{
+  initialize ();
+  finda_send (&finda);
+}
+
 /* BEGIN_OUTPUT (AUTO_PARAMETER, COM_OUT_NO, "com_out", "", com_out, ano_t ano, aid_t aid, size_t bc) */
 /* { */
 /*   initialize (); */
@@ -1615,4 +1461,5 @@ do_schedule (void)
   /*   schedule (COM_OUT_NO, com_queue_front ()); */
   /* } */
   vfs_schedule (&vfs);
+  finda_schedule (&finda);
 }

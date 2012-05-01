@@ -36,6 +36,7 @@ description_read_all (description_t* d,
 int
 description_read_name (description_t* d,
 		       action_desc_t* ad,
-		       const char* action_name);
+		       const char* name_begin,
+		       const char* name_end);
 
 #endif /* DESCRIPTION_H */

@@ -48,9 +48,9 @@ tmpfs : tmpfs.o cpio.o fs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 finda : finda.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -ldymem
 
-jsh : jsh.o fs_msg.o de.o constellation.o
+jsh : jsh.o fs_msg.o de.o constellation.o finda_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 

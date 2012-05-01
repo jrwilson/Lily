@@ -84,17 +84,6 @@ BEGIN_SYSTEM_INPUT (LOG_EVENT_NO, "log_event", "", log_event, ano_t ano, int par
   finish_input (bda, bdb);
 }
 
-/* BEGIN_SYSTEM_INPUT (SYSTEM_EVENT_NO, "system_event", "", system_event, ano_t ano, int param, bd_t bda, bd_t bdb) */
-/* { */
-/*   initialize (); */
-/*   if (buffer_file_puts (&text_out_buffer, "system_event\n") != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to text_out buffer: %s\n", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     exit (-1); */
-/*   } */
-/*   finish_input (bda, bdb); */
-/* } */
-
 static bool
 text_out_precondition (void)
 {

@@ -6,10 +6,6 @@
 
 /* User section. */
 
-/* Action names. */
-#define FS_REQUEST_NAME "request"
-#define FS_RESPONSE_NAME "response"
-
 /* Identifies a node in a file system. */
 typedef size_t fs_nodeid_t;
 
@@ -68,6 +64,10 @@ vfs_response (vfs_t* vfs,
 	      bd_t bdb);
 
 /* Implementer section. */
+
+/* Action names. */
+#define FS_REQUEST_NAME "fs_request_in"
+#define FS_RESPONSE_NAME "fs_response_out"
 
 /* Request/response types. */
 typedef enum {

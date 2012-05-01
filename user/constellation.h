@@ -11,10 +11,14 @@ typedef struct {
   automaton_t* automaton_head;
   binding_t* binding_head;
   globbed_binding_t* globbed_binding_head;
+  automaton_t* this;
 } constellation_t;
 
 void
 constellation_init (constellation_t* c);
+
+automaton_t*
+constellation_get_this (constellation_t* c);
 
 automaton_t*
 constellation_add_managed_automaton (constellation_t* c,
@@ -30,10 +34,12 @@ constellation_add_binding (constellation_t* c,
 			   automaton_t* output_automaton,
 			   const char* output_action_begin,
 			   const char* output_end_end,
+			   ano_t output_action,
 			   int output_parameter,
 			   automaton_t* input_automaton,
 			   const char* input_action_begin,
 			   const char* input_end_end,
+			   ano_t input_action,
 			   int input_parameter);
 
 globbed_binding_t*
