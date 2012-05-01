@@ -137,7 +137,7 @@ text_out_precondition (void)
   return buffer_file_size (&text_out_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param, size_t bc)
 {
   initialize ();
 
@@ -155,7 +155,7 @@ mouse_packets_out_precondition (void)
   return mouse_packet_list.count != 0;
 }
 
-BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param)
+BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param, size_t bc)
 {
   initialize ();
 
@@ -209,7 +209,7 @@ text_out_term_precondition (void)
   return buffer_file_size (&text_out_term_buffer) != 0;
 }
 
-BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_TERM_NO, "text_out_term", "buffer_file_t", text_out_term, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_TERM_NO, "text_out_term", "buffer_file_t", text_out_term, ano_t ano, int param, size_t bc)
 {
   initialize ();
 

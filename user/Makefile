@@ -7,8 +7,8 @@ finda \
 jsh \
 ps2_keyboard_mouse \
 terminal \
-vga
-
+vga \
+ecma2unix
 
 #pci \
 #ps2_keyboard_mouse_test \
@@ -17,7 +17,6 @@ vga
 #ne2000 \
 #serial_port \
 #byte_channel \
-#ecma2unix \
 #zsnoop \
 #bios
 
@@ -63,6 +62,11 @@ terminal : terminal.o vga_msg.o mouse_msg.o
 vga : vga.o vga_msg.o
 	$(CC) -o $@ $^  -ldescription -lbuffer_file
 
+ecma2unix : ecma2unix.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
+
+
+
 
 
 
@@ -85,9 +89,6 @@ serial_port : serial_port.o kv_parse.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file  -ldymem
 
 byte_channel : byte_channel.o
-	$(CC) -o $@ $^ -lbuffer_file
-
-ecma2unix : ecma2unix.o mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file
 
 zsnoop : zsnoop.o

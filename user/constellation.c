@@ -4,6 +4,8 @@
 #include <string.h>
 #include <description.h>
 
+/* TODO:  Reference counting. */
+
 typedef enum {
   MANAGED,
   UNMANAGED,
@@ -27,19 +29,21 @@ struct automaton {
   automaton_t* next;
 };
 
-/* struct binding { */
-/*   automaton_t* output_automaton; */
-/*   ano_t output_action; */
-/*   char* output_action_begin; */
-/*   char* output_action_end; */
-/*   int output_parameter; */
-/*   automaton_t* input_automaton; */
-/*   ano_t input_action; */
-/*   char* input_action_begin; */
-/*   char* input_action_end; */
-/*   int input_parameter; */
-/*   binding_t* next; */
-/* }; */
+struct binding {
+  bid_t bid;
+  automaton_t* output_automaton;
+  char* output_action_begin;
+  char* output_action_end;
+  ano_t output_action;
+  int output_parameter;
+  automaton_t* input_automaton;
+  char* input_action_begin;
+  char* input_action_end;
+  ano_t input_action;
+  int input_parameter;
+  lily_error_t error;
+  binding_t* next;
+};
 
 struct globbed_binding {
   automaton_t* output_automaton;
@@ -51,6 +55,7 @@ struct globbed_binding {
   char* input_action_end;
   int input_parameter;
   lily_error_t error;
+  binding_t* binding_head;
   globbed_binding_t* next;
 };
 
@@ -109,6 +114,58 @@ constellation_add_binding (constellation_t* c,
   /* TODO */
   logs (__func__);
   return 0;
+}
+
+static void
+binding_bind (binding_t* b)
+{
+  if (b->output_automaton->aid != -1 && b->input_automaton->aid != -1) {
+    if (b->output_action == -1 || b->input_action == -1) {
+      /* TODO:  Get the action numbers. */
+      logs ("GET THE ACTION NUMBERS");
+      exit (-1);
+    }
+
+    b->bid = bind (b->output_automaton->aid, b->output_action, b->output_parameter, b->input_automaton->aid, b->input_action, b->input_parameter);
+    b->error = lily_error;
+    /* TODO:  Probably generate an event. */
+  }
+}
+
+static binding_t*
+create_binding (automaton_t* output_automaton,
+		const char* output_action_begin,
+		const char* output_action_end,
+		ano_t output_action,
+		int output_parameter,
+		automaton_t* input_automaton,
+		const char* input_action_begin,
+		const char* input_action_end,
+		ano_t input_action,
+		int input_parameter)
+{
+  size_t size;
+  binding_t* b = malloc (sizeof (binding_t));
+  memset (b, 0, sizeof (binding_t));
+  b->bid = -1;
+  b->output_automaton = output_automaton;
+  size = output_action_end - output_action_begin;
+  b->output_action_begin = malloc (size);
+  memcpy (b->output_action_begin, output_action_begin, size);
+  b->output_action_end = b->output_action_begin + size;
+  b->output_action = output_action;
+  b->output_parameter = output_parameter;
+  b->input_automaton = input_automaton;
+  b->input_action = input_action;
+  size = input_action_end - input_action_begin;
+  b->input_action_begin = malloc (size);
+  memcpy (b->input_action_begin, input_action_begin, size);
+  b->input_action_end = b->input_action_begin + size;
+  b->input_parameter = input_parameter;
+
+  binding_bind (b);
+
+  return b;
 }
 
 static void
@@ -227,8 +284,9 @@ globbed_binding_bind (globbed_binding_t* b)
 		break;
 	      }
 	      
-	      bid_t bid = bind (b->output_automaton->aid, output_actions[out_idx].number, output_param, b->input_automaton->aid, input_actions[in_idx].number, input_param);
-	      logs (__func__);
+	      binding_t* binding = create_binding (b->output_automaton, output_actions[out_idx].name, output_actions[out_idx].name + output_actions[out_idx].name_size, output_actions[out_idx].number, output_param, b->input_automaton, input_actions[in_idx].name, input_actions[in_idx].name + input_actions[in_idx].name_size, input_actions[in_idx].number, input_param);
+	      binding->next = b->binding_head;
+	      b->binding_head = binding;
 	    }
 	  }
 	}
