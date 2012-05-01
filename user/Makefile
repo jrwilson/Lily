@@ -46,7 +46,7 @@ syslog : syslog.o
 	$(CC) -o $@ $^ -lbuffer_file
 
 tmpfs : tmpfs.o cpio.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lbuffer_file
 
 finda : finda.o
 	$(CC) -o $@ $^
