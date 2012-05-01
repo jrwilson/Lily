@@ -5,7 +5,6 @@
 #include <buffer_file.h>
 #include "vga_msg.h"
 #include "mouse_msg.h"
-#include "syslog.h"
 #include <description.h>
 
 /*
@@ -252,18 +251,12 @@
 */
 
 #define INIT_NO 1
-#define STOP_NO 2
-#define SYSLOG_NO 3
 #define SCAN_CODES_IN_NO 4
 #define MOUSE_PACKETS_IN_NO 5
 #define TEXT_OUT_NO 7
 #define MOUSE_PACKETS_OUT_NO 8
 #define TEXT_IN_NO 9
 #define VGA_OP_NO 10
-
-#define INFO "terminal: info: "
-#define WARNING "terminal: warning: "
-#define ERROR "terminal: error: "
 
 /* VGA Colors. */
 #define VGA_BLACK 0
@@ -338,20 +331,16 @@ static size_t active_client = 0;
 /* Initialization flag. */
 static bool initialized = false;
 
-typedef enum {
-  RUN,
-  STOP,
-} state_t;
-static state_t state = RUN;
-
-/* Syslog buffer. */
-static bd_t syslog_bd = -1;
-static buffer_file_t syslog_buffer;
-
 /* Buffers to drive the vga. */
 static bd_t vga_op_list_bda = -1;
 static bd_t vga_op_list_bdb = -1;
 static vga_op_list_t vga_op_list;
+
+#define LOG_BUFFER_SIZE 128
+static char log_buffer[LOG_BUFFER_SIZE];
+#define ERROR __FILE__ ": error: "
+#define WARNING __FILE__ ": warning: "
+#define INFO __FILE__ ": info: "
 
 #define LINE_HOME_POSITION 0
 #define LINE_LIMIT_POSITION 80
@@ -372,16 +361,16 @@ switch_to_client (size_t client)
     active_client = client;
     /* Send the data. */
     if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, clients[active_client].screen_bd) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not write vga op list\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write vga op list: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
     
     /* Send the cursor. */
     if (vga_op_list_write_set_cursor_location (&vga_op_list, clients[active_client].active_position_y * LINE_LIMIT_POSITION + clients[active_client].active_position_x) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not write vga op list\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write vga op list: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }
@@ -980,9 +969,8 @@ static void
 insert_modifier_group (unsigned int modifier)
 {
   if (modifier_state_to_symbols[modifier] != 0) {
-    buffer_file_puts (&syslog_buffer, ERROR "modifier group exists\n");
-    state = STOP;
-    return;
+    logs (ERROR "modifier group exists");
+    exit (-1);
   }
   /* TODO:  If these are sparse, it might be better to use a list. */
   modifier_state_to_symbols[modifier] = malloc (TOTAL_KEYS * sizeof (symbol_t));
@@ -998,9 +986,8 @@ insert_symbol (unsigned int modifier,
 	       symbol_t symbol)
 {
   if (modifier_state_to_symbols[modifier] == 0) {
-    buffer_file_puts (&syslog_buffer, ERROR "modifier group does not exist\n");
-    state = STOP;
-    return;
+    logs (ERROR "modifier group does not exist");
+    exit (-1);
   }
   modifier_state_to_symbols[modifier][key] = symbol;
 }
@@ -1062,9 +1049,8 @@ process_key_code (unsigned char key_code,
 		  bool make)
 {
   if (key_code == 0) {
-    buffer_file_puts (&syslog_buffer, ERROR "null key code\n");
-    state = STOP;
-    return;
+    logs (ERROR "null key code");
+    exit (-1);
   }
 
   symbol_t symbol = lookup_symbol (key_code);
@@ -1215,9 +1201,9 @@ ascii_func (symbol_t symbol,
     }
 
     if (buffer_file_put (&clients[active_client].text_out_buffer, c) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "Could not write to text_out buffer\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not write to text_out buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }
@@ -1246,9 +1232,9 @@ up_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, "\e[A") != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not write to ascii buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }
@@ -1259,9 +1245,9 @@ down_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, "\e[B") != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not write to ascii buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }
@@ -1272,9 +1258,9 @@ left_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, "\e[D") != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not write to ascii buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }
@@ -1285,9 +1271,9 @@ right_func (symbol_t symbol,
 {
   if (make) {
     if (buffer_file_puts (&clients[active_client].text_out_buffer, "\e[C") != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "Could not write to ascii buffer\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not write to ascii buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
   }
 }
@@ -1427,51 +1413,19 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    syslog_bd = buffer_create (0);
-    if (syslog_bd == -1) {
-      /* Nothing we can do. */
-      exit (-1);
-    }
-    if (buffer_file_initw (&syslog_buffer, syslog_bd) != 0) {
-      /* Nothing we can do. */
-      exit (-1);
-    }
-
-    aid_t syslog_aid = lookups (SYSLOG_NAME);
-    if (syslog_aid != -1) {
-      /* Bind to the syslog. */
-
-      description_t syslog_description;
-      if (description_init (&syslog_description, syslog_aid) != 0) {
-	exit (-1);
-      }
-      
-      action_desc_t syslog_text_in;
-      if (description_read_name (&syslog_description, &syslog_text_in, SYSLOG_TEXT_IN) != 0) {
-	exit (-1);
-      }
-      
-      /* We bind the response first so they don't get lost. */
-      if (bind (getaid (), SYSLOG_NO, 0, syslog_aid, syslog_text_in.number, 0) == -1) {
-	exit (-1);
-      }
-
-      description_fini (&syslog_description);
-    }
-
     vga_op_list_bda = buffer_create (0);
     vga_op_list_bdb = buffer_create (0);
     if (vga_op_list_bda == -1 ||
 	vga_op_list_bdb == -1) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not create vga op list buffers\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not create vga op list buffers: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
 
     if (vga_op_list_initw (&vga_op_list, vga_op_list_bda, vga_op_list_bdb) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not initialize vga op list buffers\n");
-      state = STOP;
-      return;
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not initialize vga op list buffers: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
     }
 
     /* Set up the modifier groups. */
@@ -1697,41 +1651,41 @@ initialize (void)
     for (size_t client = 0; client != CLIENT_COUNT; ++client) {
       clients[client].text_out_bd = buffer_create (0);
       if (clients[client].text_out_bd == -1) {
-    	buffer_file_puts (&syslog_buffer, ERROR "could not create ascii buffer\n");
-    	state = STOP;
-    	return;
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not create ascii buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       if (buffer_file_initw (&clients[client].text_out_buffer, clients[client].text_out_bd) != 0) {
-    	buffer_file_puts (&syslog_buffer, ERROR "could not initialize ascii buffer\n");
-    	state = STOP;
-    	return;
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not initialize ascii buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       
       clients[client].mouse_packets_bd = buffer_create (0);
       if (clients[client].mouse_packets_bd == -1) {
-    	buffer_file_puts (&syslog_buffer, ERROR "could not create mouse packets buffer\n");
-    	state = STOP;
-    	return;
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not create mouse packet buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       if (mouse_packet_list_initw (&clients[client].mouse_packet_list, clients[client].mouse_packets_bd) != 0) {
-    	buffer_file_puts (&syslog_buffer, ERROR "could not initialize mouse packets buffer\n");
-    	state = STOP;
-    	return;
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not initialize mouse packet buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       
       clients[client].au.attribute = DEFAULT_ATTRIBUTE;
 
       clients[client].screen_bd = buffer_create (size_to_pages (PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE));
       if (clients[client].screen_bd == -1) {
-    	buffer_file_puts (&syslog_buffer, ERROR "could not create screen buffer\n");
-    	state = STOP;
-    	return;
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not create screen buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       clients[client].screen_buffer = buffer_map (clients[client].screen_bd);
       if (clients[client].screen_buffer == 0) {
-    	buffer_file_puts (&syslog_buffer, ERROR "could not map screen buffer\n");
-    	state = STOP;
-    	return;
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "Could not map screen buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       /* ECMA-48 states that the initial state of the characters must be "erased."
     	 We use spaces. */
@@ -2130,55 +2084,6 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-/* stop
-   ----
-   Stop the automaton.
-   
-   Pre:  state == STOP and syslog_buffer is empty
-   Post: 
-*/
-static bool
-stop_precondition (void)
-{
-  return state == STOP && buffer_file_size (&syslog_buffer) == 0;
-}
-
-BEGIN_INTERNAL (NO_PARAMETER, STOP_NO, "", "", stop, ano_t ano, int param)
-{
-  initialize ();
-
-  if (stop_precondition ()) {
-    exit (-1);
-  }
-  finish_internal ();
-}
-
-/* syslog
-   ------
-   Output error messages.
-   
-   Pre:  syslog_buffer is not empty
-   Post: syslog_buffer is empty
-*/
-static bool
-syslog_precondition (void)
-{
-  return buffer_file_size (&syslog_buffer) != 0;
-}
-
-BEGIN_OUTPUT (NO_PARAMETER, SYSLOG_NO, "", "", syslogx, ano_t ano, int param)
-{
-  initialize ();
-
-  if (syslog_precondition ()) {
-    buffer_file_truncate (&syslog_buffer);
-    finish_output (true, syslog_bd, -1);
-  }
-  else {
-    finish_output (false, -1, -1);
-  }
-}
-
 /*
   INPUT DEVICES -> TERMINAL
 */
@@ -2195,14 +2100,16 @@ BEGIN_INPUT (NO_PARAMETER, SCAN_CODES_IN_NO, "scan_codes_in", "buffer_file_t", s
 
   buffer_file_t input_buffer;
   if (buffer_file_initr (&input_buffer, bda) != 0) {
-    buffer_file_puts (&syslog_buffer, WARNING "could not initialize scan code buffer for reading\n");
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize scan code buffer for reading: %s", lily_error_string (lily_error));
+    logs (log_buffer);
     finish_input (bda, bdb);
   }
   
   size_t size = buffer_file_size (&input_buffer);
   const unsigned char* codes = buffer_file_readp (&input_buffer, size);
   if (codes == 0) {
-    buffer_file_puts (&syslog_buffer, WARNING "could not read the scan code buffer\n");
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read the scan code buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
     finish_input (bda, bdb);
   }
   
@@ -2265,21 +2172,23 @@ BEGIN_INPUT (NO_PARAMETER, MOUSE_PACKETS_IN_NO, "mouse_packets_in", "mouse_packe
   mouse_packet_t mouse_packet;
   mouse_packet_list_t mouse_packet_list;
   if (mouse_packet_list_initr (&mouse_packet_list, bda) != 0) {
-    buffer_file_puts (&syslog_buffer, WARNING "could not initialize mouse packet list for reading\n");
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize the mouse packet list for reading: %s", lily_error_string (lily_error));
+    logs (log_buffer);
     finish_input (bda, bdb);
   }
   
   for (size_t idx = 0; idx != mouse_packet_list.count; ++idx) {
     if (mouse_packet_list_read (&mouse_packet_list, &mouse_packet) != 0) {
-      buffer_file_puts (&syslog_buffer, WARNING "could not read mouse packet\n");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read mouse packet: %s", lily_error_string (lily_error));
+      logs (log_buffer);
       finish_input (bda, bdb);
     }
     
     if (mouse_packet_list_write (&clients[active_client].mouse_packet_list, &mouse_packet) != 0) {
-      buffer_file_puts (&syslog_buffer, ERROR "could not write mouse packet\n");
-      state = STOP;
-      finish_input (bda, bdb);
-      }
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write mouse packet: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
   }
 
   finish_input (bda, bdb);
@@ -2316,9 +2225,9 @@ BEGIN_OUTPUT (PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packe
   if (client >= 0 && client < CLIENT_COUNT) {
     if (clients[client].mouse_packet_list.count != 0) {
       if (mouse_packet_list_reset (&clients[client].mouse_packet_list) != 0) {
-	buffer_file_puts (&syslog_buffer, ERROR "could not reset mouse packet list\n");
-	state = STOP;
-	finish_output (false, -1, -1);
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not reset mouse packet list: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
       finish_output (true, clients[client].mouse_packets_bd, -1);
     }
@@ -2341,14 +2250,16 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
   if (client >= 0 && client < CLIENT_COUNT) {
     buffer_file_t input_buffer;
     if (buffer_file_initr (&input_buffer, bda) != 0) {
-      buffer_file_puts (&syslog_buffer, WARNING "could not initialize text_in buffer for reading\n");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize text_in buffer for reading: %s", lily_error_string (lily_error));
+      logs (log_buffer);
       finish_input (bda, bdb);
     }
     
     size_t size = buffer_file_size (&input_buffer);
     const char* begin = buffer_file_readp (&input_buffer, size);
     if (begin == 0) {
-      buffer_file_puts (&syslog_buffer, WARNING "could not read text_in buffer\n");
+      snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read text_in buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
       finish_input (bda, bdb);
     }
     
@@ -2378,9 +2289,9 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
       if (screen_buffer_changed) {
 	/* Send the data. */
 	if (vga_op_list_write_bassign (&vga_op_list, VGA_TEXT_MEMORY_BEGIN, PAGE_LIMIT_POSITION * LINE_LIMIT_POSITION * CELL_SIZE, clients[active_client].screen_bd) != 0) {
-	  buffer_file_puts (&syslog_buffer, ERROR "could not write vga op list\n");
-	  state = STOP;
-	  finish_input (bda, bdb);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write vga op list: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
 	}
       }
       
@@ -2388,9 +2299,9 @@ BEGIN_INPUT (PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t a
       if (new_cursor_location != old_cursor_location) {
 	/* Send the cursor. */
 	if (vga_op_list_write_set_cursor_location (&vga_op_list, new_cursor_location) != 0) {
-	  buffer_file_puts (&syslog_buffer, ERROR "could not write vga op list\n");
-	  state = STOP;
-	  finish_input (bda, bdb);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write vga op list: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
 	}
       }
     }
@@ -2432,12 +2343,6 @@ BEGIN_OUTPUT (NO_PARAMETER, VGA_OP_NO, "vga_op_out", "vga_op_list", vga_op, ano_
 void
 do_schedule (void)
 {
-  if (stop_precondition ()) {
-    schedule (STOP_NO, 0);
-  }
-  if (syslog_precondition ()) {
-    schedule (SYSLOG_NO, 0);
-  }
   for (size_t client = 0; client != CLIENT_COUNT; ++client) {
     if (buffer_file_size (&clients[client].text_out_buffer) != 0) {
       schedule (TEXT_OUT_NO, client + 1);

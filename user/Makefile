@@ -4,12 +4,12 @@ PROGRAMS=\
 syslog \
 tmpfs \
 finda \
-jsh
+jsh \
+ps2_keyboard_mouse \
+terminal \
+vga \
+ecma2unix
 
-#vfs \
-#ps2_keyboard_mouse \
-#terminal \
-#vga \
 #pci \
 #ps2_keyboard_mouse_test \
 #frtimer \
@@ -17,7 +17,6 @@ jsh
 #ne2000 \
 #serial_port \
 #byte_channel \
-#ecma2unix \
 #zsnoop \
 #bios
 
@@ -27,7 +26,7 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o data_stack.o
+boot_automaton : boot_automaton.o cpio.o de.o
 	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
@@ -45,33 +44,34 @@ to_buffer_file : to_buffer_file.c
 syslog : syslog.o
 	$(CC) -o $@ $^ -lbuffer_file
 
-tmpfs : tmpfs.o cpio.o
-	$(CC) -o $@ $^ -lbuffer_file
-
-finda : finda.o
-	$(CC) -o $@ $^
-
-jsh : jsh.o vfs_msg.o kv_parse.o callback_queue.o data_stack.o
+tmpfs : tmpfs.o cpio.o fs_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
+finda : finda.o
+	$(CC) -o $@ $^ -ldymem
 
-
-
-
-vfs : vfs.o callback_queue.o vfs_msg.o
+jsh : jsh.o fs_msg.o de.o constellation.o finda_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file
 
-ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
-	$(CC) -o $@ $^ -lbuffer_file
-
 terminal : terminal.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
-vga : vga.o vga_msg.o kv_parse.o
-	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
+vga : vga.o vga_msg.o
+	$(CC) -o $@ $^  -ldescription -lbuffer_file
+
+ecma2unix : ecma2unix.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
+
+
+
+
+
+
+ps2_keyboard_mouse_test : ps2_keyboard_mouse_test.o mouse_msg.o
+	$(CC) -o $@ $^ -lbuffer_file
 
 pci : pci.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file -ldymem
@@ -89,9 +89,6 @@ serial_port : serial_port.o kv_parse.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file  -ldymem
 
 byte_channel : byte_channel.o
-	$(CC) -o $@ $^ -lbuffer_file
-
-ecma2unix : ecma2unix.o mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file
 
 zsnoop : zsnoop.o

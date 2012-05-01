@@ -1,7 +1,7 @@
 #include <automaton.h>
 #include <string.h>
 #include "cpio.h"
-#include "data_stack.h"
+#include "de.h"
 #include "environment.h"
 
 /*
@@ -13,6 +13,8 @@
     2.  tmpfs - The tmpfs automaton implements a simple file system based on the contents of a cpio archive.  (The buffer supplied to the boot automaton is passed to the tmpfs automaton.)
     3.  finda - The finda automaton allows automata to find each other.
   After attempting to create these automata, the boot automaton loads a shell automaton to continue the boot process.
+
+  TODO:  Use the configuration library to create the automata.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
@@ -46,7 +48,7 @@ initialize (void)
 
     cpio_archive_t archive;
     if (cpio_archive_init (&archive, bda) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize cpio archive: %s\n", lily_error_string (lily_error));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize cpio archive: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
@@ -60,64 +62,64 @@ initialize (void)
 	if (strcmp (file.name, SYSLOG_PATH) == 0) {
 	  bd_t syslog_bd = cpio_file_read (&archive, &file);
 	  if (syslog_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read syslog image: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read syslog image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
 	  aid_t syslog_aid = create (syslog_bd, -1, -1, false);
 	  if (syslog_aid == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create syslog automaton: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create syslog automaton: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
 	  if (buffer_destroy (syslog_bd) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy syslog image: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy syslog image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "syslog = %d\n", syslog_aid);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "syslog = %d", syslog_aid);
 	  logs (log_buffer);
 	}
 	else if (strcmp (file.name, TMPFS_PATH) == 0) {
 	  bd_t tmpfs_bd = cpio_file_read (&archive, &file);
 	  if (tmpfs_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read tmpfs image: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read tmpfs image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
-	  tmpfs_aid = create (tmpfs_bd, -1, -1, false);
+	  tmpfs_aid = create (tmpfs_bd, bda, -1, false);
 	  if (tmpfs_aid == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create tmpfs automaton: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create tmpfs automaton: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
 	  if (buffer_destroy (tmpfs_bd) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy tmpfs image: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy tmpfs image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "tmpfs = %d\n", tmpfs_aid);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "tmpfs = %d", tmpfs_aid);
 	  logs (log_buffer);
 	}
 	else if (strcmp (file.name, FINDA_PATH) == 0) {
 	  bd_t finda_bd = cpio_file_read (&archive, &file);
 	  if (finda_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read finda image: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read finda image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
 	  finda_aid = create (finda_bd, -1, -1, false);
 	  if (finda_aid == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create finda automaton: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create finda automaton: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
 	  if (buffer_destroy (finda_bd) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy finda image: %s\n", lily_error_string (lily_error));
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy finda image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d\n", finda_aid);
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d", finda_aid);
 	  logs (log_buffer);
 	}
 	else if (strcmp (file.name, JSH_PATH) == 0) {
@@ -128,153 +130,66 @@ initialize (void)
 
     if (bda != -1) {
       if (buffer_destroy (bda) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s\n", lily_error_string (lily_error));
+    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (lily_error));
     	logs (log_buffer);
     	exit (-1);
       }
     }
     if (bdb != -1) {
       if (buffer_destroy (bdb) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s\n", lily_error_string (lily_error));
+    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (lily_error));
     	logs (log_buffer);
     	exit (-1);
       }
     }
 
-    bd_t ds_bd = buffer_create (0);
-    data_stack_t ds;
-    if (ds_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create ds buffer: %s\n", lily_error_string (lily_error));
+    bd_t de_bd = buffer_create (0);
+    if (de_bd == -1) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create de buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
-    if (data_stack_initw (&ds, ds_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize ds buffer: %s\n", lily_error_string (lily_error));
+    buffer_file_t de_buffer;
+    if (buffer_file_initw (&de_buffer, de_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize de buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
 
-    if (data_stack_push_table (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // {}
-    if (data_stack_push_string (&ds, FINDA) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // {} FINDA
-    if (data_stack_push_integer (&ds, finda_aid) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // {} FINDA finda_aid
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid }
-    if (data_stack_push_string (&ds, FS) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS
-    if (data_stack_push_table (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS {}
-    if (data_stack_push_string (&ds, ROOT_PATH) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS {} ROOT_PATH
-    if (data_stack_push_integer (&ds, tmpfs_aid) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS {} ROOT_PATH tmpfs_aid
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid } FS { ROOT_PATH = tmpfs_aid }
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } }
-    if (data_stack_push_string (&ds, ARGS) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS
-    if (data_stack_push_table (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS {}
-    if (data_stack_push_string (&ds, "script") != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS {} "script"
-    if (data_stack_push_string (&ds, "/scr/start.jsh") != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS {} "script" "/scr/start.jsh"
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid } } ARGS { "script" = "/scr/start.jsh" }
-    if (data_stack_insert (&ds) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to ds buffer: %s\n", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    // { FINDA = finda_aid; FS = { ROOT_PATH = tmpfs_aid }; ARGS = { "script" = "/scr/start.jsh" } }
+    de_val_t* root = de_create_object ();
+    de_set (root, "." FINDA, de_create_integer (finda_aid));
+    de_set (root, "." FS "[0].from.aid", de_create_integer (-1));
+    de_set (root, "." FS "[0].from.nodeid", de_create_integer (-1));
+    de_set (root, "." FS "[0].to.aid", de_create_integer (tmpfs_aid));
+    de_set (root, "." FS "[0].to.nodeid", de_create_integer (0));
+    de_set (root, "." ARGS "." "script", de_create_string ("/scr/start.jsh"));
+    de_serialize (root, &de_buffer);
+    de_destroy (root);
 
     if (jsh_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read jsh image: %s\n", lily_error_string (lily_error));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read jsh image: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
-    aid_t jsh_aid = create (jsh_bd, ds_bd, -1, false);
+    aid_t jsh_aid = create (jsh_bd, de_bd, -1, true);
     if (jsh_aid == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create jsh automaton: %s\n", lily_error_string (lily_error));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create jsh automaton: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
     if (buffer_destroy (jsh_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy jsh image: %s\n", lily_error_string (lily_error));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy jsh image: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
 
-    if (buffer_destroy (ds_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy ds buffer: %s\n", lily_error_string (lily_error));
+    if (buffer_destroy (de_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy de buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
 
-    snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "jsh = %d\n", jsh_aid);
+    snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "jsh = %d", jsh_aid);
     logs (log_buffer);
   }
 }

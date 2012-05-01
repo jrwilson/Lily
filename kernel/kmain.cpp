@@ -25,6 +25,7 @@
 #include "vm.hpp"
 #include "halt.hpp"
 #include "scheduler.hpp"
+#include "system_automaton.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -298,16 +299,19 @@ kmain (uint32_t multiboot_magic,
   }
 
   // Create the automaton.
-  pair<shared_ptr<automaton>, int> r = automaton::create_automaton (shared_ptr<automaton> (), true, text, boot_automaton_size, data_buffer, shared_ptr<buffer> ());
+  pair<shared_ptr<automaton>, int> r = automaton::create_automaton (true, text, boot_automaton_size, data_buffer, shared_ptr<buffer> ());
 
   if (r.first.get () == 0) {
     kout << "Could not create the boot automaton.  Halting." << endl;
     halt ();
   }
 
+  // Release these resources.
   text = shared_ptr<buffer> ();
   data_buffer = shared_ptr<buffer> ();
   
+  system_automaton = r.first;
+
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, -1);
 }

@@ -1,6 +1,8 @@
 #ifndef __shared_ptr_hpp__
 #define __shared_ptr_hpp__
 
+#include <stddef.h>
+
 // From The C++ Standard Library:  A Tutorial and Reference by Josuttis pp. 222-223.
 
 // TODO:  Make these operations atomic.

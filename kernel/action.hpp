@@ -13,7 +13,6 @@ enum action_type_t {
   INPUT = LILY_ACTION_INPUT,
   OUTPUT = LILY_ACTION_OUTPUT,
   INTERNAL = LILY_ACTION_INTERNAL,
-  SYSTEM_INPUT = LILY_ACTION_SYSTEM_INPUT,
 };
 
 enum parameter_mode_t {
@@ -55,16 +54,11 @@ struct caction {
   shared_ptr< ::automaton> automaton;
   const paction* action;
   int parameter;
-  // For system inputs.
-  shared_ptr<buffer> buffer_a;
-  shared_ptr<buffer> buffer_b;
 
   caction () :
     automaton (0),
     action (0),
-    parameter (0),
-    buffer_a (0),
-    buffer_b (0)
+    parameter (0)
   { }
 
   caction (const shared_ptr< ::automaton>& a,
@@ -72,29 +66,13 @@ struct caction {
 	   int p) :
     automaton (a),
     action (act),
-    parameter (p),
-    buffer_a (0),
-    buffer_b (0)
+    parameter (p)
   { }
 
-  caction (const shared_ptr< ::automaton>& au,
-  	   const paction* act,
-  	   int p,
-  	   const shared_ptr<buffer>& a,
-  	   const shared_ptr<buffer>& b) :
-    automaton (au),
-    action (act),
-    parameter (p),
-    buffer_a (a),
-    buffer_b (b)
-  {
-    kassert (act->type == SYSTEM_INPUT);
-  }
-  
   inline bool
   operator== (const caction& other) const
   {
-    return automaton == other.automaton && action == other.action && parameter == other.parameter && buffer_a.get () == other.buffer_a.get () && buffer_b.get () == other.buffer_b.get ();
+    return automaton == other.automaton && action == other.action && parameter == other.parameter;
   }
 };
 
@@ -102,7 +80,7 @@ struct caction_hash {
   size_t
   operator() (const caction& c) const
   {
-    return reinterpret_cast<size_t> (c.automaton.get ()) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter ^ reinterpret_cast<size_t> (c.buffer_a.get ()) ^ reinterpret_cast<size_t> (c.buffer_b.get ());
+    return reinterpret_cast<size_t> (c.automaton.get ()) ^ reinterpret_cast<size_t> (c.action) ^ c.parameter;
   }
 };
 

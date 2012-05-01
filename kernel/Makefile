@@ -28,7 +28,8 @@ irq.o \
 trap_handler.o \
 trap.o \
 automaton.o \
-global_fifo_scheduler.o
+global_fifo_scheduler.o \
+system_automaton.o
 
 # Headers that will be installed.
 HEADERS=lily/action.h lily/quote.h lily/syscall.h lily/types.h

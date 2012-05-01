@@ -31,6 +31,7 @@
 #include "mutex.hpp"
 #include "lock.hpp"
 #include "shared_ptr.hpp"
+#include "system_automaton.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -96,12 +97,9 @@ private:
   /*
    * SUBSCRIPTIONS
    */
-  // Automata subscribing to log events.
-  typedef unordered_map<shared_ptr<automaton>, const paction*> log_event_map_type;
-  static log_event_map_type log_event_map_;
-  // Automata subscribing to system events.
-  typedef unordered_map<shared_ptr<automaton>, const paction*> system_event_map_type;
-  static system_event_map_type system_event_map_;
+  // // Automata subscribing to log events.
+  // typedef unordered_map<shared_ptr<automaton>, const paction*> log_event_map_type;
+  // static log_event_map_type log_event_map_;
 
   /*
    * CREATION AND DESTRUCTION
@@ -125,8 +123,7 @@ private:
 
 public:
   static pair<shared_ptr<automaton>, lily_error_t>
-  create_automaton (const shared_ptr<automaton>& parent,
-		    bool privileged,
+  create_automaton (bool privileged,
 		    const shared_ptr<buffer>& text,
 		    size_t text_size,
 		    const shared_ptr<buffer>& buffer_a,
@@ -149,8 +146,44 @@ private:
   unbind (const shared_ptr<binding>& binding,
 	  bool remove_from_output,
 	  bool remove_from_input,
-	  bool remove_from_owner);
-
+	  bool remove_from_owner)
+  {
+    // Remove from the map.
+    size_t count = bid_to_binding_map_.erase (binding->bid);
+    kassert (count == 1);
+    
+    // Disable the binding.
+    binding->bid = -1;
+    
+    // Unbind.
+    if (remove_from_output) {
+      shared_ptr<automaton> output_automaton = binding->output_action.automaton;
+      bound_outputs_map_type::iterator pos = output_automaton->bound_outputs_map_.find (binding->output_action);
+      kassert (pos != output_automaton->bound_outputs_map_.end ());
+      size_t count = pos->second.erase (binding);
+      kassert (count == 1);
+      if (pos->second.empty ()) {
+	output_automaton->bound_outputs_map_.erase (pos);
+      }
+    }
+    
+    if (remove_from_input) {
+      shared_ptr<automaton> input_automaton = binding->input_action.automaton;
+      bound_inputs_map_type::iterator pos = input_automaton->bound_inputs_map_.find (binding->input_action);
+      kassert (pos != input_automaton->bound_inputs_map_.end ());
+      size_t count = pos->second.erase (binding);
+      kassert (count == 1);
+      if (pos->second.empty ()) {
+	input_automaton->bound_inputs_map_.erase (pos);
+      }
+    }
+    
+    if (remove_from_owner) {
+      size_t count = binding->owner->owned_bindings_.erase (binding);
+      kassert (count == 1);
+    }
+  }
+  
   /*
    * I/O
    */
@@ -198,13 +231,6 @@ private:
   /*
    * AUTOMATA HIERARCHY
    */
-
-private:
-  shared_ptr<automaton> parent_;
-public:
-  typedef unordered_set<shared_ptr<automaton> > children_set_type;
-private:
-  children_set_type children_;
 
   /*
    * EXECUTION
@@ -395,10 +421,14 @@ public:
 	  bd_t text_bd,
 	  bd_t bda,
 	  bd_t bdb,
-	  bool retain_privilege)
+	  int retain_privilege)
   {
     kassert (ths.get () == this);
     
+    if (ths != system_automaton) {
+      return make_pair (-1, LILY_ERROR_PERMISSION);
+    }
+
     // Find the text buffer.
     shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
     if (text_buffer.get () == 0) {
@@ -417,10 +447,9 @@ public:
     }
     
     // Create the automaton.
-    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (ths, retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
     
     if (r.first.get () != 0) {
-      kout << "TODO:  Generate create event" << endl;
       return make_pair (r.first->aid (), r.second);
     }
     else {
@@ -437,6 +466,10 @@ public:
   destroy (const shared_ptr<automaton>& ths,
 	   aid_t aid)
   {
+    if (ths != system_automaton) {
+      return make_pair (-1, LILY_ERROR_PERMISSION);
+    }
+
     aid_to_automaton_map_type::iterator pos = aid_to_automaton_map_.find (aid);
     if (pos == aid_to_automaton_map_.end ()) {
       return make_pair (-1, LILY_ERROR_AIDDNE);
@@ -444,15 +477,7 @@ public:
 
     shared_ptr<automaton> child = pos->second;
 
-    // Are we the parent?
-    if (child->parent_ != ths) {
-      return make_pair (-1, LILY_ERROR_PERMISSION);
-    }
-
     child->destroy (child);
-
-    size_t count = children_.erase (child);
-    kassert (count == 1);
 
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
@@ -473,8 +498,7 @@ public:
   execute (const paction& action,
 	   int parameter,
 	   const shared_ptr<buffer>& output_buffer_a_,
-	   const shared_ptr<buffer>& output_buffer_b_,
-	   size_t binding_count)
+	   const shared_ptr<buffer>& output_buffer_b_)
   {
     // switch (action.type) {
     // case INPUT:
@@ -510,7 +534,6 @@ public:
     
     switch (action.type) {
     case INPUT:
-    case SYSTEM_INPUT:
       {
 	bd_t bda = -1;
 	bd_t bdb = -1;
@@ -531,16 +554,10 @@ public:
       }
       break;
     case OUTPUT:
-      // Push the binding count.
-      *--stack_pointer = binding_count;
-      break;
     case INTERNAL:
       // Do nothing.
       break;
     }
-    
-
-
 
     // Push the parameter.
     *--stack_pointer = parameter;
@@ -1155,21 +1172,151 @@ public:
     }
   }
 
-  pair<bid_t, lily_error_t>
+  inline pair<bid_t, lily_error_t>
   bind (const shared_ptr<automaton>& ths,
 	aid_t output_aid,
 	ano_t output_ano,
 	int output_parameter,
 	aid_t input_aid,
 	ano_t input_ano,
-	int input_parameter);
+	int input_parameter)
+  {
+    kassert (ths.get () == this);
+    
+    if (ths != system_automaton) {
+      return make_pair (-1, LILY_ERROR_PERMISSION);
+    }
+    
+    aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
+    if (output_pos == aid_to_automaton_map_.end ()) {
+      // Output automaton DNE.
+      return make_pair (-1, LILY_ERROR_OAIDDNE);
+    }
+    
+    aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
+    if (input_pos == aid_to_automaton_map_.end ()) {
+      // Input automaton DNE.
+      return make_pair (-1, LILY_ERROR_IAIDDNE);
+    }
+    
+    shared_ptr<automaton> output_automaton = output_pos->second;
+    
+    shared_ptr<automaton> input_automaton = input_pos->second;
+    
+    if (output_automaton == input_automaton) {
+      // The output and input automata must be different.
+      return make_pair (-1, LILY_ERROR_INVAL);
+    }
+    
+    // Check the output action dynamically.
+    const paction* output_action = output_automaton->find_action (output_ano);
+    if (output_action == 0 ||
+	output_action->type != OUTPUT) {
+      // Output action does not exist or has the wrong type.
+      return make_pair (-1, LILY_ERROR_OANODNE);
+    }
+    
+    // Check the input action dynamically.
+    const paction* input_action = input_automaton->find_action (input_ano);
+    if (input_action == 0 ||
+	input_action->type != INPUT) {
+      // Input action does not exist or has the wrong type.
+      return make_pair (-1, LILY_ERROR_IANODNE);
+    }
+    
+    // Correct the parameters.
+    switch (output_action->parameter_mode) {
+    case NO_PARAMETER:
+      output_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      output_parameter = input_automaton->aid ();
+      break;
+    }
+    
+    switch (input_action->parameter_mode) {
+    case NO_PARAMETER:
+      input_parameter = 0;
+      break;
+    case PARAMETER:
+      break;
+    case AUTO_PARAMETER:
+      input_parameter = output_automaton->aid ();
+      break;
+    }
+    
+    // Form complete actions.
+    caction oa (output_automaton, output_action, output_parameter);
+    caction ia (input_automaton, input_action, input_parameter);
+    
+    {
+      // Check that the input action is not bound to an enabled action.
+      // (Also checks that the binding does not exist.)
+      bound_inputs_map_type::const_iterator pos1 = input_automaton->bound_inputs_map_.find (ia);
+      if (pos1 != input_automaton->bound_inputs_map_.end ()) {
+	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	  if ((*pos2)->enabled ()) {
+	    // The input is bound to an enabled action.
+	    return make_pair (-1, LILY_ERROR_INVAL);
+	  }
+	}
+      }
+    }
+    
+    {
+      // Check that the output action is not bound to an enabled action in the input automaton.
+      bound_outputs_map_type::const_iterator pos1 = output_automaton->bound_outputs_map_.find (oa);
+      if (pos1 != output_automaton->bound_outputs_map_.end ()) {
+	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
+	  if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
+	    return make_pair (-1, LILY_ERROR_INVAL);
+	  }
+	}
+      }
+    }
+    
+    // Generate an id.
+    bid_t bid = current_bid_;
+    while (bid_to_binding_map_.find (bid) != bid_to_binding_map_.end ()) {
+      bid = max (bid + 1, 0); // Handles overflow.
+    }
+    current_bid_ = max (bid + 1, 0);
+    
+    // Create the binding.
+    shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
+    bid_to_binding_map_.insert (make_pair (bid, b));
+    
+    // Bind.
+    {
+      pair<bound_outputs_map_type::iterator, bool> r = output_automaton->bound_outputs_map_.insert (make_pair (oa, binding_set_type ()));
+      r.first->second.insert (b);
+    }
+    
+    {
+      pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
+      r.first->second.insert (b);
+    }
+    
+    {
+      pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
+      kassert (r.second);
+    }
+    
+    return make_pair (b->bid, LILY_ERROR_SUCCESS);
+  }
 
   inline pair<int, lily_error_t>
   unbind (const shared_ptr<automaton>& ths,
 	  bid_t bid)
   {
     kassert (ths.get () == this);
-    
+
+    if (ths != system_automaton) {
+      return make_pair (-1, LILY_ERROR_PERMISSION);
+    }
+
     // Look up the binding.
     bid_to_binding_map_type::iterator pos = bid_to_binding_map_.find (bid);
     if (pos == bid_to_binding_map_.end ()) {
@@ -1416,7 +1563,7 @@ public:
     
     // Find the action.
     const paction* action = find_action (action_number);
-    if (action == 0 || action->type != SYSTEM_INPUT) {
+    if (action == 0 || action->type != INTERNAL) {
       return make_pair (-1, LILY_ERROR_ANODNE);
     }
     
@@ -1457,10 +1604,51 @@ public:
    */
 
 public:
-  pair<int, lily_error_t>
+  inline pair<int, lily_error_t>
   log (const char* message,
-       size_t message_size);
-
+       size_t message_size)
+  {
+    if (!verify_span (message, message_size)) {
+      return make_pair (-1, LILY_ERROR_INVAL);
+    }
+    
+    // const size_t total_size = sizeof (log_event_t) + message_size;
+    // size_t page_count = align_up (total_size, PAGE_SIZE) / PAGE_SIZE;
+    
+    log_event_t le;
+    le.aid = aid_;
+    irq_handler::getmonotime (&le.time);
+    le.message_size = message_size;
+    
+    // Create a buffer for the description.
+    // shared_ptr<buffer> b (new buffer (page_count));
+    // log_event_t* le = static_cast <log_event_t*> (buffer_map (b));
+    // le->aid = aid_;
+    // irq_handler::getmonotime (&le->time);
+    // le->message_size = message_size;
+    // memcpy (&le->message[0], message, message_size);
+    
+    console::fmtflags flags = kout.flags ();
+    kout << "[" << setfill (' ') << setw (10) << left << le.time.seconds << "." << setfill ('0') << setw (3) << le.time.nanoseconds / 1000000 << "] " << le.aid << " ";
+    kout.flags (flags);
+    
+    for (size_t idx = 0; idx != message_size; ++idx) {
+      kout.put (message[idx]);
+    }
+    
+    kout << endl;
+  
+    // buffer_unmap (b);
+    
+    // for (log_event_map_type::const_iterator pos = log_event_map_.begin ();
+    //      pos != log_event_map_.end ();
+    //      ++pos) {
+    //   scheduler::schedule (caction (pos->first, pos->second, 0, b, shared_ptr<buffer> ()));
+    // }
+    
+    return make_pair (0, LILY_ERROR_SUCCESS);
+  }
+  
   /*
    * CREATION AND DESTRUCTION
    */
@@ -1468,7 +1656,6 @@ public:
   automaton () :
     aid_ (-1),
     regenerate_description_ (false),
-    parent_ (0),
     init_buffer_a_ (-1),
     init_buffer_b_ (-1),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),
@@ -1546,8 +1733,6 @@ public:
     // Nothing for name_to_action_map_.
     // Nothing for description_.
     // Nothing for regenerate_description_.
-    kassert (parent_.get () == 0);
-    kassert (children_.empty ());
     kassert (!execution_mutex_.locked ());
     // Nothing for init_buffer_a_.
     // Nothing for init_buffer_b_.

@@ -5,7 +5,6 @@
 #include <lily/types.h>
 #include <lily/action.h>
 #include <stddef.h>
-#include <stdbool.h>
 
 /* Import the Lily namespace. */
 #define NO_PARAMETER LILY_ACTION_NO_PARAMETER
@@ -33,20 +32,15 @@
   "3: .balign 4\n" \
        ".popsection\n");
 
-#define BEGIN_SYSTEM_INPUT(action_no, action_name, action_desc, func, ano, param, bda, bdb) \
-void func (ano, param, bda, bdb);					\
-EMBED_ACTION_DESCRIPTOR (LILY_ACTION_SYSTEM_INPUT, PARAMETER, func, action_no, action_name, action_desc); \
-void func (ano, param, bda, bdb)
-
 #define BEGIN_INPUT(parameter_mode, action_no, action_name, action_desc, func, ano, param, bda, bdb) \
 void func (ano, param, bda, bdb);					\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INPUT, parameter_mode, func, action_no, action_name, action_desc); \
 void func (ano, param, bda, bdb)
 
-#define BEGIN_OUTPUT(parameter_mode, action_no, action_name, action_desc, func, ano, param, bc) \
-void func (ano, param, bc);						\
+#define BEGIN_OUTPUT(parameter_mode, action_no, action_name, action_desc, func, ano, param) \
+void func (ano, param);						\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_OUTPUT, parameter_mode, func, action_no, action_name, action_desc); \
-void func (ano, param, bc)
+void func (ano, param)
 
 #define BEGIN_INTERNAL(parameter_mode, action_no, action_name, action_desc, func, ano, param) \
 void func (ano, param);						\
@@ -60,7 +54,7 @@ schedule (ano_t action_number,
 	  int parameter);
 
 void
-finish (bool output_fired,
+finish (int output_fired,
 	bd_t bda,
 	bd_t bdb);
 
@@ -69,7 +63,7 @@ finish_input (bd_t bda,
 	      bd_t bdb);
 
 void
-finish_output (bool output_fired,
+finish_output (int output_fired,
 	       bd_t bda,
 	       bd_t bdb);
 
@@ -78,26 +72,6 @@ finish_internal (void);
 
 void
 exit (int code);
-
-aid_t
-create (bd_t text_bd,
-	bd_t bda,
-	bd_t bdb,
-	bool retain_privilege);
-
-bid_t
-bind (aid_t output_automaton,
-      ano_t output_action,
-      int output_parameter,
-      aid_t input_automaton,
-      ano_t input_action,
-      int input_parameter);
-
-int
-unbind (bid_t bid);
-
-int
-destroy (aid_t aid);
 
 int
 log (const char* message,
@@ -167,6 +141,28 @@ getinitb (void);
 int
 getmonotime (mono_time_t* t);
 
+/* These calls can only be made by the system automaton. */
+aid_t
+create (bd_t text_bd,
+	bd_t bda,
+	bd_t bdb,
+	int retain_privilege);
+
+bid_t
+bind (aid_t output_automaton,
+      ano_t output_action,
+      int output_parameter,
+      aid_t input_automaton,
+      ano_t input_action,
+      int input_parameter);
+
+int
+unbind (bid_t bid);
+
+int
+destroy (aid_t aid);
+
+/* These calls can only be made by privileged automata. */
 int
 map (const void* destination,
      const void* source,

@@ -83,8 +83,13 @@ description_read_all (description_t* d,
 int
 description_read_name (description_t* d,
 		       action_desc_t* a,
-		       const char* action_name)
+		       const char* name_begin,
+		       const char* name_end)
 {
+  if (name_end == 0) {
+    name_end = name_begin + strlen (name_begin);
+  }
+
   if (buffer_file_seek (&d->bf, 0) != 0) {
     return -1;
   }
@@ -110,7 +115,7 @@ description_read_name (description_t* d,
       return -1;
     }
 
-    if (strcmp (name, action_name) == 0) {
+    if (pstrcmp (name, 0, name_begin, name_end) == 0) {
       a->type = ad->type;
       a->parameter_mode = ad->parameter_mode;
       a->number = ad->number;

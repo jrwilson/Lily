@@ -4,6 +4,250 @@
 #include <limits.h>
 #include "printf.h"
 
+string_error_t string_error = STRING_SUCCESS;
+
+int
+pstrcmp (const char* s1_begin,
+	 const char* s1_end,
+	 const char* s2_begin,
+	 const char* s2_end)
+{
+  if (s1_end == 0) {
+    s1_end = s1_begin + strlen (s1_begin);
+  }
+  if (s2_end == 0) {
+    s2_end = s2_begin + strlen (s2_begin);
+  }
+
+  for (; s1_begin != s1_end && s2_begin != s2_end; ++s1_begin, ++s2_begin) {
+    if (*s1_begin != *s2_begin) {
+      return *s1_begin - *s2_begin;
+    }
+  }
+
+  if (s1_begin == s1_end && s2_begin == s2_end) {
+    return 0;
+  }
+
+  if (s1_begin == s1_end) {
+    return 0 - *s2_begin;
+  }
+  else {
+    return *s1_begin - 0;
+  }
+}
+
+int
+pstrncmp (const char* s1_begin,
+	  const char* s1_end,
+	  const char* s2_begin,
+	  const char* s2_end,
+	  size_t n)
+{
+  if (s1_end == 0) {
+    s1_end = s1_begin + strlen (s1_begin);
+  }
+  if (s2_end == 0) {
+    s2_end = s2_begin + strlen (s2_begin);
+  }
+
+  for (; n != 0 && s1_begin != s1_end && s2_begin != s2_end; ++s1_begin, ++s2_begin, --n) {
+    if (*s1_begin != *s2_begin) {
+      return *s1_begin - *s2_begin;
+    }
+  }
+
+  if (n == 0 || (s1_begin == s1_end && s2_begin == s2_end)) {
+    return 0;
+  }
+
+  if (s1_begin == s1_end) {
+    return 0 - *s2_begin;
+  }
+  else {
+    return *s1_begin - 0;
+  }
+}
+
+char*
+pstrchr (const char* s_begin,
+	 const char* s_end,
+	 int c)
+{
+  /* Note:  strchr normaly return NULL if c is not found. */
+  for (; s_begin != s_end && *s_begin != c; ++s_begin) ;;
+  return (char*)s_begin;
+}
+
+static int
+toval (char c)
+{
+  if (isdigit (c)) {
+    return c - '0';
+  }
+  else if (isupper (c)) {
+    return c - 'A' + 10;
+  }
+  else if (islower (c)) {
+    return c - 'a' + 10;
+  }
+  else {
+    return -1;
+  }
+}
+
+static long int
+pstrtol_ (const char* ptr,
+	  const char* begin,
+	  const char* end,
+	  char** endptr,
+	  int base,
+	  bool negative,
+	  bool once)
+{
+  unsigned long int retval = 0;
+  bool overflow = false;
+  bool underflow = false;
+
+  while (ptr != end) {
+    int val = toval (*ptr);
+    if (val == -1 || val >= base) {
+      if (!once) {
+	/* No digits. */
+	string_error = STRING_INVAL;
+	if (endptr != 0) {
+	  *endptr = (char*)begin;
+	}
+	return 0;
+      }
+      else {
+	break;
+      }
+    }
+
+    unsigned long int n = retval * base + val;
+    if (n > LONG_MAX) {
+      overflow = true;
+    }
+    if (-n < LONG_MIN) {
+      underflow = true;
+    }
+
+    retval = n;
+    ++ptr;
+    once = true;
+  }
+
+  if (!overflow && !underflow) {
+    string_error = STRING_SUCCESS;
+    if (endptr != 0) {
+      *endptr = (char*)ptr;
+    }
+    if (negative) {
+      return -retval;
+    }
+    else {
+      return retval;
+    }
+  }
+  else {
+    string_error = STRING_RANGE;
+    if (endptr != 0) {
+      *endptr = (char*)ptr;
+    }
+    if (overflow) {
+      return LONG_MAX;
+    }
+    else {
+      return LONG_MIN;
+    }
+  }
+}
+
+long int
+pstrtol (const char* begin,
+	 const char* end,
+	 char** endptr,
+	 int base)
+{
+  if (end == 0) {
+    end = begin + strlen (begin);
+  }
+
+  if (!(base == 0 || (base >= 2 && base <= 36))) {
+    /* Bad base. */
+    string_error = STRING_INVAL;
+    if (endptr != 0) {
+      *endptr = (char*)begin;
+    }
+    return 0;
+  }
+
+  const char* ptr = begin;
+
+  /* Skip white space. */
+  while (ptr != end && isspace (*ptr)) {
+    ++ptr;
+  }
+
+  if (ptr == end) {
+    /* No digits. */
+    string_error = STRING_INVAL;
+    if (endptr != 0) {
+      *endptr = (char*)begin;
+    }
+    return 0;
+  }
+
+  bool negative = false;
+  if (*ptr == '+') {
+    ++ptr;
+  }
+  else if (*ptr == '-') {
+    ++ptr;
+    negative = true;
+  }
+
+  if (ptr == end) {
+    /* No digits. */
+    string_error = STRING_INVAL;
+    if (endptr != 0) {
+      *endptr = (char*)begin;
+    }
+    return 0;
+  }
+
+  if (base == 0 || base == 8 || base == 16) {
+    if (*ptr == '0') {
+      ++ptr;
+      if (ptr == end) {
+	/* Zero. */
+	string_error = STRING_SUCCESS;
+	if (endptr != 0) {
+	  *endptr = (char*)ptr;
+	}
+	return 0;
+      }
+      else if (*ptr == 'x') {
+	++ptr;
+	/* Number is hex. */
+	return pstrtol_ (ptr, begin, end, endptr, 16, negative, false);
+      }
+      else {
+	/* Number is octal. */
+	return pstrtol_ (ptr, begin, end, endptr, 8, negative, true);
+      }
+    }
+    else {
+      /* Number is decimal. */
+      return pstrtol_ (ptr, begin, end, endptr, 10, negative, false);
+    }
+  }
+  else {
+    return pstrtol_ (ptr, begin, end, endptr, base, negative, false);
+  }
+}
+
 char*
 strcpy (char* dest,
 	const char* src)
@@ -94,7 +338,7 @@ strncmp (const char* s1,
 	 const char* s2,
 	 size_t n)
 {
-  for (; n != 0; --n) {
+  for (; n != 0; --n, ++s1, ++s2) {
     if (*s1 != *s2 || *s1 == '\0' || *s2 == '\0') {
       return *s1 - *s2;
     }
@@ -274,32 +518,22 @@ memchr (const void *s,
   }
 }
 
-static int
-toval (char c)
+long int
+strtol (const char* nptr,
+	char** endptr,
+	int base)
 {
-  if (isdigit (c)) {
-    return c - '0';
-  }
-  else if (isupper (c)) {
-    return c - 'A' + 10;
-  }
-  else if (islower (c)) {
-    return c - 'a' + 10;
-  }
-  else {
-    return -1;
-  }
+  return pstrtol (nptr, 0, endptr, base);
 }
 
 static unsigned long int
-strtoul_ (string_error_t* err,
-	  const char* ptr,
+strtoul_ (const char* ptr,
 	  const char* nptr,
 	  char** endptr,
 	  int base,
-	  bool negative)
+	  bool negative,
+	  bool once)
 {
-  bool once = false;
   unsigned long int retval = 0;
   bool overflow = false;
 
@@ -308,9 +542,7 @@ strtoul_ (string_error_t* err,
     if (val == -1 || val >= base) {
       if (!once) {
 	/* No digits. */
-	if (err != 0) {
-	  *err = STRING_INVAL;
-	}
+	string_error = STRING_INVAL;
 	if (endptr != 0) {
 	  *endptr = (char*)nptr;
 	}
@@ -332,9 +564,7 @@ strtoul_ (string_error_t* err,
   }
 
   if (!overflow) {
-    if (err != 0) {
-      *err = STRING_SUCCESS;
-    }
+    string_error = STRING_SUCCESS;
     if (endptr != 0) {
       *endptr = (char*)ptr;
     }
@@ -346,9 +576,7 @@ strtoul_ (string_error_t* err,
     }
   }
   else {
-    if (err != 0) {
-      *err = STRING_RANGE;
-    }
+    string_error = STRING_RANGE;
     if (endptr != 0) {
       *endptr = (char*)ptr;
     }
@@ -357,16 +585,13 @@ strtoul_ (string_error_t* err,
 }
 
 unsigned long int
-strtoul (string_error_t* err,
-	 const char* nptr,
+strtoul (const char* nptr,
 	 char** endptr,
 	 int base)
 {
   if (!(base == 0 || (base >= 2 && base <= 36))) {
     /* Bad base. */
-    if (err != 0) {
-      *err = STRING_INVAL;
-    }
+    string_error = STRING_INVAL;
     if (endptr != 0) {
       *endptr = (char*)nptr;
     }
@@ -382,9 +607,7 @@ strtoul (string_error_t* err,
 
   if (*ptr == '\0') {
     /* No digits. */
-    if (err != 0) {
-      *err = STRING_INVAL;
-    }
+    string_error = STRING_INVAL;
     if (endptr != 0) {
       *endptr = (char*)nptr;
     }
@@ -402,9 +625,7 @@ strtoul (string_error_t* err,
 
   if (*ptr == '\0') {
     /* No digits. */
-    if (err != 0) {
-      *err = STRING_INVAL;
-    }
+    string_error = STRING_INVAL;
     if (endptr != 0) {
       *endptr = (char*)nptr;
     }
@@ -416,9 +637,7 @@ strtoul (string_error_t* err,
       ++ptr;
       if (*ptr == '\0') {
 	/* Zero. */
-	if (err != 0) {
-	  *err = STRING_SUCCESS;
-	}
+	string_error = STRING_SUCCESS;
 	if (endptr != 0) {
 	  *endptr = (char*)ptr;
 	}
@@ -427,20 +646,20 @@ strtoul (string_error_t* err,
       else if (*ptr == 'x') {
 	++ptr;
 	/* Number is hex. */
-	return strtoul_ (err, ptr, nptr, endptr, 16, negative);
+	return strtoul_ (ptr, nptr, endptr, 16, negative, false);
       }
       else {
 	/* Number is octal. */
-	return strtoul_ (err, ptr, nptr, endptr, 8, negative);
+	return strtoul_ (ptr, nptr, endptr, 8, negative, true);
       }
     }
     else {
       /* Number is decimal. */
-      return strtoul_ (err, ptr, nptr, endptr, 10, negative);
+      return strtoul_ (ptr, nptr, endptr, 10, negative, false);
     }
   }
   else {
-    return strtoul_ (err, ptr, nptr, endptr, base, negative);
+    return strtoul_ (ptr, nptr, endptr, base, negative, false);
   }
 }
 
@@ -482,6 +701,7 @@ snprintf (char* str,
   va_end (args);
 
   if (retval != 0) {
+    string_error = STRING_FORMAT;
     return -1;
   }
 
@@ -494,5 +714,6 @@ snprintf (char* str,
     str[size - 1] = '\0';
   }
 
+  string_error = STRING_SUCCESS;
   return retval;
 }

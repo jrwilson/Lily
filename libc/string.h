@@ -7,7 +7,34 @@ typedef enum {
   STRING_SUCCESS,
   STRING_INVAL,
   STRING_RANGE,
+  STRING_FORMAT,
 } string_error_t;
+
+extern string_error_t string_error;
+
+int
+pstrcmp (const char* s1_begin,
+	 const char* s1_end,
+	 const char* s2_begin,
+	 const char* s2_end);
+
+int
+pstrncmp (const char* s1_begin,
+	  const char* s1_end,
+	  const char* s2_begin,
+	  const char* s2_end,
+	  size_t n);
+
+char*
+pstrchr (const char* s_begin,
+	 const char* s_end,
+	 int c);
+
+long int
+pstrtol (const char* begin,
+	 const char* end,
+	 char** endptr,
+	 int base);
 
 char*
 strcpy (char* dest,
@@ -92,9 +119,13 @@ memchr (const void *s,
 	int c,
 	size_t n);
 
+long int
+strtol (const char* nptr,
+	char** endptr,
+	int base);
+
 unsigned long int
-strtoul (string_error_t* err,
-	 const char* nptr,
+strtoul (const char* nptr,
 	 char** endptr,
 	 int base);
 

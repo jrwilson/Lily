@@ -37,7 +37,7 @@ struct create_args {
   bd_t text_bd;
   bd_t bda;
   bd_t bdb;
-  bool retain_privilege;
+  int retain_privilege;
 };
 
 struct bind_args {
