@@ -101,7 +101,9 @@ buffer_resize (bd_t bd,
 
 int
 buffer_assign (bd_t dest,
-	       bd_t src);
+	       bd_t src,
+	       size_t begin,
+	       size_t end);
 
 size_t
 buffer_append (bd_t dest,

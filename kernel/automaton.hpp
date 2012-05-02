@@ -75,6 +75,7 @@ private:
    * BINDING
    */
 
+private:
   // Next binding id to allocate.
   static bid_t current_bid_;
 
@@ -145,8 +146,7 @@ private:
   static void
   unbind (const shared_ptr<binding>& binding,
 	  bool remove_from_output,
-	  bool remove_from_input,
-	  bool remove_from_owner)
+	  bool remove_from_input)
   {
     // Remove from the map.
     size_t count = bid_to_binding_map_.erase (binding->bid);
@@ -176,11 +176,6 @@ private:
       if (pos->second.empty ()) {
 	input_automaton->bound_inputs_map_.erase (pos);
       }
-    }
-    
-    if (remove_from_owner) {
-      size_t count = binding->owner->owned_bindings_.erase (binding);
-      kassert (count == 1);
     }
   }
   
@@ -275,8 +270,6 @@ private:
   // Bound inputs.
   typedef unordered_map<caction, binding_set_type, caction_hash> bound_inputs_map_type;
   bound_inputs_map_type bound_inputs_map_;
-  // Owned bindings.
-  binding_set_type owned_bindings_;
 
   /*
    * I/O
@@ -986,7 +979,9 @@ public:
 
   inline pair<int, lily_error_t>
   buffer_assign (bd_t dest,
-		 bd_t src)
+		 bd_t src,
+		 size_t begin,
+		 size_t end)
   {
     bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
     bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
@@ -999,13 +994,54 @@ public:
     shared_ptr<buffer> dest_b = dest_pos->second;
     shared_ptr<buffer> src_b = src_pos->second;
 
+    if (begin > end ||
+	end > src_b->size ()) {
+      return make_pair (-1, LILY_ERROR_INVAL);
+    }
+
     // Truncate and append.
     dest_b->resize (0);
-    dest_b->append (*src_b, 0, src_b->size ());
+    dest_b->append (*src_b, begin, end);
 
     // Append.
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
+
+  // int
+  // buffer_assign (bd_t dest,
+  // 		 size_t dest_begin,
+  // 		 bd_t src,
+  // 		 size_t src_begin,
+  // 		 size_t src_end)
+  // {
+  //   if (src_begin > src_end) {
+  //     // Bad range.
+  //     return -1;
+  //   }
+
+  //   bd_to_buffer_map_type::const_iterator dest_pos = bd_to_buffer_map_.find (dest);
+  //   bd_to_buffer_map_type::const_iterator src_pos = bd_to_buffer_map_.find (src);
+  //   if (dest_pos == bd_to_buffer_map_.end () ||
+  // 	src_pos == bd_to_buffer_map_.end ()) {
+  //     // One of the buffers does not exist.
+  //     return -1;
+  //   }
+
+  //   buffer* dest_b = dest_pos->second;
+  //   buffer* src_b = src_pos->second;
+
+  //   if (src_end > src_b->size ()) {
+  //     return -1;
+  //   }
+
+  //   if (dest_begin + (src_end - src_begin) > dest_b->size ()) {
+  //     return -1;
+  //   }
+
+  //   // Assign.
+  //   dest_b->assign (dest_begin, *src_b, src_begin, src_end);
+  //   return 0;
+  // }
 
 private:
   inline void*
@@ -1285,7 +1321,7 @@ public:
     current_bid_ = max (bid + 1, 0);
     
     // Create the binding.
-    shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia, ths));
+    shared_ptr<binding> b = shared_ptr<binding> (new binding (bid, oa, ia));
     bid_to_binding_map_.insert (make_pair (bid, b));
     
     // Bind.
@@ -1297,11 +1333,6 @@ public:
     {
       pair<bound_inputs_map_type::iterator, bool> r = input_automaton->bound_inputs_map_.insert (make_pair (ia, binding_set_type ()));
       r.first->second.insert (b);
-    }
-    
-    {
-      pair <binding_set_type::iterator, bool> r = owned_bindings_.insert (b);
-      kassert (r.second);
     }
     
     return make_pair (b->bid, LILY_ERROR_SUCCESS);
@@ -1325,12 +1356,7 @@ public:
     
     shared_ptr<binding> binding = pos->second;
     
-    // Are we the owner?
-    if (binding->owner != ths) {
-      return make_pair (-1, LILY_ERROR_PERMISSION);
-    }
-    
-    unbind (binding, true, true, true);
+    unbind (binding, true, true);
     
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
@@ -1815,7 +1841,6 @@ public:
     
     kassert (bound_outputs_map_.empty ());
     kassert (bound_inputs_map_.empty ());
-    kassert (owned_bindings_.empty ());
     // Nothing for privileged_.
     kassert (mapped_areas_.empty ());
     kassert (port_set_.empty ());

@@ -33,13 +33,6 @@ trap_handler::install ()
 }
 
 /* TODO:  Pass with registers. */
-struct create_args {
-  bd_t text_bd;
-  bd_t bda;
-  bd_t bdb;
-  int retain_privilege;
-};
-
 struct bind_args {
   aid_t output_automaton;
   ano_t output_action;
@@ -83,11 +76,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_CREATE:
     {
-      create_args* ptr = reinterpret_cast<create_args*> (regs.ebx);
-      if (!a->verify_stack (ptr, sizeof (create_args))) {
-	kpanic ("TODO:  Can't get create arguments from the stack");
-      }
-      pair<aid_t, lily_error_t> r = a->create (a, ptr->text_bd, ptr->bda, ptr->bdb, ptr->retain_privilege);
+      pair<aid_t, lily_error_t> r = a->create (a, regs.ebx, regs.ecx, regs.edx, regs.esi);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -179,7 +168,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BUFFER_ASSIGN:
     {
-      pair<int, lily_error_t> r = a->buffer_assign (regs.ebx, regs.ecx);
+      pair<int, lily_error_t> r = a->buffer_assign (regs.ebx, regs.ecx, regs.edx, regs.esi);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

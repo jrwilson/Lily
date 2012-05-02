@@ -459,7 +459,7 @@ BEGIN_INPUT (AUTO_PARAMETER, REQUEST_NO, FS_REQUEST_NAME, "", request, ano_t ano
 	finish_input (bda, bdb);
       }
 
-      if (buffer_assign (client->response_bdb, inode->bd) != 0) {
+      if (buffer_assign (client->response_bdb, inode->bd, 0, buffer_size (inode->bd)) != 0) {
 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not assign buffer: %s", lily_error_string (lily_error));
 	logs (log_buffer);
 	exit (-1);

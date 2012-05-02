@@ -26,16 +26,13 @@ struct binding {
   bid_t bid;
   caction const output_action;
   caction const input_action;
-  shared_ptr<automaton> const owner;
 
   binding (bid_t b,
 	   const caction& oa,
-	   const caction& ia,
-	   const shared_ptr<automaton>& o) :
+	   const caction& ia) :
     bid (b),
     output_action (oa),
-    input_action (ia),
-    owner (o)
+    input_action (ia)
   { }
 
   ~binding () {

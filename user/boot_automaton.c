@@ -3,6 +3,7 @@
 #include "cpio.h"
 #include "de.h"
 #include "environment.h"
+#include "system_msg.h"
 
 /*
   The Boot Automaton
@@ -14,13 +15,21 @@
     3.  finda - The finda automaton allows automata to find each other.
   After attempting to create these automata, the boot automaton loads a shell automaton to continue the boot process.
 
-  TODO:  Use the configuration library to create the automata.
+  TODO:  Find a balance between the data structures in the kernel and the system automaton.
 
   Authors:  Justin R. Wilson
   Copyright (C) 2012 Justin R. Wilson
 */
 
 #define INIT_NO 1
+#define CREATE_IN_NO 2
+#define BIND_IN_NO 3
+#define UNBIND_IN_NO 4
+#define DESTROY_IN_NO 5
+#define CREATE_OUT_NO 6
+#define BIND_OUT_NO 7
+#define UNBIND_OUT_NO 8
+#define DESTROY_OUT_NO 9
 
 /* Paths in the cpio archive. */
 #define SYSLOG_PATH "bin/syslog"
@@ -36,6 +45,7 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define ERROR __FILE__ ": error: "
 #define WARNING __FILE__ ": warning: "
 #define INFO __FILE__ ": info: "
+#define TODO __FILE__ ": todo: "
 
 static void
 initialize (void)
@@ -198,6 +208,90 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 {
   initialize ();
   finish_internal ();
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, CREATE_IN_NO, "create_in", "", create_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  create_t c;
+  create_initr (&c, bda, bdb);
+  aid_t aid = create (c.text, c.bda, c.bdb, c.retain_privilege);
+  create_fini (&c);
+
+  logs (TODO "create response");
+
+  finish_input (bda, bdb);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, BIND_IN_NO, "bind_in", "", bind_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  bind_t b;
+  bind_initr (&b, bda);
+  bid_t bid = bind (b.output_aid, b.output_ano, b.output_parameter, b.input_aid, b.input_ano, b.input_parameter);
+  bind_fini (&b);
+
+  logs (TODO "bind response");
+
+  finish_input (bda, bdb);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, UNBIND_IN_NO, "unbind_in", "", unbind_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  unbind_t u;
+  unbind_initr (&u, bda);
+  int r = unbind (u.bid);
+  unbind_fini (&u);
+
+  logs (TODO "unbind response");
+
+  finish_input (bda, bdb);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, DESTROY_IN_NO, "destroy_in", "", destroy_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  destroy_t d;
+  destroy_initr (&d, bda);
+  int r = destroy (d.aid);
+  destroy_fini (&d);
+
+  logs (TODO "destroy response");
+
+  finish_input (bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_OUT_NO, "create_out", "", create_out, ano_t ano, int param)
+{
+  initialize ();
+  logs (__func__);
+  finish_output (false, -1, -1);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, BIND_OUT_NO, "bind_out", "", bind_out, ano_t ano, int param)
+{
+  initialize ();
+  logs (__func__);
+  finish_output (false, -1, -1);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, UNBIND_OUT_NO, "unbind_out", "", unbind_out, ano_t ano, int param)
+{
+  initialize ();
+  logs (__func__);
+  finish_output (false, -1, -1);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, DESTROY_OUT_NO, "destroy_out", "", destroy_out, ano_t ano, int param)
+{
+  initialize ();
+  logs (__func__);
+  finish_output (false, -1, -1);
 }
 
 void

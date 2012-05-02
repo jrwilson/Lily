@@ -60,6 +60,16 @@ lily_error_t lily_error = LILY_ERROR_SUCCESS;
 	   "mov %%eax, %0\n" \
 	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
 
+#define syscall4re(syscall, retval, p1, p2, p3, p4)	\
+  __asm__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "mov %5, %%edx\n" \
+	   "mov %6, %%esi\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3), "m"(p4) : "eax", "ebx", "ecx", "edx", "esi" );
+
 int
 schedule (ano_t action_number,
 	  int parameter)
@@ -126,7 +136,7 @@ create (bd_t text_bd,
 	int retain_privilege)
 {
   aid_t retval;
-  syscall1re (LILY_SYSCALL_CREATE, retval, &text_bd);
+  syscall4re (LILY_SYSCALL_CREATE, retval, text_bd, bda, retain_privilege, retval);
   return retval;
 }
 
@@ -225,10 +235,12 @@ buffer_resize (bd_t bd,
 
 int
 buffer_assign (bd_t dest,
-	       bd_t src)
+	       bd_t src,
+	       size_t begin,
+	       size_t end)
 {
   int retval;
-  syscall2re (LILY_SYSCALL_BUFFER_ASSIGN, retval, dest, src);
+  syscall4re (LILY_SYSCALL_BUFFER_ASSIGN, retval, dest, src, begin, end);
   return retval;
 }
 

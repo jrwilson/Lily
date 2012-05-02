@@ -221,7 +221,7 @@ automaton::destroy (const shared_ptr<automaton>& ths)
     for (binding_set_type::const_iterator pos2 = pos1->second.begin ();
 	 pos2 != pos1->second.end ();
 	 ++pos2) {
-      unbind (*pos2, false, true, true);
+      unbind (*pos2, false, true);
     }
   }
   bound_outputs_map_.clear ();
@@ -232,17 +232,10 @@ automaton::destroy (const shared_ptr<automaton>& ths)
     for (binding_set_type::const_iterator pos2 = pos1->second.begin ();
 	 pos2 != pos1->second.end ();
 	 ++pos2) {
-      unbind (*pos2, true, false, true);
+      unbind (*pos2, true, false);
     }
   }
   bound_inputs_map_.clear ();
-  
-  for (binding_set_type::const_iterator pos = owned_bindings_.begin ();
-       pos != owned_bindings_.end ();
-       ++pos) {
-    unbind (*pos, true, true, false);
-  }
-  owned_bindings_.clear ();
   
   // Leave privileged_ for dtor.
   

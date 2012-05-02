@@ -151,8 +151,8 @@ BEGIN_OUTPUT (AUTO_PARAMETER, RECV_OUT_NO, FINDA_RECV_NAME, "", recv_out, ano_t 
   initialize ();
   
   if (msg_head != 0 && msg_head->to == aid) {
-    buffer_assign (recv_bda, msg_head->rcb->bda);
-    buffer_assign (recv_bdb, msg_head->rcb->bdb);
+    buffer_assign (recv_bda, msg_head->rcb->bda, 0, buffer_size (msg_head->rcb->bda));
+    buffer_assign (recv_bdb, msg_head->rcb->bdb, 0, buffer_size (msg_head->rcb->bdb));
     pop ();
     finish_output (true, recv_bda, recv_bdb);
   }
