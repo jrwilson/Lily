@@ -503,18 +503,8 @@ public:
     // case INTERNAL:
     // 	kout << "#";
     // 	break;
-    // case SYSTEM_INPUT:
-    // 	kout << "*";
-    // 	break;
     // }
-    // kout << " ";
-    // if (name_.c_str () != 0) {
-    //   kout << name_.c_str ();
-    // }
-    // else {
-    //   kout << aid_;
-    // }
-    // kout << "\t" << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
+    // kout << " " << aid_ << " " << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
     
     // Switch page directories.
     vm::switch_to_directory (page_directory);
@@ -1218,11 +1208,11 @@ public:
 	int input_parameter)
   {
     kassert (ths.get () == this);
-    
+
     if (ths != system_automaton) {
       return make_pair (-1, LILY_ERROR_PERMISSION);
     }
-    
+
     aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
     if (output_pos == aid_to_automaton_map_.end ()) {
       // Output automaton DNE.

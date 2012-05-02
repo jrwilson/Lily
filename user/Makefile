@@ -4,11 +4,12 @@ PROGRAMS=\
 syslog \
 tmpfs \
 finda \
-jsh \
-ps2_keyboard_mouse \
-terminal \
-vga \
-ecma2unix
+jsh
+
+#ps2_keyboard_mouse \
+#terminal \
+#vga \
+#ecma2unix
 
 #pci \
 #ps2_keyboard_mouse_test \
@@ -27,7 +28,7 @@ TARGETS=boot_automaton boot_data
 all : $(TARGETS)
 
 boot_automaton : boot_automaton.o cpio.o de.o system_msg.o
-	$(CC) -o $@ $^ -lbuffer_file -ldymem
+	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 	mkdir -p init_fs/bin
@@ -50,8 +51,11 @@ tmpfs : tmpfs.o cpio.o fs_msg.o
 finda : finda.o
 	$(CC) -o $@ $^ -ldymem
 
-jsh : jsh.o fs_msg.o de.o constellation.o finda_msg.o
+jsh : jsh.o fs_msg.o de.o system.o vfs.o system_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
+
+
+
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file

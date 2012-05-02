@@ -13,10 +13,10 @@ typedef struct {
   int type;
   int parameter_mode;
   ano_t number;
-  const char* name;
-  size_t name_size;
-  const char* description;
-  size_t description_size;
+  const char* name_begin;
+  const char* name_end;
+  const char* description_begin;
+  const char* description_end;
 } action_desc_t;
 
 int

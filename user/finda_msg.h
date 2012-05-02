@@ -2,7 +2,7 @@
 #define FINDA_H
 
 #include <automaton.h>
-#include "constellation.h"
+#include "system.h"
 
 #define FINDA_RECV_NAME "finda_recv_out"
 #define FINDA_SEND_NAME "finda_send_in"
@@ -15,7 +15,7 @@ typedef void (*finda_callback_t) (void* arg);
 
 void
 finda_init (finda_t* finda,
-	    constellation_t* constellation,
+	    system_t* system,
 	    aid_t aid,
 	    ano_t send,
 	    ano_t recv);

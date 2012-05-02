@@ -71,10 +71,10 @@ description_read_all (description_t* d,
     a[idx].type = ad->type;
     a[idx].parameter_mode = ad->parameter_mode;
     a[idx].number = ad->number;
-    a[idx].name = name;
-    a[idx].name_size = ad->name_size;
-    a[idx].description = description;
-    a[idx].description_size = ad->description_size;
+    a[idx].name_begin = name;
+    a[idx].name_end = name + ad->name_size;
+    a[idx].description_begin = description;
+    a[idx].description_end = description + ad->description_size;
   }
 
   return 0;
@@ -119,10 +119,10 @@ description_read_name (description_t* d,
       a->type = ad->type;
       a->parameter_mode = ad->parameter_mode;
       a->number = ad->number;
-      a->name = name;
-      a->name_size = ad->name_size;
-      a->description = description;
-      a->description_size = ad->description_size;
+      a->name_begin = name;
+      a->name_end = name + ad->name_size;
+      a->description_begin = description;
+      a->description_end = description + ad->description_size;
       return 0;
     }
   }

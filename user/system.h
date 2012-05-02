@@ -1,36 +1,64 @@
-#ifndef CONSTELLATION_H
-#define CONSTELLATION_H
+#ifndef SYSTEM_H
+#define SYSTEM_H
+
+#include <automaton.h>
+#include <buffer_file.h>
+
+#define SYSTEM_REQUEST_OUT_NAME "system_request_out"
+#define SYSTEM_RESPONSE_IN_NAME "system_response_in"
 
 #include <automaton.h>
 
 typedef struct automaton automaton_t;
 typedef struct binding binding_t;
 typedef struct globbed_binding globbed_binding_t;
+typedef struct system_op system_op_t;
 
 typedef struct {
+  ano_t request;
+  ano_t response;
   automaton_t* automaton_head;
   binding_t* binding_head;
   globbed_binding_t* globbed_binding_head;
   automaton_t* this;
-} constellation_t;
+  system_op_t* send_head;
+  system_op_t** send_tail;
+  system_op_t* recv_head;
+  system_op_t** recv_tail;
+  bd_t bda;
+  buffer_file_t bfa;
+} system_t;
 
 void
-constellation_init (constellation_t* c);
+system_init (system_t* c,
+	     ano_t request,
+	     ano_t response);
+
+void
+system_request (system_t* system);
+
+void
+system_response (system_t* system,
+		 bd_t bda,
+		 bd_t bdb);
+
+void
+system_schedule (system_t* system);
 
 automaton_t*
-constellation_get_this (constellation_t* c);
+system_get_this (system_t* c);
 
 automaton_t*
-constellation_add_managed_automaton (constellation_t* c,
-				     bd_t bd,
-				     int retain_privilege);
+system_add_managed_automaton (system_t* c,
+			      bd_t bd,
+			      int retain_privilege);
 
 automaton_t*
-constellation_add_unmanaged_automaton (constellation_t* c,
+system_add_unmanaged_automaton (system_t* c,
 				       aid_t aid);
 
 binding_t*
-constellation_add_binding (constellation_t* c,
+system_add_binding (system_t* c,
 			   automaton_t* output_automaton,
 			   const char* output_action_begin,
 			   const char* output_end_end,
@@ -43,7 +71,7 @@ constellation_add_binding (constellation_t* c,
 			   int input_parameter);
 
 globbed_binding_t*
-constellation_add_globbed_binding (constellation_t* c,
+system_add_globbed_binding (system_t* c,
 				   automaton_t* output_automaton,
 				   const char* output_action_begin,
 				   const char* output_end_end,
@@ -57,4 +85,4 @@ void
 automaton_create (automaton_t* a,
 		  bd_t bd);
 
-#endif /* CONSTELLATION_H */
+#endif /* SYSTEM_H */

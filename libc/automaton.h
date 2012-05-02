@@ -47,6 +47,73 @@ void func (ano, param);						\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INTERNAL, parameter_mode, func, action_no, action_name, action_desc); \
 void func (ano, param)
 
+#define syscall0(syscall)		\
+  __asm__ ("mov %0, %%eax\n" \
+	   "int $0x80\n" : : "g"(syscall) : "eax", "ecx");
+
+#define syscall1(syscall, p1)		\
+  __asm__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx");
+
+#define syscall2(syscall, p1, p2)		\
+  __asm__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "mov %2, %%ecx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx");
+
+#define syscall3(syscall, p1, p2, p3)		\
+  __asm__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "mov %2, %%ecx\n" \
+	   "mov %3, %%edx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx");
+
+#define syscall0r(syscall, retval)	\
+  __asm__ ("mov %1, %%eax\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall) : "eax", "ecx" );
+
+#define syscall0re(syscall, retval)	\
+  __asm__ ("mov %2, %%eax\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall) : "eax", "ecx" );
+
+#define syscall1re(syscall, retval, p1)	\
+  __asm__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" );
+
+#define syscall2re(syscall, retval, p1, p2)	\
+  __asm__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
+
+#define syscall3re(syscall, retval, p1, p2, p3)	\
+  __asm__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "mov %5, %%edx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
+
+#define syscall4re(syscall, retval, p1, p2, p3, p4)	\
+  __asm__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "mov %5, %%edx\n" \
+	   "mov %6, %%esi\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3), "m"(p4) : "eax", "ebx", "ecx", "edx", "esi" );
+
 extern lily_error_t lily_error;
 
 int
@@ -142,27 +209,6 @@ getinitb (void);
 
 int
 getmonotime (mono_time_t* t);
-
-/* These calls can only be made by the system automaton. */
-aid_t
-create (bd_t text_bd,
-	bd_t bda,
-	bd_t bdb,
-	int retain_privilege);
-
-bid_t
-bind (aid_t output_automaton,
-      ano_t output_action,
-      int output_parameter,
-      aid_t input_automaton,
-      ano_t input_action,
-      int input_parameter);
-
-int
-unbind (bid_t bid);
-
-int
-destroy (aid_t aid);
 
 /* These calls can only be made by privileged automata. */
 int

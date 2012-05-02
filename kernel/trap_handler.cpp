@@ -84,7 +84,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_BIND:
     {
-      bind_args* ptr = reinterpret_cast<bind_args*> (regs.ebx);
+      bind_args* ptr = reinterpret_cast<bind_args*> (regs.useresp);
       if (!a->verify_stack (ptr, sizeof (bind_args))) {
 	kpanic ("TODO:  Can't get bind arguments from the stack");
       }
