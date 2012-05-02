@@ -114,6 +114,13 @@ private:
    * IDENTIFICATION
    */
 
+public:
+  static inline bool
+  exists (aid_t aid)
+  {
+    return aid_to_automaton_map_.find (aid) != aid_to_automaton_map_.end ();
+  }
+
   /*
    * DESCRIPTION
    */

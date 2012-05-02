@@ -76,7 +76,8 @@ bind_init (bind_t* bind,
 	   int output_parameter,
 	   aid_t input_aid,
 	   ano_t input_ano,
-	   int input_parameter)
+	   int input_parameter,
+	   aid_t owner_aid)
 {
   bind->output_aid = output_aid;
   bind->output_ano = output_ano;
@@ -84,6 +85,7 @@ bind_init (bind_t* bind,
   bind->input_aid = input_aid;
   bind->input_ano = input_ano;
   bind->input_parameter = input_parameter;
+  bind->owner_aid = owner_aid;
 
   return 0;
 }

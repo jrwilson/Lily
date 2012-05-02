@@ -26,7 +26,8 @@
 
 #define INIT_NO 1
 #define REQUEST_IN_NO 2
-#define RESPONSE_OUT_NO 3
+#define BIND_RFA_OUT_NO 3
+#define RESPONSE_OUT_NO 4
 
 /* Paths in the cpio archive. */
 #define SYSLOG_PATH "bin/syslog"
@@ -34,9 +35,7 @@
 #define FINDA_PATH "bin/finda"
 #define JSH_PATH "bin/jsh"
 
-/* Initialization flag. */
-static bool initialized = false;
-
+/* Logging. */
 #define LOG_BUFFER_SIZE 128
 static char log_buffer[LOG_BUFFER_SIZE];
 #define ERROR __FILE__ ": error: "
@@ -44,7 +43,132 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define INFO __FILE__ ": info: "
 #define TODO __FILE__ ": todo: "
 
+/* Initialization flag. */
+static bool initialized = false;
+
+/* This automaton's aid. */
 static aid_t system_automaton_aid = -1;
+
+typedef enum {
+  UNKNOWN = 0,
+  DENIED,
+  GRANTED,
+} approval_t;
+
+/* Bind request processing. */
+typedef struct bind_request bind_request_t;
+struct bind_request {
+  bind_t bind;
+  mono_time_t time; /* A timestamp so requests can timeout. */
+  approval_t output_approval;
+  approval_t input_approval;
+  approval_t owner_approval;
+  bind_request_t* next;
+};
+
+static bind_request_t* bind_request_head = 0;
+static bind_request_t** bind_request_tail = &bind_request_head;
+
+static bind_request_t*
+push_bind_request (const bind_t* b)
+{
+  bind_request_t* req = malloc (sizeof (bind_request_t));
+  memset (req, 0, sizeof (bind_request_t));
+  memcpy (&req->bind, b, sizeof (bind_t));
+  getmonotime (&req->time);
+
+  *bind_request_tail = req;
+  bind_request_tail = &req->next;
+
+  return req;
+}
+
+static void
+bind_request_process (bind_request_t* req)
+{
+  logs (__func__);
+}
+
+typedef struct bind_rfa bind_rfa_t;
+struct bind_rfa {
+  aid_t to;
+  bind_request_t* request;
+  approval_t* approval;
+  bind_rfa_t* next;
+};
+
+static bind_rfa_t* bind_rfa_head = 0;
+static bind_rfa_t** bind_rfa_tail = &bind_rfa_head;
+
+static void
+push_bind_rfa (aid_t to,
+	       bind_request_t* req,
+	       approval_t* approval)
+{
+  bind_rfa_t* rfa = malloc (sizeof (bind_rfa_t));
+  memset (rfa, 0, sizeof (bind_rfa_t));
+  rfa->to = to;
+  rfa->request = req;
+  rfa->approval = approval;
+  
+  *bind_rfa_tail = rfa;
+  bind_rfa_tail = &rfa->next;
+}
+
+static void
+pop_bind_rfa (void)
+{
+  bind_rfa_t* rfa = bind_rfa_head;
+  bind_rfa_head = rfa->next;
+  if (bind_rfa_head == 0) {
+    bind_rfa_tail = &bind_rfa_head;
+  }
+  free (rfa);
+}
+
+static bd_t response_bd = -1;
+static buffer_file_t response_buffer;
+
+typedef struct result result_t;
+struct result {
+  aid_t aid;
+  int retval;
+  lily_error_t error;
+  result_t* next;
+};
+
+static result_t* result_head = 0;
+static result_t** result_tail = &result_head;
+
+static void
+push_result (aid_t aid,
+	     int retval,
+	     lily_error_t error)
+{
+  result_t* res = malloc (sizeof (result_t));
+  memset (res, 0, sizeof (result_t));
+  res->aid = aid;
+  res->retval = retval;
+  res->error = error;
+  *result_tail = res;
+  result_tail = &res->next;
+}
+
+static void
+pop_result (void)
+{
+  result_t* res = result_head;
+  result_head = res->next;
+  if (result_head == 0) {
+    result_tail = &result_head;
+  }
+
+  free (res);
+}
+
+
+
+
 
 static aid_t
 create (bd_t text_bd,
@@ -98,6 +222,14 @@ destroy (aid_t aid)
 }
 
 static aid_t
+exists (aid_t aid)
+{
+  aid_t retval;
+  syscall0r (LILY_SYSCALL_EXISTS, retval);
+  return retval;
+}
+
+static aid_t
 create_ (bd_t text_bd,
 	 bd_t bda,
 	 bd_t bdb,
@@ -120,46 +252,6 @@ create_ (bd_t text_bd,
     }
   }
   return aid;
-}
-
-static bd_t response_bd = -1;
-static buffer_file_t response_buffer;
-
-typedef struct result result_t;
-struct result {
-  aid_t aid;
-  int retval;
-  lily_error_t error;
-  result_t* next;
-};
-
-static result_t* result_head = 0;
-static result_t** result_tail = &result_head;
-
-static void
-push_result (aid_t aid,
-	     int retval,
-	     lily_error_t error)
-{
-  result_t* res = malloc (sizeof (result_t));
-  memset (res, 0, sizeof (result_t));
-  res->aid = aid;
-  res->retval = retval;
-  res->error = error;
-  *result_tail = res;
-  result_tail = &res->next;
-}
-
-static void
-pop_result (void)
-{
-  result_t* res = result_head;
-  result_head = res->next;
-  if (result_head == 0) {
-    result_tail = &result_head;
-  }
-
-  free (res);
 }
 
 static void
@@ -345,13 +437,15 @@ BEGIN_INPUT (AUTO_PARAMETER, REQUEST_IN_NO, "", "", request_in, ano_t ano, aid_t
 
   buffer_file_t bf;
   if (buffer_file_initr (&bf, bda) != 0) {
-    /* TODO */
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize request buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
     finish_input (bda, bdb);
   }
 
   system_msg_type_t type;
   if (system_msg_type_read (&bf, &type) != 0) {
-    /* TODO */
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read request type: %s", lily_error_string (lily_error));
+    logs (log_buffer);
     finish_input (bda, bdb);
   }
 
@@ -363,12 +457,19 @@ BEGIN_INPUT (AUTO_PARAMETER, REQUEST_IN_NO, "", "", request_in, ano_t ano, aid_t
     {
       bind_t b;
       if (bind_read (&bf, &b) != 0) {
-	/* TODO */
+	snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read bind request: %s", lily_error_string (lily_error));
+	logs (log_buffer);
 	finish_input (bda, bdb);
       }
+      
+      /* Make a record of the bind request. */
+      bind_request_t* req = push_bind_request (&b);
+      
+      /* Send a request for authorization to the three parties. */
+      push_bind_rfa (b.output_aid, req, &req->output_approval);
+      push_bind_rfa (b.input_aid, req, &req->input_approval);
+      push_bind_rfa (b.owner_aid, req, &req->owner_approval);
 
-      bid_t bid = bind (b.output_aid, b.output_ano, b.output_parameter, b.input_aid, b.input_ano, b.input_parameter);
-      push_result (aid, bid, lily_error);
       bind_fini (&b);
     }
     break;
@@ -379,11 +480,38 @@ BEGIN_INPUT (AUTO_PARAMETER, REQUEST_IN_NO, "", "", request_in, ano_t ano, aid_t
     logs (TODO " destroy");
     break;
   default:
-    logs (TODO " default");
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "unknown request type: %d", type);
+    logs (log_buffer);
+    finish_input (bda, bdb);
     break;
   }
 
   finish_input (bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RFA_OUT_NO, "", "", bind_rfa_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+
+  if (bind_rfa_head != 0 && bind_rfa_head->to == aid) {
+    if (exists (aid)) {
+      /* TODO */
+      logs ("EXISTS");
+      logs (__func__);
+      finish_output (false, -1, -1);
+    }
+    else {
+      // You can't speak when you're dead.
+      // We interpret silence as being permissive.
+      // If this is the output or input automaton, the bind with fail later.
+      *bind_rfa_head->approval = GRANTED;
+      bind_request_process (bind_rfa_head->request);
+      pop_bind_rfa ();
+      finish_output (false, -1, -1);
+    }
+  }
+
+  finish_output (false, -1, -1);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_OUT_NO, "", "", response_out, ano_t ano, aid_t aid)
@@ -408,6 +536,9 @@ BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_OUT_NO, "", "", response_out, ano_t ano, 
 void
 do_schedule (void)
 {
+  if (bind_rfa_head != 0) {
+    schedule (BIND_RFA_OUT_NO, bind_rfa_head->to);
+  }
   if (result_head != 0) {
     schedule (RESPONSE_OUT_NO, result_head->aid);
   }

@@ -59,16 +59,17 @@ system_add_unmanaged_automaton (system_t* c,
 
 binding_t*
 system_add_binding (system_t* c,
-			   automaton_t* output_automaton,
-			   const char* output_action_begin,
-			   const char* output_end_end,
-			   ano_t output_action,
-			   int output_parameter,
-			   automaton_t* input_automaton,
-			   const char* input_action_begin,
-			   const char* input_end_end,
-			   ano_t input_action,
-			   int input_parameter);
+		    automaton_t* output_automaton,
+		    const char* output_action_begin,
+		    const char* output_end_end,
+		    ano_t output_action,
+		    int output_parameter,
+		    automaton_t* input_automaton,
+		    const char* input_action_begin,
+		    const char* input_end_end,
+		    ano_t input_action,
+		    int input_parameter,
+		    automaton_t* owner_automaton);
 
 globbed_binding_t*
 system_add_globbed_binding (system_t* c,

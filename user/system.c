@@ -44,6 +44,7 @@ struct binding {
   char* input_action_end;
   ano_t input_action;
   int input_parameter;
+  automaton_t* owner_automaton;
   lily_error_t error;
   binding_t* next;
 };
@@ -119,7 +120,8 @@ system_request (system_t* system)
 	bind_t bind;
 	bind_init (&bind,
 		   op->u.binding->output_automaton->aid, op->u.binding->output_action, op->u.binding->output_parameter,
-		   op->u.binding->input_automaton->aid, op->u.binding->input_action, op->u.binding->input_parameter);
+		   op->u.binding->input_automaton->aid, op->u.binding->input_action, op->u.binding->input_parameter,
+		   (op->u.binding->owner_automaton != 0) ? op->u.binding->owner_automaton->aid : -1);
 	system_msg_type_write (&system->bfa, BIND);
 	bind_write (&system->bfa, &bind);
 	bind_fini (&bind);
@@ -223,7 +225,7 @@ system_add_unmanaged_automaton (system_t* c,
 static void
 binding_bind (binding_t* b)
 {
-  if (b->output_automaton->aid != -1 && b->input_automaton->aid != -1) {
+  if (b->output_automaton->aid != -1 && b->input_automaton->aid != -1 && (b->owner_automaton == 0 || b->owner_automaton->aid != -1)) {
     if (b->output_action == -1) {
       /* Describe the output automaton. */
       description_t output_description;
@@ -305,7 +307,8 @@ create_binding (system_t* system,
 		const char* input_action_begin,
 		const char* input_action_end,
 		ano_t input_action,
-		int input_parameter)
+		int input_parameter,
+		automaton_t* owner_automaton)
 {
   size_t size;
   binding_t* b = malloc (sizeof (binding_t));
@@ -326,6 +329,7 @@ create_binding (system_t* system,
   b->input_action_end = b->input_action_begin + size;
   b->input_action = input_action;
   b->input_parameter = input_parameter;
+  b->owner_automaton = owner_automaton;
 
   binding_bind (b);
 
@@ -364,7 +368,8 @@ system_add_binding (system_t* system,
 		    const char* input_action_begin,
 		    const char* input_action_end,
 		    ano_t input_action,
-		    int input_parameter)
+		    int input_parameter,
+		    automaton_t* owner_automaton)
 {
   if (output_action_begin != 0 && output_action_end == 0) {
     output_action_end = output_action_begin + strlen (output_action_begin);
@@ -373,7 +378,7 @@ system_add_binding (system_t* system,
     input_action_end = input_action_begin + strlen (input_action_begin);
   }
 
-  binding_t* binding = create_binding (system, output_automaton, output_action_begin, output_action_end, output_action, output_parameter, input_automaton, input_action_begin, input_action_end, input_action, input_parameter);
+  binding_t* binding = create_binding (system, output_automaton, output_action_begin, output_action_end, output_action, output_parameter, input_automaton, input_action_begin, input_action_end, input_action, input_parameter, owner_automaton);
 
   binding->next = system->binding_head;
   system->binding_head = binding;

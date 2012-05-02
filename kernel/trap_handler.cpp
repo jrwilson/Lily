@@ -110,6 +110,13 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
+  case LILY_SYSCALL_EXISTS:
+    {
+      regs.eax = automaton::exists (regs.ebx);
+      regs.ecx = LILY_ERROR_SUCCESS;
+      return;
+    }
+    break;
   case LILY_SYSCALL_LOG:
     {
       pair<int, lily_error_t> r = a->log (reinterpret_cast<const char*> (regs.ebx), regs.ecx);

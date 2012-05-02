@@ -105,10 +105,12 @@ create_fs (vfs_t* vfs,
   automaton_t* fs_a = system_add_unmanaged_automaton (vfs->system, aid);
   system_add_binding (vfs->system,
 		      this_a, 0, 0, vfs->request, 0,
-		      fs_a, FS_REQUEST_NAME, 0, -1, 0);
+		      fs_a, FS_REQUEST_NAME, 0, -1, 0,
+		      this_a);
   system_add_binding (vfs->system,
 		      fs_a, FS_RESPONSE_NAME, 0, -1, 0,
-		      this_a, 0, 0, vfs->response, 0);
+		      this_a, 0, 0, vfs->response, 0,
+		      this_a);
 
   return fs;
 }

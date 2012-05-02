@@ -41,6 +41,7 @@ typedef struct {
   aid_t input_aid;
   ano_t input_ano;
   int input_parameter;
+  aid_t owner_aid;
 } bind_t;
 
 int
@@ -50,7 +51,8 @@ bind_init (bind_t* bind,
 	   int output_parameter,
 	   aid_t input_aid,
 	   ano_t input_ano,
-	   int input_parameter);
+	   int input_parameter,
+	   aid_t owner_aid);
 
 int
 bind_write (buffer_file_t* bf,
