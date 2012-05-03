@@ -4,6 +4,7 @@
 #include <automaton.h>
 #include <buffer_file.h>
 
+/* The system automaton tries to bind to the following actions. */
 #define SA_BIND_REQUEST_OUT_NAME "sa_bind_request_out"
 #define SA_BA_REQUEST_IN_NAME "sa_ba_request_in"
 #define SA_BA_RESPONSE_OUT_NAME "sa_ba_response_out"

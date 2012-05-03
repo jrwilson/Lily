@@ -30,6 +30,10 @@
 #define SA_BA_REQUEST_IN_NO 18
 #define SA_BA_RESPONSE_OUT_NO 19
 #define SA_BIND_RESULT_IN_NO 20
+#define FS_DESCEND_REQUEST_OUT_NO 21
+#define FS_DESCEND_RESPONSE_IN_NO 22
+#define FS_READFILE_REQUEST_OUT_NO 23
+#define FS_READFILE_RESPONSE_IN_NO 24
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -1175,7 +1179,7 @@ initialize (void)
     system_init (&system, &output_bfa, SA_BIND_REQUEST_OUT_NO);
     bind_auth_init (&bind_auth, &output_bfa, SA_BA_RESPONSE_OUT_NO);
     bind_stat_init (&bind_stat);
-    vfs_init (&vfs, &system, &bind_stat, FS_REQUEST_NO, FS_RESPONSE_NO);
+    vfs_init (&vfs, &system, &bind_stat, &output_bfa, FS_DESCEND_REQUEST_OUT_NO, FS_DESCEND_RESPONSE_IN_NO, FS_READFILE_REQUEST_OUT_NO, FS_READFILE_RESPONSE_IN_NO);
 
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
@@ -1416,13 +1420,17 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_request, ano_t ano, aid_t aid)
 {
   initialize ();
-  vfs_request (&vfs, aid);
+  logs (__func__);
+  //vfs_request (&vfs, aid);
+  finish_output (false, -1, -1);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_response, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  vfs_response (&vfs, aid, bda, bdb);
+  logs (__func__);
+  //vfs_response (&vfs, aid, bda, bdb);
+  finish_input (bda, bdb);
 }
 
 /* BEGIN_INPUT (NO_PARAMETER, RECV_NO, "", "", recv, ano_t ano, int param, bd_t bda, bd_t bdb) */
@@ -1495,6 +1503,32 @@ BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESULT_IN_NO, SA_BIND_RESULT_IN_NAME, "", sa_
 {
   initialize ();
   bind_stat_result (&bind_stat, bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_OUT_NO, "", "", fs_descend_request_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+  vfs_descend_request (&vfs, aid);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_IN_NO, "", "", fs_descend_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  vfs_descend_response (&vfs, aid, bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_OUT_NO, "", "", fs_readfile_request_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+  logs (__func__);
+  finish_output (false, -1, -1);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_RESPONSE_IN_NO, "", "", fs_readfile_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  logs (__func__);
+  finish_input (bda, bdb);
 }
 
 void

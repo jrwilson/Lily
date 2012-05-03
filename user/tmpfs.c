@@ -67,6 +67,10 @@
 
 #define REQUEST_NO 1
 #define RESPONSE_NO 2
+#define FS_DESCEND_REQUEST_IN_NO 3
+#define FS_DESCEND_RESPONSE_OUT_NO 4
+#define FS_READFILE_REQUEST_IN_NO 5
+#define FS_READFILE_RESPONSE_OUT_NO 6
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -251,6 +255,41 @@ create_client (aid_t aid)
   return client;
 }
 
+typedef struct descend_response descend_response_t;
+struct descend_response {
+  aid_t to;
+  fs_descend_response_t response;
+  descend_response_t* next;
+};
+
+static descend_response_t* descend_response_head = 0;
+static descend_response_t** descend_response_tail = &descend_response_head;
+
+static void
+push_descend_response (aid_t to,
+		       fs_descend_error_t error,
+		       fs_nodeid_t nodeid)
+{
+  descend_response_t* res = malloc (sizeof (descend_response_t));
+  memset (res, 0, sizeof (descend_response_t));
+  res->to = to;
+  fs_descend_response_init (&res->response, error, nodeid);
+
+  *descend_response_tail = res;
+  descend_response_tail = &res->next;
+}
+
+static void
+pop_descend_response (void)
+{
+  descend_response_t* res = descend_response_head;
+  descend_response_head = res->next;
+  if (descend_response_head == 0) {
+    descend_response_tail = &descend_response_head;
+  }
+  free (res);
+}
+
 static void
 initialize (void)
 {
@@ -368,70 +407,6 @@ BEGIN_INPUT (AUTO_PARAMETER, REQUEST_NO, FS_REQUEST_NAME, "", request, ano_t ano
 
   switch (type) {
   case FS_DESCEND:
-    {
-      fs_nodeid_t nodeid;
-      const char* name;
-      size_t name_size;
-      if (fs_descend_request_read (&buffer, &nodeid, &name, &name_size) != 0) {
-	if (fs_descend_response_write (&client->response_buffer, FS_BAD_REQUEST, -1) != 0) {
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
-	  logs (log_buffer);
-	  exit (-1);
-	}
-	finish_input (bda, bdb);
-      }
-
-      if (nodeid >= nodes_size) {
-	if (fs_descend_response_write (&client->response_buffer, FS_NODE_DNE, -1) != 0) {
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
-	  logs (log_buffer);
-	  exit (-1);
-	}
-	finish_input (bda, bdb);
-      }
-
-      inode_t* inode = nodes[nodeid];
-
-      if (inode == 0) {
-	if (fs_descend_response_write (&client->response_buffer, FS_NODE_DNE, -1) != 0) {
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
-	  logs (log_buffer);
-	  exit (-1);
-	}
-	finish_input (bda, bdb);
-      }
-
-      if (inode->type != DIRECTORY) {
-	if (fs_descend_response_write (&client->response_buffer, FS_NOT_DIRECTORY, -1) != 0) {
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
-	  logs (log_buffer);
-	  exit (-1);
-	}
-	finish_input (bda, bdb);
-      }
-
-      for (inode_t* child = inode->first_child; child != 0; child = child->next_sibling) {
-  	if (child->name_size == name_size &&
-  	    memcmp (child->name, name, name_size) == 0) {
-  	  /* Found the child with the correct name. */
-	  if (fs_descend_response_write (&client->response_buffer, FS_SUCCESS, child->nodeid) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-  	  finish_input (bda, bdb);
-  	}
-      }
-
-      /* Didn't find it. */
-      if (fs_descend_response_write (&client->response_buffer, FS_CHILD_DNE, -1) != 0) {
-      	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write response: %s", lily_error_string (lily_error));
-      	logs (log_buffer);
-      	exit (-1);
-      }
-
-      finish_input (bda, bdb);
-    }
     break;
   case FS_READFILE:
     {
@@ -513,9 +488,92 @@ BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t
   finish_output (false, -1, -1);
 }
 
+BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_IN_NO, FS_DESCEND_REQUEST_IN_NAME, "", fs_descend_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+
+  buffer_file_t bf;
+  if (buffer_file_initr (&bf, bda) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize descend request buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
+
+  fs_descend_request_t* req = fs_descend_request_read (&bf);
+  if (req == 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read descend request: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
+
+  if (req->nodeid >= nodes_size) {
+    push_descend_response (aid, FS_DESCEND_NODE_DNE, -1);
+    fs_descend_request_destroy (req);
+    finish_input (bda, bdb);
+  }
+
+  inode_t* inode = nodes[req->nodeid];
+  
+  if (inode == 0) {
+    push_descend_response (aid, FS_DESCEND_NODE_DNE, -1);
+    fs_descend_request_destroy (req);
+    finish_input (bda, bdb);
+  }
+
+  if (inode->type != DIRECTORY) {
+    push_descend_response (aid, FS_DESCEND_NOT_DIRECTORY, -1);
+    fs_descend_request_destroy (req);
+    finish_input (bda, bdb);
+  }
+
+  for (inode_t* child = inode->first_child; child != 0; child = child->next_sibling) {
+    if (pstrcmp (child->name, child->name + child->name_size, req->name_begin, req->name_end) == 0) {
+      /* Found the child with the correct name. */
+      push_descend_response (aid, FS_DESCEND_SUCCESS, child->nodeid);
+      fs_descend_request_destroy (req);
+      finish_input (bda, bdb);
+    }
+  }
+
+  /* Didn't find it. */
+  push_descend_response (aid, FS_DESCEND_CHILD_DNE, -1);
+  fs_descend_request_destroy (req);
+  finish_input (bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_OUT_NO, FS_DESCEND_RESPONSE_OUT_NAME, "", fs_descend_response_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+  
+  if (descend_response_head != 0 && descend_response_head->to == aid) {
+    buffer_file_shred (&output_bfa);
+    buffer_file_write (&output_bfa, &descend_response_head->response, sizeof (fs_descend_response_t));
+    pop_descend_response ();
+    finish_output (true, output_bfa.bd, -1);
+  }
+  finish_output (false, -1, -1);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_IN_NO, FS_READFILE_REQUEST_IN_NAME, "", fs_readfile_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  logs (__func__);
+  finish_input (bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, FS_READFILE_RESPONSE_OUT_NO, FS_READFILE_RESPONSE_OUT_NAME, "", fs_readfile_response_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+  logs (__func__);
+  finish_output (false, -1, -1);
+}
+
 void
 do_schedule (void)
 {
+  if (descend_response_head != 0) {
+    schedule (FS_DESCEND_RESPONSE_OUT_NO, descend_response_head->to);
+  }
   for (client_t* client = client_head; client != 0; client = client->next) {
     if (buffer_file_size (&client->response_buffer) != 0) {
       if (schedule (RESPONSE_NO, client->aid) != 0) {

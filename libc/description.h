@@ -39,4 +39,9 @@ description_read_name (description_t* d,
 		       const char* name_begin,
 		       const char* name_end);
 
+int
+description_read_number (description_t* d,
+			 action_desc_t* ad,
+			 ano_t ano);
+
 #endif /* DESCRIPTION_H */

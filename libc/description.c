@@ -129,3 +129,48 @@ description_read_name (description_t* d,
 
   return -1;
 }
+
+int
+description_read_number (description_t* d,
+			 action_desc_t* a,
+			 ano_t ano)
+{
+  if (buffer_file_seek (&d->bf, 0) != 0) {
+    return -1;
+  }
+
+  size_t count;
+  if (buffer_file_read (&d->bf, &count, sizeof (size_t)) != 0) {
+    return -1;
+  }
+
+  for (size_t idx = 0; idx != count; ++idx) {
+    const action_descriptor_t* ad = buffer_file_readp (&d->bf, sizeof (action_descriptor_t));
+    if (ad == 0) {
+      return -1;
+    }
+
+    const char* name = buffer_file_readp (&d->bf, ad->name_size);
+    if (name == 0) {
+      return -1;
+    }
+
+    const char* description = buffer_file_readp (&d->bf, ad->description_size);
+    if (description == 0) {
+      return -1;
+    }
+
+    if (ano == ad->number) {
+      a->type = ad->type;
+      a->parameter_mode = ad->parameter_mode;
+      a->number = ad->number;
+      a->name_begin = name;
+      a->name_end = name + ad->name_size;
+      a->description_begin = description;
+      a->description_end = description + ad->description_size;
+      return 0;
+    }
+  }
+
+  return -1;
+}

@@ -120,7 +120,27 @@ binding_count (ano_t ano,
   return retval;
 }
 
-/* Bind request processing. */
+/* Bind Protocol
+   -------------
+   The bind protocol involves five parties:  the initiator, the system automaton, the output automaton, the input automaton, and the owner automaton (optional).
+   A typical execution is depicted as follows:
+     Message       Initiator   System   Output   Input   Owner
+     bind_request      |--------->|        |       |       |
+     ba_request        |          |------->|       |       |
+     ba_request        |          |--------|------>|       |
+     ba_request        |          |--------|-------|------>|
+     ba_response       |          |<-------|       |       |
+     ba_response       |          |<-------|-------|       |
+     ba_response       |          |<-------|-------|-------|
+                                bind!
+     bind_result       |          |------->|       |       |
+     bind_result       |          |--------|------>|       |
+     bind_result       |          |--------|-------|------>|
+
+   ba stands for bind authorization.
+   Thus, the output, input, or owner automaton can prevent the binding from succeeding.
+   Seek system_msg.h for the contents of each message.
+ */
 typedef struct bind_result bind_result_t;
 struct bind_result {
   aid_t to;

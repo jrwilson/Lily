@@ -191,71 +191,85 @@ static void
 binding_bind (binding_t* b)
 {
   if (b->output_automaton->aid != -1 && b->input_automaton->aid != -1 && (b->owner_automaton == 0 || b->owner_automaton->aid != -1)) {
+    /* Describe the output automaton. */
+    description_t output_description;
+    if (description_init (&output_description, b->output_automaton->aid) != 0) {
+      b->error = lily_error;
+      return;
+    }
+    
+    /* Look up the actions. */
+    action_desc_t output_action;
     if (b->output_action == -1) {
-      /* Describe the output automaton. */
-      description_t output_description;
-      if (description_init (&output_description, b->output_automaton->aid) != 0) {
-	b->error = lily_error;
-	return;
-      }
-      
-      /* Look up the actions. */
-      action_desc_t output_action;
       if (description_read_name (&output_description, &output_action, b->output_action_begin, b->output_action_end) != 0) {
 	b->error = lily_error;
 	description_fini (&output_description);
 	return;
       }
-      
-      b->output_action = output_action.number;
-      
-      switch (output_action.parameter_mode) {
-      case NO_PARAMETER:
-	b->output_parameter = 0;
-	break;
-      case PARAMETER:
-	/* Okay. */
-	break;
-      case AUTO_PARAMETER:
-	b->output_parameter = b->input_automaton->aid;
-	break;
-      }
-      
-      description_fini (&output_description);
     }
-
-    if (b->input_action == -1) {
-      /* Describe the input automaton. */
-      description_t input_description;
-      if (description_init (&input_description, b->input_automaton->aid) != 0) {
+    else {
+      if (description_read_number (&output_description, &output_action, b->output_action) != 0) {
 	b->error = lily_error;
+	description_fini (&output_description);
 	return;
       }
+    }
+    
+    b->output_action = output_action.number;
+    
+    switch (output_action.parameter_mode) {
+    case NO_PARAMETER:
+      b->output_parameter = 0;
+      break;
+    case PARAMETER:
+      /* Okay. */
+      break;
+    case AUTO_PARAMETER:
+      b->output_parameter = b->input_automaton->aid;
+      break;
+    }
       
-      /* Look up the actions. */
-      action_desc_t input_action;
+    description_fini (&output_description);
+
+    /* Describe the input automaton. */
+    description_t input_description;
+    if (description_init (&input_description, b->input_automaton->aid) != 0) {
+      b->error = lily_error;
+      return;
+    }
+    
+    /* Look up the actions. */
+    action_desc_t input_action;
+    if (b->input_action == -1) {
       if (description_read_name (&input_description, &input_action, b->input_action_begin, b->input_action_end) != 0) {
 	b->error = lily_error;
 	description_fini (&input_description);
 	return;
       }
-
-      b->input_action = input_action.number;
-      
-      switch (input_action.parameter_mode) {
-      case NO_PARAMETER:
-	b->input_parameter = 0;
-	break;
-      case PARAMETER:
-	/* Okay. */
-	break;
-      case AUTO_PARAMETER:
-	b->input_parameter = b->output_automaton->aid;
-	break;
-      }
-
-      description_fini (&input_description);
     }
+    else {
+      if (description_read_number (&input_description, &input_action, b->input_action) != 0) {
+	b->error = lily_error;
+	description_fini (&input_description);
+	return;
+      }
+    }
+    
+    b->input_action = input_action.number;
+    
+    switch (input_action.parameter_mode) {
+    case NO_PARAMETER:
+      b->input_parameter = 0;
+      break;
+    case PARAMETER:
+      /* Okay. */
+      break;
+    case AUTO_PARAMETER:
+      b->input_parameter = b->output_automaton->aid;
+      break;
+    }
+    
+    description_fini (&input_description);
 
     sa_binding_t sab;
     sa_binding_init (&sab, b->output_automaton->aid, b->output_action, b->output_parameter, b->input_automaton->aid, b->input_action, b->input_parameter, b->owner_automaton->aid);

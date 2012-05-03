@@ -9,13 +9,24 @@
 
 typedef void (*readfile_callback_t) (void* arg, fs_error_t error, size_t size, bd_t bd);
 
+typedef struct descend_request descend_request_t;
+typedef struct readfile_request readfile_request_t;
 typedef struct fs fs_t;
 typedef struct redirect redirect_t;
 typedef struct {
   system_t* system;
   bind_stat_t* bs;
-  ano_t request;
-  ano_t response;
+  buffer_file_t* output_bfa;
+  ano_t descend_request;
+  ano_t descend_response;
+  descend_request_t* descend_request_head;
+  descend_request_t** descend_request_tail;
+  descend_request_t* descend_response_head;
+  descend_request_t** descend_response_tail;
+  ano_t readfile_request;
+  ano_t readfile_response;
+  readfile_request_t* readfile_head;
+  readfile_request_t** readfile_tail;
   fs_t* fs_head;
   redirect_t* redirect_head;
   redirect_t** redirect_tail;
@@ -25,8 +36,11 @@ void
 vfs_init (vfs_t* vfs,
 	  system_t* system,
 	  bind_stat_t* bs,
-	  ano_t request,
-	  ano_t response);
+	  buffer_file_t* output_bfa,
+	  ano_t descend_request,
+	  ano_t descend_response,
+	  ano_t readfile_request,
+	  ano_t readfile_response);
 
 void
 vfs_append (vfs_t* vfs,
@@ -46,13 +60,13 @@ void
 vfs_schedule (const vfs_t* vfs);
 
 void
-vfs_request (vfs_t* vfs,
-	     aid_t aid);
+vfs_descend_request (vfs_t* vfs,
+		     aid_t aid);
 
 void
-vfs_response (vfs_t* vfs,
-	      aid_t aid,
-	      bd_t bda,
-	      bd_t bdb);
+vfs_descend_response (vfs_t* vfs,
+		      aid_t aid,
+		      bd_t bda,
+		      bd_t bdb);
 
 #endif /* VFS_H */
