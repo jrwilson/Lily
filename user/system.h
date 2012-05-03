@@ -5,6 +5,7 @@
 #include <buffer_file.h>
 
 #define SYSTEM_REQUEST_OUT_NAME "system_request_out"
+#define SYSTEM_BIND_RFA_IN_NAME "system_bind_rfa_in"
 #define SYSTEM_RESPONSE_IN_NAME "system_response_in"
 
 #include <automaton.h>

@@ -1358,6 +1358,61 @@ public:
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
   
+  inline size_t
+  binding_count (const shared_ptr<automaton>&ths,
+		 ano_t ano,
+		 int parameter)
+  {
+    kassert (ths.get () == this);
+
+    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (ano);
+    if (pos != ano_to_action_map_.end ()) {
+      caction c (ths, pos->second, parameter);
+
+      switch (pos->second->type) {
+      case INPUT:
+	{
+	  bound_inputs_map_type::const_iterator pos2 = bound_inputs_map_.find (c);
+	  if (pos2 == bound_inputs_map_.end ()) {
+	    return 0;
+	  }
+	  size_t count = 0;
+	  for (binding_set_type::const_iterator pos3 = pos2->second.begin ();
+	       pos3 != pos2->second.end ();
+	       ++pos3) {
+	    if ((*pos3)->enabled ()) {
+	      ++count;
+	    }
+	  }
+	  return count;
+	}
+	break;
+      case OUTPUT:
+	{
+	  bound_outputs_map_type::const_iterator pos2 = bound_outputs_map_.find (c);
+	  if (pos2 == bound_outputs_map_.end ()) {
+	    return 0;
+	  }
+	  size_t count = 0;
+	  for (binding_set_type::const_iterator pos3 = pos2->second.begin ();
+	       pos3 != pos2->second.end ();
+	       ++pos3) {
+	    if ((*pos3)->enabled ()) {
+	      ++count;
+	    }
+	  }
+	  return count;
+	}
+	break;
+      case INTERNAL:
+	return 0;
+	break;
+      }
+    }
+
+    return 0;
+  }
+
   /*
    * I/O
    */

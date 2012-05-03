@@ -126,8 +126,22 @@ pop_bind_rfa (void)
   free (rfa);
 }
 
-static bd_t response_bd = -1;
-static buffer_file_t response_buffer;
+/* Output buffer. */
+static bd_t output_bda = -1;
+static bd_t output_bdb = -1;
+static buffer_file_t output_buffer;
+
+
+
+
+
+
+
+
+
+
+
+
 
 typedef struct result result_t;
 struct result {
@@ -221,13 +235,23 @@ destroy (aid_t aid)
   return retval;
 }
 
-static aid_t
+static int
 exists (aid_t aid)
 {
-  aid_t retval;
-  syscall0r (LILY_SYSCALL_EXISTS, retval);
+  int retval;
+  syscall1r (LILY_SYSCALL_EXISTS, aid, retval);
   return retval;
 }
+
+static size_t
+binding_count (ano_t ano,
+	       int parameter)
+{
+  size_t retval;
+  syscall2r (LILY_SYSCALL_BINDING_COUNT, ano, parameter, retval);
+  return retval;
+}
+
 
 static aid_t
 create_ (bd_t text_bd,
@@ -244,11 +268,14 @@ create_ (bd_t text_bd,
     description_t description;
     action_desc_t desc;
     description_init (&description, aid);
-    if (description_read_name (&description, &desc, SYSTEM_RESPONSE_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
-      bind (system_automaton_aid, RESPONSE_OUT_NO, 0, aid, desc.number, 0);
-    }
     if (description_read_name (&description, &desc, SYSTEM_REQUEST_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
       bind (aid, desc.number, 0, system_automaton_aid, REQUEST_IN_NO, 0);
+    }
+    if (description_read_name (&description, &desc, SYSTEM_BIND_RFA_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      bind (system_automaton_aid, BIND_RFA_OUT_NO, 0, aid, desc.number, 0);
+    }
+    if (description_read_name (&description, &desc, SYSTEM_RESPONSE_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      bind (system_automaton_aid, RESPONSE_OUT_NO, 0, aid, desc.number, 0);
     }
   }
   return aid;
@@ -260,13 +287,14 @@ initialize (void)
   if (!initialized) {
     initialized = true;
 
-    response_bd = buffer_create (0);
-    if (response_bd == -1) {
+    output_bda = buffer_create (0);
+    output_bdb = buffer_create (0);
+    if (output_bda == -1 || output_bdb == -1) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create response buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
-    if (buffer_file_initw (&response_buffer, response_bd) != 0) {
+    if (buffer_file_initw (&output_buffer, output_bda) != 0) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize response buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
@@ -494,16 +522,16 @@ BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RFA_OUT_NO, "", "", bind_rfa_out, ano_t ano, 
   initialize ();
 
   if (bind_rfa_head != 0 && bind_rfa_head->to == aid) {
-    if (exists (aid)) {
-      /* TODO */
-      logs ("EXISTS");
-      logs (__func__);
-      finish_output (false, -1, -1);
+    if (exists (aid) && binding_count (ano, aid) == 1) {
+      // Send the rfa.
+      buffer_file_truncate (&output_buffer);
+      bind_write (&output_buffer, &bind_rfa_head->request->bind);
+      pop_bind_rfa ();
+      finish_output (true, output_bda, -1);
     }
     else {
-      // You can't speak when you're dead.
+      // The automaton in question is either dead or can't receive bind rfa's.
       // We interpret silence as being permissive.
-      // If this is the output or input automaton, the bind with fail later.
       *bind_rfa_head->approval = GRANTED;
       bind_request_process (bind_rfa_head->request);
       pop_bind_rfa ();
@@ -519,15 +547,15 @@ BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_OUT_NO, "", "", response_out, ano_t ano, 
   initialize ();
 
   if (result_head != 0 && result_head->aid == aid) {
-    buffer_file_truncate (&response_buffer);
+    buffer_file_truncate (&output_buffer);
     
     sysresult_t res;
     sysresult_init (&res, result_head->retval, result_head->error);
-    sysresult_write (&response_buffer, &res);
+    sysresult_write (&output_buffer, &res);
     sysresult_fini (&res);
 
     pop_result ();
-    finish_output (true, response_bd, -1);
+    finish_output (true, output_bda, -1);
   }
 
   finish_output (false, -1, -1);

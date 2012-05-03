@@ -74,6 +74,19 @@ void func (ano, param)
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall) : "eax", "ecx" );
 
+#define syscall1r(syscall, p1, retval)		\
+  __asm__ ("mov %1, %%eax\n" \
+           "mov %2, %%ebx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx" );
+
+#define syscall2r(syscall, p1, p2, retval)	\
+  __asm__ ("mov %1, %%eax\n" \
+           "mov %2, %%ebx\n" \
+           "mov %3, %%ecx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
+
 #define syscall0re(syscall, retval)	\
   __asm__ ("mov %2, %%eax\n" \
 	   "int $0x80\n" \

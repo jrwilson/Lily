@@ -4,6 +4,7 @@
 #include <buffer_file.h>
 #include "cpio.h"
 #include "fs_msg.h"
+#include "system.h"
 
 /*
   Tmpfs
@@ -67,6 +68,7 @@
 
 #define REQUEST_NO 1
 #define RESPONSE_NO 2
+#define SYSTEM_BIND_RFA_IN_NO 3
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -496,6 +498,13 @@ BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t
   }
 
   finish_output (false, -1, -1);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SYSTEM_BIND_RFA_IN_NO, SYSTEM_BIND_RFA_IN_NAME, "", system_bind_rfa_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  logs (__func__);
+  finish_input (bda, bdb);
 }
 
 void

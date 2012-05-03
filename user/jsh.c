@@ -27,6 +27,7 @@
 #define CREATE_OUT_NO 16
 #define SYSTEM_REQUEST_OUT_NO 17
 #define SYSTEM_RESPONSE_IN_NO 18
+#define SYSTEM_BIND_RFA_IN_NO 19
 
 /* Initialization flag. */
 static bool initialized = false;
@@ -1449,6 +1450,13 @@ BEGIN_OUTPUT (NO_PARAMETER, SYSTEM_REQUEST_OUT_NO, SYSTEM_REQUEST_OUT_NAME, "", 
 {
   initialize ();
   system_request (&system);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SYSTEM_BIND_RFA_IN_NO, SYSTEM_BIND_RFA_IN_NAME, "", system_bind_rfa_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  logs (__func__);
+  finish_input (bda, bdb);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SYSTEM_RESPONSE_IN_NO, SYSTEM_RESPONSE_IN_NAME, "", system_response_in, ano_t ano, int param, bd_t bda, bd_t bdb)

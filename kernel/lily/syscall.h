@@ -11,6 +11,7 @@
 #define LILY_SYSCALL_UNBIND                0x12
 #define LILY_SYSCALL_DESTROY               0x13
 #define LILY_SYSCALL_EXISTS                0x14
+#define LILY_SYSCALL_BINDING_COUNT         0x15
 
 #define LILY_SYSCALL_LOG                   0x20
 
