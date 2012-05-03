@@ -1,38 +1,8 @@
 #ifndef SYSTEM_MSG_H
 #define SYSTEM_MSG_H
 
-#include <automaton.h>
-#include <buffer_file.h>
-
-typedef enum {
-  CREATE,
-  BIND,
-  UNBIND,
-  DESTROY,
-} system_msg_type_t;
-
-int
-system_msg_type_write (buffer_file_t* bf,
-		       system_msg_type_t type);
-
-int
-system_msg_type_read (buffer_file_t* bf,
-		      system_msg_type_t* type);
-
-/* typedef struct { */
-/*   bd_t text; */
-/*   bd_t bda; */
-/*   bd_t bdb; */
-/*   int retain_privilege; */
-/* } create_t; */
-
-/* void */
-/* create_initr (create_t* c, */
-/* 	      bd_t bda, */
-/* 	      bd_t bdb); */
-
-/* void */
-/* create_fini (create_t* c); */
+#include <lily/types.h>
+#include <stdbool.h>
 
 typedef struct {
   aid_t output_aid;
@@ -42,66 +12,79 @@ typedef struct {
   ano_t input_ano;
   int input_parameter;
   aid_t owner_aid;
-} bind_t;
+} sa_binding_t;
 
-int
-bind_init (bind_t* bind,
-	   aid_t output_aid,
-	   ano_t output_ano,
-	   int output_parameter,
-	   aid_t input_aid,
-	   ano_t input_ano,
-	   int input_parameter,
-	   aid_t owner_aid);
+void
+sa_binding_init (sa_binding_t* b,
+		 aid_t output_aid,
+		 ano_t output_ano,
+		 int output_parameter,
+		 aid_t input_aid,
+		 ano_t input_ano,
+		 int input_parameter,
+		 aid_t owner_aid);
 
-int
-bind_write (buffer_file_t* bf,
-	    bind_t* bind);
+bool
+sa_binding_equal (const sa_binding_t* x,
+		  const sa_binding_t* y);
 
-int
-bind_read (buffer_file_t* bf,
-	   bind_t* bind);
+typedef enum {
+  SA_BINDING_INPUT,
+  SA_BINDING_OUTPUT,
+  SA_BINDING_OWNER,
+} sa_binding_role_t;
 
-int
-bind_fini (bind_t* b);
-
-/* typedef struct { */
-/*   bid_t bid; */
-/* } unbind_t; */
-
-/* void */
-/* unbind_initr (unbind_t* u, */
-/* 	      bd_t bd); */
-
-/* void */
-/* unbind_fini (unbind_t* u); */
-
-/* typedef struct { */
-/*   aid_t aid; */
-/* } destroy_t; */
-
-/* void */
-/* destroy_initr (destroy_t* d, */
-/* 	       bd_t bd); */
-
-/* void */
-/* destroy_fini (destroy_t* d); */
+typedef enum {
+  SA_BINDING_SUCCESS,
+  SA_BINDING_OAIDDNE,
+  SA_BINDING_IAIDDNE,
+  SA_BINDING_OANODNE,
+  SA_BINDING_IANODNE,
+  SA_BINDING_SAME,
+  SA_BINDING_ALREADY,
+  SA_BINDING_NOT_AUTHORIZED,
+} sa_binding_outcome_t;
 
 typedef struct {
-  int retval;
-  lily_error_t error;
-} sysresult_t;
+  sa_binding_t binding;
+} sa_bind_request_t;
 
-int
-sysresult_init (sysresult_t* r,
-		int retval,
-		lily_error_t error);
+void
+sa_bind_request_init (sa_bind_request_t* req,
+		      const sa_binding_t* b);
 
-int
-sysresult_write (buffer_file_t* bf,
-		 sysresult_t* r);
+typedef struct {
+  sa_binding_t binding;
+  sa_binding_role_t role;
+} sa_ba_request_t;
 
-int
-sysresult_fini (sysresult_t* r);
+void
+sa_ba_request_init (sa_ba_request_t* req,
+		    const sa_binding_t* b,
+		    sa_binding_role_t role);
+
+typedef struct {
+  sa_binding_t binding;
+  sa_binding_role_t role;
+  bool authorized;
+} sa_ba_response_t;
+
+void
+sa_ba_response_init (sa_ba_response_t* res,
+		     const sa_binding_t* b,
+		     sa_binding_role_t role,
+		     bool authorized);
+
+typedef struct {
+  sa_binding_t binding;
+  sa_binding_role_t role;
+  sa_binding_outcome_t outcome;
+} sa_bind_result_t;
+
+void
+sa_bind_result_init (sa_bind_result_t* res,
+		     const sa_binding_t* b,
+		     sa_binding_role_t role,
+		     sa_binding_outcome_t outcome);
 
 #endif /* SYSTEM_MSG_H */

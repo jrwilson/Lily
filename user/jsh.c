@@ -8,7 +8,8 @@
 #include "environment.h"
 #include "system.h"
 #include "vfs.h"
-#include "system_msg.h"
+#include "bind_auth.h"
+#include "bind_stat.h"
 
 /* TODO:  Improve the error handling. */
 
@@ -25,15 +26,26 @@
 #define RECV_NO 14
 #define SEND_NO 15
 #define CREATE_OUT_NO 16
-#define SYSTEM_REQUEST_OUT_NO 17
-#define SYSTEM_RESPONSE_IN_NO 18
-#define SYSTEM_BIND_RFA_IN_NO 19
+#define SA_BIND_REQUEST_OUT_NO 17
+#define SA_BA_REQUEST_IN_NO 18
+#define SA_BA_RESPONSE_OUT_NO 19
+#define SA_BIND_RESULT_IN_NO 20
 
 /* Initialization flag. */
 static bool initialized = false;
 
+/* Output buffers. */
+static bd_t output_bda = -1;
+static buffer_file_t output_bfa;
+
 /* System automaton. */
 static system_t system;
+
+/* Bind authorization. */
+static bind_auth_t bind_auth;
+
+/* Bind status. */
+static bind_stat_t bind_stat;
 
 /* Virtual file system. */
 static vfs_t vfs;
@@ -1113,12 +1125,13 @@ typedef enum {
   ===================
 */
 
-/* static void */
-/* readscript_callback (void* arg, */
-/* 		     fs_error_t error, */
-/* 		     size_t size, */
-/* 		     bd_t bd) */
-/* { */
+static void
+readscript_callback (void* arg,
+		     fs_error_t error,
+		     size_t size,
+		     bd_t bd)
+{
+  logs (__func__);
 /*   switch (error) { */
 /*   case FS_SUCCESS: */
 /*     { */
@@ -1137,7 +1150,7 @@ typedef enum {
 /*     /\* TODO *\/ */
 /*     break; */
 /*   } */
-/* } */
+}
 
 static void
 initialize (void)
@@ -1147,8 +1160,22 @@ initialize (void)
 
     /* aid_t finda_aid = -1; */
 
-    system_init (&system, SYSTEM_REQUEST_OUT_NO, SYSTEM_RESPONSE_IN_NO);
-    vfs_init (&vfs, &system, FS_REQUEST_NO, FS_RESPONSE_NO);
+    output_bda = buffer_create (0);
+    if (output_bda == -1) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create output buffer: %s\n", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    if (buffer_file_initw (&output_bfa, output_bda) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize output buffer: %s\n", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+
+    system_init (&system, &output_bfa, SA_BIND_REQUEST_OUT_NO);
+    bind_auth_init (&bind_auth, &output_bfa, SA_BA_RESPONSE_OUT_NO);
+    bind_stat_init (&bind_stat);
+    vfs_init (&vfs, &system, &bind_stat, FS_REQUEST_NO, FS_RESPONSE_NO);
 
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
@@ -1170,23 +1197,23 @@ initialize (void)
 
       de_val_t* fs = de_get (root, "." FS);
       if (de_type (fs) == DE_ARRAY) {
-    	for (size_t idx = 0; idx != de_array_size (fs); ++idx) {
-    	  de_val_t* entry = de_array_at (fs, idx);
+      	for (size_t idx = 0; idx != de_array_size (fs); ++idx) {
+      	  de_val_t* entry = de_array_at (fs, idx);
 
-    	  aid_t from_aid = de_integer_val (de_get (entry, ".from.aid"), -1);
-    	  fs_nodeid_t from_nodeid = de_integer_val (de_get (entry, ".from.nodeid"), -1);
-    	  aid_t to_aid = de_integer_val (de_get (entry, ".to.aid"), -1);
-    	  fs_nodeid_t to_nodeid = de_integer_val (de_get (entry, ".to.nodeid"), -1);
-    	  if (to_aid != -1 && to_nodeid != -1) {
-    	    vfs_append (&vfs, from_aid, from_nodeid, to_aid, to_nodeid);
-    	  }
-    	}
+      	  aid_t from_aid = de_integer_val (de_get (entry, ".from.aid"), -1);
+      	  fs_nodeid_t from_nodeid = de_integer_val (de_get (entry, ".from.nodeid"), -1);
+      	  aid_t to_aid = de_integer_val (de_get (entry, ".to.aid"), -1);
+      	  fs_nodeid_t to_nodeid = de_integer_val (de_get (entry, ".to.nodeid"), -1);
+      	  if (to_aid != -1 && to_nodeid != -1) {
+      	    vfs_append (&vfs, from_aid, from_nodeid, to_aid, to_nodeid);
+      	  }
+      	}
       }
 
-    /*   const char* script_name = de_string_val (de_get (root, "." ARGS "." "script"), 0); */
-    /*   if (script_name != 0) { */
-    /* 	vfs_readfile (&vfs, script_name, script_name + strlen (script_name), readscript_callback, 0); */
-    /*   } */
+      const char* script_name = de_string_val (de_get (root, "." ARGS "." "script"), 0);
+      if (script_name != 0) {
+	vfs_readfile (&vfs, script_name, script_name + strlen (script_name), readscript_callback, 0);
+      }
 
     /*   finda_aid = de_integer_val (de_get (root, "." FINDA), -1); */
     }
@@ -1446,23 +1473,28 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_response, ano_t ano, aid
 /*   finish_input (bda, bdb); */
 /* } */
 
-BEGIN_OUTPUT (NO_PARAMETER, SYSTEM_REQUEST_OUT_NO, SYSTEM_REQUEST_OUT_NAME, "", system_request_out, ano_t ano, int param)
+BEGIN_OUTPUT (NO_PARAMETER, SA_BIND_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NAME, "", sa_bind_request_out, ano_t ano, int param)
 {
   initialize ();
-  system_request (&system);
+  system_bind_request (&system);
 }
 
-BEGIN_INPUT (NO_PARAMETER, SYSTEM_BIND_RFA_IN_NO, SYSTEM_BIND_RFA_IN_NAME, "", system_bind_rfa_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_INPUT (NO_PARAMETER, SA_BA_REQUEST_IN_NO, SA_BA_REQUEST_IN_NAME, "", sa_ba_request_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   initialize ();
-  logs (__func__);
-  finish_input (bda, bdb);
+  bind_auth_request (&bind_auth, bda, bdb);
 }
 
-BEGIN_INPUT (NO_PARAMETER, SYSTEM_RESPONSE_IN_NO, SYSTEM_RESPONSE_IN_NAME, "", system_response_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+BEGIN_OUTPUT (NO_PARAMETER, SA_BA_RESPONSE_OUT_NO, SA_BA_RESPONSE_OUT_NAME, "", sa_ba_response_out, ano_t ano, int param)
 {
   initialize ();
-  system_response (&system, bda, bdb);
+  bind_auth_response (&bind_auth);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESULT_IN_NO, SA_BIND_RESULT_IN_NAME, "", sa_bind_result_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  bind_stat_result (&bind_stat, bda, bdb);
 }
 
 void
@@ -1478,6 +1510,7 @@ do_schedule (void)
   /*   schedule (COM_OUT_NO, com_queue_front ()); */
   /* } */
   system_schedule (&system);
+  bind_auth_schedule (&bind_auth);
   vfs_schedule (&vfs);
   /* finda_schedule (&finda); */
 }

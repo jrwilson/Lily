@@ -104,13 +104,13 @@ create_fs (vfs_t* vfs,
   automaton_t* this_a = system_get_this (vfs->system);
   automaton_t* fs_a = system_add_unmanaged_automaton (vfs->system, aid);
   system_add_binding (vfs->system,
-		      this_a, 0, 0, vfs->request, 0,
-		      fs_a, FS_REQUEST_NAME, 0, -1, 0,
-		      this_a);
+  		      this_a, 0, 0, vfs->request, 0,
+  		      fs_a, FS_REQUEST_NAME, 0, -1, 0,
+  		      this_a);
   system_add_binding (vfs->system,
-		      fs_a, FS_RESPONSE_NAME, 0, -1, 0,
-		      this_a, 0, 0, vfs->response, 0,
-		      this_a);
+  		      fs_a, FS_RESPONSE_NAME, 0, -1, 0,
+  		      this_a, 0, 0, vfs->response, 0,
+  		      this_a);
 
   return fs;
 }
@@ -174,35 +174,33 @@ fs_op_empty (const fs_t* fs)
 static bool
 fs_request_precondition (const fs_t* fs)
 {
-  return !fs->sent && !fs_op_empty (fs);
+  return !fs->sent && !fs_op_empty (fs) && bind_stat_output_bound (fs->vfs->bs, fs->vfs->request, 0) && bind_stat_input_bound (fs->vfs->bs, fs->vfs->response, 0);
 }
 
 static void
 fs_request (fs_t* fs)
 {
   if (fs_request_precondition (fs)) {
-    buffer_file_truncate (&fs->request_buffer);
-    /* TODO */
-    buffer_resize (fs->request_bdb, 0);
-
-    fs_op_t* op = fs->op_head;
-    switch (op->type) {
-    case FS_DESCEND:
+      buffer_file_truncate (&fs->request_buffer);
       /* TODO */
-      fs_descend_request_write (&fs->request_buffer, op->u.descend.nodeid, op->u.descend.begin, op->u.descend.end - op->u.descend.begin);
-      break;
-    case FS_READFILE:
-      /* TODO */
-      fs_readfile_request_write (&fs->request_buffer, op->u.readfile.nodeid);
-      break;
-    }
-
-    fs->sent = true;
-    finish_output (true, fs->request_bda, fs->request_bdb);
+      buffer_resize (fs->request_bdb, 0);
+    
+      fs_op_t* op = fs->op_head;
+      switch (op->type) {
+      case FS_DESCEND:
+        /* TODO */
+        fs_descend_request_write (&fs->request_buffer, op->u.descend.nodeid, op->u.descend.begin, op->u.descend.end - op->u.descend.begin);
+        break;
+      case FS_READFILE:
+        /* TODO */
+        fs_readfile_request_write (&fs->request_buffer, op->u.readfile.nodeid);
+        break;
+      }
+    
+      fs->sent = true;
+      finish_output (true, fs->request_bda, fs->request_bdb);
   }
-  else {
-    finish_output (false, -1, -1);
-  }
+  finish_output (false, -1, -1);
 }
 
 static void
@@ -417,10 +415,12 @@ process_readfile_context (readfile_context_t* c)
 void
 vfs_init (vfs_t* vfs,
 	  system_t* system,
+	  bind_stat_t* bs,
 	  ano_t request,
 	  ano_t response)
 {
   vfs->system = system;
+  vfs->bs = bs;
   vfs->request = request;
   vfs->response = response;
   vfs->redirect_tail = &vfs->redirect_head;

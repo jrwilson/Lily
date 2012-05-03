@@ -4,7 +4,6 @@
 #include <buffer_file.h>
 #include "cpio.h"
 #include "fs_msg.h"
-#include "system.h"
 
 /*
   Tmpfs
@@ -68,7 +67,6 @@
 
 #define REQUEST_NO 1
 #define RESPONSE_NO 2
-#define SYSTEM_BIND_RFA_IN_NO 3
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -94,6 +92,9 @@ static inode_t* free_list = 0;
 
 /* Initialization flag. */
 static bool initialized = false;
+
+static bd_t output_bda = -1;
+static buffer_file_t output_bfa;
 
 /* /\* Queue of response. *\/ */
 /* static bd_t response_bda = -1; */
@@ -255,6 +256,18 @@ initialize (void)
 {
   if (!initialized) {
     initialized = true;
+
+    output_bda = buffer_create (0);
+    if (output_bda == -1) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create output buffer: %s\n", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    if (buffer_file_initw (&output_bfa, output_bda) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize output buffer: %s\n", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
 
     /* Allocate the inode vector. */
     nodes_capacity = 1;
@@ -498,13 +511,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_NO, FS_RESPONSE_NAME, "", response, ano_t
   }
 
   finish_output (false, -1, -1);
-}
-
-BEGIN_INPUT (NO_PARAMETER, SYSTEM_BIND_RFA_IN_NO, SYSTEM_BIND_RFA_IN_NAME, "", system_bind_rfa_in, ano_t ano, int param, bd_t bda, bd_t bdb)
-{
-  initialize ();
-  logs (__func__);
-  finish_input (bda, bdb);
 }
 
 void

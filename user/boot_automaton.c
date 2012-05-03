@@ -25,9 +25,10 @@
 */
 
 #define INIT_NO 1
-#define REQUEST_IN_NO 2
-#define BIND_RFA_OUT_NO 3
-#define RESPONSE_OUT_NO 4
+#define BIND_REQUEST_IN_NO 2
+#define BA_REQUEST_OUT_NO 3
+#define BA_RESPONSE_IN_NO 4
+#define BIND_RESULT_OUT_NO 5
 
 /* Paths in the cpio archive. */
 #define SYSLOG_PATH "bin/syslog"
@@ -49,141 +50,6 @@ static bool initialized = false;
 /* This automaton's aid. */
 static aid_t system_automaton_aid = -1;
 
-typedef enum {
-  UNKNOWN = 0,
-  DENIED,
-  GRANTED,
-} approval_t;
-
-/* Bind request processing. */
-typedef struct bind_request bind_request_t;
-struct bind_request {
-  bind_t bind;
-  mono_time_t time; /* A timestamp so requests can timeout. */
-  approval_t output_approval;
-  approval_t input_approval;
-  approval_t owner_approval;
-  bind_request_t* next;
-};
-
-static bind_request_t* bind_request_head = 0;
-static bind_request_t** bind_request_tail = &bind_request_head;
-
-static bind_request_t*
-push_bind_request (const bind_t* b)
-{
-  bind_request_t* req = malloc (sizeof (bind_request_t));
-  memset (req, 0, sizeof (bind_request_t));
-  memcpy (&req->bind, b, sizeof (bind_t));
-  getmonotime (&req->time);
-
-  *bind_request_tail = req;
-  bind_request_tail = &req->next;
-
-  return req;
-}
-
-static void
-bind_request_process (bind_request_t* req)
-{
-  logs (__func__);
-}
-
-typedef struct bind_rfa bind_rfa_t;
-struct bind_rfa {
-  aid_t to;
-  bind_request_t* request;
-  approval_t* approval;
-  bind_rfa_t* next;
-};
-
-static bind_rfa_t* bind_rfa_head = 0;
-static bind_rfa_t** bind_rfa_tail = &bind_rfa_head;
-
-static void
-push_bind_rfa (aid_t to,
-	       bind_request_t* req,
-	       approval_t* approval)
-{
-  bind_rfa_t* rfa = malloc (sizeof (bind_rfa_t));
-  memset (rfa, 0, sizeof (bind_rfa_t));
-  rfa->to = to;
-  rfa->request = req;
-  rfa->approval = approval;
-  
-  *bind_rfa_tail = rfa;
-  bind_rfa_tail = &rfa->next;
-}
-
-static void
-pop_bind_rfa (void)
-{
-  bind_rfa_t* rfa = bind_rfa_head;
-  bind_rfa_head = rfa->next;
-  if (bind_rfa_head == 0) {
-    bind_rfa_tail = &bind_rfa_head;
-  }
-  free (rfa);
-}
-
-/* Output buffer. */
-static bd_t output_bda = -1;
-static bd_t output_bdb = -1;
-static buffer_file_t output_buffer;
-
-
-
-
-
-
-
-
-
-
-
-
-
-typedef struct result result_t;
-struct result {
-  aid_t aid;
-  int retval;
-  lily_error_t error;
-  result_t* next;
-};
-
-static result_t* result_head = 0;
-static result_t** result_tail = &result_head;
-
-static void
-push_result (aid_t aid,
-	     int retval,
-	     lily_error_t error)
-{
-  result_t* res = malloc (sizeof (result_t));
-  memset (res, 0, sizeof (result_t));
-  res->aid = aid;
-  res->retval = retval;
-  res->error = error;
-  *result_tail = res;
-  result_tail = &res->next;
-}
-
-static void
-pop_result (void)
-{
-  result_t* res = result_head;
-  result_head = res->next;
-  if (result_head == 0) {
-    result_tail = &result_head;
-  }
-
-  free (res);
-}
-
-
-
-
-
 static aid_t
 create (bd_t text_bd,
 	bd_t bda,
@@ -195,6 +61,8 @@ create (bd_t text_bd,
   return retval;
 }
 
+static lily_bind_error_t bind_error;
+
 static bid_t
 bind (aid_t output_automaton,
       ano_t output_action,
@@ -203,7 +71,7 @@ bind (aid_t output_automaton,
       ano_t input_action,
       int input_parameter)
 {
-  aid_t retval;
+  bid_t retval;
   __asm__ ("push %8\n"
 	   "push %7\n"
 	   "push %6\n"
@@ -214,7 +82,7 @@ bind (aid_t output_automaton,
 	   "int $0x80\n"
 	   "mov %%eax, %0\n"
 	   "mov %%ecx, %1\n"
-	   "sub $24, %%esp\n" : "=g"(retval), "=g"(lily_error) : "g"(LILY_SYSCALL_BIND), "g"(output_automaton), "g"(output_action), "g"(output_parameter), "g"(input_automaton), "g"(input_action), "g"(input_parameter) : "eax", "ecx");
+	   "sub $24, %%esp\n" : "=g"(retval), "=g"(bind_error) : "g"(LILY_SYSCALL_BIND), "g"(output_automaton), "g"(output_action), "g"(output_parameter), "g"(input_automaton), "g"(input_action), "g"(input_parameter) : "eax", "ecx");
 
   return retval;
 }
@@ -252,6 +120,197 @@ binding_count (ano_t ano,
   return retval;
 }
 
+/* Bind request processing. */
+typedef struct bind_result bind_result_t;
+struct bind_result {
+  aid_t to;
+  sa_bind_result_t result;
+  bind_result_t* next;
+};
+
+static bind_result_t* bind_result_head = 0;
+static bind_result_t** bind_result_tail = &bind_result_head;
+
+static void
+push_bind_result (aid_t to,
+		  const sa_binding_t* binding,
+		  sa_binding_role_t role,
+		  sa_binding_outcome_t outcome)
+{
+  bind_result_t* res = malloc (sizeof (bind_result_t));
+  memset (res, 0, sizeof (bind_result_t));
+  res->to = to;
+  sa_bind_result_init (&res->result, binding, role, outcome);
+  
+  *bind_result_tail = res;
+  bind_result_tail = &res->next;
+}
+
+static void
+pop_bind_result (void)
+{
+  bind_result_t* res = bind_result_head;
+  bind_result_head = res->next;
+  if (bind_result_head == 0) {
+    bind_result_tail = &bind_result_head;
+  }
+  free (res);
+}
+
+typedef enum {
+  UNKNOWN = 0,
+  DENIED,
+  GRANTED,
+} approval_t;
+
+typedef struct bind_transaction bind_transaction_t;
+struct bind_transaction {
+  sa_binding_t binding;
+  mono_time_t time; /* A timestamp so requests can timeout. */
+  approval_t output_approval;
+  approval_t input_approval;
+  approval_t owner_approval;
+  bind_transaction_t* next;
+};
+
+static bind_transaction_t* bind_transaction_head = 0;
+static bind_transaction_t** bind_transaction_tail = &bind_transaction_head;
+
+static bind_transaction_t*
+insert_bind_transaction (const sa_binding_t* b)
+{
+  bind_transaction_t* req = malloc (sizeof (bind_transaction_t));
+  memset (req, 0, sizeof (bind_transaction_t));
+  req->binding = *b;
+  getmonotime (&req->time);
+
+  *bind_transaction_tail = req;
+  bind_transaction_tail = &req->next;
+
+  return req;
+}
+
+static bind_transaction_t*
+find_bind_transaction (const sa_binding_t* b)
+{
+  for (bind_transaction_t* ptr = bind_transaction_head; ptr != 0; ptr = ptr->next) {
+    if (sa_binding_equal (&ptr->binding, b)) {
+      return ptr;
+    }
+  }
+  return 0;
+}
+
+static void
+remove_bind_transaction (bind_transaction_t* t)
+{
+  for (bind_transaction_t** ptr = &bind_transaction_head; *ptr != 0; ptr = &(*ptr)->next) {
+    if (*ptr == t) {
+      *ptr = t->next;
+      free (t);
+      break;
+    }
+  }
+}
+
+static void
+process_bind_transaction (bind_transaction_t* t)
+{
+  /* Wait until all of the parties have answered.
+     This means there are no outstanding references to the transaction so we can destroy it.
+     If we don't wait, we could send a result before sending a request.
+     This may or may not be a problem.
+     It is my personal opinion that waiting makes the protocol easier to understand.
+  */
+  if (t->output_approval != UNKNOWN &&
+      t->input_approval != UNKNOWN &&
+      t->owner_approval != UNKNOWN) {
+    const sa_binding_t* b = &t->binding;
+    sa_binding_outcome_t outcome = SA_BINDING_NOT_AUTHORIZED;
+
+    if (t->output_approval == GRANTED &&
+	t->input_approval == GRANTED &&
+	t->owner_approval == GRANTED) {
+      /* Permission granted. */
+      bind (b->output_aid, b->output_ano, b->output_parameter, b->input_aid, b->input_ano, b->input_parameter);
+      switch (bind_error) {
+      case LILY_BIND_ERROR_SUCCESS:
+	outcome = SA_BINDING_SUCCESS;
+	break;
+      case LILY_BIND_ERROR_PERMISSION:
+	/* Should not happen. */
+	break;
+      case LILY_BIND_ERROR_OAIDDNE:
+	outcome = SA_BINDING_OAIDDNE;
+	break;
+      case LILY_BIND_ERROR_IAIDDNE:
+	outcome = SA_BINDING_IAIDDNE;
+	break;
+      case LILY_BIND_ERROR_OANODNE:
+	outcome = SA_BINDING_OANODNE;
+	break;
+      case LILY_BIND_ERROR_IANODNE:
+	outcome = SA_BINDING_IANODNE;
+	break;
+      case LILY_BIND_ERROR_SAME:
+	outcome = SA_BINDING_SAME;
+	break;
+      case LILY_BIND_ERROR_ALREADY:
+	outcome = SA_BINDING_ALREADY;
+	break;
+      }
+    }
+
+    /* Send the result. */
+    push_bind_result (b->output_aid, b, SA_BINDING_OUTPUT, outcome);
+    push_bind_result (b->input_aid, b, SA_BINDING_INPUT, outcome);
+    push_bind_result (b->owner_aid, b, SA_BINDING_OWNER, outcome);
+
+    remove_bind_transaction (t);
+  }
+}
+
+typedef struct ba_request ba_request_t;
+struct ba_request {
+  aid_t to;
+  bind_transaction_t* transaction;
+  sa_ba_request_t request;
+  ba_request_t* next;
+};
+
+static ba_request_t* ba_request_head = 0;
+static ba_request_t** ba_request_tail = &ba_request_head;
+
+static void
+push_ba_request (aid_t to,
+		 bind_transaction_t* transaction,
+		 sa_binding_role_t role)
+{
+  ba_request_t* rfa = malloc (sizeof (ba_request_t));
+  memset (rfa, 0, sizeof (ba_request_t));
+  rfa->to = to;
+  rfa->transaction = transaction;
+  sa_ba_request_init (&rfa->request, &transaction->binding, role);
+  
+  *ba_request_tail = rfa;
+  ba_request_tail = &rfa->next;
+}
+
+static void
+pop_ba_request (void)
+{
+  ba_request_t* rfa = ba_request_head;
+  ba_request_head = rfa->next;
+  if (ba_request_head == 0) {
+    ba_request_tail = &ba_request_head;
+  }
+  free (rfa);
+}
+
+/* Output buffer. */
+static bd_t output_bda = -1;
+static bd_t output_bdb = -1;
+static buffer_file_t output_bfa;
 
 static aid_t
 create_ (bd_t text_bd,
@@ -268,14 +327,17 @@ create_ (bd_t text_bd,
     description_t description;
     action_desc_t desc;
     description_init (&description, aid);
-    if (description_read_name (&description, &desc, SYSTEM_REQUEST_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
-      bind (aid, desc.number, 0, system_automaton_aid, REQUEST_IN_NO, 0);
+    if (description_read_name (&description, &desc, SA_BIND_REQUEST_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
+      bind (aid, desc.number, 0, system_automaton_aid, BIND_REQUEST_IN_NO, 0);
     }
-    if (description_read_name (&description, &desc, SYSTEM_BIND_RFA_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
-      bind (system_automaton_aid, BIND_RFA_OUT_NO, 0, aid, desc.number, 0);
+    if (description_read_name (&description, &desc, SA_BA_REQUEST_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      bind (system_automaton_aid, BA_REQUEST_OUT_NO, 0, aid, desc.number, 0);
     }
-    if (description_read_name (&description, &desc, SYSTEM_RESPONSE_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
-      bind (system_automaton_aid, RESPONSE_OUT_NO, 0, aid, desc.number, 0);
+    if (description_read_name (&description, &desc, SA_BA_RESPONSE_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
+      bind (aid, desc.number, 0, system_automaton_aid, BA_RESPONSE_IN_NO, 0);
+    }
+    if (description_read_name (&description, &desc, SA_BIND_RESULT_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      bind (system_automaton_aid, BIND_RESULT_OUT_NO, 0, aid, desc.number, 0);
     }
   }
   return aid;
@@ -290,12 +352,12 @@ initialize (void)
     output_bda = buffer_create (0);
     output_bdb = buffer_create (0);
     if (output_bda == -1 || output_bdb == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create response buffer: %s", lily_error_string (lily_error));
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create output buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
-    if (buffer_file_initw (&output_buffer, output_bda) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize response buffer: %s", lily_error_string (lily_error));
+    if (buffer_file_initw (&output_bfa, output_bda) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize output buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
     }
@@ -459,82 +521,70 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-BEGIN_INPUT (AUTO_PARAMETER, REQUEST_IN_NO, "", "", request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+BEGIN_INPUT (AUTO_PARAMETER, BIND_REQUEST_IN_NO, "", "", bind_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  buffer_file_t bf;
-  if (buffer_file_initr (&bf, bda) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize request buffer: %s", lily_error_string (lily_error));
+  buffer_file_t bfa;
+  if (buffer_file_initr (&bfa, bda) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize bind request buffer: %s", lily_error_string (lily_error));
     logs (log_buffer);
     finish_input (bda, bdb);
   }
 
-  system_msg_type_t type;
-  if (system_msg_type_read (&bf, &type) != 0) {
-    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read request type: %s", lily_error_string (lily_error));
+  const sa_bind_request_t* req = buffer_file_readp (&bfa, sizeof (sa_bind_request_t));
+  if (req == 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read bind request: %s", lily_error_string (lily_error));
     logs (log_buffer);
     finish_input (bda, bdb);
   }
 
-  switch (type) {
-  case CREATE:
-    logs (TODO " create");
-    break;
-  case BIND:
-    {
-      bind_t b;
-      if (bind_read (&bf, &b) != 0) {
-	snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read bind request: %s", lily_error_string (lily_error));
-	logs (log_buffer);
-	finish_input (bda, bdb);
-      }
+  /* Make a record of the bind request. */
+  bind_transaction_t* t = insert_bind_transaction (&req->binding);
       
-      /* Make a record of the bind request. */
-      bind_request_t* req = push_bind_request (&b);
-      
-      /* Send a request for authorization to the three parties. */
-      push_bind_rfa (b.output_aid, req, &req->output_approval);
-      push_bind_rfa (b.input_aid, req, &req->input_approval);
-      push_bind_rfa (b.owner_aid, req, &req->owner_approval);
-
-      bind_fini (&b);
-    }
-    break;
-  case UNBIND:
-    logs (TODO " unbind");
-    break;
-  case DESTROY:
-    logs (TODO " destroy");
-    break;
-  default:
-    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "unknown request type: %d", type);
-    logs (log_buffer);
-    finish_input (bda, bdb);
-    break;
-  }
+  /* Send a request for authorization to the three parties. */
+  push_ba_request (req->binding.output_aid, t, SA_BINDING_OUTPUT);
+  push_ba_request (req->binding.input_aid, t, SA_BINDING_INPUT);
+  push_ba_request (req->binding.owner_aid, t, SA_BINDING_OWNER);
 
   finish_input (bda, bdb);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RFA_OUT_NO, "", "", bind_rfa_out, ano_t ano, aid_t aid)
+BEGIN_OUTPUT (AUTO_PARAMETER, BA_REQUEST_OUT_NO, "", "", ba_request_out, ano_t ano, aid_t aid)
 {
   initialize ();
+  
+  if (ba_request_head != 0 && ba_request_head->to == aid) {
+    if (exists (aid) && binding_count (BA_REQUEST_OUT_NO, aid) == 1 && binding_count (BA_RESPONSE_IN_NO, aid) == 1) {
+      // The automaton in question is alive and can receive/send bind rfa's.
+      
+      // Shred the output buffer.
+      buffer_file_shred (&output_bfa);
 
-  if (bind_rfa_head != 0 && bind_rfa_head->to == aid) {
-    if (exists (aid) && binding_count (ano, aid) == 1) {
-      // Send the rfa.
-      buffer_file_truncate (&output_buffer);
-      bind_write (&output_buffer, &bind_rfa_head->request->bind);
-      pop_bind_rfa ();
+      // Write the request.
+      buffer_file_write (&output_bfa, &ba_request_head->request, sizeof (sa_ba_request_t));
+
+      // Pop the request.
+      pop_ba_request ();
+
       finish_output (true, output_bda, -1);
     }
     else {
-      // The automaton in question is either dead or can't receive bind rfa's.
+      // The automaton in question is either dead or can't receive/send bind rfa's.
       // We interpret silence as being permissive.
-      *bind_rfa_head->approval = GRANTED;
-      bind_request_process (bind_rfa_head->request);
-      pop_bind_rfa ();
+      switch (ba_request_head->request.role) {
+      case SA_BINDING_INPUT:
+	ba_request_head->transaction->input_approval = GRANTED;
+	break;
+      case SA_BINDING_OUTPUT:
+	ba_request_head->transaction->output_approval = GRANTED;
+	break;
+      case SA_BINDING_OWNER:
+	ba_request_head->transaction->owner_approval = GRANTED;
+	break;
+      }
+      process_bind_transaction (ba_request_head->transaction);
+      pop_ba_request ();
       finish_output (false, -1, -1);
     }
   }
@@ -542,32 +592,80 @@ BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RFA_OUT_NO, "", "", bind_rfa_out, ano_t ano, 
   finish_output (false, -1, -1);
 }
 
-BEGIN_OUTPUT (AUTO_PARAMETER, RESPONSE_OUT_NO, "", "", response_out, ano_t ano, aid_t aid)
+BEGIN_INPUT (AUTO_PARAMETER, BA_RESPONSE_IN_NO, "", "", ba_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
 
-  if (result_head != 0 && result_head->aid == aid) {
-    buffer_file_truncate (&output_buffer);
-    
-    sysresult_t res;
-    sysresult_init (&res, result_head->retval, result_head->error);
-    sysresult_write (&output_buffer, &res);
-    sysresult_fini (&res);
-
-    pop_result ();
-    finish_output (true, output_bda, -1);
+  buffer_file_t bfa;
+  if (buffer_file_initr (&bfa, bda) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize ba response buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
   }
 
+  const sa_ba_response_t* res = buffer_file_readp (&bfa, sizeof (sa_ba_response_t));
+  if (res == 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read ba response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
+
+  /* Find the transaction. */
+  bind_transaction_t* t = find_bind_transaction (&res->binding);
+  if (t != 0) {
+    /* Check that they are authorized to answer for their role and that no answer has been given. */
+    switch (res->role) {
+    case SA_BINDING_INPUT:
+      if (t->binding.input_aid == aid && t->input_approval == UNKNOWN) {
+	t->input_approval = res->authorized ? GRANTED : DENIED;
+	process_bind_transaction (t);
+      }
+      break;
+    case SA_BINDING_OUTPUT:
+      if (t->binding.output_aid == aid && t->output_approval == UNKNOWN) {
+	t->output_approval = res->authorized ? GRANTED : DENIED;
+	process_bind_transaction (t);
+      }
+      break;
+    case SA_BINDING_OWNER:
+      if (t->binding.owner_aid == aid && t->owner_approval == UNKNOWN) {
+	t->owner_approval = res->authorized ? GRANTED : DENIED;
+	process_bind_transaction (t);
+      }
+      break;
+    }
+  }
+
+  finish_input (bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RESULT_OUT_NO, "", "", bind_result_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+
+  if (bind_result_head != 0 && bind_result_head->to == aid) {
+    // Shred the output buffer.
+    buffer_file_shred (&output_bfa);
+    
+    // Write the result.
+    buffer_file_write (&output_bfa, &bind_result_head->result, sizeof (sa_bind_result_t));
+    
+    // Pop the result..
+    pop_bind_result ();
+    
+    finish_output (true, output_bda, -1);
+  }
+    
   finish_output (false, -1, -1);
 }
 
 void
 do_schedule (void)
 {
-  if (bind_rfa_head != 0) {
-    schedule (BIND_RFA_OUT_NO, bind_rfa_head->to);
+  if (ba_request_head != 0) {
+    schedule (BA_REQUEST_OUT_NO, ba_request_head->to);
   }
-  if (result_head != 0) {
-    schedule (RESPONSE_OUT_NO, result_head->aid);
+  if (bind_result_head != 0) {
+    schedule (BIND_RESULT_OUT_NO, bind_result_head->to);
   }
 }

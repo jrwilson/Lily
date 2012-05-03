@@ -5,6 +5,7 @@
 #include <buffer_file.h>
 #include "system.h"
 #include "fs_msg.h"
+#include "bind_stat.h"
 
 typedef void (*readfile_callback_t) (void* arg, fs_error_t error, size_t size, bd_t bd);
 
@@ -12,6 +13,7 @@ typedef struct fs fs_t;
 typedef struct redirect redirect_t;
 typedef struct {
   system_t* system;
+  bind_stat_t* bs;
   ano_t request;
   ano_t response;
   fs_t* fs_head;
@@ -22,6 +24,7 @@ typedef struct {
 void
 vfs_init (vfs_t* vfs,
 	  system_t* system,
+	  bind_stat_t* bs,
 	  ano_t request,
 	  ano_t response);
 

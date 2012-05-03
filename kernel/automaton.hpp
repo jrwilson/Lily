@@ -1205,7 +1205,7 @@ public:
     }
   }
 
-  inline pair<bid_t, lily_error_t>
+  inline pair<bid_t, lily_bind_error_t>
   bind (const shared_ptr<automaton>& ths,
 	aid_t output_aid,
 	ano_t output_ano,
@@ -1217,19 +1217,19 @@ public:
     kassert (ths.get () == this);
 
     if (ths != system_automaton) {
-      return make_pair (-1, LILY_ERROR_PERMISSION);
+      return make_pair (-1, LILY_BIND_ERROR_PERMISSION);
     }
 
     aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
     if (output_pos == aid_to_automaton_map_.end ()) {
       // Output automaton DNE.
-      return make_pair (-1, LILY_ERROR_OAIDDNE);
+      return make_pair (-1, LILY_BIND_ERROR_OAIDDNE);
     }
     
     aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
     if (input_pos == aid_to_automaton_map_.end ()) {
       // Input automaton DNE.
-      return make_pair (-1, LILY_ERROR_IAIDDNE);
+      return make_pair (-1, LILY_BIND_ERROR_IAIDDNE);
     }
     
     shared_ptr<automaton> output_automaton = output_pos->second;
@@ -1238,7 +1238,7 @@ public:
     
     if (output_automaton == input_automaton) {
       // The output and input automata must be different.
-      return make_pair (-1, LILY_ERROR_INVAL);
+      return make_pair (-1, LILY_BIND_ERROR_SAME);
     }
     
     // Check the output action dynamically.
@@ -1246,7 +1246,7 @@ public:
     if (output_action == 0 ||
 	output_action->type != OUTPUT) {
       // Output action does not exist or has the wrong type.
-      return make_pair (-1, LILY_ERROR_OANODNE);
+      return make_pair (-1, LILY_BIND_ERROR_OANODNE);
     }
     
     // Check the input action dynamically.
@@ -1254,7 +1254,7 @@ public:
     if (input_action == 0 ||
 	input_action->type != INPUT) {
       // Input action does not exist or has the wrong type.
-      return make_pair (-1, LILY_ERROR_IANODNE);
+      return make_pair (-1, LILY_BIND_ERROR_IANODNE);
     }
     
     // Correct the parameters.
@@ -1292,7 +1292,7 @@ public:
 	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
 	  if ((*pos2)->enabled ()) {
 	    // The input is bound to an enabled action.
-	    return make_pair (-1, LILY_ERROR_INVAL);
+	    return make_pair (-1, LILY_BIND_ERROR_ALREADY);
 	  }
 	}
       }
@@ -1304,7 +1304,7 @@ public:
       if (pos1 != output_automaton->bound_outputs_map_.end ()) {
 	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
 	  if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
-	    return make_pair (-1, LILY_ERROR_INVAL);
+	    return make_pair (-1, LILY_BIND_ERROR_ALREADY);
 	  }
 	}
       }
@@ -1332,7 +1332,7 @@ public:
       r.first->second.insert (b);
     }
     
-    return make_pair (b->bid, LILY_ERROR_SUCCESS);
+    return make_pair (b->bid, LILY_BIND_ERROR_SUCCESS);
   }
 
   inline pair<int, lily_error_t>

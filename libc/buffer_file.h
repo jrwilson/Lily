@@ -41,8 +41,11 @@ int
 buffer_file_puts (buffer_file_t* bf,
 		  const char* s);
 
-void
+int
 buffer_file_truncate (buffer_file_t* bf);
+
+int
+buffer_file_shred (buffer_file_t* bf);
 
 int
 buffer_file_initr (buffer_file_t* bf,

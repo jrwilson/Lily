@@ -43,6 +43,17 @@ typedef enum {
   LILY_ERROR_IANODNE,
 } lily_error_t;
 
+typedef enum {
+  LILY_BIND_ERROR_SUCCESS,
+  LILY_BIND_ERROR_PERMISSION,
+  LILY_BIND_ERROR_OAIDDNE,
+  LILY_BIND_ERROR_IAIDDNE,
+  LILY_BIND_ERROR_OANODNE,
+  LILY_BIND_ERROR_IANODNE,
+  LILY_BIND_ERROR_SAME,
+  LILY_BIND_ERROR_ALREADY,
+} lily_bind_error_t;
+
 typedef struct {
   aid_t aid;
   mono_time_t time;

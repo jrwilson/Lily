@@ -111,6 +111,10 @@ int
 buffer_file_puts (buffer_file_t* bf,
 		  const char* s)
 {
+  if (!bf->can_update) {
+    return -1;
+  }
+
   while (*s != '\0') {
     if (buffer_file_put (bf, *s) != 0) {
       return -1;
@@ -121,11 +125,32 @@ buffer_file_puts (buffer_file_t* bf,
   return 0;
 }
 
-void
+int
 buffer_file_truncate (buffer_file_t* bf)
 {
+  if (!bf->can_update) {
+    return -1;
+  }
+
   bf->position = sizeof (size_t);
   bf->size = sizeof (size_t);
+
+  return 0;
+}
+
+int
+buffer_file_shred (buffer_file_t* bf)
+{
+  if (!bf->can_update) {
+    return -1;
+  }
+
+  if (bf->bd_size != 0) {
+    memset (bf->ptr, 0, bf->size);
+    buffer_file_truncate (bf);
+  }
+
+  return 0;
 }
 
 int
