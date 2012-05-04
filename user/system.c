@@ -26,9 +26,13 @@ struct automaton {
   system_t* system;
   automaton_type_t type;
   aid_t aid;
+  bd_t text_bd;
+  bd_t bda;
+  bd_t bdb;
   int retain_privilege;
   automaton_t* owner_automaton;
   lily_error_t error;
+  sa_create_outcome_t outcome;
   event_handler_item_t* event_handler_head;
   automaton_t* next;
 };
@@ -68,10 +72,12 @@ struct binding {
 void
 system_init (system_t* system,
 	     buffer_file_t* output_bfa,
+	     bd_t bdb,
 	     ano_t create_request,
 	     ano_t bind_request)
 {
   system->output_bfa = output_bfa;
+  system->bdb = bdb;
   system->create_request = create_request;
   system->bind_request = bind_request;
   system->automaton_head = 0;
@@ -95,15 +101,15 @@ struct create_request {
 };
 
 static void
-push_create (automaton_t* automaton,
-	     bd_t text_bd,
-	     bd_t bda,
-	     bd_t bdb)
+push_create (automaton_t* automaton)
 {
   create_request_t* req = malloc (sizeof (create_request_t));
   memset (req, 0, sizeof (create_request_t));
   req->automaton = automaton;
-  req->request = sa_create_request_create (text_bd, bda, bdb, automaton->retain_privilege, (automaton->owner_automaton != 0) ? automaton->owner_automaton->aid : -1);
+  req->request = sa_create_request_create (automaton->text_bd, automaton->bda, automaton->bdb, automaton->retain_privilege, (automaton->owner_automaton != 0) ? automaton->owner_automaton->aid : -1);
+  buffer_destroy (automaton->text_bd);
+  buffer_destroy (automaton->bda);
+  buffer_destroy (automaton->bdb);
   *automaton->system->create_request_tail = req;
   automaton->system->create_request_tail = &req->next;
 }
@@ -120,14 +126,19 @@ shift_create (system_t* system)
 
   *system->create_response_tail = req;
   system->create_response_tail = &req->next;
+}
 
-  logs (__func__);
+static void
+pop_create (system_t* system)
+{
+  create_request_t* req = system->create_response_head;
+  system->create_response_head = req->next;
+  if (system->create_response_head == 0) {
+    system->create_response_tail = &system->create_response_head;
+  }
 
-    /* a->aid = create (bd, -1, -1, a->retain_privilege); */
-/*     a->error = lily_error; */
-/*     for (event_handler_item_t* item = a->event_handler_head; item != 0; item = item->next) { */
-/*       item->event_handler (item->arg); */
-/*     } */
+  sa_create_request_destroy (req->request);
+  free (req);
 }
 
 static bool
@@ -144,12 +155,12 @@ system_create_request (system_t* system)
     buffer_file_shred (system->output_bfa);
 
     /* Write the request. */
-    sa_create_request_write (system->output_bfa, system->create_request_head->request);
+    sa_create_request_write (system->output_bfa, system->bdb, system->create_request_head->request);
 
     /* Shift the request. */
     shift_create (system);
 
-    finish_output (true, system->output_bfa->bd, -1);
+    finish_output (true, system->output_bfa->bd, system->bdb);
   }
   finish_output (false, -1, -1);
 }
@@ -159,7 +170,30 @@ system_create_response (system_t* system,
 			bd_t bda,
 			bd_t bdb)
 {
-  logs (__func__);
+  if (system->create_response_head != 0) {
+    automaton_t* automaton = system->create_response_head->automaton;
+
+    buffer_file_t bf;
+    if (buffer_file_initr (&bf, bda) != 0) {
+      finish_input (bda, bdb);
+    }
+
+    const sa_create_response_t* res = buffer_file_readp (&bf, sizeof (sa_create_response_t));
+    if (res == 0) {
+      finish_input (bda, bdb);
+    }
+
+    automaton->aid = res->aid;
+    automaton->outcome = res->outcome;
+
+    /* TODO:  Trigger an event, callbacks, etc.. */
+    
+    for (event_handler_item_t* item = automaton->event_handler_head; item != 0; item = item->next) {
+      item->event_handler (item->arg);
+    }
+
+    pop_create (system);
+  }
   finish_input (bda, bdb);
 }
 
@@ -247,9 +281,10 @@ system_bind_response (system_t* system,
     }
 
     system->bind_response_head->binding->outcome = res->outcome;
-    pop_bind (system);
 
     /* TODO:  Trigger an event, callbacks, etc.. */
+
+    pop_bind (system);
   }
   finish_input (bda, bdb);
 }
@@ -271,24 +306,62 @@ system_get_this (system_t* system)
   return system->this;
 }
 
+static void
+automaton_subscribe (automaton_t* a,
+		     event_handler_t event_handler,
+		     void* arg)
+{
+  event_handler_item_t* item = malloc (sizeof (event_handler_item_t));
+  memset (item, 0, sizeof (event_handler_item_t));
+  item->event_handler = event_handler;
+  item->arg = arg;
+
+  item->next = a->event_handler_head;
+  a->event_handler_head = item;
+}
+
+static void
+automaton_create (automaton_t* a)
+{
+  if (a->aid == -1 && buffer_size (a->text_bd) != -1 && (a->owner_automaton == 0 || a->owner_automaton->aid != -1)) {
+    push_create (a);
+  }
+}
+
+static void
+automaton_owner_event (void* arg)
+{
+  automaton_t* a = arg;
+  automaton_create (a);
+}
+
 automaton_t*
 system_add_managed_automaton (system_t* system,
 			      bd_t text_bd,
 			      bd_t bda,
 			      bd_t bdb,
-			      int retain_privilege)
+			      int retain_privilege,
+			      automaton_t* owner)
 {
   automaton_t* a = malloc (sizeof (automaton_t));
   memset (a, 0, sizeof (automaton_t));
   a->system = system;
   a->type = MANAGED;
   a->aid = -1;
+  a->text_bd = buffer_copy (text_bd);
+  a->bda = buffer_copy (bda);
+  a->bdb = buffer_copy (bdb);
   a->retain_privilege = retain_privilege;
+  a->owner_automaton = owner;
+
+  if (owner != 0) {
+    automaton_subscribe (owner, automaton_owner_event, a);
+  }
 
   a->next = system->automaton_head;
   system->automaton_head = a;
 
-  automaton_create (a, text_bd, bda, bdb);
+  automaton_create (a);
 
   return a;
 }
@@ -437,20 +510,6 @@ create_binding (system_t* system,
   binding_bind (b);
 
   return b;
-}
-
-static void
-automaton_subscribe (automaton_t* a,
-		     event_handler_t event_handler,
-		     void* arg)
-{
-  event_handler_item_t* item = malloc (sizeof (event_handler_item_t));
-  memset (item, 0, sizeof (event_handler_item_t));
-  item->event_handler = event_handler;
-  item->arg = arg;
-
-  item->next = a->event_handler_head;
-  a->event_handler_head = item;
 }
 
 static void
@@ -682,12 +741,10 @@ system_add_binding (system_t* system,
 /* /\* } *\/ */
 
 void
-automaton_create (automaton_t* a,
-		  bd_t text_bd,
-		  bd_t bda,
-		  bd_t bdb)
+automaton_set_text (automaton_t* a,
+		    bd_t text_bd)
 {
-  if (a->aid == -1 && buffer_size (text_bd) != -1) {
-    push_create (a, text_bd, bda, bdb);
-  }
+  buffer_destroy (a->text_bd);
+  a->text_bd = buffer_copy (text_bd);
+  automaton_create (a);
 }

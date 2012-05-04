@@ -8,27 +8,36 @@
 #include "environment.h"
 #include "system.h"
 #include "fs_set.h"
+#include "create_auth.h"
 #include "bind_auth.h"
+#include "create_stat.h"
 #include "bind_stat.h"
 
 /* TODO:  Improve the error handling. */
 
 #define INIT_NO 1
-#define TEXT_IN_NO 3
-#define PROCESS_LINE_NO 4
-#define TEXT_OUT_NO 5
-#define DESTROYED_NO 6
-#define UNBOUND_NO 7
-#define COM_OUT_NO 12
-#define COM_IN_NO 13
-#define RECV_NO 14
-#define SEND_NO 15
-#define SA_CREATE_REQUEST_OUT_NO 16
-#define SA_BIND_REQUEST_OUT_NO 17
-#define SA_BA_REQUEST_IN_NO 18
-#define SA_BA_RESPONSE_OUT_NO 19
-#define SA_BIND_RESULT_IN_NO 20
-#define SA_BIND_RESPONSE_IN_NO 2
+#define TEXT_IN_NO 2
+#define PROCESS_LINE_NO 3
+#define TEXT_OUT_NO 4
+#define DESTROYED_NO 5
+#define UNBOUND_NO 6
+#define COM_OUT_NO 7
+#define COM_IN_NO 8
+#define RECV_NO 9
+#define SEND_NO 10
+
+#define SA_CREATE_REQUEST_OUT_NO 11
+#define SA_CA_REQUEST_IN_NO 12
+#define SA_CA_RESPONSE_OUT_NO 13
+#define SA_CREATE_RESULT_IN_NO 14
+#define SA_CREATE_RESPONSE_IN_NO 15
+
+#define SA_BIND_REQUEST_OUT_NO 16
+#define SA_BA_REQUEST_IN_NO 17
+#define SA_BA_RESPONSE_OUT_NO 18
+#define SA_BIND_RESULT_IN_NO 19
+#define SA_BIND_RESPONSE_IN_NO 20
+
 #define FS_DESCEND_REQUEST_OUT_NO 21
 #define FS_DESCEND_RESPONSE_IN_NO 22
 #define FS_READFILE_REQUEST_OUT_NO 23
@@ -39,13 +48,20 @@ static bool initialized = false;
 
 /* Output buffers. */
 static bd_t output_bda = -1;
+static bd_t output_bdb = -1;
 static buffer_file_t output_bfa;
 
 /* System automaton. */
 static system_t system;
 
+/* Create authorization. */
+static create_auth_t create_auth;
+
 /* Bind authorization. */
 static bind_auth_t bind_auth;
+
+/* Create status. */
+static create_stat_t create_stat;
 
 /* Bind status. */
 static bind_stat_t bind_stat;
@@ -414,7 +430,7 @@ create_readfile_callback (void* arg,
   automaton_item_t* ai = arg;
   switch (res->error) {
   case FS_READFILE_SUCCESS:
-    automaton_create (ai->automaton, bd, -1, -1);
+    automaton_set_text (ai->automaton, bd);
     buffer_destroy (bd);
     break;
   default:
@@ -471,7 +487,7 @@ create_ (const string_t* strings,
     /* TODO:  Pass the arguments. */
 
     if (find_automaton (strings[name_idx].begin, strings[name_idx].end) == 0) {
-      automaton_t* a = system_add_managed_automaton (&system, -1, -1, -1, retain_privilege);
+      automaton_t* a = system_add_managed_automaton (&system, -1, -1, -1, retain_privilege, system_get_this (&system));
       automaton_item_t* ai = create_automaton (a, strings[name_idx].begin, strings[name_idx].end);
       fs_set_readfile (&fs_set, strings[path_idx].begin, strings[path_idx].end, create_readfile_callback, ai);
     }
@@ -1167,7 +1183,8 @@ initialize (void)
     /* aid_t finda_aid = -1; */
 
     output_bda = buffer_create (0);
-    if (output_bda == -1) {
+    output_bdb = buffer_create (0);
+    if (output_bda == -1 || output_bdb == -1) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create output buffer: %s\n", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
@@ -1178,8 +1195,10 @@ initialize (void)
       exit (-1);
     }
 
-    system_init (&system, &output_bfa, SA_CREATE_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NO);
+    system_init (&system, &output_bfa, output_bdb, SA_CREATE_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NO);
+    create_auth_init (&create_auth, &output_bfa, SA_CA_RESPONSE_OUT_NO);
     bind_auth_init (&bind_auth, &output_bfa, SA_BA_RESPONSE_OUT_NO);
+    create_stat_init (&create_stat);
     bind_stat_init (&bind_stat);
     fs_set_init (&fs_set, &system, &bind_stat, &output_bfa, FS_DESCEND_REQUEST_OUT_NO, FS_DESCEND_RESPONSE_IN_NO, FS_READFILE_REQUEST_OUT_NO, FS_READFILE_RESPONSE_IN_NO);
 
@@ -1470,8 +1489,31 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 BEGIN_OUTPUT (NO_PARAMETER, SA_CREATE_REQUEST_OUT_NO, SA_CREATE_REQUEST_OUT_NAME, "", sa_create_request_out, ano_t ano, int param)
 {
   initialize ();
-  logs (__func__);
   system_create_request (&system);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SA_CA_REQUEST_IN_NO, SA_CA_REQUEST_IN_NAME, "", sa_ca_request_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  create_auth_request (&create_auth, bda, bdb);
+}
+
+BEGIN_OUTPUT (NO_PARAMETER, SA_CA_RESPONSE_OUT_NO, SA_CA_RESPONSE_OUT_NAME, "", sa_ca_response_out, ano_t ano, int param)
+{
+  initialize ();
+  create_auth_response (&create_auth);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SA_CREATE_RESULT_IN_NO, SA_CREATE_RESULT_IN_NAME, "", sa_create_result_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  create_stat_result (&create_stat, bda, bdb);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SA_CREATE_RESPONSE_IN_NO, SA_CREATE_RESPONSE_IN_NAME, "", sa_create_response_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  system_create_response (&system, bda, bdb);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, SA_BIND_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NAME, "", sa_bind_request_out, ano_t ano, int param)
@@ -1541,6 +1583,7 @@ do_schedule (void)
   /*   schedule (COM_OUT_NO, com_queue_front ()); */
   /* } */
   system_schedule (&system);
+  create_auth_schedule (&create_auth);
   bind_auth_schedule (&bind_auth);
   fs_set_schedule (&fs_set);
   /* finda_schedule (&finda); */

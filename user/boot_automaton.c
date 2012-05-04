@@ -244,12 +244,13 @@ static create_response_t** create_response_tail = &create_response_head;
 
 static void
 push_create_response (aid_t to,
-		      sa_create_outcome_t outcome)
+		      sa_create_outcome_t outcome,
+		      aid_t aid)
 {
   create_response_t* res = malloc (sizeof (create_response_t));
   memset (res, 0, sizeof (create_response_t));
   res->to = to;
-  sa_create_response_init (&res->response, outcome);
+  sa_create_response_init (&res->response, outcome, aid);
   
   *create_response_tail = res;
   create_response_tail = &res->next;
@@ -303,6 +304,8 @@ insert_create_transaction (sa_create_request_t* request,
 static create_transaction_t*
 find_create_transaction (void)
 {
+  logs (__func__);
+  return create_transaction_head;
   /* TODO */
   /* for (create_transaction_t* ptr = create_transaction_head; ptr != 0; ptr = ptr->next) { */
   /*   if (sa_createing_equal (&ptr->createing, b)) { */
@@ -337,10 +340,11 @@ process_create_transaction (create_transaction_t* t)
   if (t->owner_approval != UNKNOWN) {
     sa_create_outcome_t outcome = SA_CREATE_NOT_AUTHORIZED;
     const sa_create_request_t* req = t->request;
+    aid_t aid = -1;
 
     if (t->owner_approval == GRANTED) {
       /* Permission granted. */
-      create_ (req->text_bd, req->bda, req->bdb, req->retain_privilege);
+      aid = create_ (req->text_bd, req->bda, req->bdb, req->retain_privilege);
       switch (create_error) {
       case LILY_CREATE_ERROR_SUCCESS:
       	outcome = SA_CREATE_SUCCESS;
@@ -359,7 +363,7 @@ process_create_transaction (create_transaction_t* t)
 
     /* Send the result. */
     push_create_result (req->owner_aid, outcome);
-    push_create_response (t->initiator_aid, outcome);
+    push_create_response (t->initiator_aid, outcome, aid);
 
     remove_create_transaction (t);
   }
@@ -825,163 +829,135 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
   finish_internal ();
 }
 
-/* BEGIN_INPUT (AUTO_PARAMETER, CREATE_REQUEST_IN_NO, "", "", create_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb) */
-/* { */
-/*   initialize (); */
+BEGIN_INPUT (AUTO_PARAMETER, CREATE_REQUEST_IN_NO, "", "", create_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
 
-/*   buffer_file_t bfa; */
-/*   if (buffer_file_initr (&bfa, bda) != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize create request buffer: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     finish_input (bda, bdb); */
-/*   } */
+  buffer_file_t bfa;
+  if (buffer_file_initr (&bfa, bda) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize create request buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
 
-/*   const sa_create_request_t* req = buffer_file_readp (&bfa, sizeof (sa_create_request_t)); */
-/*   if (req == 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read create request: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     finish_input (bda, bdb); */
-/*   } */
+  sa_create_request_t* req = sa_create_request_read (&bfa, bdb);
+  if (req == 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read create request: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
 
-/*   /\* Make a record of the create request. *\/ */
-/*   create_transaction_t* t = insert_create_transaction (&req->createing, aid); */
+  /* Make a record of the create request. */
+  create_transaction_t* t = insert_create_transaction (req, aid);
       
-/*   /\* Send a request for authorization to the three parties. *\/ */
-/*   push_ba_request (req->createing.output_aid, t, SA_CREATEING_OUTPUT); */
-/*   push_ba_request (req->createing.input_aid, t, SA_CREATEING_INPUT); */
-/*   push_ba_request (req->createing.owner_aid, t, SA_CREATEING_OWNER); */
+  /* Send a request for authorization to the owner. */
+  push_ca_request (req->owner_aid, t);
 
-/*   finish_input (bda, bdb); */
-/* } */
+  finish_input (bda, bdb);
+}
 
-/* BEGIN_OUTPUT (AUTO_PARAMETER, BA_REQUEST_OUT_NO, "", "", ba_request_out, ano_t ano, aid_t aid) */
-/* { */
-/*   initialize (); */
-  
-/*   if (ba_request_head != 0 && ba_request_head->to == aid) { */
-/*     if (exists (aid) && createing_count (BA_REQUEST_OUT_NO, aid) == 1 && createing_count (BA_RESPONSE_IN_NO, aid) == 1) { */
-/*       // The automaton in question is alive and can receive/send create rfa's. */
+BEGIN_OUTPUT (AUTO_PARAMETER, CA_REQUEST_OUT_NO, "", "", ca_request_out, ano_t ano, aid_t aid)
+{
+  initialize ();
+
+  if (ca_request_head != 0 && ca_request_head->to == aid) {
+    if (exists (aid) && binding_count (CA_REQUEST_OUT_NO, aid) == 1 && binding_count (CA_RESPONSE_IN_NO, aid) == 1) {
+      // The automaton in question is alive and can receive/send create rfa's.
       
-/*       // Shred the output buffer. */
-/*       buffer_file_shred (&output_bfa); */
+      // Shred the output buffer.
+      buffer_file_shred (&output_bfa);
 
-/*       // Write the request. */
-/*       buffer_file_write (&output_bfa, &ba_request_head->request, sizeof (sa_ba_request_t)); */
+      // Write the request.
+      buffer_file_write (&output_bfa, &ca_request_head->request, sizeof (sa_ca_request_t));
 
-/*       // Pop the request. */
-/*       pop_ba_request (); */
+      // Pop the request.
+      pop_ca_request ();
 
-/*       finish_output (true, output_bda, -1); */
-/*     } */
-/*     else { */
-/*       // The automaton in question is either dead or can't receive/send create rfa's. */
-/*       // We interpret silence as being permissive. */
-/*       switch (ba_request_head->request.role) { */
-/*       case SA_CREATEING_INPUT: */
-/* 	ba_request_head->transaction->input_approval = GRANTED; */
-/* 	break; */
-/*       case SA_CREATEING_OUTPUT: */
-/* 	ba_request_head->transaction->output_approval = GRANTED; */
-/* 	break; */
-/*       case SA_CREATEING_OWNER: */
-/* 	ba_request_head->transaction->owner_approval = GRANTED; */
-/* 	break; */
-/*       } */
-/*       process_create_transaction (ba_request_head->transaction); */
-/*       pop_ba_request (); */
-/*       finish_output (false, -1, -1); */
-/*     } */
-/*   } */
+      finish_output (true, output_bda, -1);
+    }
+    else {
+      // The automaton in question is either dead or can't receive/send create rfa's.
+      // We interpret silence as being permissive.
+      ca_request_head->transaction->owner_approval = GRANTED;
+      process_create_transaction (ca_request_head->transaction);
+      pop_ca_request ();
+      finish_output (false, -1, -1);
+    }
+  }
 
-/*   finish_output (false, -1, -1); */
-/* } */
+  finish_output (false, -1, -1);
+}
 
-/* BEGIN_INPUT (AUTO_PARAMETER, BA_RESPONSE_IN_NO, "", "", ba_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb) */
-/* { */
-/*   initialize (); */
+BEGIN_INPUT (AUTO_PARAMETER, CA_RESPONSE_IN_NO, "", "", ca_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  initialize ();
 
-/*   buffer_file_t bfa; */
-/*   if (buffer_file_initr (&bfa, bda) != 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize ba response buffer: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     finish_input (bda, bdb); */
-/*   } */
+  buffer_file_t bfa;
+  if (buffer_file_initr (&bfa, bda) != 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize ca response buffer: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
 
-/*   const sa_ba_response_t* res = buffer_file_readp (&bfa, sizeof (sa_ba_response_t)); */
-/*   if (res == 0) { */
-/*     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read ba response: %s", lily_error_string (lily_error)); */
-/*     logs (log_buffer); */
-/*     finish_input (bda, bdb); */
-/*   } */
+  const sa_ca_response_t* res = buffer_file_readp (&bfa, sizeof (sa_ca_response_t));
+  if (res == 0) {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read ca response: %s", lily_error_string (lily_error));
+    logs (log_buffer);
+    finish_input (bda, bdb);
+  }
 
-/*   /\* Find the transaction. *\/ */
-/*   create_transaction_t* t = find_create_transaction (&res->createing); */
-/*   if (t != 0) { */
-/*     /\* Check that they are authorized to answer for their role and that no answer has been given. *\/ */
-/*     switch (res->role) { */
-/*     case SA_CREATEING_INPUT: */
-/*       if (t->createing.input_aid == aid && t->input_approval == UNKNOWN) { */
-/* 	t->input_approval = res->authorized ? GRANTED : DENIED; */
-/* 	process_create_transaction (t); */
-/*       } */
-/*       break; */
-/*     case SA_CREATEING_OUTPUT: */
-/*       if (t->createing.output_aid == aid && t->output_approval == UNKNOWN) { */
-/* 	t->output_approval = res->authorized ? GRANTED : DENIED; */
-/* 	process_create_transaction (t); */
-/*       } */
-/*       break; */
-/*     case SA_CREATEING_OWNER: */
-/*       if (t->createing.owner_aid == aid && t->owner_approval == UNKNOWN) { */
-/* 	t->owner_approval = res->authorized ? GRANTED : DENIED; */
-/* 	process_create_transaction (t); */
-/*       } */
-/*       break; */
-/*     } */
-/*   } */
+  /* Find the transaction. */
+  create_transaction_t* t = find_create_transaction ();
+  if (t != 0) {
+    /* Check that they are authorized to answer for their role and that no answer has been given. */
+    if (t->request->owner_aid == aid && t->owner_approval == UNKNOWN) {
+      t->owner_approval = res->authorized ? GRANTED : DENIED;
+      process_create_transaction (t);
+    }
+  }
 
-/*   finish_input (bda, bdb); */
-/* } */
+  finish_input (bda, bdb);
+}
 
-/* BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESULT_OUT_NO, "", "", create_result_out, ano_t ano, aid_t aid) */
-/* { */
-/*   initialize (); */
+BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESULT_OUT_NO, "", "", create_result_out, ano_t ano, aid_t aid)
+{
+  initialize ();
 
-/*   if (create_result_head != 0 && create_result_head->to == aid) { */
-/*     // Shred the output buffer. */
-/*     buffer_file_shred (&output_bfa); */
+  if (create_result_head != 0 && create_result_head->to == aid) {
+    // Shred the output buffer.
+    buffer_file_shred (&output_bfa);
     
-/*     // Write the result. */
-/*     buffer_file_write (&output_bfa, &create_result_head->result, sizeof (sa_create_result_t)); */
+    // Write the result.
+    buffer_file_write (&output_bfa, &create_result_head->result, sizeof (sa_create_result_t));
     
-/*     // Pop the result.. */
-/*     pop_create_result (); */
+    // Pop the result..
+    pop_create_result ();
     
-/*     finish_output (true, output_bda, -1); */
-/*   } */
+    finish_output (true, output_bda, -1);
+  }
     
-/*   finish_output (false, -1, -1); */
-/* } */
+  finish_output (false, -1, -1);
+}
 
-/* BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESPONSE_OUT_NO, "", "", create_response_out, ano_t ano, aid_t aid) */
-/* { */
-/*   initialize (); */
+BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESPONSE_OUT_NO, "", "", create_response_out, ano_t ano, aid_t aid)
+{
+  initialize ();
 
-/*   if (create_response_head != 0 && create_response_head->to == aid) { */
-/*     // Shred the output buffer. */
-/*     buffer_file_shred (&output_bfa); */
+  if (create_response_head != 0 && create_response_head->to == aid) {
+    // Shred the output buffer.
+    buffer_file_shred (&output_bfa);
     
-/*     // Write the response. */
-/*     buffer_file_write (&output_bfa, &create_response_head->response, sizeof (sa_create_response_t)); */
+    // Write the response.
+    buffer_file_write (&output_bfa, &create_response_head->response, sizeof (sa_create_response_t));
     
-/*     // Pop the response.. */
-/*     pop_create_response (); */
+    // Pop the response..
+    pop_create_response ();
     
-/*     finish_output (true, output_bda, -1); */
-/*   } */
+    finish_output (true, output_bda, -1);
+  }
     
-/*   finish_output (false, -1, -1); */
-/* } */
+  finish_output (false, -1, -1);
+}
 
 BEGIN_INPUT (AUTO_PARAMETER, BIND_REQUEST_IN_NO, "", "", bind_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {

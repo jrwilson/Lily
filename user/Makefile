@@ -51,7 +51,7 @@ tmpfs : tmpfs.o cpio.o fs_msg.o
 finda : finda.o
 	$(CC) -o $@ $^ -ldymem
 
-jsh : jsh.o fs_msg.o de.o system.o fs_set.o system_msg.o bind_auth.o bind_stat.o
+jsh : jsh.o fs_msg.o de.o system.o fs_set.o system_msg.o create_auth.o bind_auth.o create_stat.o bind_stat.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 

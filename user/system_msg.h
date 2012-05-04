@@ -22,7 +22,12 @@ sa_create_request_create (bd_t text_bd,
 
 int
 sa_create_request_write (buffer_file_t* bfa,
+			 bd_t bd,
 			 const sa_create_request_t* req);
+
+sa_create_request_t*
+sa_create_request_read (buffer_file_t* bfa,
+			bd_t bdb);
 
 void
 sa_create_request_destroy (sa_create_request_t* req);
@@ -35,6 +40,7 @@ typedef enum {
 } sa_create_outcome_t;
 
 typedef struct {
+  int na;
 } sa_ca_request_t;
 
 void
@@ -58,11 +64,13 @@ sa_create_result_init (sa_create_result_t* res,
 
 typedef struct {
   sa_create_outcome_t outcome;
+  aid_t aid;
 } sa_create_response_t;
 
 void
 sa_create_response_init (sa_create_response_t* res,
-			 sa_create_outcome_t outcome);
+			 sa_create_outcome_t outcome,
+			 aid_t aid);
 
 typedef struct {
   aid_t output_aid;

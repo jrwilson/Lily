@@ -27,6 +27,7 @@ typedef struct bind_request bind_request_t;
 
 typedef struct {
   buffer_file_t* output_bfa;
+  bd_t bdb;
   ano_t create_request;
   ano_t bind_request;
   automaton_t* automaton_head;
@@ -46,6 +47,7 @@ typedef struct {
 void
 system_init (system_t* c,
 	     buffer_file_t* output_bfa,
+	     bd_t bdb,
 	     ano_t create_request,
 	     ano_t bind_request);
 
@@ -76,7 +78,8 @@ system_add_managed_automaton (system_t* c,
 			      bd_t text_bd,
 			      bd_t bda,
 			      bd_t bdb,
-			      int retain_privilege);
+			      int retain_privilege,
+			      automaton_t* owner);
 
 automaton_t*
 system_add_unmanaged_automaton (system_t* c,
@@ -108,9 +111,7 @@ system_add_globbed_binding (system_t* c,
 			    int input_parameter);
 
 void
-automaton_create (automaton_t* a,
-		  bd_t text_bd,
-		  bd_t bda,
-		  bd_t bdb);
+automaton_set_text (automaton_t* a,
+		    bd_t text_bd);
 
 #endif /* SYSTEM_H */
