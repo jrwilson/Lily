@@ -499,10 +499,10 @@ initialize (void)
 
     de_val_t* root = de_create_object ();
     de_set (root, "." FINDA, de_create_integer (finda_aid));
-    de_set (root, "." FS "[0].from.aid", de_create_integer (-1));
-    de_set (root, "." FS "[0].from.nodeid", de_create_integer (-1));
-    de_set (root, "." FS "[0].to.aid", de_create_integer (tmpfs_aid));
-    de_set (root, "." FS "[0].to.nodeid", de_create_integer (0));
+    de_set (root, "." FS "[0].aid", de_create_integer (tmpfs_aid));
+    de_set (root, "." FS "[0].name", de_create_string ("bootfs"));
+    de_set (root, "." FS "[0].nodeid", de_create_integer (0));
+    de_set (root, "." ACTIVE_FS, de_create_integer (tmpfs_aid));
     de_set (root, "." ARGS "." "script", de_create_string ("/scr/start.jsh"));
     de_serialize (root, &de_buffer);
     de_destroy (root);

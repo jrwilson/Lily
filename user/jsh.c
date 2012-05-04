@@ -7,7 +7,7 @@
 #include "de.h"
 #include "environment.h"
 #include "system.h"
-#include "vfs.h"
+#include "fs_set.h"
 #include "bind_auth.h"
 #include "bind_stat.h"
 
@@ -49,8 +49,8 @@ static bind_auth_t bind_auth;
 /* Bind status. */
 static bind_stat_t bind_stat;
 
-/* Virtual file system. */
-static vfs_t vfs;
+/* File system set. */
+static fs_set_t fs_set;
 
 /* static bd_t text_out_bd = -1; */
 /* static buffer_file_t text_out_buffer; */
@@ -1130,35 +1130,28 @@ typedef enum {
 
 static void
 readscript_callback (void* arg,
-		     const fs_descend_response_t* res1,
-		     const fs_readfile_response_t* res2,
+		     const fs_readfile_response_t* res,
 		     bd_t bd)
 {
-  if (res1 != 0) {
-    logs (TODO "readscript failed");
-  }
-  else if (res2 != 0) {
-    switch (res2->error) {
-    case FS_READFILE_SUCCESS:
-      {
-	const char* str = buffer_map (bd);
-	if (str == 0) {
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error));
-	  logs (log_buffer);
-	  exit (-1);
-	}
-	log (str, res2->size);
-	/*       interpret (str, size); */
-	buffer_unmap (bd);
+  switch (res->error) {
+  case FS_READFILE_SUCCESS:
+    {
+      const char* str = buffer_map (bd);
+      if (str == 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
-      break;
-    case FS_READFILE_NODE_DNE:
-      logs (TODO "readscript failed");
-      break;
-    case FS_READFILE_NOT_FILE:
-      logs (TODO "readscript failed");
-      break;
+      //log (str, res->size);
+      /*       interpret (str, size); */
+      buffer_unmap (bd);
     }
+    break;
+  case FS_READFILE_BAD_START:
+  case FS_READFILE_NODE_DNE:
+  case FS_READFILE_NOT_FILE:
+    logs (TODO "readscript failed");
+    break;
   }
 }
 
@@ -1185,7 +1178,7 @@ initialize (void)
     system_init (&system, &output_bfa, SA_BIND_REQUEST_OUT_NO);
     bind_auth_init (&bind_auth, &output_bfa, SA_BA_RESPONSE_OUT_NO);
     bind_stat_init (&bind_stat);
-    vfs_init (&vfs, &system, &bind_stat, &output_bfa, FS_DESCEND_REQUEST_OUT_NO, FS_DESCEND_RESPONSE_IN_NO, FS_READFILE_REQUEST_OUT_NO, FS_READFILE_RESPONSE_IN_NO);
+    fs_set_init (&fs_set, &system, &bind_stat, &output_bfa, FS_DESCEND_REQUEST_OUT_NO, FS_DESCEND_RESPONSE_IN_NO, FS_READFILE_REQUEST_OUT_NO, FS_READFILE_RESPONSE_IN_NO);
 
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
@@ -1210,19 +1203,24 @@ initialize (void)
       	for (size_t idx = 0; idx != de_array_size (fs); ++idx) {
       	  de_val_t* entry = de_array_at (fs, idx);
 
-      	  aid_t from_aid = de_integer_val (de_get (entry, ".from.aid"), -1);
-      	  fs_nodeid_t from_nodeid = de_integer_val (de_get (entry, ".from.nodeid"), -1);
-      	  aid_t to_aid = de_integer_val (de_get (entry, ".to.aid"), -1);
-      	  fs_nodeid_t to_nodeid = de_integer_val (de_get (entry, ".to.nodeid"), -1);
-      	  if (to_aid != -1 && to_nodeid != -1) {
-      	    vfs_append (&vfs, from_aid, from_nodeid, to_aid, to_nodeid);
-      	  }
+	  aid_t aid = de_integer_val (de_get (entry, ".aid"), -1);
+	  const char* name = de_string_val (de_get (entry, ".name"), 0);
+	  fs_nodeid_t nodeid = de_integer_val (de_get (entry, ".nodeid"), -1);
+
+	  if (aid != -1 && name != 0 && nodeid != -1) {
+	    fs_set_insert (&fs_set, aid, name, nodeid);
+	  }
       	}
+      }
+
+      aid_t active_fs = de_integer_val (de_get (root, "." ACTIVE_FS), -1);
+      if (active_fs != -1) {
+	fs_set_make_active (&fs_set, active_fs);
       }
 
       const char* script_name = de_string_val (de_get (root, "." ARGS "." "script"), 0);
       if (script_name != 0) {
-	vfs_readfile (&vfs, script_name, script_name + strlen (script_name), readscript_callback, 0);
+	fs_set_readfile (&fs_set, script_name, script_name + strlen (script_name), readscript_callback, 0);
       }
 
     /*   finda_aid = de_integer_val (de_get (root, "." FINDA), -1); */
@@ -1498,25 +1496,25 @@ BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESULT_IN_NO, SA_BIND_RESULT_IN_NAME, "", sa_
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_OUT_NO, "", "", fs_descend_request_out, ano_t ano, aid_t aid)
 {
   initialize ();
-  vfs_descend_request (&vfs, aid);
+  fs_set_descend_request (&fs_set, aid);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_IN_NO, "", "", fs_descend_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  vfs_descend_response (&vfs, aid, bda, bdb);
+  fs_set_descend_response (&fs_set, aid, bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_OUT_NO, "", "", fs_readfile_request_out, ano_t ano, aid_t aid)
 {
   initialize ();
-  vfs_readfile_request (&vfs, aid);
+  fs_set_readfile_request (&fs_set, aid);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_RESPONSE_IN_NO, "", "", fs_readfile_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  vfs_readfile_response (&vfs, aid, bda, bdb);
+  fs_set_readfile_response (&fs_set, aid, bda, bdb);
 }
 
 void
@@ -1533,6 +1531,6 @@ do_schedule (void)
   /* } */
   system_schedule (&system);
   bind_auth_schedule (&bind_auth);
-  vfs_schedule (&vfs);
+  fs_set_schedule (&fs_set);
   /* finda_schedule (&finda); */
 }

@@ -21,14 +21,14 @@ typedef enum {
 
 typedef struct {
   fs_nodeid_t nodeid;
-  char* name_begin;
-  char* name_end;
+  char* path_begin;
+  char* path_end;
 } fs_descend_request_t;
 
 fs_descend_request_t*
 fs_descend_request_create (fs_nodeid_t nodeid,
-			   const char* name_begin,
-			   const char* name_end);
+			   const char* path_begin,
+			   const char* path_end);
 
 int
 fs_descend_request_write (buffer_file_t* bfa,
@@ -42,9 +42,8 @@ fs_descend_request_destroy (fs_descend_request_t* req);
 
 typedef enum {
   FS_DESCEND_SUCCESS,
+  FS_DESCEND_BAD_START,
   FS_DESCEND_NODE_DNE,
-  FS_DESCEND_NOT_DIRECTORY,
-  FS_DESCEND_CHILD_DNE,
 } fs_descend_error_t;
 
 typedef struct {
@@ -59,14 +58,28 @@ fs_descend_response_init (fs_descend_response_t* res,
 
 typedef struct {
   fs_nodeid_t nodeid;
+  char* path_begin;
+  char* path_end;
 } fs_readfile_request_t;
 
+fs_readfile_request_t*
+fs_readfile_request_create (fs_nodeid_t nodeid,
+			    const char* path_begin,
+			    const char* path_end);
+
+int
+fs_readfile_request_write (buffer_file_t* bfa,
+			  const fs_readfile_request_t* req);
+
+fs_readfile_request_t*
+fs_readfile_request_read (buffer_file_t* bfa);
+
 void
-fs_readfile_request_init (fs_readfile_request_t* res,
-			  fs_nodeid_t nodeid);
+fs_readfile_request_destroy (fs_readfile_request_t* req);
 
 typedef enum {
   FS_READFILE_SUCCESS,
+  FS_READFILE_BAD_START,
   FS_READFILE_NODE_DNE,
   FS_READFILE_NOT_FILE,
 } fs_readfile_error_t;

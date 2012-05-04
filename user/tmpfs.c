@@ -75,8 +75,8 @@ typedef struct inode inode_t;
 struct inode {
   fs_nodeid_t nodeid;
   fs_node_type_t type;
-  char* name; /* Not 0 terminated. */
-  size_t name_size;
+  char* name_begin;
+  char* name_end;
   bd_t bd;
   size_t size;
   inode_t* parent;
@@ -108,8 +108,9 @@ static char log_buffer[LOG_BUFFER_SIZE];
 /* static void */
 /* print (const inode_t* inode) */
 /* { */
-/*   snprintf (log_buffer, LOG_BUFFER_SIZE, "nodeid=%d\n", inode->nodeid); */
+/*   snprintf (log_buffer, LOG_BUFFER_SIZE, "nodeid=%d", inode->nodeid); */
 /*   logs (log_buffer); */
+/*   log (inode->name_begin, inode->name_end - inode->name_begin); */
 /*   for (const inode_t* c = inode->first_child; c != 0; c = c->next_sibling) { */
 /*     print (c); */
 /*   } */
@@ -117,8 +118,8 @@ static char log_buffer[LOG_BUFFER_SIZE];
 
 static inode_t*
 inode_create (fs_node_type_t type,
-	      const char* name,
-	      size_t name_size,
+	      const char* name_begin,
+	      const char* name_end,
 	      bd_t bd,
 	      size_t size,
 	      inode_t* parent)
@@ -157,9 +158,10 @@ inode_create (fs_node_type_t type,
 
   /* Initialize the node. */
   node->type = type;
-  node->name = malloc (name_size);
-  memcpy (node->name, name, name_size);
-  node->name_size = name_size;
+  size_t name_size = name_end - name_begin;
+  node->name_begin = malloc (name_size);
+  memcpy (node->name_begin, name_begin, name_size);
+  node->name_end = node->name_begin + name_size;
   node->bd = bd;
   node->size = size;
   node->parent = parent;
@@ -171,44 +173,93 @@ inode_create (fs_node_type_t type,
 
 static inode_t*
 directory_find_or_create (inode_t* parent,
-			  const char* name,
-			  size_t name_size)
+			  const char* name_begin,
+			  const char* name_end)
 {
   /* Iterate over the parent's children looking for the name. */
   inode_t** ptr;
   for (ptr = &parent->first_child; *ptr != 0; ptr = &(*ptr)->next_sibling) {
-    if ((*ptr)->name_size == name_size &&
-  	memcmp ((*ptr)->name, name, name_size) == 0) {
+    if (pstrcmp ((*ptr)->name_begin, (*ptr)->name_end, name_begin, name_end) == 0) {
       return *ptr;
     }
   }
 
   /* Create a node. */
-  *ptr = inode_create (DIRECTORY, name, name_size, -1, 0, parent);
+  *ptr = inode_create (DIRECTORY, name_begin, name_end, -1, 0, parent);
 
   return *ptr;
 }
 
 static inode_t*
 file_find_or_create (inode_t* parent,
-		     const char* name,
-		     size_t name_size,
+		     const char* name_begin,
+		     const char* name_end,
 		     bd_t bd,
 		     size_t size)
 {
   /* Iterate over the parent's children looking for the name. */
   inode_t** ptr;
   for (ptr = &parent->first_child; *ptr != 0; ptr = &(*ptr)->next_sibling) {
-    if ((*ptr)->name_size == name_size &&
-  	memcmp ((*ptr)->name, name, name_size) == 0) {
+    if (pstrcmp ((*ptr)->name_begin, (*ptr)->name_end, name_begin, name_end) == 0) {
       return *ptr;
     }
   }
 
   /* Create a node. */
-  *ptr = inode_create (FILE, name, name_size, bd, size, parent);
+  *ptr = inode_create (FILE, name_begin, name_end, bd, size, parent);
 
   return *ptr;
+}
+
+static inode_t*
+descend (inode_t* parent,
+	 const char* name_begin,
+	 const char* name_end)
+{
+  if (parent->type != DIRECTORY) {
+    return 0;
+  }
+
+  inode_t* ptr;
+  for (ptr = parent->first_child; ptr != 0; ptr = ptr->next_sibling) {
+    if (pstrcmp (name_begin, name_end, ptr->name_begin, ptr->name_end) == 0) {
+      return ptr;
+    }
+  }
+
+  return 0;
+}
+
+static inode_t*
+resolve_path (inode_t* inode,
+	      const char* path_begin,
+	      const char* path_end)
+{
+  if (inode == 0) {
+    return 0;
+  }
+
+  if (path_begin == 0) {
+    return inode;
+  }
+
+  while (path_begin != path_end && inode != 0) {
+    if (*path_begin == '/') {
+      ++path_begin;
+    }
+    else {
+      /* Find the separator. */
+      const char* end = memchr (path_begin, '/', path_end - path_begin);
+      if (end == 0) {
+	end = path_end;
+      }
+      /* Found a separator. */
+      inode = descend (inode, path_begin, end);
+      path_begin = end;
+    }
+  }
+
+  return inode;
 }
 
 typedef struct descend_response descend_response_t;
@@ -341,7 +392,7 @@ initialize (void)
 	    
 	    if (end != 0) {
 	      /* Process part of the path. */
-	      parent = directory_find_or_create (parent, begin, end - begin);
+	      parent = directory_find_or_create (parent, begin, end);
 	      /* Update the beginning. */
 	      begin = end + 1;
 	    }
@@ -352,17 +403,15 @@ initialize (void)
 	  
 	  switch (file.mode & CPIO_TYPE_MASK) {
 	  case CPIO_REGULAR:
-	    file_find_or_create (parent, begin, file.name_size - 1 - (begin - file.name), cpio_file_read (&archive, &file), file.file_size);
+	    file_find_or_create (parent, begin, file.name + file.name_size - 1, cpio_file_read (&archive, &file), file.file_size);
 	    break;
 	  case CPIO_DIRECTORY:
-	    directory_find_or_create (parent, begin, file.name_size - 1 - (begin - file.name));
+	    directory_find_or_create (parent, begin, file.name + file.name_size - 1);
 	    break;
 	  }
 	}
       }
     }
-
-    /* print (nodes[0]); */
 
     if (bda != -1) {
       buffer_destroy (bda);
@@ -391,13 +440,22 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_IN_NO, FS_DESCEND_REQUEST_IN_NAM
     finish_input (bda, bdb);
   }
 
-  if (req->nodeid >= nodes_size) {
-    push_descend_response (aid, FS_DESCEND_NODE_DNE, -1);
+  inode_t* inode = 0;
+  if (req->path_begin != 0 && req->path_begin[0] == '/') {
+    /* Absolute path.  Start at the root. */
+    inode = nodes[0];
+  }
+  else if (req->nodeid < nodes_size) {
+    /* Relative path.  Start at the given node. */
+    inode = nodes[req->nodeid];
+  }
+  else {
+    push_descend_response (aid, FS_DESCEND_BAD_START, -1);
     fs_descend_request_destroy (req);
     finish_input (bda, bdb);
   }
 
-  inode_t* inode = nodes[req->nodeid];
+  inode = resolve_path (inode, req->path_begin, req->path_end);
   
   if (inode == 0) {
     push_descend_response (aid, FS_DESCEND_NODE_DNE, -1);
@@ -405,23 +463,8 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_IN_NO, FS_DESCEND_REQUEST_IN_NAM
     finish_input (bda, bdb);
   }
 
-  if (inode->type != DIRECTORY) {
-    push_descend_response (aid, FS_DESCEND_NOT_DIRECTORY, -1);
-    fs_descend_request_destroy (req);
-    finish_input (bda, bdb);
-  }
-
-  for (inode_t* child = inode->first_child; child != 0; child = child->next_sibling) {
-    if (pstrcmp (child->name, child->name + child->name_size, req->name_begin, req->name_end) == 0) {
-      /* Found the child with the correct name. */
-      push_descend_response (aid, FS_DESCEND_SUCCESS, child->nodeid);
-      fs_descend_request_destroy (req);
-      finish_input (bda, bdb);
-    }
-  }
-
-  /* Didn't find it. */
-  push_descend_response (aid, FS_DESCEND_CHILD_DNE, -1);
+  /* Found the child with the correct name. */
+  push_descend_response (aid, FS_DESCEND_SUCCESS, inode->nodeid);
   fs_descend_request_destroy (req);
   finish_input (bda, bdb);
 }
@@ -450,31 +493,44 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_IN_NO, FS_READFILE_REQUEST_IN_N
     finish_input (bda, bdb);
   }
 
-  const fs_readfile_request_t* req = buffer_file_readp (&bf, sizeof (fs_readfile_request_t));
+  fs_readfile_request_t* req = fs_readfile_request_read (&bf);
   if (req == 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not read readfile request: %s", lily_error_string (lily_error));
     logs (log_buffer);
     finish_input (bda, bdb);
   }
 
-  if (req->nodeid >= nodes_size) {
-    push_readfile_response (aid, FS_READFILE_NODE_DNE, -1, -1);
+  inode_t* inode = 0;
+  if (req->path_begin != 0 && req->path_begin[0] == '/') {
+    /* Absolute path.  Start at the root. */
+    inode = nodes[0];
+  }
+  else if (req->nodeid < nodes_size) {
+    /* Relative path.  Start at the given node. */
+    inode = nodes[req->nodeid];
+  }
+  else {
+    push_readfile_response (aid, FS_READFILE_BAD_START, -1, -1);
+    fs_readfile_request_destroy (req);
     finish_input (bda, bdb);
   }
-  
-  inode_t* inode = nodes[req->nodeid];
+
+  inode = resolve_path (inode, req->path_begin, req->path_end);
   
   if (inode == 0) {
     push_readfile_response (aid, FS_READFILE_NODE_DNE, -1, -1);
+    fs_readfile_request_destroy (req);
     finish_input (bda, bdb);
   }
-      
+
   if (inode->type != FILE) {
     push_readfile_response (aid, FS_READFILE_NOT_FILE, -1, -1);
+    fs_readfile_request_destroy (req);
     finish_input (bda, bdb);
   }
   
   push_readfile_response (aid, FS_READFILE_SUCCESS, inode->size, inode->bd);
+  fs_readfile_request_destroy (req);
   finish_input (bda, bdb);
 }
 
