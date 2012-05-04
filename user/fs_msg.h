@@ -61,9 +61,14 @@ typedef struct {
   fs_nodeid_t nodeid;
 } fs_readfile_request_t;
 
+void
+fs_readfile_request_init (fs_readfile_request_t* res,
+			  fs_nodeid_t nodeid);
+
 typedef enum {
   FS_READFILE_SUCCESS,
-  /* TODO */
+  FS_READFILE_NODE_DNE,
+  FS_READFILE_NOT_FILE,
 } fs_readfile_error_t;
 
 typedef struct {
@@ -71,62 +76,9 @@ typedef struct {
   size_t size;
 } fs_readfile_response_t;
 
-
-
-
-
-
-
-#define FS_REQUEST_NAME "fs_request_in"
-#define FS_RESPONSE_NAME "fs_response_out"
-
-/* Errors. */
-typedef enum {
-  FS_SUCCESS,
-  FS_BAD_REQUEST,
-  FS_NODE_DNE,
-  FS_NOT_DIRECTORY,
-  FS_NOT_FILE,
-  FS_CHILD_DNE,
-} fs_error_t;
-
-/* Request/response types. */
-typedef enum {
-  FS_DESCEND,
-  FS_READFILE,
-} fs_type_t;
-
-
-int
-fs_request_type_read (buffer_file_t* bf,
-		      fs_type_t* type);
-
-int
-fs_descend_response_write (buffer_file_t* bf,
-			   fs_error_t error,
-			   fs_nodeid_t nodeid);
-
-int
-fs_descend_response_read (buffer_file_t* bf,
-			  fs_error_t* error,
-			  fs_nodeid_t* nodeid);
-
-int
-fs_readfile_request_write (buffer_file_t* bf,
-			   fs_nodeid_t nodeid);
-
-int
-fs_readfile_request_read (buffer_file_t* bf,
-			  fs_nodeid_t* nodeid);
-
-int
-fs_readfile_response_write (buffer_file_t* bf,
-			    fs_error_t error,
-			    size_t size);
-
-int
-fs_readfile_response_read (buffer_file_t* bf,
-			   fs_error_t* error,
-			   size_t* size);
+void
+fs_readfile_response_init (fs_readfile_response_t* res,
+			   fs_readfile_error_t error,
+			   size_t size);
 
 #endif /* FS_MSG_H */

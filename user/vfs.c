@@ -6,38 +6,33 @@
 
 /* TODO: Error handling. */
 
-typedef void (*descend_callback_t) (void* arg, fs_error_t error, fs_nodeid_t nodeid);
+typedef void (*descend_callback_t) (void* arg, const fs_descend_response_t* res);
 
 struct descend_request {
-  aid_t to;
   fs_descend_request_t* request;
+  descend_callback_t callback;
+  void* arg;
   descend_request_t* next;
 };
 
-/* typedef struct fs_op fs_op_t; */
-/* struct fs_op { */
-/*   fs_type_t type; */
-/*   union { */
-/*     struct { */
-/*       fs_nodeid_t nodeid; */
-/*       const char* begin; */
-/*       const char* end; */
-/*       descend_callback_t callback; */
-/*       void* arg; */
-/*     } descend; */
-/*     struct { */
-/*       fs_nodeid_t nodeid; */
-/*       readfile_callback_t callback; */
-/*       void* arg; */
-/*     } readfile; */
-/*   } u; */
-/*   fs_op_t* next; */
-/* }; */
+struct readfile_request {
+  fs_readfile_request_t request;
+  readfile_callback_t callback;
+  void* arg;
+  readfile_request_t* next;
+};
 
 struct fs {
-  size_t refcount;
   vfs_t* vfs;
   aid_t aid;
+  descend_request_t* descend_request_head;
+  descend_request_t** descend_request_tail;
+  descend_request_t* descend_response_head;
+  descend_request_t** descend_response_tail;
+  readfile_request_t* readfile_request_head;
+  readfile_request_t** readfile_request_tail;
+  readfile_request_t* readfile_response_head;
+  readfile_request_t** readfile_response_tail;
   fs_t* next;
 };
 
@@ -81,9 +76,16 @@ create_fs (vfs_t* vfs,
   /* Create the file system. */
   fs_t* fs = malloc (sizeof (fs_t));
   memset (fs, 0, sizeof (fs_t));
-  fs->refcount = 0;
   fs->vfs = vfs;
   fs->aid = aid;
+  fs->descend_request_head = 0;
+  fs->descend_request_tail = &fs->descend_request_head;
+  fs->descend_response_head = 0;
+  fs->descend_response_tail = &fs->descend_response_head;
+  fs->readfile_request_head = 0;
+  fs->readfile_request_tail = &fs->readfile_request_head;
+  fs->readfile_response_head = 0;
+  fs->readfile_response_tail = &fs->readfile_response_head;
 
   /* Insert into the list. */
   fs->next = vfs->fs_head;
@@ -113,225 +115,202 @@ create_fs (vfs_t* vfs,
 }
 
 static void
-fs_incref (fs_t* fs)
-{
-  ++fs->refcount;
-}
-
-/* static void */
-/* fs_decref (fs_t* fs) */
-/* { */
-/*   --fs->refcount; */
-/*   if (fs->refcount == 0) { */
-/*     buffer_destroy (fs->request_bda); */
-/*     buffer_destroy (fs->request_bdb); */
-/*     /\* TODO *\/ */
-/*     logs (__func__); */
-/*     /\* unbind (fs->response_bid); *\/ */
-/*     /\* unbind (fs->request_bid); *\/ */
-
-/*     for (fs_t** ptr = &fs->vfs->fs_head; *ptr != 0; ptr = &(*ptr)->next) { */
-/*       if (*ptr == fs) { */
-/* 	*ptr = fs->next; */
-/* 	break; */
-/*       } */
-/*     } */
-    
-/*     free (fs); */
-/*   } */
-/* } */
-
-/* static void */
-/* fs_op_push (fs_t* fs, */
-/* 	    fs_op_t* op) */
-/* { */
-/*   *fs->op_tail = op; */
-/*   fs->op_tail = &op->next; */
-/*   fs_incref (fs); */
-/* } */
-
-/* static void */
-/* fs_op_pop (fs_t* fs) */
-/* { */
-/*   fs_op_t* op = fs->op_head; */
-/*   fs->op_head = op->next; */
-/*   if (fs->op_head == 0) { */
-/*     fs->op_tail = &fs->op_head; */
-/*   } */
-/*   free (op); */
-/*   fs_decref (fs); */
-/* } */
-
-/* static bool */
-/* fs_op_empty (const fs_t* fs) */
-/* { */
-/*   return fs->op_head == 0; */
-/* } */
-
-/* static bool */
-/* fs_request_precondition (const fs_t* fs) */
-/* { */
-/*   return !fs->sent && !fs_op_empty (fs) && bind_stat_output_bound (fs->vfs->bs, fs->vfs->request, 0) && bind_stat_input_bound (fs->vfs->bs, fs->vfs->response, 0); */
-/* } */
-
-/* static void */
-/* fs_request (fs_t* fs) */
-/* { */
-/*   if (fs_request_precondition (fs)) { */
-/*       buffer_file_truncate (&fs->request_buffer); */
-/*       /\* TODO *\/ */
-/*       buffer_resize (fs->request_bdb, 0); */
-    
-/*       fs_op_t* op = fs->op_head; */
-/*       switch (op->type) { */
-/*       case FS_DESCEND: */
-/*         /\* TODO *\/ */
-/*         fs_descend_request_write (&fs->request_buffer, op->u.descend.nodeid, op->u.descend.begin, op->u.descend.end - op->u.descend.begin); */
-/*         break; */
-/*       case FS_READFILE: */
-/*         /\* TODO *\/ */
-/*         fs_readfile_request_write (&fs->request_buffer, op->u.readfile.nodeid); */
-/*         break; */
-/*       } */
-    
-/*       fs->sent = true; */
-/*       finish_output (true, fs->request_bda, fs->request_bdb); */
-/*   } */
-/*   finish_output (false, -1, -1); */
-/* } */
-
-/* static void */
-/* fs_response (fs_t* fs, */
-/* 	     bd_t bda, */
-/* 	     bd_t bdb) */
-/* { */
-/*   if (!fs->sent) { */
-/*     /\* Response when none was expected. *\/ */
-/*     finish_input (bda, bdb); */
-/*   } */
-
-/*   buffer_file_t buffer; */
-/*   if (buffer_file_initr (&buffer, bda) != 0) { */
-/*     /\* TODO *\/ */
-/*     finish_input (bda, bdb); */
-/*   }     */
-
-/*   fs_op_t* op = fs->op_head; */
-/*   switch (op->type) { */
-/*   case FS_DESCEND: */
-/*     { */
-/*       fs_error_t error; */
-/*       fs_nodeid_t nodeid; */
-/*       if (fs_descend_response_read (&buffer, &error, &nodeid) == 0) { */
-/* 	op->u.descend.callback (op->u.descend.arg, error, nodeid); */
-/*       } */
-/*       else { */
-/* 	/\* TODO *\/ */
-/*       } */
-/*     } */
-/*     break; */
-/*   case FS_READFILE: */
-/*   { */
-/*       fs_error_t error; */
-/*       size_t size; */
-/*       if (fs_readfile_response_read (&buffer, &error, &size) == 0 && */
-/* 	  buffer_size (bdb) >= size_to_pages (size)) { */
-/* 	op->u.readfile.callback (op->u.readfile.arg, error, size, bdb); */
-/*       } */
-/*       else { */
-/* 	/\* TODO *\/ */
-/*       } */
-/*     } */
-/*       break; */
-/*   } */
-  
-/*   fs_op_pop (fs); */
-/*   fs->sent = false; */
-
-/*   finish_input (bda, bdb); */
-/* } */
-
-/* static void */
-/* fs_schedule (const fs_t* fs) */
-/* { */
-/*   if (fs_request_precondition (fs)) { */
-/*     schedule (fs->vfs->request, fs->aid); */
-/*   } */
-/* } */
-
-static void
-push_descend_request (vfs_t* vfs,
-		      aid_t to,
+push_descend_request (fs_t* fs,
 		      fs_nodeid_t nodeid,
 		      const char* name_begin,
-		      const char* name_end)
+		      const char* name_end,
+		      descend_callback_t callback,
+		      void* arg)
 {
   descend_request_t* req = malloc (sizeof (descend_request_t));
   memset (req, 0, sizeof (descend_request_t));
-  req->to = to;
   req->request = fs_descend_request_create (nodeid, name_begin, name_end);
+  req->callback = callback;
+  req->arg = arg;
   
-  *vfs->descend_request_tail = req;
-  vfs->descend_request_tail = &req->next;
+  *fs->descend_request_tail = req;
+  fs->descend_request_tail = &req->next;
 }
 
 static void
-shift_descend_request (vfs_t* vfs)
+shift_descend_request (fs_t* fs)
 {
-  descend_request_t* req = vfs->descend_request_head;
-  vfs->descend_request_head = req->next;
-  if (vfs->descend_request_head == 0) {
-    vfs->descend_request_tail = &vfs->descend_request_head;
+  descend_request_t* req = fs->descend_request_head;
+  fs->descend_request_head = req->next;
+  if (fs->descend_request_head == 0) {
+    fs->descend_request_tail = &fs->descend_request_head;
   }
   req->next = 0;
 
-  *vfs->descend_response_tail = req;
-  vfs->descend_response_tail = &req->next;
+  *fs->descend_response_tail = req;
+  fs->descend_response_tail = &req->next;
 }
 
 static void
-push_readfile_request (vfs_t* vfs)
+pop_descend_response (fs_t* fs)
 {
-  logs (__func__);
+  descend_request_t* req = fs->descend_response_head;
+  fs->descend_response_head = req->next;
+  if (fs->descend_response_head == 0) {
+    fs->descend_response_tail = &fs->descend_response_head;
+  }
+
+  fs_descend_request_destroy (req->request);
+  free (req);
 }
 
-/* static void */
-/* fs_descend (fs_t* fs, */
-/* 	    fs_nodeid_t nodeid, */
-/* 	    const char* begin, */
-/* 	    const char* end, */
-/* 	    descend_callback_t callback, */
-/* 	    void* arg) */
-/* { */
-/*   /\* TODO:  What if we aren't bound? *\/ */
+static bool
+fs_descend_request_precondition (const fs_t* fs)
+{
+  return fs->descend_request_head != 0 && bind_stat_output_bound (fs->vfs->bs, fs->vfs->descend_request, fs->aid) && bind_stat_input_bound (fs->vfs->bs, fs->vfs->descend_response, fs->aid);
+}
 
-/*   fs_op_t* op = malloc (sizeof (fs_op_t)); */
-/*   memset (op, 0, sizeof (fs_op_t)); */
-/*   op->type = FS_DESCEND; */
-/*   op->u.descend.nodeid = nodeid; */
-/*   op->u.descend.begin = begin; */
-/*   op->u.descend.end = end; */
-/*   op->u.descend.callback = callback; */
-/*   op->u.descend.arg = arg; */
-/*   fs_op_push (fs, op); */
-/* } */
+static void
+fs_descend_request (fs_t* fs)
+{
+  if (fs_descend_request_precondition (fs)) {
+    buffer_file_shred (fs->vfs->output_bfa);
+    fs_descend_request_write (fs->vfs->output_bfa, fs->descend_request_head->request);
+    shift_descend_request (fs);
+    finish_output (true, fs->vfs->output_bfa->bd, -1);
+  }
 
-/* static void */
-/* fs_readfile (fs_t* fs, */
-/* 	     fs_nodeid_t nodeid, */
-/* 	     readfile_callback_t callback, */
-/* 	     void* arg) */
-/* { */
-/*   /\* TODO:  What if we aren't bound? *\/ */
+  finish_output (false, -1, -1);
+}
 
-/*   fs_op_t* op = malloc (sizeof (fs_op_t)); */
-/*   memset (op, 0, sizeof (fs_op_t)); */
-/*   op->type = FS_READFILE; */
-/*   op->u.readfile.nodeid = nodeid; */
-/*   op->u.readfile.callback = callback; */
-/*   op->u.readfile.arg = arg; */
-/*   fs_op_push (fs, op); */
-/* } */
+static void
+fs_descend_response (fs_t* fs,
+		     bd_t bda,
+		     bd_t bdb)
+{
+  if (fs->descend_response_head == 0) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+  
+  buffer_file_t bf;
+  if (buffer_file_initr (&bf, bda) != 0) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+
+  const fs_descend_response_t* res = buffer_file_readp (&bf, sizeof (fs_descend_response_t));
+  if (res == 0) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+
+  fs->descend_response_head->callback (fs->descend_response_head->arg, res);
+
+  pop_descend_response (fs);
+
+  finish_input (bda, bdb);
+}
+
+static void
+push_readfile_request (fs_t* fs,
+		       fs_nodeid_t nodeid,
+		       readfile_callback_t callback,
+		       void* arg)
+{
+  readfile_request_t* req = malloc (sizeof (readfile_request_t));
+  memset (req, 0, sizeof (readfile_request_t));
+  fs_readfile_request_init (&req->request, nodeid);
+  req->callback = callback;
+  req->arg = arg;
+  
+  *fs->readfile_request_tail = req;
+  fs->readfile_request_tail = &req->next;
+}
+
+static void
+shift_readfile_request (fs_t* fs)
+{
+  readfile_request_t* req = fs->readfile_request_head;
+  fs->readfile_request_head = req->next;
+  if (fs->readfile_request_head == 0) {
+    fs->readfile_request_tail = &fs->readfile_request_head;
+  }
+  req->next = 0;
+
+  *fs->readfile_response_tail = req;
+  fs->readfile_response_tail = &req->next;
+}
+
+static void
+pop_readfile_response (fs_t* fs)
+{
+  readfile_request_t* req = fs->readfile_response_head;
+  fs->readfile_response_head = req->next;
+  if (fs->readfile_response_head == 0) {
+    fs->readfile_response_tail = &fs->readfile_response_head;
+  }
+  free (req);
+}
+
+static bool
+fs_readfile_request_precondition (const fs_t* fs)
+{
+  return fs->readfile_request_head != 0 && bind_stat_output_bound (fs->vfs->bs, fs->vfs->readfile_request, fs->aid) && bind_stat_input_bound (fs->vfs->bs, fs->vfs->readfile_response, fs->aid);
+}
+
+static void
+fs_readfile_request (fs_t* fs)
+{
+  if (fs_readfile_request_precondition (fs)) {
+    buffer_file_shred (fs->vfs->output_bfa);
+    buffer_file_write (fs->vfs->output_bfa, &fs->readfile_request_head->request, sizeof (fs_readfile_request_t));
+    shift_readfile_request (fs);
+    finish_output (true, fs->vfs->output_bfa->bd, -1);
+  }
+
+  finish_output (false, -1, -1);
+}
+
+static void
+fs_readfile_response (fs_t* fs,
+		      bd_t bda,
+		      bd_t bdb)
+{
+  if (fs->readfile_response_head == 0) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+  
+  buffer_file_t bf;
+  if (buffer_file_initr (&bf, bda) != 0) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+
+  const fs_readfile_response_t* res = buffer_file_readp (&bf, sizeof (fs_readfile_response_t));
+  if (res == 0) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+
+  if (res->error == FS_READFILE_SUCCESS && buffer_size (bdb) < size_to_pages (res->size)) {
+    /* TODO:  log */
+    finish_input (bda, bdb);
+  }
+
+  fs->readfile_response_head->callback (fs->readfile_response_head->arg, 0, res, bdb);
+
+  pop_readfile_response (fs);
+
+  finish_input (bda, bdb);
+}
+
+static void
+fs_schedule (const fs_t* fs)
+{
+  if (fs_descend_request_precondition (fs)) {
+    schedule (fs->vfs->descend_request, fs->aid);
+  }
+  if (fs_readfile_request_precondition (fs)) {
+    schedule (fs->vfs->readfile_request, fs->aid);
+  }
+}
 
 typedef struct {
   vfs_t* vfs;
@@ -367,52 +346,50 @@ create_readfile_context (vfs_t* vfs,
   return c;
 }
 
-/* static void */
-/* destroy_readfile_context (readfile_context_t* c) */
-/* { */
-/*   free (c->path); */
-/*   free (c); */
-/* } */
+static void
+destroy_readfile_context (readfile_context_t* c)
+{
+  free (c->path);
+  free (c);
+}
 
-/* static void */
-/* readfile_readfile (void* arg, */
-/* 		   fs_error_t error, */
-/* 		   size_t size, */
-/* 		   bd_t bdb) */
-/* { */
-/*   readfile_context_t* c = arg; */
-/*   c->callback (c->arg, error, size, bdb); */
-/*   destroy_readfile_context (c); */
-/* } */
+static void
+readfile_readfile (void* arg,
+		   const fs_descend_response_t* res1,
+		   const fs_readfile_response_t* res2,
+		   bd_t bdb)
+{
+  readfile_context_t* c = arg;
+  c->callback (c->arg, res1, res2, bdb);
+  destroy_readfile_context (c);
+}
 
 static void
 process_readfile_context (readfile_context_t* c);
 
-/* static void */
-/* readfile_descend (void* arg, */
-/* 		  fs_error_t error, */
-/* 		  fs_nodeid_t nodeid) */
-/* { */
-/*   readfile_context_t* c = arg; */
-/*   switch (error) { */
-/*   case FS_SUCCESS: */
-/*     c->vnode.nodeid = nodeid; */
-/*     process_readfile_context (c); */
-/*     break; */
-/*   default: */
-/*     c->callback (c->arg, error, -1, -1); */
-/*     destroy_readfile_context (c); */
-/*     break; */
-/*   } */
-/* } */
+static void
+readfile_descend (void* arg,
+		  const fs_descend_response_t* res)
+{
+  readfile_context_t* c = arg;
+  switch (res->error) {
+  case FS_DESCEND_SUCCESS:
+    c->vnode.nodeid = res->nodeid;
+    process_readfile_context (c);
+    break;
+  default:
+    c->callback (c->arg, res, 0, -1);
+    destroy_readfile_context (c);
+    break;
+  }
+}
 
 static void
 process_readfile_context (readfile_context_t* c)
 {
   if (*c->begin == '\0') {
-    //fs_t* fs = find_fs (c->vfs, c->vnode.aid);
-    push_readfile_request (c->vfs);
-    //fs_readfile (fs, c->vnode.nodeid, readfile_readfile, c);
+    fs_t* fs = find_fs (c->vfs, c->vnode.aid);
+    push_readfile_request (fs, c->vnode.nodeid, readfile_readfile, c);
   }
   else if (*c->begin == '/') {
     ++c->begin;
@@ -429,16 +406,15 @@ process_readfile_context (readfile_context_t* c)
 	r = r->next;
       }
     }
-
-    //fs_t* fs = find_fs (c->vfs, c->vnode.aid);
     
     const char* end = strchr (c->begin, '/');
     if (end == NULL) {
       end = c->begin + strlen (c->begin);
     }
     
-    push_descend_request (c->vfs, c->vnode.aid, c->vnode.nodeid, c->begin, end);
-    //fs_descend (fs, c->vnode.nodeid, c->begin, end, readfile_descend, c);
+    fs_t* fs = find_fs (c->vfs, c->vnode.aid);
+
+    push_descend_request (fs, c->vnode.nodeid, c->begin, end, readfile_descend, c);
     c->begin = end;
   }
   else {
@@ -462,14 +438,8 @@ vfs_init (vfs_t* vfs,
   vfs->output_bfa = output_bfa;
   vfs->descend_request = descend_request;
   vfs->descend_response = descend_response;
-  vfs->descend_request_head = 0;
-  vfs->descend_request_tail = &vfs->descend_request_head;
-  vfs->descend_response_head = 0;
-  vfs->descend_response_tail = &vfs->descend_response_head;
   vfs->readfile_request = readfile_request;
   vfs->readfile_response = readfile_response;
-  vfs->readfile_head = 0;
-  vfs->readfile_tail = &vfs->readfile_head;
   vfs->redirect_tail = &vfs->redirect_head;
 }
 
@@ -485,7 +455,6 @@ vfs_append (vfs_t* vfs,
   if (to_fs == 0) {
     to_fs = create_fs (vfs, to_aid);
   }
-  fs_incref (to_fs);
 
   /* Create the redirect. */
   redirect_t* r = malloc (sizeof (redirect_t));
@@ -511,27 +480,17 @@ vfs_readfile (vfs_t* vfs,
   process_readfile_context (c);
 }
 
-static bool descend_request_precondition (const vfs_t* vfs)
-{
-  if (vfs->descend_request_head != 0) {
-    aid_t to = vfs->descend_request_head->to;
-    return bind_stat_output_bound (vfs->bs, vfs->descend_request, to) && bind_stat_input_bound (vfs->bs, vfs->descend_response, to);
-  }
-  else {
-    return false;
-  }
-}
-
 void
 vfs_descend_request (vfs_t* vfs,
 		     aid_t aid)
 {
-  if (descend_request_precondition (vfs) && vfs->descend_request_head->to == aid) {
-    buffer_file_shred (vfs->output_bfa);
-    fs_descend_request_write (vfs->output_bfa, vfs->descend_request_head->request);
-    shift_descend_request (vfs);
-    finish_output (true, vfs->output_bfa->bd, -1);
+  for (fs_t* fs = vfs->fs_head; fs != 0; fs = fs->next) {
+    if (fs->aid == aid) {
+      fs_descend_request (fs);
+      break;
+    }
   }
+
   finish_output (false, -1, -1);
 }
 
@@ -541,23 +500,51 @@ vfs_descend_response (vfs_t* vfs,
 		      bd_t bda,
 		      bd_t bdb)
 {
-  logs (__func__);
-/*   fs_t* fs = find_fs (vfs, aid); */
+  fs_t* fs = find_fs (vfs, aid);
 
-/*   if (fs != 0) { */
-/*     fs_response (fs, bda, bdb); */
-/*   } */
-/*   else { */
-/*     finish_input (bda, bdb); */
-/*   } */
-  finish_input (bda, bdb);
+  if (fs != 0) {
+    fs_descend_response (fs, bda, bdb);
+  }
+  else {
+    finish_input (bda, bdb);
+  }
+}
+
+void
+vfs_readfile_request (vfs_t* vfs,
+		      aid_t aid)
+{
+  for (fs_t* fs = vfs->fs_head; fs != 0; fs = fs->next) {
+    if (fs->aid == aid) {
+      fs_readfile_request (fs);
+      break;
+    }
+  }
+
+  finish_output (false, -1, -1);
+}
+
+void
+vfs_readfile_response (vfs_t* vfs,
+		       aid_t aid,
+		       bd_t bda,
+		       bd_t bdb)
+{
+  fs_t* fs = find_fs (vfs, aid);
+
+  if (fs != 0) {
+    fs_readfile_response (fs, bda, bdb);
+  }
+  else {
+    finish_input (bda, bdb);
+  }
 }
 
 void
 vfs_schedule (const vfs_t* vfs)
 {
-  if (descend_request_precondition (vfs)) {
-    schedule (vfs->descend_request, vfs->descend_request_head->to);
+  for (fs_t* fs = vfs->fs_head; fs != 0; fs = fs->next) {
+    fs_schedule (fs);
   }
 }
 

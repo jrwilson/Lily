@@ -19,8 +19,6 @@
 #define TEXT_OUT_NO 5
 #define DESTROYED_NO 6
 #define UNBOUND_NO 7
-#define FS_RESPONSE_NO 8
-#define FS_REQUEST_NO 9
 #define COM_OUT_NO 12
 #define COM_IN_NO 13
 #define RECV_NO 14
@@ -67,6 +65,7 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define ERROR __FILE__ ": error: "
 #define WARNING __FILE__ ": warning: "
 #define INFO __FILE__ ": info: "
+#define TODO __FILE__ ": todo: "
 
 typedef struct automaton_item automaton_item_t;
 /* typedef struct binding_item binding_item_t; */
@@ -1131,29 +1130,36 @@ typedef enum {
 
 static void
 readscript_callback (void* arg,
-		     fs_error_t error,
-		     size_t size,
+		     const fs_descend_response_t* res1,
+		     const fs_readfile_response_t* res2,
 		     bd_t bd)
 {
-  logs (__func__);
-/*   switch (error) { */
-/*   case FS_SUCCESS: */
-/*     { */
-/*       const char* str = buffer_map (bd); */
-/*       if (str == 0) { */
-/* 	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error)); */
-/* 	logs (log_buffer); */
-/* 	exit (-1); */
-/*       } */
-      
-/*       interpret (str, size); */
-/*       buffer_unmap (bd); */
-/*     } */
-/*     break; */
-/*   default: */
-/*     /\* TODO *\/ */
-/*     break; */
-/*   } */
+  if (res1 != 0) {
+    logs (TODO "readscript failed");
+  }
+  else if (res2 != 0) {
+    switch (res2->error) {
+    case FS_READFILE_SUCCESS:
+      {
+	const char* str = buffer_map (bd);
+	if (str == 0) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not map script: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	log (str, res2->size);
+	/*       interpret (str, size); */
+	buffer_unmap (bd);
+      }
+      break;
+    case FS_READFILE_NODE_DNE:
+      logs (TODO "readscript failed");
+      break;
+    case FS_READFILE_NOT_FILE:
+      logs (TODO "readscript failed");
+      break;
+    }
+  }
 }
 
 static void
@@ -1417,22 +1423,6 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 /*   finish_input (bda, bdb); */
 /* } */
 
-BEGIN_OUTPUT (AUTO_PARAMETER, FS_REQUEST_NO, "", "", fs_request, ano_t ano, aid_t aid)
-{
-  initialize ();
-  logs (__func__);
-  //vfs_request (&vfs, aid);
-  finish_output (false, -1, -1);
-}
-
-BEGIN_INPUT (AUTO_PARAMETER, FS_RESPONSE_NO, "", "", fs_response, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
-{
-  initialize ();
-  logs (__func__);
-  //vfs_response (&vfs, aid, bda, bdb);
-  finish_input (bda, bdb);
-}
-
 /* BEGIN_INPUT (NO_PARAMETER, RECV_NO, "", "", recv, ano_t ano, int param, bd_t bda, bd_t bdb) */
 /* { */
 /*   initialize (); */
@@ -1520,15 +1510,13 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_IN_NO, "", "", fs_descend_respo
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_OUT_NO, "", "", fs_readfile_request_out, ano_t ano, aid_t aid)
 {
   initialize ();
-  logs (__func__);
-  finish_output (false, -1, -1);
+  vfs_readfile_request (&vfs, aid);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_RESPONSE_IN_NO, "", "", fs_readfile_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
   initialize ();
-  logs (__func__);
-  finish_input (bda, bdb);
+  vfs_readfile_response (&vfs, aid, bda, bdb);
 }
 
 void
