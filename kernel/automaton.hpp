@@ -1257,26 +1257,34 @@ public:
       return make_pair (-1, LILY_BIND_ERROR_IANODNE);
     }
     
-    // Correct the parameters.
+    // Check the parameters.
     switch (output_action->parameter_mode) {
     case NO_PARAMETER:
-      output_parameter = 0;
+      if (output_parameter != 0) {
+	return make_pair (-1, LILY_BIND_ERROR_OANODNE);
+      }
       break;
     case PARAMETER:
       break;
     case AUTO_PARAMETER:
-      output_parameter = input_automaton->aid ();
+      if (output_parameter != input_automaton->aid ()) {
+	return make_pair (-1, LILY_BIND_ERROR_OANODNE);
+      }
       break;
     }
     
     switch (input_action->parameter_mode) {
     case NO_PARAMETER:
-      input_parameter = 0;
+      if (input_parameter != 0) {
+	return make_pair (-1, LILY_BIND_ERROR_IANODNE);
+      }
       break;
     case PARAMETER:
       break;
     case AUTO_PARAMETER:
-      input_parameter = output_automaton->aid ();
+      if (input_parameter != output_automaton->aid ()) {
+	return make_pair (-1, LILY_BIND_ERROR_IANODNE);
+      }
       break;
     }
     
@@ -1646,8 +1654,8 @@ public:
     }
     
     // Correct the parameter.
-    if (action->parameter_mode == NO_PARAMETER) {
-      parameter = 0;
+    if (action->parameter_mode == NO_PARAMETER && parameter != 0) {
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
     
     if (irq_map_.find (irq) != irq_map_.end ()) {

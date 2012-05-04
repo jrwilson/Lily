@@ -348,16 +348,16 @@ create_ (bd_t text_bd,
     action_desc_t desc;
     description_init (&description, aid);
     if (description_read_name (&description, &desc, SA_BIND_REQUEST_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
-      bind (aid, desc.number, 0, system_automaton_aid, BIND_REQUEST_IN_NO, 0);
+      bind (aid, desc.number, 0, system_automaton_aid, BIND_REQUEST_IN_NO, aid);
     }
     if (description_read_name (&description, &desc, SA_BA_REQUEST_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
-      bind (system_automaton_aid, BA_REQUEST_OUT_NO, 0, aid, desc.number, 0);
+      bind (system_automaton_aid, BA_REQUEST_OUT_NO, aid, aid, desc.number, 0);
     }
     if (description_read_name (&description, &desc, SA_BA_RESPONSE_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
-      bind (aid, desc.number, 0, system_automaton_aid, BA_RESPONSE_IN_NO, 0);
+      bind (aid, desc.number, 0, system_automaton_aid, BA_RESPONSE_IN_NO, aid);
     }
     if (description_read_name (&description, &desc, SA_BIND_RESULT_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
-      bind (system_automaton_aid, BIND_RESULT_OUT_NO, 0, aid, desc.number, 0);
+      bind (system_automaton_aid, BIND_RESULT_OUT_NO, aid, aid, desc.number, 0);
     }
   }
   return aid;

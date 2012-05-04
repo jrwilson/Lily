@@ -22,15 +22,9 @@ automaton::schedule (const shared_ptr<automaton>& ths,
 
   const paction* action = find_action (action_number);
   if (action != 0) {
-    /* Correct the parameter. */
-    switch (action->parameter_mode) {
-    case NO_PARAMETER:
-      parameter = 0;
-      break;
-    case PARAMETER:
-    case AUTO_PARAMETER:
-      /* No correction necessary. */
-      break;
+    /* Check the parameter. */
+    if (action->parameter_mode == NO_PARAMETER && parameter != 0) {
+      return make_pair (-1, LILY_ERROR_INVAL);
     }
     
     switch (action->type) {
