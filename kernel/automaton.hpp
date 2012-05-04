@@ -130,7 +130,7 @@ public:
    */
 
 public:
-  static pair<shared_ptr<automaton>, lily_error_t>
+  static pair<shared_ptr<automaton>, lily_create_error_t>
   create_automaton (bool privileged,
 		    const shared_ptr<buffer>& text,
 		    size_t text_size,
@@ -416,7 +416,7 @@ public:
    * AUTOMATA HIERARCHY
    */
   
-  inline pair<aid_t, lily_error_t>
+  inline pair<aid_t, lily_create_error_t>
   create (const shared_ptr<automaton>& ths,
 	  bd_t text_bd,
 	  bd_t bda,
@@ -426,14 +426,14 @@ public:
     kassert (ths.get () == this);
     
     if (ths != system_automaton) {
-      return make_pair (-1, LILY_ERROR_PERMISSION);
+      return make_pair (-1, LILY_CREATE_ERROR_PERMISSION);
     }
 
     // Find the text buffer.
     shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
     if (text_buffer.get () == 0) {
       // Buffer does not exist.
-      return make_pair (-1, LILY_ERROR_BDDNE);
+      return make_pair (-1, LILY_CREATE_ERROR_BDDNE);
     }
     
     // Find and synchronize the data buffers so the frames listed in the buffers are correct.
@@ -447,7 +447,7 @@ public:
     }
     
     // Create the automaton.
-    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+    pair<shared_ptr<automaton>, lily_create_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
     
     if (r.first.get () != 0) {
       return make_pair (r.first->aid (), r.second);

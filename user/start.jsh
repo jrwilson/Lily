@@ -23,7 +23,7 @@
 
 #bios = create -p /bin/bios
 
-#create -p ps2_keyboard_mouse /bin/ps2_keyboard_mouse
+create -p ps2_keyboard_mouse /bin/ps2_keyboard_mouse
 #create terminal /bin/terminal
 #create -p vga /bin/vga
 

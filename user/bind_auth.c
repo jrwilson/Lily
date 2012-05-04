@@ -24,7 +24,7 @@ bind_auth_init (bind_auth_t* ba,
 static void
 push_ba_response (bind_auth_t* ba,
 		  const sa_binding_t* binding,
-		  sa_binding_role_t role,
+		  sa_bind_role_t role,
 		  bool authorized)
 {
   bind_auth_response_t* res = malloc (sizeof (bind_auth_response_t));

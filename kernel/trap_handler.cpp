@@ -76,7 +76,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_CREATE:
     {
-      pair<aid_t, lily_error_t> r = a->create (a, regs.ebx, regs.ecx, regs.edx, regs.esi);
+      pair<aid_t, lily_create_error_t> r = a->create (a, regs.ebx, regs.ecx, regs.edx, regs.esi);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;

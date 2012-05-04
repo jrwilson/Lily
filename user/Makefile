@@ -4,9 +4,9 @@ PROGRAMS=\
 syslog \
 tmpfs \
 finda \
-jsh
+jsh \
+ps2_keyboard_mouse
 
-#ps2_keyboard_mouse \
 #terminal \
 #vga \
 #ecma2unix
@@ -54,11 +54,10 @@ finda : finda.o
 jsh : jsh.o fs_msg.o de.o system.o fs_set.o system_msg.o bind_auth.o bind_stat.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
-
-
-
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file
+
+
 
 terminal : terminal.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem

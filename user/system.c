@@ -23,9 +23,11 @@ struct event_handler_item {
 };
   
 struct automaton {
+  system_t* system;
   automaton_type_t type;
   aid_t aid;
   int retain_privilege;
+  automaton_t* owner_automaton;
   lily_error_t error;
   event_handler_item_t* event_handler_head;
   automaton_t* next;
@@ -33,7 +35,6 @@ struct automaton {
 
 struct binding {
   system_t* system;
-  bid_t bid;
   automaton_t* output_automaton;
   char* output_action_begin;
   char* output_action_end;
@@ -46,6 +47,7 @@ struct binding {
   int input_parameter;
   automaton_t* owner_automaton;
   lily_error_t error;
+  sa_bind_outcome_t outcome;
   binding_t* next;
 };
 
@@ -63,17 +65,14 @@ struct binding {
 /*   globbed_binding_t* next; */
 /* }; */
 
-struct bind_request {
-  sa_bind_request_t request;
-  bind_request_t* next;
-};
-
 void
 system_init (system_t* system,
 	     buffer_file_t* output_bfa,
+	     ano_t create_request,
 	     ano_t bind_request)
 {
   system->output_bfa = output_bfa;
+  system->create_request = create_request;
   system->bind_request = bind_request;
   system->automaton_head = 0;
   system->binding_head = 0;
@@ -81,26 +80,128 @@ system_init (system_t* system,
   system->this = system_add_unmanaged_automaton (system, getaid ());
   system->bind_request_head = 0;
   system->bind_request_tail = &system->bind_request_head;
+  system->bind_response_head = 0;
+  system->bind_response_tail = &system->bind_response_head;
+  system->create_request_head = 0;
+  system->create_request_tail = &system->create_request_head;
+  system->create_response_head = 0;
+  system->create_response_tail = &system->create_response_head;
+}
+
+struct create_request {
+  automaton_t* automaton;
+  sa_create_request_t* request;
+  create_request_t* next;
+};
+
+static void
+push_create (automaton_t* automaton,
+	     bd_t text_bd,
+	     bd_t bda,
+	     bd_t bdb)
+{
+  create_request_t* req = malloc (sizeof (create_request_t));
+  memset (req, 0, sizeof (create_request_t));
+  req->automaton = automaton;
+  req->request = sa_create_request_create (text_bd, bda, bdb, automaton->retain_privilege, (automaton->owner_automaton != 0) ? automaton->owner_automaton->aid : -1);
+  *automaton->system->create_request_tail = req;
+  automaton->system->create_request_tail = &req->next;
 }
 
 static void
-push_bind (system_t* system,
+shift_create (system_t* system)
+{
+  create_request_t* req = system->create_request_head;
+  system->create_request_head = req->next;
+  if (system->create_request_head == 0) {
+    system->create_request_tail = &system->create_request_head;
+  }
+  req->next = 0;
+
+  *system->create_response_tail = req;
+  system->create_response_tail = &req->next;
+
+  logs (__func__);
+
+    /* a->aid = create (bd, -1, -1, a->retain_privilege); */
+/*     a->error = lily_error; */
+/*     for (event_handler_item_t* item = a->event_handler_head; item != 0; item = item->next) { */
+/*       item->event_handler (item->arg); */
+/*     } */
+}
+
+static bool
+create_request_precondition (system_t* system)
+{
+  return system->create_request_head != 0;
+}
+
+void
+system_create_request (system_t* system)
+{
+  if (create_request_precondition (system)) {
+    /* Shred the output buffer. */
+    buffer_file_shred (system->output_bfa);
+
+    /* Write the request. */
+    sa_create_request_write (system->output_bfa, system->create_request_head->request);
+
+    /* Shift the request. */
+    shift_create (system);
+
+    finish_output (true, system->output_bfa->bd, -1);
+  }
+  finish_output (false, -1, -1);
+}
+
+void
+system_create_response (system_t* system,
+			bd_t bda,
+			bd_t bdb)
+{
+  logs (__func__);
+  finish_input (bda, bdb);
+}
+
+struct bind_request {
+  binding_t* binding;
+  sa_bind_request_t request;
+  bind_request_t* next;
+};
+
+static void
+push_bind (binding_t* bin,
 	   const sa_binding_t* binding)
 {
   bind_request_t* req = malloc (sizeof (bind_request_t));
   memset (req, 0, sizeof (bind_request_t));
+  req->binding = bin;
   sa_bind_request_init (&req->request, binding);
-  *system->bind_request_tail = req;
-  system->bind_request_tail = &req->next;
+  *bin->system->bind_request_tail = req;
+  bin->system->bind_request_tail = &req->next;
 }
 
 static void
-pop_bind (system_t* system)
+shift_bind (system_t* system)
 {
   bind_request_t* req = system->bind_request_head;
   system->bind_request_head = req->next;
   if (system->bind_request_head == 0) {
     system->bind_request_tail = &system->bind_request_head;
+  }
+  req->next = 0;
+
+  *system->bind_response_tail = req;
+  system->bind_response_tail = &req->next;
+}
+
+static void
+pop_bind (system_t* system)
+{
+  bind_request_t* req = system->bind_response_head;
+  system->bind_response_head = req->next;
+  if (system->bind_response_head == 0) {
+    system->bind_response_tail = &system->bind_response_head;
   }
   free (req);
 }
@@ -121,27 +222,44 @@ system_bind_request (system_t* system)
     /* Write the request. */
     buffer_file_write (system->output_bfa, &system->bind_request_head->request, sizeof (sa_bind_request_t));
 
-    /* Pop the request. */
-    pop_bind (system);
+    /* Shift the request. */
+    shift_bind (system);
 
     finish_output (true, system->output_bfa->bd, -1);
   }
   finish_output (false, -1, -1);
 }
 
-/* void */
-/* system_response (system_t* system, */
-/* 		 bd_t bda, */
-/* 		 bd_t bdb) */
-/* { */
-/*   /\* TODO *\/ */
-/*   logs (__func__); */
-/*   finish_input (bda, bdb); */
-/* } */
+void
+system_bind_response (system_t* system,
+		      bd_t bda,
+		      bd_t bdb)
+{
+  if (system->bind_response_head != 0) {
+    buffer_file_t bf;
+    if (buffer_file_initr (&bf, bda) != 0) {
+      finish_input (bda, bdb);
+    }
+
+    const sa_bind_response_t* res = buffer_file_readp (&bf, sizeof (sa_bind_response_t));
+    if (res == 0) {
+      finish_input (bda, bdb);
+    }
+
+    system->bind_response_head->binding->outcome = res->outcome;
+    pop_bind (system);
+
+    /* TODO:  Trigger an event, callbacks, etc.. */
+  }
+  finish_input (bda, bdb);
+}
 
 void
 system_schedule (system_t* system)
 {
+  if (create_request_precondition (system)) {
+    schedule (system->create_request, 0);
+  }
   if (bind_request_precondition (system)) {
     schedule (system->bind_request, 0);
   }
@@ -153,36 +271,40 @@ system_get_this (system_t* system)
   return system->this;
 }
 
-/* /\* automaton_t* *\/ */
-/* /\* system_add_managed_automaton (system_t* c, *\/ */
-/* /\* 				     bd_t bd, *\/ */
-/* /\* 				     int retain_privilege) *\/ */
-/* /\* { *\/ */
-/* /\*   automaton_t* a = malloc (sizeof (automaton_t)); *\/ */
-/* /\*   memset (a, 0, sizeof (automaton_t)); *\/ */
-/* /\*   a->type = MANAGED; *\/ */
-/* /\*   a->aid = -1; *\/ */
-/* /\*   a->retain_privilege = retain_privilege; *\/ */
+automaton_t*
+system_add_managed_automaton (system_t* system,
+			      bd_t text_bd,
+			      bd_t bda,
+			      bd_t bdb,
+			      int retain_privilege)
+{
+  automaton_t* a = malloc (sizeof (automaton_t));
+  memset (a, 0, sizeof (automaton_t));
+  a->system = system;
+  a->type = MANAGED;
+  a->aid = -1;
+  a->retain_privilege = retain_privilege;
 
-/* /\*   a->next = c->automaton_head; *\/ */
-/* /\*   c->automaton_head = a; *\/ */
+  a->next = system->automaton_head;
+  system->automaton_head = a;
 
-/* /\*   automaton_create (a, bd); *\/ */
+  automaton_create (a, text_bd, bda, bdb);
 
-/* /\*   return a; *\/ */
-/* /\* } *\/ */
+  return a;
+}
 
 automaton_t*
-system_add_unmanaged_automaton (system_t* c,
+system_add_unmanaged_automaton (system_t* system,
 				aid_t aid)
 {
   automaton_t* a = malloc (sizeof (automaton_t));
   memset (a, 0, sizeof (automaton_t));
+  a->system = system;
   a->type = UNMANAGED;
   a->aid = aid;
 
-  a->next = c->automaton_head;
-  c->automaton_head = a;
+  a->next = system->automaton_head;
+  system->automaton_head = a;
 
   return a;
 }
@@ -274,7 +396,7 @@ binding_bind (binding_t* b)
     sa_binding_t sab;
     sa_binding_init (&sab, b->output_automaton->aid, b->output_action, b->output_parameter, b->input_automaton->aid, b->input_action, b->input_parameter, b->owner_automaton->aid);
 
-    push_bind (b->system, &sab);
+    push_bind (b, &sab);
   }
 }
 
@@ -296,7 +418,6 @@ create_binding (system_t* system,
   binding_t* b = malloc (sizeof (binding_t));
   memset (b, 0, sizeof (binding_t));
   b->system = system;
-  b->bid = -1;
   b->output_automaton = output_automaton;
   size = output_action_end - output_action_begin;
   b->output_action_begin = malloc (size);
@@ -560,15 +681,13 @@ system_add_binding (system_t* system,
 /* /\*   return b; *\/ */
 /* /\* } *\/ */
 
-/* /\* void *\/ */
-/* /\* automaton_create (automaton_t* a, *\/ */
-/* /\* 		  bd_t bd) *\/ */
-/* /\* { *\/ */
-/* /\*   if (a->aid == -1 && buffer_size (bd) != -1) { *\/ */
-/* /\*     a->aid = create (bd, -1, -1, a->retain_privilege); *\/ */
-/* /\*     a->error = lily_error; *\/ */
-/* /\*     for (event_handler_item_t* item = a->event_handler_head; item != 0; item = item->next) { *\/ */
-/* /\*       item->event_handler (item->arg); *\/ */
-/* /\*     } *\/ */
-/* /\*   } *\/ */
-/* /\* } *\/ */
+void
+automaton_create (automaton_t* a,
+		  bd_t text_bd,
+		  bd_t bda,
+		  bd_t bdb)
+{
+  if (a->aid == -1 && buffer_size (text_bd) != -1) {
+    push_create (a, text_bd, bda, bdb);
+  }
+}

@@ -1,5 +1,37 @@
 #include "system_msg.h"
 
+#include <automaton.h>
+#include <dymem.h>
+#include <string.h>
+
+sa_create_request_t*
+sa_create_request_create (bd_t text_bd,
+			  bd_t bda,
+			  bd_t bdb,
+			  bool retain_privilege,
+			  aid_t owner_aid)
+{
+  sa_create_request_t* req = malloc (sizeof (sa_create_request_t));
+  memset (req, 0, sizeof (sa_create_request_t));
+  req->text_bd = buffer_copy (text_bd);
+  req->bda = buffer_copy (bda);
+  req->bdb = buffer_copy (bdb);
+  req->retain_privilege = retain_privilege;
+  req->owner_aid = owner_aid;
+  return req;
+}
+
+int
+sa_create_request_write (buffer_file_t* bfa,
+			 const sa_create_request_t* req)
+{
+  size_t text_bd_size = buffer_size (req->text_bd);
+  size_t bda_size = buffer_size (req->bda);
+  size_t bdb_size = buffer_size (req->bdb);
+
+  return buffer_file_write (bfa, req, sizeof (sa_create_request_t));
+}
+
 void
 sa_binding_init (sa_binding_t* b,
 		 aid_t output_aid,
@@ -42,7 +74,7 @@ sa_bind_request_init (sa_bind_request_t* req,
 void
 sa_ba_request_init (sa_ba_request_t* req,
 		    const sa_binding_t* b,
-		    sa_binding_role_t role)
+		    sa_bind_role_t role)
 {
   req->binding = *b;
   req->role = role;
@@ -51,7 +83,7 @@ sa_ba_request_init (sa_ba_request_t* req,
 void
 sa_ba_response_init (sa_ba_response_t* res,
 		     const sa_binding_t* b,
-		     sa_binding_role_t role,
+		     sa_bind_role_t role,
 		     bool authorized)
 {
   res->binding = *b;
@@ -62,10 +94,19 @@ sa_ba_response_init (sa_ba_response_t* res,
 void
 sa_bind_result_init (sa_bind_result_t* res,
 		     const sa_binding_t* b,
-		     sa_binding_role_t role,
-		     sa_binding_outcome_t outcome)
+		     sa_bind_role_t role,
+		     sa_bind_outcome_t outcome)
 {
   res->binding = *b;
   res->role = role;
+  res->outcome = outcome;
+}
+
+void
+sa_bind_response_init (sa_bind_response_t* res,
+		       const sa_binding_t* b,
+		       sa_bind_outcome_t outcome)
+{
+  res->binding = *b;
   res->outcome = outcome;
 }

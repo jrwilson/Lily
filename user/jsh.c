@@ -23,11 +23,12 @@
 #define COM_IN_NO 13
 #define RECV_NO 14
 #define SEND_NO 15
-#define CREATE_OUT_NO 16
+#define SA_CREATE_REQUEST_OUT_NO 16
 #define SA_BIND_REQUEST_OUT_NO 17
 #define SA_BA_REQUEST_IN_NO 18
 #define SA_BA_RESPONSE_OUT_NO 19
 #define SA_BIND_RESULT_IN_NO 20
+#define SA_BIND_RESPONSE_IN_NO 2
 #define FS_DESCEND_REQUEST_OUT_NO 21
 #define FS_DESCEND_RESPONSE_IN_NO 22
 #define FS_READFILE_REQUEST_OUT_NO 23
@@ -70,12 +71,12 @@ static char log_buffer[LOG_BUFFER_SIZE];
 typedef struct automaton_item automaton_item_t;
 /* typedef struct binding_item binding_item_t; */
 
-/* struct automaton_item { */
-/*   automaton_t* automaton; */
-/*   char* name_begin; */
-/*   char* name_end; */
-/*   automaton_item_t* next; */
-/* }; */
+struct automaton_item {
+  automaton_t* automaton;
+  char* name_begin;
+  char* name_end;
+  automaton_item_t* next;
+};
 
 /* struct binding { */
 /*   bid_t bid; */
@@ -95,28 +96,31 @@ typedef struct automaton_item automaton_item_t;
 /*   binding_item_t* next; */
 /* }; */
 
-/* static automaton_t* this_automaton = 0; */
-/* static automaton_item_t* automaton_head = 0; */
+static automaton_item_t* this_automaton = 0;
+static automaton_item_t* automaton_head = 0;
 /* static binding_t* bindings_head = 0; */
 
-/* static automaton_item_t* */
-/* create_automaton (automaton_t* a, */
-/* 		  const char* name_begin, */
-/* 		  const char* name_end) */
-/* { */
-/*   automaton_item_t* ai = malloc (sizeof (automaton_item_t)); */
-/*   memset (ai, 0, sizeof (automaton_item_t)); */
-/*   ai->automaton = a; */
-/*   size_t name_size = name_end - name_begin; */
-/*   ai->name_begin = malloc (name_size); */
-/*   memcpy (ai->name_begin, name_begin, name_size); */
-/*   ai->name_end = ai->name_begin + name_size; */
-
-/*   ai->next = automaton_head; */
-/*   automaton_head = ai; */
-
-/*   return ai; */
-/* } */
+static automaton_item_t*
+create_automaton (automaton_t* a,
+		  const char* name_begin,
+		  const char* name_end)
+{
+  if (name_end == 0) {
+    name_end = name_begin + strlen (name_begin);
+  }
+  automaton_item_t* ai = malloc (sizeof (automaton_item_t));
+  memset (ai, 0, sizeof (automaton_item_t));
+  ai->automaton = a;
+  size_t name_size = name_end - name_begin;
+  ai->name_begin = malloc (name_size);
+  memcpy (ai->name_begin, name_begin, name_size);
+  ai->name_end = ai->name_begin + name_size;
+  
+  ai->next = automaton_head;
+  automaton_head = ai;
+  
+  return ai;
+}
 
 /* static void */
 /* destroy_automaton (automaton_t* automaton) */
@@ -126,18 +130,18 @@ typedef struct automaton_item automaton_item_t;
 /*   free (automaton); */
 /* } */
 
-/* static automaton_item_t* */
-/* find_automaton (const char* name_begin, */
-/* 		const char* name_end) */
-/* { */
-/*   automaton_item_t* automaton; */
-/*   for (automaton = automaton_head; automaton != 0; automaton = automaton->next) { */
-/*     if (pstrcmp (automaton->name_begin, automaton->name_end, name_begin, name_end) == 0) { */
-/*       break; */
-/*     } */
-/*   } */
-/*   return automaton; */
-/* } */
+static automaton_item_t*
+find_automaton (const char* name_begin,
+		const char* name_end)
+{
+  automaton_item_t* automaton;
+  for (automaton = automaton_head; automaton != 0; automaton = automaton->next) {
+    if (pstrcmp (automaton->name_begin, automaton->name_end, name_begin, name_end) == 0) {
+      break;
+    }
+  }
+  return automaton;
+}
 
 /* static automaton_t* */
 /* find_automaton_aid (aid_t aid) */
@@ -401,85 +405,85 @@ typedef struct {
 /* static const char* create_path = 0; */
 /* static size_t create_argv_idx = 0; */
 
-/* static void */
-/* create_readfile_callback (void* arg, */
-/* 			  fs_error_t error, */
-/* 			  size_t size, */
-/* 			  bd_t bd) */
-/* { */
-/*   automaton_t* a = arg; */
-/*   switch (error) { */
-/*   case FS_SUCCESS: */
-/*     automaton_create (a, bd); */
-/*     buffer_destroy (bd); */
-/*     break; */
-/*   default: */
-/*     /\* TODO *\/ */
-/*     logs (ERROR "TODO:  could not read file"); */
-/*     break; */
-/*   } */
-/* } */
+static void
+create_readfile_callback (void* arg,
+			  const fs_readfile_response_t* res,
+			  bd_t bd)
+{
 
-/* static void */
-/* create_usage (void) */
-/* { */
-/*   /\* TODO *\/ */
-/*   logs (ERROR "TODO:  create_usage"); */
-/*   /\* buffer_file_puts (&text_out_buffer, "-> usage: create [-p ] NAME PATH [OPTIONS...]\n"); *\/ */
-/* } */
+  automaton_item_t* ai = arg;
+  switch (res->error) {
+  case FS_READFILE_SUCCESS:
+    automaton_create (ai->automaton, bd, -1, -1);
+    buffer_destroy (bd);
+    break;
+  default:
+    /* TODO */
+    logs (ERROR "TODO:  could not read file");
+    break;
+  }
+}
 
-/* static bool */
-/* create_ (const string_t* strings, */
-/* 	 size_t size) */
-/* { */
-/*   if (pstrcmp ("create", 0, strings[0].begin, strings[0].end) == 0) { */
-/*     bool retain_privilege = false; */
-/*     size_t name_idx; */
-/*     size_t path_idx; */
+static void
+create_usage (void)
+{
+  /* TODO */
+  logs (ERROR "TODO:  create_usage");
+  /* buffer_file_puts (&text_out_buffer, "-> usage: create [-p ] NAME PATH [OPTIONS...]\n"); */
+}
 
-/*     size_t idx = 1; */
-/*     if (size > idx && pstrcmp ("-p", 0, strings[idx].begin, strings[idx].end) == 0) { */
-/*       retain_privilege = true; */
-/*       ++idx; */
-/*     } */
+static bool
+create_ (const string_t* strings,
+	 size_t size)
+{
+  if (pstrcmp ("create", 0, strings[0].begin, strings[0].end) == 0) {
+    bool retain_privilege = false;
+    size_t name_idx;
+    size_t path_idx;
 
-/*     /\* The name should be next. *\/ */
-/*     if (size > idx) { */
-/*       name_idx = idx; */
-/*       ++idx; */
-/*     } */
-/*     else { */
-/*       create_usage (); */
-/*       return true; */
-/*     } */
+    size_t idx = 1;
+    if (size > idx && pstrcmp ("-p", 0, strings[idx].begin, strings[idx].end) == 0) {
+      retain_privilege = true;
+      ++idx;
+    }
 
-/*     /\* The path should be next. *\/ */
-/*     if (size > idx) { */
-/*       path_idx = idx; */
-/*       ++idx; */
-/*     } */
-/*     else { */
-/*       create_usage (); */
-/*       return true; */
-/*     } */
+    /* The name should be next. */
+    if (size > idx) {
+      name_idx = idx;
+      ++idx;
+    }
+    else {
+      create_usage ();
+      return true;
+    }
 
-/*     /\* The rest are arguments. *\/ */
-/*     /\* TODO:  Pass the arguments. *\/ */
+    /* The path should be next. */
+    if (size > idx) {
+      path_idx = idx;
+      ++idx;
+    }
+    else {
+      create_usage ();
+      return true;
+    }
 
-/*     if (find_automaton (strings[name_idx].begin, strings[name_idx].end) == 0) { */
-/*       automaton_t* a = constellation_add_managed_automaton (&constellation, -1, retain_privilege); */
-/*       vfs_readfile (&vfs, strings[path_idx].begin, strings[path_idx].end, create_readfile_callback, a); */
-/*       create_automaton (a, strings[name_idx].begin, strings[name_idx].end); */
-/*     } */
-/*     else { */
-/*       logs (ERROR "TODO:  name already taken"); */
-/*     } */
+    /* The rest are arguments. */
+    /* TODO:  Pass the arguments. */
 
-/*     return true; */
-/*   } */
+    if (find_automaton (strings[name_idx].begin, strings[name_idx].end) == 0) {
+      automaton_t* a = system_add_managed_automaton (&system, -1, -1, -1, retain_privilege);
+      automaton_item_t* ai = create_automaton (a, strings[name_idx].begin, strings[name_idx].end);
+      fs_set_readfile (&fs_set, strings[path_idx].begin, strings[path_idx].end, create_readfile_callback, ai);
+    }
+    else {
+      logs (ERROR "TODO:  name already taken");
+    }
 
-/*   return false; */
-/* } */
+    return true;
+  }
+
+  return false;
+}
 
 /* static void */
 /* bind_usage (void) */
@@ -943,36 +947,36 @@ typedef struct {
 /*   return false; */
 /* } */
 
-/* static bool */
-/* error_ (const string_t* strings, */
-/* 	size_t size) */
-/* { */
-/*   /\* TODO *\/ */
-/*   logs ("error_"); */
-/*   //exit (-1); */
-/*   /\* if (scan_strings_size != 0) { *\/ */
-/*   /\*   /\\* Catch all. *\\/ *\/ */
-/*   /\*   bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]); *\/ */
-/*   /\* } *\/ */
-/*   return true; */
-/* } */
+static bool
+error_ (const string_t* strings,
+	size_t size)
+{
+  /* TODO */
+  logs ("error_");
+  //exit (-1);
+  /* if (scan_strings_size != 0) { */
+  /*   /\* Catch all. *\/ */
+  /*   bfprintf (&text_out_buffer, "-> error: unknown command %s\n", scan_strings[0]); */
+  /* } */
+  return true;
+}
 
 typedef bool (*dispatch_func_t) (const string_t* strings,
 				 size_t size);
 
-/* static dispatch_func_t dispatch[] = { */
-/*   /\* create_, *\/ */
-/*   /\* bind_, *\/ */
-/*   /\* unbind_, *\/ */
-/*   /\* destroy_, *\/ */
-/*   /\* find_, *\/ */
-/*   /\* describe_, *\/ */
-/*   /\* list_, *\/ */
-/*   /\* com_, *\/ */
-/*   /\* Catch errors. *\/ */
-/*   error_, */
-/*   0 */
-/* }; */
+static dispatch_func_t dispatch[] = {
+  create_,
+  /* bind_, */
+  /* unbind_, */
+  /* destroy_, */
+  /* find_, */
+  /* describe_, */
+  /* list_, */
+  /* com_, */
+  /* Catch errors. */
+  error_,
+  0
+};
 
 /*
   End Dispatch Section
@@ -991,11 +995,11 @@ typedef enum {
   SCAN_ACCEPT,
 } scan_state_t;
 
-/* static scan_state_t scan_state; */
-/* static const char* scan_string_begin; */
-/* static string_t* scan_strings; */
-/* static size_t scan_strings_size = 0; */
-/* static size_t scan_strings_capacity = 0; */
+static scan_state_t scan_state;
+static const char* scan_string_begin;
+static string_t* scan_strings;
+static size_t scan_strings_size = 0;
+static size_t scan_strings_capacity = 0;
 
 /* Tokens
 
@@ -1006,122 +1010,122 @@ typedef enum {
    comment - #[^\n]*
  */
 
-/* static void */
-/* scanner_reset (void) */
-/* { */
-/*   scan_state = SCAN_START; */
-/*   scan_string_begin = 0; */
-/*   scan_strings_size = 0; */
-/* } */
+static void
+scanner_reset (void)
+{
+  scan_state = SCAN_START;
+  scan_string_begin = 0;
+  scan_strings_size = 0;
 
-/* static void */
-/* scanner_push_string (const char* end) */
-/* { */
-/*   if (scan_strings_size == scan_strings_capacity) { */
-/*     scan_strings_capacity = 2 * scan_strings_capacity + 1; */
-/*     scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (string_t)); */
-/*   } */
-/*   scan_strings[scan_strings_size].begin = scan_string_begin; */
-/*   scan_strings[scan_strings_size].end = end; */
-/*   ++scan_strings_size; */
-/*   scan_string_begin = 0; */
-/* } */
+}
+static void
+scanner_push_string (const char* end)
+{
+  if (scan_strings_size == scan_strings_capacity) {
+    scan_strings_capacity = 2 * scan_strings_capacity + 1;
+    scan_strings = realloc (scan_strings, scan_strings_capacity * sizeof (string_t));
+  }
+  scan_strings[scan_strings_size].begin = scan_string_begin;
+  scan_strings[scan_strings_size].end = end;
+  ++scan_strings_size;
+  scan_string_begin = 0;
+}
 
-/* static void */
-/* scanner_put (const char* ptr) */
-/* { */
-/*   const char c = *ptr; */
+static void
+scanner_put (const char* ptr)
+{
+  const char c = *ptr;
 
-/*   switch (scan_state) { */
-/*   case SCAN_START: */
-/*     if (c == '\n') { */
-/*       scan_state = SCAN_ACCEPT; */
-/*     } */
-/*     else if (c == '#') { */
-/*       scan_state = SCAN_COMMENT; */
-/*     } */
-/*     else if (isalnum (c) || ispunct (c)) { */
-/*       scan_string_begin = ptr; */
-/*       scan_state = SCAN_STRING; */
-/*     } */
-/*     else { */
-/*       scan_state = SCAN_START; */
-/*     } */
-/*     break; */
-/*   case SCAN_STRING: */
-/*     if (c == '\n') { */
-/*       scanner_push_string (ptr); */
-/*       scan_state = SCAN_ACCEPT; */
-/*     } */
-/*     else if (c == '#') { */
-/*       scanner_push_string (ptr); */
-/*       scan_state = SCAN_COMMENT; */
-/*     } */
-/*     else if (isalnum (c) || ispunct (c)) { */
-/*       scan_state = SCAN_STRING; */
-/*     } */
-/*     else { */
-/*       scanner_push_string (ptr); */
-/*       scan_state = SCAN_START; */
-/*     } */
-/*     break; */
-/*   case SCAN_COMMENT: */
-/*     if (c == '\n') { */
-/*       scan_state = SCAN_ACCEPT; */
-/*     } */
-/*     /\* Otherwise, stay in SCAN_COMMENT. *\/ */
-/*     break; */
-/*   case SCAN_ACCEPT: */
-/*     /\* Do nothing. *\/ */
-/*     break; */
-/*   } */
-/* } */
+  switch (scan_state) {
+  case SCAN_START:
+    if (c == '\n') {
+      scan_state = SCAN_ACCEPT;
+    }
+    else if (c == '#') {
+      scan_state = SCAN_COMMENT;
+    }
+    else if (isalnum (c) || ispunct (c)) {
+      scan_string_begin = ptr;
+      scan_state = SCAN_STRING;
+    }
+    else {
+      scan_state = SCAN_START;
+    }
+    break;
+  case SCAN_STRING:
+    if (c == '\n') {
+      scanner_push_string (ptr);
+      scan_state = SCAN_ACCEPT;
+    }
+    else if (c == '#') {
+      scanner_push_string (ptr);
+      scan_state = SCAN_COMMENT;
+    }
+    else if (isalnum (c) || ispunct (c)) {
+      scan_state = SCAN_STRING;
+    }
+    else {
+      scanner_push_string (ptr);
+      scan_state = SCAN_START;
+    }
+    break;
+  case SCAN_COMMENT:
+    if (c == '\n') {
+      scan_state = SCAN_ACCEPT;
+    }
+    /* Otherwise, stay in SCAN_COMMENT. */
+    break;
+  case SCAN_ACCEPT:
+    /* Do nothing. */
+    break;
+  }
+}
 
-/* static void */
-/* scanner_finalize (const char* end) */
-/* { */
-/*   if (scan_state == SCAN_STRING) { */
-/*     /\* We were in the middle of a string. *\/ */
-/*     scanner_push_string (end); */
-/*   } */
-/*   scan_state = SCAN_ACCEPT; */
-/* } */
+static void
+scanner_finalize (const char* end)
+{
+  if (scan_state == SCAN_STRING) {
+    /* We were in the middle of a string. */
+    scanner_push_string (end);
+  }
+  scan_state = SCAN_ACCEPT;
+}
 
-/* static int */
-/* process (void) */
-/* { */
-/*   if (scan_strings_size != 0) { */
-/*     for (size_t idx = 0; dispatch[idx] != 0; ++idx) { */
-/*       if (dispatch[idx] (scan_strings, scan_strings_size)) { */
-/* 	break; */
-/*       } */
-/*     } */
-/*   } */
-/*   return 0; */
-/* } */
+static int
+process (void)
+{
+  if (scan_strings_size != 0) {
+    for (size_t idx = 0; dispatch[idx] != 0; ++idx) {
+      if (dispatch[idx] (scan_strings, scan_strings_size)) {
+	break;
+      }
+    }
+  }
+  return 0;
+}
 
-/* static void */
-/* interpret (const char* begin, */
-/* 	   size_t size) */
-/* { */
-/*   scanner_reset (); */
-/*   const char* end = begin + size; */
-/*   for (const char* ptr = begin; ptr != end; ++ptr) { */
-/*     scanner_put (ptr); */
-/*     if (scan_state == SCAN_ACCEPT) { */
-/*       if (process () != 0) { */
-/* 	/\* Error. *\/ */
-/* 	return; */
-/*       } */
-/*       scanner_reset (); */
-/*     } */
-/*   } */
-/*   scanner_finalize (end); */
-/*   if (process () != 0) { */
-/*     /\* Error. *\/ */
-/*     return; */
-/*   } */
-/* } */
+static void
+interpret (const char* begin,
+	   size_t size)
+{
+  scanner_reset ();
+  const char* end = begin + size;
+  for (const char* ptr = begin; ptr != end; ++ptr) {
+    scanner_put (ptr);
+    if (scan_state == SCAN_ACCEPT) {
+      if (process () != 0) {
+	/* Error. */
+	return;
+      }
+      scanner_reset ();
+    }
+  }
+  scanner_finalize (end);
+  if (process () != 0) {
+    /* Error. */
+    return;
+  }
+}
 
 /*
   End Scanner Section
@@ -1142,8 +1146,7 @@ readscript_callback (void* arg,
 	logs (log_buffer);
 	exit (-1);
       }
-      //log (str, res->size);
-      /*       interpret (str, size); */
+      interpret (str, res->size);
       buffer_unmap (bd);
     }
     break;
@@ -1175,10 +1178,12 @@ initialize (void)
       exit (-1);
     }
 
-    system_init (&system, &output_bfa, SA_BIND_REQUEST_OUT_NO);
+    system_init (&system, &output_bfa, SA_CREATE_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NO);
     bind_auth_init (&bind_auth, &output_bfa, SA_BA_RESPONSE_OUT_NO);
     bind_stat_init (&bind_stat);
     fs_set_init (&fs_set, &system, &bind_stat, &output_bfa, FS_DESCEND_REQUEST_OUT_NO, FS_DESCEND_RESPONSE_IN_NO, FS_READFILE_REQUEST_OUT_NO, FS_READFILE_RESPONSE_IN_NO);
+
+    this_automaton = create_automaton (system_get_this (&system), "this", 0);
 
     bd_t bda = getinita ();
     bd_t bdb = getinitb ();
@@ -1242,13 +1247,6 @@ initialize (void)
     	exit (-1);
       }
     }
-
-    /* aid_t aid = getaid (); */
-
-    /* this_automaton = create_automaton ("this", aid, "this"); */
-
-    /* this_automaton->next = automata_head; */
-    /* automata_head = this_automaton; */
 
     /* text_out_bd = buffer_create (0); */
     /* if (text_out_bd == -1) { */
@@ -1469,6 +1467,13 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 /*   finish_input (bda, bdb); */
 /* } */
 
+BEGIN_OUTPUT (NO_PARAMETER, SA_CREATE_REQUEST_OUT_NO, SA_CREATE_REQUEST_OUT_NAME, "", sa_create_request_out, ano_t ano, int param)
+{
+  initialize ();
+  logs (__func__);
+  system_create_request (&system);
+}
+
 BEGIN_OUTPUT (NO_PARAMETER, SA_BIND_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NAME, "", sa_bind_request_out, ano_t ano, int param)
 {
   initialize ();
@@ -1491,6 +1496,12 @@ BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESULT_IN_NO, SA_BIND_RESULT_IN_NAME, "", sa_
 {
   initialize ();
   bind_stat_result (&bind_stat, bda, bdb);
+}
+
+BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESPONSE_IN_NO, SA_BIND_RESPONSE_IN_NAME, "", sa_bind_response_in, ano_t ano, int param, bd_t bda, bd_t bdb)
+{
+  initialize ();
+  system_bind_response (&system, bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_OUT_NO, "", "", fs_descend_request_out, ano_t ano, aid_t aid)

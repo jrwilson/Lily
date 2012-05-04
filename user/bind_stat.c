@@ -37,9 +37,9 @@ bind_stat_result (bind_stat_t* bs,
   }
 
   switch (res->role) {
-  case SA_BINDING_INPUT:
-  case SA_BINDING_OUTPUT:
-  case SA_BINDING_OWNER:
+  case SA_BIND_INPUT:
+  case SA_BIND_OUTPUT:
+  case SA_BIND_OWNER:
     break;
   default:
     /* TODO:  log? */
@@ -47,21 +47,21 @@ bind_stat_result (bind_stat_t* bs,
     break;
   }
 
-  if (res->outcome == SA_BINDING_SUCCESS) {
+  if (res->outcome == SA_BIND_SUCCESS) {
     bind_result_t* br = malloc (sizeof (bind_result_t));
     memset (br, 0, sizeof (bind_result_t));
     br->result = *res;
     
     switch (res->role) {
-    case SA_BINDING_INPUT:
+    case SA_BIND_INPUT:
       br->next = bs->input_head;
       bs->input_head = br;
       break;
-    case SA_BINDING_OUTPUT:
+    case SA_BIND_OUTPUT:
       br->next = bs->output_head;
       bs->output_head = br;
       break;
-    case SA_BINDING_OWNER:
+    case SA_BIND_OWNER:
       br->next = bs->owner_head;
       bs->owner_head = br;
       break;
