@@ -108,7 +108,8 @@ system_add_globbed_binding (system_t* c,
 			    automaton_t* input_automaton,
 			    const char* input_action_begin,
 			    const char* input_end_end,
-			    int input_parameter);
+			    int input_parameter,
+			    automaton_t* owner_automaton);
 
 void
 automaton_set_text (automaton_t* a,

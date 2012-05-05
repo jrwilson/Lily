@@ -133,7 +133,7 @@ buffer_assign (bd_t dest,
 	       size_t end)
 {
   int retval;
-  syscall4re (LILY_SYSCALL_BUFFER_ASSIGN, retval, dest, src, begin, end);
+  syscall4re (LILY_SYSCALL_BUFFER_ASSIGN, retval, lily_error, dest, src, begin, end);
   return retval;
 }
 

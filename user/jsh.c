@@ -501,127 +501,127 @@ create_ (const string_t* strings,
   return false;
 }
 
-/* static void */
-/* bind_usage (void) */
-/* { */
-/*   /\* TODO *\/ */
-/*   logs (ERROR "TODO:  bind_usage"); */
-/*   /\* buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n"); *\/ */
-/* } */
+static void
+bind_usage (void)
+{
+  /* TODO */
+  logs (ERROR "TODO:  bind_usage");
+  /* buffer_file_puts (&text_out_buffer, "-> usage: bind [-o OPARAM -i IPARAM] OAID OACTION IAID IACTION\n"); */
+}
 
-/* static bool */
-/* bind_ (const string_t* strings, */
-/*        size_t size) */
-/* { */
-/*   if (pstrcmp ("bind", 0, strings[0].begin, strings[0].end) == 0) { */
-/*     automaton_item_t* output_automaton; */
-/*     size_t output_action_idx; */
-/*     int output_parameter = 0; */
-/*     automaton_item_t* input_automaton; */
-/*     size_t input_action_idx; */
-/*     int input_parameter = 0; */
+static bool
+bind_ (const string_t* strings,
+       size_t size)
+{
+  if (pstrcmp ("bind", 0, strings[0].begin, strings[0].end) == 0) {
+    automaton_item_t* output_automaton;
+    size_t output_action_idx;
+    int output_parameter = 0;
+    automaton_item_t* input_automaton;
+    size_t input_action_idx;
+    int input_parameter = 0;
 
-/*     size_t idx = 1; */
-/*     if (size > idx && pstrcmp ("-o", 0, strings[idx].begin, strings[idx].end) == 0) { */
-/*       ++idx; */
+    size_t idx = 1;
+    if (size > idx && pstrcmp ("-o", 0, strings[idx].begin, strings[idx].end) == 0) {
+      ++idx;
 
-/*       if (size > idx) { */
-/* 	output_parameter = pstrtol (strings[idx].begin, strings[idx].end, 0, 0); */
-/* 	if (string_error != STRING_SUCCESS) { */
-/* 	  logs (ERROR "TODO:  could not parse output parameter"); */
-/* 	  return true; */
-/* 	} */
-/* 	++idx; */
-/*       } */
-/*       else { */
-/* 	bind_usage (); */
-/* 	return true; */
-/*       } */
-/*     } */
+      if (size > idx) {
+	output_parameter = pstrtol (strings[idx].begin, strings[idx].end, 0, 0);
+	if (string_error != STRING_SUCCESS) {
+	  logs (ERROR "TODO:  could not parse output parameter");
+	  return true;
+	}
+	++idx;
+      }
+      else {
+	bind_usage ();
+	return true;
+      }
+    }
 
-/*     if (size > idx && pstrcmp ("-i", 0, strings[idx].begin, strings[idx].end) == 0) { */
-/*       ++idx; */
+    if (size > idx && pstrcmp ("-i", 0, strings[idx].begin, strings[idx].end) == 0) {
+      ++idx;
 
-/*       if (size > idx) { */
-/* 	input_parameter = pstrtol (strings[idx].begin, strings[idx].end, 0, 0); */
-/* 	if (string_error != STRING_SUCCESS) { */
-/* 	  logs (ERROR "TODO:  could not parse input parameter"); */
-/* 	  return true; */
-/* 	} */
-/* 	++idx; */
-/*       } */
-/*       else { */
-/* 	bind_usage (); */
-/* 	return true; */
-/*       } */
-/*     } */
+      if (size > idx) {
+	input_parameter = pstrtol (strings[idx].begin, strings[idx].end, 0, 0);
+	if (string_error != STRING_SUCCESS) {
+	  logs (ERROR "TODO:  could not parse input parameter");
+	  return true;
+	}
+	++idx;
+      }
+      else {
+	bind_usage ();
+	return true;
+      }
+    }
 
-/*     if (size > idx) { */
-/*       output_automaton = find_automaton (strings[idx].begin, strings[idx].end); */
-/*       if (output_automaton == 0) { */
-/* 	logs (ERROR "TODO:  output automaton not declared"); */
-/* 	return true; */
-/*       } */
-/*       ++idx; */
-/*     } */
-/*     else { */
-/*       bind_usage (); */
-/*       return true; */
-/*     } */
+    if (size > idx) {
+      output_automaton = find_automaton (strings[idx].begin, strings[idx].end);
+      if (output_automaton == 0) {
+	logs (ERROR "TODO:  output automaton not declared");
+	return true;
+      }
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
 
-/*     if (size > idx) { */
-/*       output_action_idx = idx; */
-/*       ++idx; */
-/*     } */
-/*     else { */
-/*       bind_usage (); */
-/*       return true; */
-/*     } */
+    if (size > idx) {
+      output_action_idx = idx;
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
 
-/*     if (size > idx) { */
-/*       input_automaton = find_automaton (strings[idx].begin, strings[idx].end); */
-/*       if (input_automaton == 0) { */
-/* 	logs (ERROR "TODO:  input automaton not declared"); */
-/* 	return true; */
-/*       } */
-/*       ++idx; */
-/*     } */
-/*     else { */
-/*       bind_usage (); */
-/*       return true; */
-/*     } */
+    if (size > idx) {
+      input_automaton = find_automaton (strings[idx].begin, strings[idx].end);
+      if (input_automaton == 0) {
+	logs (ERROR "TODO:  input automaton not declared");
+	return true;
+      }
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
 
-/*     if (size > idx) { */
-/*       input_action_idx = idx; */
-/*       ++idx; */
-/*     } */
-/*     else { */
-/*       bind_usage (); */
-/*       return true; */
-/*     } */
+    if (size > idx) {
+      input_action_idx = idx;
+      ++idx;
+    }
+    else {
+      bind_usage ();
+      return true;
+    }
     
-/*     /\* Are we globbing? *\/ */
-/*     const char* output_glob = pstrchr (strings[output_action_idx].begin, strings[output_action_idx].end,'*'); */
-/*     const char* input_glob = pstrchr (strings[input_action_idx].begin, strings[input_action_idx].end, '*'); */
+    /* Are we globbing? */
+    const char* output_glob = pstrchr (strings[output_action_idx].begin, strings[output_action_idx].end,'*');
+    const char* input_glob = pstrchr (strings[input_action_idx].begin, strings[input_action_idx].end, '*');
 
-/*     if (!((output_glob == strings[output_action_idx].end && input_glob == strings[input_action_idx].end) || */
-/* 	  (output_glob != strings[output_action_idx].end && input_glob != strings[input_action_idx].end))) { */
-/*       logs (ERROR "TODO:  glob disagreement"); */
-/*       return true; */
-/*     } */
+    if (!((output_glob == strings[output_action_idx].end && input_glob == strings[input_action_idx].end) ||
+	  (output_glob != strings[output_action_idx].end && input_glob != strings[input_action_idx].end))) {
+      logs (ERROR "TODO:  glob disagreement");
+      return true;
+    }
 
-/*     if (output_glob == strings[output_action_idx].end) { */
-/*       constellation_add_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, -1, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, -1, input_parameter); */
-/*     } */
-/*     else { */
-/*       constellation_add_globbed_binding (&constellation, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, input_parameter); */
-/*     } */
+    if (output_glob == strings[output_action_idx].end) {
+      system_add_binding (&system, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, -1, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, -1, input_parameter, system_get_this (&system));
+    }
+    else {
+      system_add_globbed_binding (&system, output_automaton->automaton, strings[output_action_idx].begin, strings[output_action_idx].end, output_parameter, input_automaton->automaton, strings[input_action_idx].begin, strings[input_action_idx].end, input_parameter, system_get_this (&system));
+    }
 
-/*     return true; */
-/*   } */
+    return true;
+  }
 
-/*   return false; */
-/* } */
+  return false;
+}
 
 /* static bool */
 /* unbind_ (void) */
@@ -982,7 +982,7 @@ typedef bool (*dispatch_func_t) (const string_t* strings,
 
 static dispatch_func_t dispatch[] = {
   create_,
-  /* bind_, */
+  bind_,
   /* unbind_, */
   /* destroy_, */
   /* find_, */

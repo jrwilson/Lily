@@ -23,11 +23,12 @@ create_auth_init (create_auth_t* ca,
 
 static void
 push_ca_response (create_auth_t* ca,
+		  void* id,
 		  bool authorized)
 {
   create_auth_response_t* res = malloc (sizeof (create_auth_response_t));
   memset (res, 0, sizeof (create_auth_response_t));
-  sa_ca_response_init (&res->response, authorized);
+  sa_ca_response_init (&res->response, id, authorized);
   *ca->response_tail = res;
   ca->response_tail = &res->next;
 }
@@ -63,7 +64,7 @@ create_auth_request (create_auth_t* ca,
   /* TODO:  This is where we should apply whatever policy the user want.
      For now, we will authorize everything. */
   
-  push_ca_response (ca, true);
+  push_ca_response (ca, req->id, true);
 
   finish_input (bda, bdb);
 }

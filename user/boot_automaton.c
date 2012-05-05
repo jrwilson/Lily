@@ -67,7 +67,7 @@ create (bd_t text_bd,
 	int retain_privilege)
 {
   aid_t retval;
-  syscall4re (LILY_SYSCALL_CREATE, retval, text_bd, bda, retain_privilege, retval);
+  syscall4re (LILY_SYSCALL_CREATE, retval, create_error, text_bd, bda, bdb, retain_privilege);
   return retval;
 }
 
@@ -210,12 +210,14 @@ static create_result_t** create_result_tail = &create_result_head;
 
 static void
 push_create_result (aid_t to,
-		    sa_create_outcome_t outcome)
+		    void* id,
+		    sa_create_outcome_t outcome,
+		    aid_t aid)
 {
   create_result_t* res = malloc (sizeof (create_result_t));
   memset (res, 0, sizeof (create_result_t));
   res->to = to;
-  sa_create_result_init (&res->result, outcome);
+  sa_create_result_init (&res->result, id, outcome, aid);
   
   *create_result_tail = res;
   create_result_tail = &res->next;
@@ -302,16 +304,13 @@ insert_create_transaction (sa_create_request_t* request,
 }
 
 static create_transaction_t*
-find_create_transaction (void)
+find_create_transaction (void* id)
 {
-  logs (__func__);
-  return create_transaction_head;
-  /* TODO */
-  /* for (create_transaction_t* ptr = create_transaction_head; ptr != 0; ptr = ptr->next) { */
-  /*   if (sa_createing_equal (&ptr->createing, b)) { */
-  /*     return ptr; */
-  /*   } */
-  /* } */
+  for (create_transaction_t* ptr = create_transaction_head; ptr != 0; ptr = ptr->next) {
+    if (ptr == id) {
+      return ptr;
+    }
+  }
   return 0;
 }
 
@@ -362,7 +361,7 @@ process_create_transaction (create_transaction_t* t)
     }
 
     /* Send the result. */
-    push_create_result (req->owner_aid, outcome);
+    push_create_result (req->owner_aid, t, outcome, aid);
     push_create_response (t->initiator_aid, outcome, aid);
 
     remove_create_transaction (t);
@@ -388,7 +387,7 @@ push_ca_request (aid_t to,
   memset (rfa, 0, sizeof (ca_request_t));
   rfa->to = to;
   rfa->transaction = transaction;
-  sa_ca_request_init (&rfa->request);
+  sa_ca_request_init (&rfa->request, transaction);
   
   *ca_request_tail = rfa;
   ca_request_tail = &rfa->next;
@@ -439,6 +438,7 @@ static bind_result_t** bind_result_tail = &bind_result_head;
 
 static void
 push_bind_result (aid_t to,
+		  void* id,
 		  const sa_binding_t* binding,
 		  sa_bind_role_t role,
 		  sa_bind_outcome_t outcome)
@@ -446,7 +446,7 @@ push_bind_result (aid_t to,
   bind_result_t* res = malloc (sizeof (bind_result_t));
   memset (res, 0, sizeof (bind_result_t));
   res->to = to;
-  sa_bind_result_init (&res->result, binding, role, outcome);
+  sa_bind_result_init (&res->result, id, binding, role, outcome);
   
   *bind_result_tail = res;
   bind_result_tail = &res->next;
@@ -529,10 +529,10 @@ insert_bind_transaction (const sa_binding_t* b,
 }
 
 static bind_transaction_t*
-find_bind_transaction (const sa_binding_t* b)
+find_bind_transaction (void* id)
 {
   for (bind_transaction_t* ptr = bind_transaction_head; ptr != 0; ptr = ptr->next) {
-    if (sa_binding_equal (&ptr->binding, b)) {
+    if (ptr == id) {
       return ptr;
     }
   }
@@ -600,9 +600,9 @@ process_bind_transaction (bind_transaction_t* t)
     }
 
     /* Send the result. */
-    push_bind_result (b->output_aid, b, SA_BIND_OUTPUT, outcome);
-    push_bind_result (b->input_aid, b, SA_BIND_INPUT, outcome);
-    push_bind_result (b->owner_aid, b, SA_BIND_OWNER, outcome);
+    push_bind_result (b->output_aid, t, b, SA_BIND_OUTPUT, outcome);
+    push_bind_result (b->input_aid, t, b, SA_BIND_INPUT, outcome);
+    push_bind_result (b->owner_aid, t, b, SA_BIND_OWNER, outcome);
     push_bind_response (t->initiator_aid, b, outcome);
 
     remove_bind_transaction (t);
@@ -629,7 +629,7 @@ push_ba_request (aid_t to,
   memset (rfa, 0, sizeof (ba_request_t));
   rfa->to = to;
   rfa->transaction = transaction;
-  sa_ba_request_init (&rfa->request, &transaction->binding, role);
+  sa_ba_request_init (&rfa->request, transaction, &transaction->binding, role);
   
   *ba_request_tail = rfa;
   ba_request_tail = &rfa->next;
@@ -907,7 +907,7 @@ BEGIN_INPUT (AUTO_PARAMETER, CA_RESPONSE_IN_NO, "", "", ca_response_in, ano_t an
   }
 
   /* Find the transaction. */
-  create_transaction_t* t = find_create_transaction ();
+  create_transaction_t* t = find_create_transaction (res->id);
   if (t != 0) {
     /* Check that they are authorized to answer for their role and that no answer has been given. */
     if (t->request->owner_aid == aid && t->owner_approval == UNKNOWN) {
@@ -1049,7 +1049,7 @@ BEGIN_INPUT (AUTO_PARAMETER, BA_RESPONSE_IN_NO, "", "", ba_response_in, ano_t an
   }
 
   /* Find the transaction. */
-  bind_transaction_t* t = find_bind_transaction (&res->binding);
+  bind_transaction_t* t = find_bind_transaction (res->id);
   if (t != 0) {
     /* Check that they are authorized to answer for their role and that no answer has been given. */
     switch (res->role) {

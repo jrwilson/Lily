@@ -40,27 +40,34 @@ typedef enum {
 } sa_create_outcome_t;
 
 typedef struct {
-  int na;
+  void* id;
 } sa_ca_request_t;
 
 void
-sa_ca_request_init (sa_ca_request_t* req);
+sa_ca_request_init (sa_ca_request_t* req,
+		    void* id);
 
 typedef struct {
+  void* id;
   bool authorized;
 } sa_ca_response_t;
 
 void
 sa_ca_response_init (sa_ca_response_t* res,
+		     void* id,
 		     bool authorized);
 
 typedef struct {
+  void* id;
   sa_create_outcome_t outcome;
+  aid_t aid;
 } sa_create_result_t;
 
 void
 sa_create_result_init (sa_create_result_t* res,
-		       sa_create_outcome_t outcome);
+		       void* id,
+		       sa_create_outcome_t outcome,
+		       aid_t aid);
 
 typedef struct {
   sa_create_outcome_t outcome;
@@ -122,28 +129,31 @@ sa_bind_request_init (sa_bind_request_t* req,
 		      const sa_binding_t* b);
 
 typedef struct {
+  void* id;
   sa_binding_t binding;
   sa_bind_role_t role;
 } sa_ba_request_t;
 
 void
 sa_ba_request_init (sa_ba_request_t* req,
+		    void* id,
 		    const sa_binding_t* b,
 		    sa_bind_role_t role);
 
 typedef struct {
-  sa_binding_t binding;
+  void* id;
   sa_bind_role_t role;
   bool authorized;
 } sa_ba_response_t;
 
 void
 sa_ba_response_init (sa_ba_response_t* res,
-		     const sa_binding_t* b,
+		     void* id,
 		     sa_bind_role_t role,
 		     bool authorized);
 
 typedef struct {
+  void* id;
   sa_binding_t binding;
   sa_bind_role_t role;
   sa_bind_outcome_t outcome;
@@ -151,6 +161,7 @@ typedef struct {
 
 void
 sa_bind_result_init (sa_bind_result_t* res,
+		     void* id,
 		     const sa_binding_t* b,
 		     sa_bind_role_t role,
 		     sa_bind_outcome_t outcome);

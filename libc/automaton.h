@@ -117,7 +117,7 @@ void func (ano, param)
 	   "mov %%eax, %0\n" \
 	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
 
-#define syscall4re(syscall, retval, p1, p2, p3, p4)	\
+#define syscall4re(syscall, retval, error, p1, p2, p3, p4)	\
   __asm__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "mov %4, %%ecx\n" \
@@ -125,7 +125,7 @@ void func (ano, param)
 	   "mov %6, %%esi\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3), "m"(p4) : "eax", "ebx", "ecx", "edx", "esi" );
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3), "m"(p4) : "eax", "ebx", "ecx", "edx", "esi" );
 
 extern lily_error_t lily_error;
 

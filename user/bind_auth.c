@@ -23,13 +23,13 @@ bind_auth_init (bind_auth_t* ba,
 
 static void
 push_ba_response (bind_auth_t* ba,
-		  const sa_binding_t* binding,
+		  void* id,
 		  sa_bind_role_t role,
 		  bool authorized)
 {
   bind_auth_response_t* res = malloc (sizeof (bind_auth_response_t));
   memset (res, 0, sizeof (bind_auth_response_t));
-  sa_ba_response_init (&res->response, binding, role, authorized);
+  sa_ba_response_init (&res->response, id, role, authorized);
   *ba->response_tail = res;
   ba->response_tail = &res->next;
 }
@@ -65,7 +65,7 @@ bind_auth_request (bind_auth_t* ba,
   /* TODO:  This is where we should apply whatever policy the user want.
      For now, we will authorize everything. */
 
-  push_ba_response (ba, &req->binding, req->role, true);
+  push_ba_response (ba, req->id, req->role, true);
 
   finish_input (bda, bdb);
 }

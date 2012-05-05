@@ -133,23 +133,30 @@ sa_create_request_destroy (sa_create_request_t* req)
 }
 
 void
-sa_ca_request_init (sa_ca_request_t* req)
+sa_ca_request_init (sa_ca_request_t* req,
+		    void* id)
 {
-
+  req->id = id;
 }
 
 void
 sa_ca_response_init (sa_ca_response_t* res,
+		     void* id,
 		     bool authorized)
 {
+  res->id = id;
   res->authorized = authorized;
 }
 
 void
 sa_create_result_init (sa_create_result_t* res,
-		       sa_create_outcome_t outcome)
+		       void* id,
+		       sa_create_outcome_t outcome,
+		       aid_t aid)
 {
+  res->id = id;
   res->outcome = outcome;
+  res->aid = aid;
 }
 
 void
@@ -202,30 +209,34 @@ sa_bind_request_init (sa_bind_request_t* req,
 
 void
 sa_ba_request_init (sa_ba_request_t* req,
+		    void* id,
 		    const sa_binding_t* b,
 		    sa_bind_role_t role)
 {
+  req->id = id;
   req->binding = *b;
   req->role = role;
 }
 
 void
 sa_ba_response_init (sa_ba_response_t* res,
-		     const sa_binding_t* b,
+		     void* id,
 		     sa_bind_role_t role,
 		     bool authorized)
 {
-  res->binding = *b;
+  res->id = id;
   res->role = role;
   res->authorized = authorized;
 }
 
 void
 sa_bind_result_init (sa_bind_result_t* res,
+		     void* id,
 		     const sa_binding_t* b,
 		     sa_bind_role_t role,
 		     sa_bind_outcome_t outcome)
 {
+  res->id = id;
   res->binding = *b;
   res->role = role;
   res->outcome = outcome;

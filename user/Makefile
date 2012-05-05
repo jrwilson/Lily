@@ -5,11 +5,10 @@ syslog \
 tmpfs \
 finda \
 jsh \
-ps2_keyboard_mouse
-
-#terminal \
-#vga \
-#ecma2unix
+ps2_keyboard_mouse \
+terminal \
+vga \
+ecma2unix
 
 #pci \
 #ps2_keyboard_mouse_test \
@@ -57,8 +56,6 @@ jsh : jsh.o fs_msg.o de.o system.o fs_set.o system_msg.o create_auth.o bind_auth
 ps2_keyboard_mouse : ps2_keyboard_mouse.o mouse_msg.o 
 	$(CC) -o $@ $^  -ldescription -lbuffer_file
 
-
-
 terminal : terminal.o vga_msg.o mouse_msg.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
@@ -67,7 +64,6 @@ vga : vga.o vga_msg.o
 
 ecma2unix : ecma2unix.o mouse_msg.o
 	$(CC) -o $@ $^ -lbuffer_file
-
 
 
 

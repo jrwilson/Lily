@@ -24,31 +24,31 @@
 #bios = create -p /bin/bios
 
 create -p ps2_keyboard_mouse /bin/ps2_keyboard_mouse
-#create terminal /bin/terminal
+create terminal /bin/terminal
 #create -p vga /bin/vga
 
-#bind ps2_keyboard_mouse *_out terminal *_in
+bind ps2_keyboard_mouse *_out terminal *_in
 #bind terminal *_out vga *_in
 
-#create terminal1 /bin/ecma2unix
-#bind -o 1 terminal *_out terminal1 *_in_term
-#bind -i 1 terminal1 *_term terminal *_in
+create terminal1 /bin/ecma2unix
+bind -o 1 terminal *_out terminal1 *_in_term
+bind -i 1 terminal1 *_term terminal *_in
 
-#create terminal2 /bin/ecma2unix
-#bind -o 2 terminal *_out terminal2 *_in_term
-#bind -i 2 terminal2 *_out_term terminal *_in
+create terminal2 /bin/ecma2unix
+bind -o 2 terminal *_out terminal2 *_in_term
+bind -i 2 terminal2 *_out_term terminal *_in
 
-#create terminal3 /bin/ecma2unix
-#bind -o 3 terminal *_out terminal3 *_in_term
-#bind -i 3 terminal3 *_out_term terminal *_in
+create terminal3 /bin/ecma2unix
+bind -o 3 terminal *_out terminal3 *_in_term
+bind -i 3 terminal3 *_out_term terminal *_in
 
-#create terminal4 /bin/ecma2unix
-#bind -o 4 terminal *_out terminal4 *_in_term
-#bind -i 4 terminal4 *_out_term terminal *_in
+create terminal4 /bin/ecma2unix
+bind -o 4 terminal *_out terminal4 *_in_term
+bind -i 4 terminal4 *_out_term terminal *_in
 
-#create terminal5 /bin/ecma2unix
-#bind -o 5 terminal *_out terminal5 *_in_term
-#bind -i 5 terminal5 *_out_term terminal *_in
+create terminal5 /bin/ecma2unix
+bind -o 5 terminal *_out terminal5 *_in_term
+bind -i 5 terminal5 *_out_term terminal *_in
 
 # Put the syslog on terminal1.
 #find syslog syslog
