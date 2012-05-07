@@ -28,6 +28,7 @@ irq.o \
 trap_handler.o \
 trap.o \
 automaton.o \
+binding.o \
 global_fifo_scheduler.o \
 system_automaton.o
 

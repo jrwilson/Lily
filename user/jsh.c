@@ -426,7 +426,6 @@ create_readfile_callback (void* arg,
 			  const fs_readfile_response_t* res,
 			  bd_t bd)
 {
-
   automaton_item_t* ai = arg;
   switch (res->error) {
   case FS_READFILE_SUCCESS:
@@ -1174,8 +1173,7 @@ readscript_callback (void* arg,
   }
 }
 
-static void
-initialize (void)
+BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   if (!initialized) {
     initialized = true;
@@ -1291,12 +1289,8 @@ initialize (void)
     /*   exit (-1); */
     /* } */
   }
-}
 
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
-{
-  initialize ();
-  finish_internal ();
+  finish_input (bda, bdb);
 }
 
 /* BEGIN_INPUT (NO_PARAMETER, TEXT_IN_NO, "text_in", "buffer_file_t", text_in, ano_t ano, int param, bd_t bda, bd_t bdb) */
@@ -1488,85 +1482,71 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 
 BEGIN_OUTPUT (NO_PARAMETER, SA_CREATE_REQUEST_OUT_NO, SA_CREATE_REQUEST_OUT_NAME, "", sa_create_request_out, ano_t ano, int param)
 {
-  initialize ();
   system_create_request (&system);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SA_CA_REQUEST_IN_NO, SA_CA_REQUEST_IN_NAME, "", sa_ca_request_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
-  initialize ();
   create_auth_request (&create_auth, bda, bdb);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, SA_CA_RESPONSE_OUT_NO, SA_CA_RESPONSE_OUT_NAME, "", sa_ca_response_out, ano_t ano, int param)
 {
-  initialize ();
   create_auth_response (&create_auth);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SA_CREATE_RESULT_IN_NO, SA_CREATE_RESULT_IN_NAME, "", sa_create_result_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
-  initialize ();
   create_stat_result (&create_stat, bda, bdb);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SA_CREATE_RESPONSE_IN_NO, SA_CREATE_RESPONSE_IN_NAME, "", sa_create_response_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
-  initialize ();
   system_create_response (&system, bda, bdb);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, SA_BIND_REQUEST_OUT_NO, SA_BIND_REQUEST_OUT_NAME, "", sa_bind_request_out, ano_t ano, int param)
 {
-  initialize ();
   system_bind_request (&system);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SA_BA_REQUEST_IN_NO, SA_BA_REQUEST_IN_NAME, "", sa_ba_request_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
-  initialize ();
   bind_auth_request (&bind_auth, bda, bdb);
 }
 
 BEGIN_OUTPUT (NO_PARAMETER, SA_BA_RESPONSE_OUT_NO, SA_BA_RESPONSE_OUT_NAME, "", sa_ba_response_out, ano_t ano, int param)
 {
-  initialize ();
   bind_auth_response (&bind_auth);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESULT_IN_NO, SA_BIND_RESULT_IN_NAME, "", sa_bind_result_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
-  initialize ();
   bind_stat_result (&bind_stat, bda, bdb);
 }
 
 BEGIN_INPUT (NO_PARAMETER, SA_BIND_RESPONSE_IN_NO, SA_BIND_RESPONSE_IN_NAME, "", sa_bind_response_in, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
-  initialize ();
   system_bind_response (&system, bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_OUT_NO, "", "", fs_descend_request_out, ano_t ano, aid_t aid)
 {
-  initialize ();
   fs_set_descend_request (&fs_set, aid);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_IN_NO, "", "", fs_descend_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
   fs_set_descend_response (&fs_set, aid, bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_OUT_NO, "", "", fs_readfile_request_out, ano_t ano, aid_t aid)
 {
-  initialize ();
   fs_set_readfile_request (&fs_set, aid);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_RESPONSE_IN_NO, "", "", fs_readfile_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
   fs_set_readfile_response (&fs_set, aid, bda, bdb);
 }
 

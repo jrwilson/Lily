@@ -3,6 +3,7 @@
 #include <buffer_file.h>
 #include <description.h>
 #include "mouse_msg.h"
+#include "system.h"
 
 /*
   PS2 Keyboard and Mouse Driver
@@ -383,9 +384,7 @@ write_mouse_packet () {
   }
 }
 
-/* Initialization that must succeed. */
-static void
-initialize (void)
+BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   if (!initialized) {
     initialized = true;
@@ -484,12 +483,8 @@ initialize (void)
       exit (-1);
     }
   }
-}
 
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
-{
-  initialize ();
-  finish_internal ();
+  finish_input (bda, bdb);
 }
 
 /* keyboard_interrupt
@@ -500,7 +495,6 @@ BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 */
 BEGIN_INTERNAL (NO_PARAMETER, KEYBOARD_INTERRUPT_NO, "", "", keyboard_interrupt, ano_t ano, aid_t aid)
 {
-  initialize ();
   if (byte_ready ()) {
     if (buffer_file_put (&scan_codes_buffer, read_byte ()) != 0) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not write to output buffer: %s", lily_error_string (lily_error));
@@ -526,8 +520,6 @@ scan_codes_precondition (void)
 
 BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes_out", "buffer_file_t", scan_codes, ano_t ano, int param)
 {
-  initialize ();
-
   if (scan_codes_precondition ()) {
     buffer_file_truncate (&scan_codes_buffer);
     finish_output (true, scan_codes_bd, -1);
@@ -545,8 +537,6 @@ BEGIN_OUTPUT (NO_PARAMETER, SCAN_CODES_NO, "scan_codes_out", "buffer_file_t", sc
 */
 BEGIN_INTERNAL (NO_PARAMETER, MOUSE_INTERRUPT_NO, "", "", mouse_interrupt, ano_t ano, int param)
 {
-  initialize ();
-
   if (byte_ready ()) {
     mouse_packet_data [mouse_byte] = read_byte ();
     
@@ -593,8 +583,6 @@ mouse_packets_out_precondition (void)
 
 BEGIN_OUTPUT (NO_PARAMETER, MOUSE_PACKETS_OUT_NO, "mouse_packets_out", "mouse_packet_list_t", mouse_packets_out, ano_t ano, int param)
 {
-  initialize ();
-
   if (mouse_packets_out_precondition ()) {
     if (mouse_packet_list_reset (&mouse_packet_list) != 0) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "mouse packet list reset failed: %s", lily_error_string (lily_error));

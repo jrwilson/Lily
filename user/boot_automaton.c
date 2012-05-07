@@ -11,12 +11,12 @@
 /*
   The Boot Automaton
   ==================
-  The goal of the boot automaton is to create a minimal environment that allows automata to load other automata from a store.
-  The environment consists of three optional automata:
-    1.  syslog - The syslog automaton receives log events and outputs them as text.
-    2.  tmpfs - The tmpfs automaton implements a simple file system based on the contents of a cpio archive.  (The buffer supplied to the boot automaton is passed to the tmpfs automaton.)
-    3.  finda - The finda automaton allows automata to find each other.
-  After attempting to create these automata, the boot automaton loads a shell automaton to continue the boot process.
+  The boot automaton has two roles.
+  First, it is the system automaton meaning it works in concert with the kernel to create automata, bind actions, etc.
+  Second, it is the first automaton loaded and consequently has the responsibility of creating an environment for loading additional automata.
+  This environment consists of a temporary file system (tmpfs) and another automaton (typically a shell called jsh) from which the rest of the system can be loaded.
+  The boot automaton receives a buffer containing a cpio archive that it uses to create these two automata.
+  It passes the archive to the tmpfs automaton.
 
   TODO:  Find a balance between the data structures in the kernel and the system automaton.
 
@@ -26,22 +26,24 @@
 
 #define INIT_NO 1
 
-#define CREATE_REQUEST_IN_NO 2
-#define CA_REQUEST_OUT_NO 3
-#define CA_RESPONSE_IN_NO 4
-#define CREATE_RESULT_OUT_NO 5
-#define CREATE_RESPONSE_OUT_NO 6
+#define INIT_OUT_NO 2
 
-#define BIND_REQUEST_IN_NO 7
-#define BA_REQUEST_OUT_NO 8
-#define BA_RESPONSE_IN_NO 9
-#define BIND_RESULT_OUT_NO 10
-#define BIND_RESPONSE_OUT_NO 11
+#define CREATE_REQUEST_IN_NO 3
+#define CA_REQUEST_OUT_NO 4
+#define CA_RESPONSE_IN_NO 5
+#define CREATE_RESULT_OUT_NO 6
+#define CREATE_RESPONSE_OUT_NO 7
+
+#define BIND_REQUEST_IN_NO 8
+#define BA_REQUEST_OUT_NO 9
+#define BA_RESPONSE_IN_NO 10
+#define BIND_RESULT_OUT_NO 11
+#define BIND_RESPONSE_OUT_NO 12
+
+#define CREATE_JSH_NO 100
 
 /* Paths in the cpio archive. */
-#define SYSLOG_PATH "bin/syslog"
 #define TMPFS_PATH "bin/tmpfs"
-#define FINDA_PATH "bin/finda"
 #define JSH_PATH "bin/jsh"
 
 /* Logging. */
@@ -52,11 +54,25 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define INFO __FILE__ ": info: "
 #define TODO __FILE__ ": todo: "
 
+typedef struct create_transaction create_transaction_t;
+
 /* Initialization flag. */
 static bool initialized = false;
 
 /* This automaton's aid. */
 static aid_t system_automaton_aid = -1;
+
+/* Transaction for creating the tmpfs. */
+static create_transaction_t* tmpfs_transaction = 0;
+
+/* The aid of the tmpfs. */
+static aid_t tmpfs_aid = -1;
+
+/* The buffer containing the image of the jsh. */
+static bd_t jsh_bd = -1;
+
+/* Transaction for creating the jsh. */
+static create_transaction_t* jsh_transaction = 0;
 
 static lily_create_error_t create_error;
 
@@ -82,17 +98,17 @@ bind (aid_t output_automaton,
       int input_parameter)
 {
   bid_t retval;
-  __asm__ ("push %8\n"
-	   "push %7\n"
-	   "push %6\n"
-	   "push %5\n"
-	   "push %4\n"
-	   "push %3\n"
-	   "mov %2, %%eax\n"
-	   "int $0x80\n"
-	   "mov %%eax, %0\n"
-	   "mov %%ecx, %1\n"
-	   "sub $24, %%esp\n" : "=g"(retval), "=g"(bind_error) : "g"(LILY_SYSCALL_BIND), "g"(output_automaton), "g"(output_action), "g"(output_parameter), "g"(input_automaton), "g"(input_action), "g"(input_parameter) : "eax", "ecx");
+  __asm__ __volatile__ ("push %8\n"
+			"push %7\n"
+			"push %6\n"
+			"push %5\n"
+			"push %4\n"
+			"push %3\n"
+			"mov %2, %%eax\n"
+			"int $0x80\n"
+			"mov %%eax, %0\n"
+			"mov %%ecx, %1\n"
+			"sub $24, %%esp\n" : "=g"(retval), "=g"(bind_error) : "g"(LILY_SYSCALL_BIND), "g"(output_automaton), "g"(output_action), "g"(output_parameter), "g"(input_automaton), "g"(input_action), "g"(input_parameter) : "eax", "ecx");
 
   return retval;
 }
@@ -114,10 +130,18 @@ destroy (aid_t aid)
 }
 
 static int
-exists (aid_t aid)
+enabled (aid_t aid)
 {
   int retval;
-  syscall1r (LILY_SYSCALL_EXISTS, aid, retval);
+  syscall1r (LILY_SYSCALL_ENABLED, aid, retval);
+  return retval;
+}
+
+static int
+enable (aid_t aid)
+{
+  int retval;
+  syscall1r (LILY_SYSCALL_ENABLE, aid, retval);
   return retval;
 }
 
@@ -130,6 +154,38 @@ binding_count (ano_t ano,
   return retval;
 }
 
+typedef struct init_item init_item_t;
+struct init_item {
+  create_transaction_t* create_transaction;
+  init_item_t* next;
+};
+
+static init_item_t* init_head = 0;
+static init_item_t** init_tail = &init_head;
+
+static void
+push_init (create_transaction_t* create_transaction)
+{
+  init_item_t* i = malloc (sizeof (init_item_t));
+  memset (i, 0, sizeof (init_item_t));
+  i->create_transaction = create_transaction;
+
+  *init_tail = i;
+  init_tail = &i->next;
+}
+
+static void
+pop_init (void)
+{
+  init_item_t* i = init_head;
+  init_head = i->next;
+  if (init_head == 0) {
+    init_tail = &init_head;
+  }
+
+  free (i);
+}
+
 static aid_t
 create_ (bd_t text_bd,
 	 bd_t bda,
@@ -139,12 +195,15 @@ create_ (bd_t text_bd,
   /* Create the automaton. */
   aid_t aid = create (text_bd, bda, bdb, retain_privilege);
 
-
   if (aid != -1) {
     /* Bind it to the system automaton. */
     description_t description;
     action_desc_t desc;
     description_init (&description, aid);
+
+    if (description_read_name (&description, &desc, SA_INIT_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      bind (system_automaton_aid, INIT_OUT_NO, aid, aid, desc.number, 0);
+    }
 
     if (description_read_name (&description, &desc, SA_CREATE_REQUEST_OUT_NAME, 0) == 0 && desc.type == LILY_ACTION_OUTPUT) {
       bind (aid, desc.number, 0, system_automaton_aid, CREATE_REQUEST_IN_NO, aid);
@@ -184,15 +243,16 @@ create_ (bd_t text_bd,
 
 /* Create Protocol
    ---------------
-   The create protocol involves three parties:  the initiator, the system automaton, and the owner automaton (optional).
+   The create protocol involves four parties:  the initiator, the system automaton, the owner automaton (optional), and the created automaton.
    A typical execution is depicted as follows:
-     Message       Initiator   System   Owner
-     create_request    |--------->|       |
-     ca_request        |          |------>|
-     ca_response       |          |<------|
+     Message       Initiator   System   Owner   New
+     create_request    |--------->|       |      |
+     ca_request        |          |------>|      |
+     ca_response       |          |<------|      |
                                create!
-     create_result     |          |------>|
-     create_response   |<---------|       |
+     init              |          |-------|----->|
+     create_result     |          |------>|      |
+     create_response   |<---------|       |      |
 
    ca stands for create authorization.
    The owner automaton can prevent the create from succeeding.
@@ -275,32 +335,87 @@ typedef enum {
   GRANTED,
 } approval_t;
 
-typedef struct create_transaction create_transaction_t;
+typedef struct ca_request ca_request_t;
+struct ca_request {
+  aid_t to;
+  create_transaction_t* transaction;
+  sa_ca_request_t request;
+  ca_request_t* next;
+};
+
+static ca_request_t* ca_request_head = 0;
+static ca_request_t** ca_request_tail = &ca_request_head;
+
+static void
+push_ca_request (aid_t to,
+		 create_transaction_t* transaction)
+{
+   ca_request_t* rfa = malloc (sizeof (ca_request_t));
+  memset (rfa, 0, sizeof (ca_request_t));
+  rfa->to = to;
+  rfa->transaction = transaction;
+  sa_ca_request_init (&rfa->request, transaction);
+  
+  *ca_request_tail = rfa;
+  ca_request_tail = &rfa->next;
+}
+
+static void
+pop_ca_request (void)
+{
+  ca_request_t* rfa = ca_request_head;
+  ca_request_head = rfa->next;
+  if (ca_request_head == 0) {
+    ca_request_tail = &ca_request_head;
+  }
+  free (rfa);
+}
+
 struct create_transaction {
   sa_create_request_t* request;
   mono_time_t time; /* A timestamp so requests can timeout. */
   approval_t owner_approval;
   aid_t initiator_aid;
+  sa_create_outcome_t outcome;
+  aid_t aid;
+
   create_transaction_t* next;
 };
 
 static create_transaction_t* create_transaction_head = 0;
 static create_transaction_t** create_transaction_tail = &create_transaction_head;
 
+/* static void */
+/* print_create_transactions (void) */
+/* { */
+/*   if (create_transaction_head == 0) { */
+/*     logs ("(empty)"); */
+/*   } */
+/*   else { */
+/*     for (create_transaction_t* t = create_transaction_head; t != 0; t = t->next) { */
+/*       snprintf (log_buffer, LOG_BUFFER_SIZE, "ct=%p", t); */
+/*       logs (log_buffer); */
+/*     } */
+/*   } */
+/* } */
+
 static create_transaction_t*
 insert_create_transaction (sa_create_request_t* request,
 			   aid_t initiator_aid)
 {
-  create_transaction_t* req = malloc (sizeof (create_transaction_t));
-  memset (req, 0, sizeof (create_transaction_t));
-  req->request = request;
-  getmonotime (&req->time);
-  req->initiator_aid = initiator_aid;
+  create_transaction_t* t = malloc (sizeof (create_transaction_t));
+  memset (t, 0, sizeof (create_transaction_t));
+  t->request = request;
+  getmonotime (&t->time);
+  t->initiator_aid = initiator_aid;
 
-  *create_transaction_tail = req;
-  create_transaction_tail = &req->next;
+  *create_transaction_tail = t;
+  create_transaction_tail = &t->next;
 
-  return req;
+  /* Send a request for authorization to the owner. */
+  push_ca_request (request->owner_aid, t);
+
+  return t;
 }
 
 static create_transaction_t*
@@ -325,6 +440,19 @@ remove_create_transaction (create_transaction_t* t)
       break;
     }
   }
+
+  if (create_transaction_head == 0) {
+    create_transaction_tail = &create_transaction_head;
+  }
+}
+
+static void
+finish_create_transaction (create_transaction_t* t)
+{
+  /* Send the result. */
+  push_create_result (t->request->owner_aid, t, t->outcome, t->aid);
+  push_create_response (t->initiator_aid, t->outcome, t->aid);
+  remove_create_transaction (t);
 }
 
 static void
@@ -337,71 +465,60 @@ process_create_transaction (create_transaction_t* t)
      It is my personal opinion that waiting makes the protocol easier to understand.
   */
   if (t->owner_approval != UNKNOWN) {
-    sa_create_outcome_t outcome = SA_CREATE_NOT_AUTHORIZED;
+    t->outcome = SA_CREATE_NOT_AUTHORIZED;
     const sa_create_request_t* req = t->request;
-    aid_t aid = -1;
+    t->aid = -1;
 
     if (t->owner_approval == GRANTED) {
       /* Permission granted. */
-      aid = create_ (req->text_bd, req->bda, req->bdb, req->retain_privilege);
+      t->aid = create_ (req->text_bd, req->bda, req->bdb, req->retain_privilege);
+
+      if (t == tmpfs_transaction) {
+	tmpfs_transaction = 0;
+	tmpfs_aid = t->aid;
+
+	if (tmpfs_aid == -1) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create tmpfs automaton: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "tmpfs = %d", tmpfs_aid);
+	logs (log_buffer);
+      }
+      else if (t == jsh_transaction) {
+	jsh_transaction = 0;
+	aid_t jsh_aid = t->aid;
+
+	if (jsh_aid == -1) {
+	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create jsh automaton: %s", lily_error_string (lily_error));
+	  logs (log_buffer);
+	  exit (-1);
+	}
+	snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "jsh = %d", jsh_aid);
+	logs (log_buffer);
+      }
+
       switch (create_error) {
       case LILY_CREATE_ERROR_SUCCESS:
-      	outcome = SA_CREATE_SUCCESS;
+      	t->outcome = SA_CREATE_SUCCESS;
+	push_init (t);
+	return;
       	break;
       case LILY_CREATE_ERROR_PERMISSION:
       	/* Should not happen. */
       	break;
       case LILY_CREATE_ERROR_INVAL:
-      	outcome = SA_CREATE_INVAL;
+      	t->outcome = SA_CREATE_INVAL;
       	break;
       case LILY_CREATE_ERROR_BDDNE:
-      	outcome = SA_CREATE_BDDNE;
+      	t->outcome = SA_CREATE_BDDNE;
       	break;
       }
     }
 
-    /* Send the result. */
-    push_create_result (req->owner_aid, t, outcome, aid);
-    push_create_response (t->initiator_aid, outcome, aid);
-
-    remove_create_transaction (t);
+    /* Error. */
+    finish_create_transaction (t);
   }
-}
-
-typedef struct ca_request ca_request_t;
-struct ca_request {
-  aid_t to;
-  create_transaction_t* transaction;
-  sa_ca_request_t request;
-  ca_request_t* next;
-};
-
-static ca_request_t* ca_request_head = 0;
-static ca_request_t** ca_request_tail = &ca_request_head;
-
-static void
-push_ca_request (aid_t to,
-		 create_transaction_t* transaction)
-{
-  ca_request_t* rfa = malloc (sizeof (ca_request_t));
-  memset (rfa, 0, sizeof (ca_request_t));
-  rfa->to = to;
-  rfa->transaction = transaction;
-  sa_ca_request_init (&rfa->request, transaction);
-  
-  *ca_request_tail = rfa;
-  ca_request_tail = &rfa->next;
-}
-
-static void
-pop_ca_request (void)
-{
-  ca_request_t* rfa = ca_request_head;
-  ca_request_head = rfa->next;
-  if (ca_request_head == 0) {
-    ca_request_tail = &ca_request_head;
-  }
-  free (rfa);
 }
 
 /* Bind Protocol
@@ -651,11 +768,12 @@ static bd_t output_bda = -1;
 static bd_t output_bdb = -1;
 static buffer_file_t output_bfa;
 
-static void
-initialize (void)
+BEGIN_INTERNAL (PARAMETER, INIT_NO, "init", "", init, ano_t ano, aid_t aid)
 {
   if (!initialized) {
     initialized = true;
+
+    system_automaton_aid = getaid ();
 
     output_bda = buffer_create (0);
     output_bdb = buffer_create (0);
@@ -670,10 +788,7 @@ initialize (void)
       exit (-1);
     }
 
-    system_automaton_aid = getaid ();
-
     bd_t bda = getinita ();
-    bd_t bdb = getinitb ();
 
     cpio_archive_t archive;
     if (cpio_archive_init (&archive, bda) != 0) {
@@ -682,77 +797,30 @@ initialize (void)
       exit (-1);
     }
 
-    aid_t finda_aid = -1;
-    aid_t tmpfs_aid = -1;
-    bd_t jsh_bd = -1;
     cpio_file_t file;
     while (cpio_archive_read (&archive, &file) == 0) {
       if ((file.mode & CPIO_TYPE_MASK) == CPIO_REGULAR) {
-	if (strcmp (file.name, SYSLOG_PATH) == 0) {
-	  bd_t syslog_bd = cpio_file_read (&archive, &file);
-	  if (syslog_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read syslog image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  aid_t syslog_aid = create_ (syslog_bd, -1, -1, false);
-	  if (syslog_aid == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create syslog automaton: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  if (buffer_destroy (syslog_bd) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy syslog image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "syslog = %d", syslog_aid);
-	  logs (log_buffer);
-	}
-	else if (strcmp (file.name, TMPFS_PATH) == 0) {
+	if (strcmp (file.name, TMPFS_PATH) == 0) {
 	  bd_t tmpfs_bd = cpio_file_read (&archive, &file);
 	  if (tmpfs_bd == -1) {
 	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read tmpfs image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
-	  tmpfs_aid = create_ (tmpfs_bd, bda, -1, false);
-	  if (tmpfs_aid == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create tmpfs automaton: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
+	  tmpfs_transaction = insert_create_transaction (sa_create_request_create (tmpfs_bd, bda, -1, false, system_automaton_aid), system_automaton_aid);
 	  if (buffer_destroy (tmpfs_bd) != 0) {
 	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy tmpfs image: %s", lily_error_string (lily_error));
 	    logs (log_buffer);
 	    exit (-1);
 	  }
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "tmpfs = %d", tmpfs_aid);
-	  logs (log_buffer);
-	}
-	else if (strcmp (file.name, FINDA_PATH) == 0) {
-	  bd_t finda_bd = cpio_file_read (&archive, &file);
-	  if (finda_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read finda image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  finda_aid = create_ (finda_bd, -1, -1, false);
-	  if (finda_aid == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create finda automaton: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  if (buffer_destroy (finda_bd) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy finda image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "finda = %d", finda_aid);
-	  logs (log_buffer);
 	}
 	else if (strcmp (file.name, JSH_PATH) == 0) {
 	  jsh_bd = cpio_file_read (&archive, &file);
+	  if (jsh_bd == -1) {
+	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read jsh image: %s", lily_error_string (lily_error));
+	    logs (log_buffer);
+	    exit (-1);
+	  }
 	}
       }
     }
@@ -764,6 +832,8 @@ initialize (void)
     	exit (-1);
       }
     }
+
+    bd_t bdb = getinitb ();
     if (bdb != -1) {
       if (buffer_destroy (bdb) != 0) {
     	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (lily_error));
@@ -771,68 +841,28 @@ initialize (void)
     	exit (-1);
       }
     }
-
-    bd_t de_bd = buffer_create (0);
-    if (de_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create de buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    buffer_file_t de_buffer;
-    if (buffer_file_initw (&de_buffer, de_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize de buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    de_val_t* root = de_create_object ();
-    de_set (root, "." FINDA, de_create_integer (finda_aid));
-    de_set (root, "." FS "[0].aid", de_create_integer (tmpfs_aid));
-    de_set (root, "." FS "[0].name", de_create_string ("bootfs"));
-    de_set (root, "." FS "[0].nodeid", de_create_integer (0));
-    de_set (root, "." ACTIVE_FS, de_create_integer (tmpfs_aid));
-    de_set (root, "." ARGS "." "script", de_create_string ("/scr/start.jsh"));
-    de_serialize (root, &de_buffer);
-    de_destroy (root);
-
-    if (jsh_bd == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "archive does not contain %s", JSH_PATH);
-      logs (log_buffer);
-      exit (-1);
-    }
-    aid_t jsh_aid = create_ (jsh_bd, de_bd, -1, true);
-    if (jsh_aid == -1) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create jsh automaton: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-    if (buffer_destroy (jsh_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy jsh image: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    if (buffer_destroy (de_bd) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy de buffer: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    snprintf (log_buffer, LOG_BUFFER_SIZE, INFO "jsh = %d", jsh_aid);
-    logs (log_buffer);
   }
+
+  finish_internal ();
 }
 
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
+BEGIN_OUTPUT (AUTO_PARAMETER, INIT_OUT_NO, "", "", init_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-  finish_internal ();
+  if (init_head != 0 && init_head->create_transaction->aid == aid) {
+    // Enable the automaton.
+    enable (aid);
+    
+    // Find the create transaction.
+    finish_create_transaction (init_head->create_transaction);
+
+    pop_init ();
+    finish_output (true, -1, -1);
+  }
+  finish_output (false, -1, -1);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, CREATE_REQUEST_IN_NO, "", "", create_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
-
   buffer_file_t bfa;
   if (buffer_file_initr (&bfa, bda) != 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize create request buffer: %s", lily_error_string (lily_error));
@@ -848,20 +878,15 @@ BEGIN_INPUT (AUTO_PARAMETER, CREATE_REQUEST_IN_NO, "", "", create_request_in, an
   }
 
   /* Make a record of the create request. */
-  create_transaction_t* t = insert_create_transaction (req, aid);
-      
-  /* Send a request for authorization to the owner. */
-  push_ca_request (req->owner_aid, t);
+  insert_create_transaction (req, aid);
 
   finish_input (bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, CA_REQUEST_OUT_NO, "", "", ca_request_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-
   if (ca_request_head != 0 && ca_request_head->to == aid) {
-    if (exists (aid) && binding_count (CA_REQUEST_OUT_NO, aid) == 1 && binding_count (CA_RESPONSE_IN_NO, aid) == 1) {
+    if (enabled (aid) && binding_count (CA_REQUEST_OUT_NO, aid) == 1 && binding_count (CA_RESPONSE_IN_NO, aid) == 1) {
       // The automaton in question is alive and can receive/send create rfa's.
       
       // Shred the output buffer.
@@ -890,8 +915,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, CA_REQUEST_OUT_NO, "", "", ca_request_out, ano_t a
 
 BEGIN_INPUT (AUTO_PARAMETER, CA_RESPONSE_IN_NO, "", "", ca_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
-
   buffer_file_t bfa;
   if (buffer_file_initr (&bfa, bda) != 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize ca response buffer: %s", lily_error_string (lily_error));
@@ -915,14 +938,17 @@ BEGIN_INPUT (AUTO_PARAMETER, CA_RESPONSE_IN_NO, "", "", ca_response_in, ano_t an
       process_create_transaction (t);
     }
   }
+  else {
+    snprintf (log_buffer, LOG_BUFFER_SIZE, "t->id=%p", res->id);
+    logs (log_buffer);
+    logs ("t == 0");
+  }
 
   finish_input (bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESULT_OUT_NO, "", "", create_result_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-
   if (create_result_head != 0 && create_result_head->to == aid) {
     // Shred the output buffer.
     buffer_file_shred (&output_bfa);
@@ -941,8 +967,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESULT_OUT_NO, "", "", create_result_out, a
 
 BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESPONSE_OUT_NO, "", "", create_response_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-
   if (create_response_head != 0 && create_response_head->to == aid) {
     // Shred the output buffer.
     buffer_file_shred (&output_bfa);
@@ -961,8 +985,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, CREATE_RESPONSE_OUT_NO, "", "", create_response_ou
 
 BEGIN_INPUT (AUTO_PARAMETER, BIND_REQUEST_IN_NO, "", "", bind_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
-
   buffer_file_t bfa;
   if (buffer_file_initr (&bfa, bda) != 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize bind request buffer: %s", lily_error_string (lily_error));
@@ -990,10 +1012,8 @@ BEGIN_INPUT (AUTO_PARAMETER, BIND_REQUEST_IN_NO, "", "", bind_request_in, ano_t 
 
 BEGIN_OUTPUT (AUTO_PARAMETER, BA_REQUEST_OUT_NO, "", "", ba_request_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-  
   if (ba_request_head != 0 && ba_request_head->to == aid) {
-    if (exists (aid) && binding_count (BA_REQUEST_OUT_NO, aid) == 1 && binding_count (BA_RESPONSE_IN_NO, aid) == 1) {
+    if (enabled (aid) && binding_count (BA_REQUEST_OUT_NO, aid) == 1 && binding_count (BA_RESPONSE_IN_NO, aid) == 1) {
       // The automaton in question is alive and can receive/send bind rfa's.
       
       // Shred the output buffer.
@@ -1032,8 +1052,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, BA_REQUEST_OUT_NO, "", "", ba_request_out, ano_t a
 
 BEGIN_INPUT (AUTO_PARAMETER, BA_RESPONSE_IN_NO, "", "", ba_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
-
   buffer_file_t bfa;
   if (buffer_file_initr (&bfa, bda) != 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize ba response buffer: %s", lily_error_string (lily_error));
@@ -1079,8 +1097,6 @@ BEGIN_INPUT (AUTO_PARAMETER, BA_RESPONSE_IN_NO, "", "", ba_response_in, ano_t an
 
 BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RESULT_OUT_NO, "", "", bind_result_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-
   if (bind_result_head != 0 && bind_result_head->to == aid) {
     // Shred the output buffer.
     buffer_file_shred (&output_bfa);
@@ -1099,8 +1115,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RESULT_OUT_NO, "", "", bind_result_out, ano_t
 
 BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RESPONSE_OUT_NO, "", "", bind_response_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-
   if (bind_response_head != 0 && bind_response_head->to == aid) {
     // Shred the output buffer.
     buffer_file_shred (&output_bfa);
@@ -1117,9 +1131,64 @@ BEGIN_OUTPUT (AUTO_PARAMETER, BIND_RESPONSE_OUT_NO, "", "", bind_response_out, a
   finish_output (false, -1, -1);
 }
 
+static bool
+create_jsh_precondition (void)
+{
+  return tmpfs_aid != -1 && jsh_bd != -1;
+}
+
+BEGIN_INTERNAL (NO_PARAMETER, CREATE_JSH_NO, "", "", create_jsh, ano_t ano, int param)
+{
+  if (create_jsh_precondition ()) {
+
+    bd_t de_bd = buffer_create (0);
+    if (de_bd == -1) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create de buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+    buffer_file_t de_buffer;
+    if (buffer_file_initw (&de_buffer, de_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize de buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+
+    de_val_t* root = de_create_object ();
+    de_set (root, "." FS "[0].aid", de_create_integer (tmpfs_aid));
+    de_set (root, "." FS "[0].name", de_create_string ("bootfs"));
+    de_set (root, "." FS "[0].nodeid", de_create_integer (0));
+    de_set (root, "." ACTIVE_FS, de_create_integer (tmpfs_aid));
+    de_set (root, "." ARGS "." "script", de_create_string ("/scr/start.jsh"));
+    de_serialize (root, &de_buffer);
+    de_destroy (root);
+
+    jsh_transaction = insert_create_transaction (sa_create_request_create (jsh_bd, de_bd, -1, true, system_automaton_aid), system_automaton_aid);
+
+    if (buffer_destroy (de_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy de buffer: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+
+    if (buffer_destroy (jsh_bd) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy jsh image: %s", lily_error_string (lily_error));
+      logs (log_buffer);
+      exit (-1);
+    }
+
+    jsh_bd = -1;
+  }
+  finish_internal ();
+}
+
 void
 do_schedule (void)
 {
+  if (init_head != 0) {
+    schedule (INIT_OUT_NO, init_head->create_transaction->aid);
+  }
+
   if (ca_request_head != 0) {
     schedule (CA_REQUEST_OUT_NO, ca_request_head->to);
   }
@@ -1138,5 +1207,9 @@ do_schedule (void)
   }
   if (bind_response_head != 0) {
     schedule (BIND_RESPONSE_OUT_NO, bind_response_head->to);
+  }
+
+  if (create_jsh_precondition ()) {
+    schedule (CREATE_JSH_NO, 0);
   }
 }

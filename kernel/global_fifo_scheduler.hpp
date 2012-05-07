@@ -72,7 +72,6 @@ private:
     while (input_action_pos_ != input_action_list_.end ()) {
       if ((*input_action_pos_)->enabled ()) {
 	action_ = (*input_action_pos_)->input_action;
-	// This does not return.
 	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
       else {
@@ -206,7 +205,7 @@ public:
 
       irq_handler::process_interrupts ();
 
-      if (!ready_queue_.empty ()) {
+      while (!ready_queue_.empty ()) {
 	// Get the automaton context and remove it from the ready queue.
 	automaton_context* c = ready_queue_.front ();
 	ready_queue_.pop_front ();
@@ -264,7 +263,6 @@ public:
 	  ready_queue_.push_back (c);
 	}
 
-	// This call does not return.
 	action_.automaton->execute (*action_.action, action_.parameter, output_buffer_a_, output_buffer_b_);
       }
 

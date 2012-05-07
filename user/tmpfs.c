@@ -4,6 +4,7 @@
 #include <buffer_file.h>
 #include "cpio.h"
 #include "fs_msg.h"
+#include "system.h"
 
 /*
   Tmpfs
@@ -65,10 +66,11 @@
   Copyright (C) 2012 Justin R. Wilson
 */
 
-#define FS_DESCEND_REQUEST_IN_NO 1
-#define FS_DESCEND_RESPONSE_OUT_NO 2
-#define FS_READFILE_REQUEST_IN_NO 3
-#define FS_READFILE_RESPONSE_OUT_NO 4
+#define INIT_NO 1
+#define FS_DESCEND_REQUEST_IN_NO 2
+#define FS_DESCEND_RESPONSE_OUT_NO 3
+#define FS_READFILE_REQUEST_IN_NO 4
+#define FS_READFILE_RESPONSE_OUT_NO 5
 
 /* Every inode in the filesystem is either a file or directory. */
 typedef struct inode inode_t;
@@ -337,8 +339,7 @@ pop_readfile_response (void)
   free (res);
 }
 
-static void
-initialize (void)
+BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   if (!initialized) {
     initialized = true;
@@ -420,12 +421,12 @@ initialize (void)
       buffer_destroy (bdb);
     }
   }
+
+  finish_input (bda, bdb);
 }
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_IN_NO, FS_DESCEND_REQUEST_IN_NAME, "", fs_descend_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
-
   buffer_file_t bf;
   if (buffer_file_initr (&bf, bda) != 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize descend request buffer: %s", lily_error_string (lily_error));
@@ -471,8 +472,6 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_IN_NO, FS_DESCEND_REQUEST_IN_NAM
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_OUT_NO, FS_DESCEND_RESPONSE_OUT_NAME, "", fs_descend_response_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-  
   if (descend_response_head != 0 && descend_response_head->to == aid) {
     buffer_file_shred (&output_bfa);
     buffer_file_write (&output_bfa, &descend_response_head->response, sizeof (fs_descend_response_t));
@@ -484,8 +483,6 @@ BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_RESPONSE_OUT_NO, FS_DESCEND_RESPONSE_OU
 
 BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_IN_NO, FS_READFILE_REQUEST_IN_NAME, "", fs_readfile_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
-
   buffer_file_t bf;
   if (buffer_file_initr (&bf, bda) != 0) {
     snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "could not initialize readfile request buffer: %s", lily_error_string (lily_error));
@@ -536,8 +533,6 @@ BEGIN_INPUT (AUTO_PARAMETER, FS_READFILE_REQUEST_IN_NO, FS_READFILE_REQUEST_IN_N
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_READFILE_RESPONSE_OUT_NO, FS_READFILE_RESPONSE_OUT_NAME, "", fs_readfile_response_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-
   if (readfile_response_head != 0 && readfile_response_head->to == aid) {
     buffer_file_shred (&output_bfa);
     buffer_file_write (&output_bfa, &readfile_response_head->response, sizeof (fs_readfile_response_t));

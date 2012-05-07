@@ -2,6 +2,7 @@
 #include <buffer_file.h>
 #include <string.h>
 #include <ctype.h>
+#include "system.h"
 
 /*
   Syslog
@@ -26,8 +27,7 @@ static char log_buffer[LOG_BUFFER_SIZE];
 #define ERROR __FILE__ ": error: "
 #define WARNING __FILE__ ": warning: "
 
-static void
-initialize (void)
+BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   if (!initialized) {
     initialized = true;
@@ -44,12 +44,8 @@ initialize (void)
       exit (-1);
     }
   }
-}
 
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
-{
-  initialize ();
-  finish_internal ();
+  finish_input (bda, bdb);
 }
 
 /* BEGIN_INTERNAL (LOG_EVENT_NO, "log_event", "", log_event, ano_t ano, int param, bd_t bda, bd_t bdb) */
@@ -92,8 +88,6 @@ text_out_precondition (void)
 
 BEGIN_OUTPUT (NO_PARAMETER, TEXT_OUT_NO, "text_out", "buffer_file_t", text_out, ano_t ano, int param)
 {
-  initialize ();
-
   if (text_out_precondition ()) {
     buffer_file_truncate (&text_out_buffer);
     finish_output (true, text_out_bd, -1);

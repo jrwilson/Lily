@@ -114,13 +114,6 @@ private:
    * IDENTIFICATION
    */
 
-public:
-  static inline bool
-  exists (aid_t aid)
-  {
-    return aid_to_automaton_map_.find (aid) != aid_to_automaton_map_.end ();
-  }
-
   /*
    * DESCRIPTION
    */
@@ -141,6 +134,17 @@ public:
    * EXECUTION
    */
 
+public:
+  static inline bool
+  enabled (aid_t aid)
+  {
+    aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
+    if (pos == aid_to_automaton_map_.end ()) {
+      return false;
+    }
+    return pos->second->enabled ();
+  }
+
   /*
    * MEMORY MAP AND BUFFERS
    */
@@ -160,7 +164,7 @@ private:
     kassert (count == 1);
     
     // Disable the binding.
-    binding->bid = -1;
+    binding->disable ();
     
     // Unbind.
     if (remove_from_output) {
@@ -237,6 +241,9 @@ private:
   /*
    * EXECUTION
    */
+
+  // Automaton is either enabled or disabled.
+  bool enabled_;
 
   // Mutual exlusion lock for executing actions.
   mutex execution_mutex_;
@@ -356,7 +363,19 @@ private:
     }
   }
 
-public:  
+public:
+  inline const paction*
+  find_action (const kstring& name) const
+  {
+    name_to_action_map_type::const_iterator pos = name_to_action_map_.find (name);
+    if (pos != name_to_action_map_.end ()) {
+      return pos->second;
+    }
+    else {
+      return 0;
+    }
+  }
+
   inline pair<bd_t, lily_error_t>
   describe (aid_t aid)
   {
@@ -417,15 +436,12 @@ public:
    */
   
   inline pair<aid_t, lily_create_error_t>
-  create (const shared_ptr<automaton>& ths,
-	  bd_t text_bd,
+  create (bd_t text_bd,
 	  bd_t bda,
 	  bd_t bdb,
 	  int retain_privilege)
   {
-    kassert (ths.get () == this);
-    
-    if (ths != system_automaton) {
+    if (this != system_automaton.get ()) {
       return make_pair (-1, LILY_CREATE_ERROR_PERMISSION);
     }
 
@@ -463,10 +479,9 @@ private:
 
 public:
   inline pair<int, lily_error_t>
-  destroy (const shared_ptr<automaton>& ths,
-	   aid_t aid)
+  destroy (aid_t aid)
   {
-    if (ths != system_automaton) {
+    if (this != system_automaton.get ()) {
       return make_pair (-1, LILY_ERROR_PERMISSION);
     }
 
@@ -487,6 +502,31 @@ public:
    */
 
 public:
+  inline bool
+  enabled () const
+  {
+    return enabled_;
+  }
+
+  inline void
+  enable ()
+  {
+    enabled_ = true;
+  }
+
+  inline int
+  enable (aid_t aid)
+  {
+    if (this == system_automaton.get ()) {
+      aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
+      if (pos != aid_to_automaton_map_.end ()) {
+	pos->second->enable ();	
+	return 0;
+      }
+    }
+    return -1;
+  }
+
   inline void
   lock_execution ()
   {
@@ -500,98 +540,102 @@ public:
 	   const shared_ptr<buffer>& output_buffer_a_,
 	   const shared_ptr<buffer>& output_buffer_b_)
   {
-    // switch (action.type) {
-    // case INPUT:
-    // 	kout << "?";
-    // 	break;
-    // case OUTPUT:
-    // 	kout << "!";
-    // 	break;
-    // case INTERNAL:
-    // 	kout << "#";
-    // 	break;
-    // }
-    // kout << " " << aid_ << " " << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
-    
-    // Switch page directories.
-    vm::switch_to_directory (page_directory);
-    
-    uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (stack_area_->end ());
-    
-    // These instructions serve a dual purpose.
-    // First, they set up the cdecl calling convention for actions.
-    // Second, they force the stack to be created if it is not.
-    
-    switch (action.type) {
-    case INPUT:
-      {
-	bd_t bda = -1;
-	bd_t bdb = -1;
-	
-	if (output_buffer_a_.get () != 0) {
-	  // Copy the buffer to the input automaton.
-	  bda = buffer_create (output_buffer_a_);
+    // Only execute if enabled.
+    if (enabled_) {
+      
+      // switch (action.type) {
+      // case INPUT:
+      // 	kout << "?";
+      // 	break;
+      // case OUTPUT:
+      // 	kout << "!";
+      // 	break;
+      // case INTERNAL:
+      // 	kout << "#";
+      // 	break;
+      // }
+      // kout << " " << aid_ << " " << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
+      
+      // Switch page directories.
+      vm::switch_to_directory (page_directory);
+      
+      uint32_t* stack_pointer = reinterpret_cast<uint32_t*> (stack_area_->end ());
+      
+      // These instructions serve a dual purpose.
+      // First, they set up the cdecl calling convention for actions.
+      // Second, they force the stack to be created if it is not.
+      
+      switch (action.type) {
+      case INPUT:
+	{
+	  bd_t bda = -1;
+	  bd_t bdb = -1;
+	  
+	  if (output_buffer_a_.get () != 0) {
+	    // Copy the buffer to the input automaton.
+	    bda = buffer_create (output_buffer_a_);
+	  }
+	  
+	  if (output_buffer_b_.get () != 0) {
+	    // Copy the buffer to the input automaton.
+	    bdb = buffer_create (output_buffer_b_);
+	  }
+	  
+	  // Push the buffers.
+	  *--stack_pointer = bdb;
+	  *--stack_pointer = bda;
 	}
-	
-	if (output_buffer_b_.get () != 0) {
-	  // Copy the buffer to the input automaton.
-	  bdb = buffer_create (output_buffer_b_);
-	}
-	
-	// Push the buffers.
-	*--stack_pointer = bdb;
-	*--stack_pointer = bda;
+	break;
+      case OUTPUT:
+      case INTERNAL:
+	// Do nothing.
+	break;
       }
-      break;
-    case OUTPUT:
-    case INTERNAL:
-      // Do nothing.
-      break;
+      
+      // Push the parameter.
+      *--stack_pointer = parameter;
+      
+      // Push the action number.
+      *--stack_pointer = action.action_number;
+      
+      // Push a bogus instruction pointer so we can use the cdecl calling convention.
+      *--stack_pointer = 0;
+      uint32_t* sp = stack_pointer;
+      
+      // Push the stack segment.
+      *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
+      
+      // Push the stack pointer.
+      *--stack_pointer = reinterpret_cast<uint32_t> (sp);
+      
+      // Push the flags.
+      uint32_t eflags;
+      asm ("pushf\n"
+	   "pop %0\n" : "=g"(eflags) : :);
+      *--stack_pointer = eflags;
+      
+      // Push the code segment.
+      *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
+      
+      // Push the instruction pointer.
+      *--stack_pointer = reinterpret_cast<uint32_t> (action.action_entry_point);
+      
+      //kout << "aid = " << aid_ << " ip = " << hexformat (action.action_entry_point) << endl;
+      
+      asm ("mov %0, %%ds\n"	// Load the data segments.
+	   "mov %0, %%es\n"	// Load the data segments.
+	   "mov %0, %%fs\n"	// Load the data segments.
+	   "mov %0, %%gs\n"	// Load the data segments.
+	   "mov %1, %%esp\n"	// Load the new stack pointer.
+	   "xor %%eax, %%eax\n"	// Clear the registers.
+	   "xor %%ebx, %%ebx\n"
+	   "xor %%ecx, %%ecx\n"
+	   "xor %%edx, %%edx\n"
+	   "xor %%edi, %%edi\n"
+	   "xor %%esi, %%esi\n"
+	   "xor %%ebp, %%ebp\n"
+	   "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
     }
-
-    // Push the parameter.
-    *--stack_pointer = parameter;
-
-    // Push the action number.
-    *--stack_pointer = action.action_number;
-    
-    // Push a bogus instruction pointer so we can use the cdecl calling convention.
-    *--stack_pointer = 0;
-    uint32_t* sp = stack_pointer;
-    
-    // Push the stack segment.
-    *--stack_pointer = gdt::USER_DATA_SELECTOR | descriptor::RING3;
-    
-    // Push the stack pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (sp);
-    
-    // Push the flags.
-    uint32_t eflags;
-    asm ("pushf\n"
-	 "pop %0\n" : "=g"(eflags) : :);
-    *--stack_pointer = eflags;
-    
-    // Push the code segment.
-    *--stack_pointer = gdt::USER_CODE_SELECTOR | descriptor::RING3;
-    
-    // Push the instruction pointer.
-    *--stack_pointer = reinterpret_cast<uint32_t> (action.action_entry_point);
-    
-    //kout << "aid = " << aid_ << " ip = " << hexformat (action.action_entry_point) << endl;
-
-    asm ("mov %0, %%ds\n"	// Load the data segments.
-	 "mov %0, %%es\n"	// Load the data segments.
-	 "mov %0, %%fs\n"	// Load the data segments.
-	 "mov %0, %%gs\n"	// Load the data segments.
-	 "mov %1, %%esp\n"	// Load the new stack pointer.
-	 "xor %%eax, %%eax\n"	// Clear the registers.
-	 "xor %%ebx, %%ebx\n"
-	 "xor %%ecx, %%ecx\n"
-	 "xor %%edx, %%edx\n"
-	 "xor %%edi, %%edi\n"
-	 "xor %%esi, %%esi\n"
-	 "xor %%ebp, %%ebp\n"
-	 "iret\n" :: "r"(gdt::USER_DATA_SELECTOR | descriptor::RING3), "r"(stack_pointer));
   }
 
   pair<int, lily_error_t>
@@ -1206,17 +1250,14 @@ public:
   }
 
   inline pair<bid_t, lily_bind_error_t>
-  bind (const shared_ptr<automaton>& ths,
-	aid_t output_aid,
+  bind (aid_t output_aid,
 	ano_t output_ano,
 	int output_parameter,
 	aid_t input_aid,
 	ano_t input_ano,
 	int input_parameter)
   {
-    kassert (ths.get () == this);
-
-    if (ths != system_automaton) {
+    if (this != system_automaton.get ()) {
       return make_pair (-1, LILY_BIND_ERROR_PERMISSION);
     }
 
@@ -1344,12 +1385,9 @@ public:
   }
 
   inline pair<int, lily_error_t>
-  unbind (const shared_ptr<automaton>& ths,
-	  bid_t bid)
+  unbind (bid_t bid)
   {
-    kassert (ths.get () == this);
-
-    if (ths != system_automaton) {
+    if (this != system_automaton.get ()) {
       return make_pair (-1, LILY_ERROR_PERMISSION);
     }
 
@@ -1742,6 +1780,7 @@ public:
   automaton () :
     aid_ (-1),
     regenerate_description_ (false),
+    enabled_ (false),
     init_buffer_a_ (-1),
     init_buffer_b_ (-1),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),

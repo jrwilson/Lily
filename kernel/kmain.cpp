@@ -276,41 +276,52 @@ kmain (uint32_t multiboot_magic,
   // Initialize the scheduler.
   scheduler::initialize ();
 
-  // Create a buffer containing the text of the initial automaton.
-  const size_t automaton_frame_end = boot_automaton_frame + align_up (boot_automaton_size, PAGE_SIZE) / PAGE_SIZE;
-  shared_ptr<buffer> text = shared_ptr<buffer> (new buffer (0));
-  kassert (text.get () != 0);
-  for (frame_t frame = boot_automaton_frame; frame != automaton_frame_end; ++frame) {
-    text->append_frame (frame);
-    // Drop the reference count.
-    size_t count = frame_manager::decref (frame);
-    kassert (count == 1);
+  // This scope causes the text and data_buffer resources to be reclaimed.
+  {
+    // Create a buffer containing the text of the initial automaton.
+    const size_t automaton_frame_end = boot_automaton_frame + align_up (boot_automaton_size, PAGE_SIZE) / PAGE_SIZE;
+    shared_ptr<buffer> text = shared_ptr<buffer> (new buffer (0));
+    kassert (text.get () != 0);
+    for (frame_t frame = boot_automaton_frame; frame != automaton_frame_end; ++frame) {
+      text->append_frame (frame);
+      // Drop the reference count.
+      size_t count = frame_manager::decref (frame);
+      kassert (count == 1);
+    }
+    
+    // Create a buffer to contain the initial data.
+    const size_t data_frame_end = boot_data_frame + align_up (boot_data_size, PAGE_SIZE) / PAGE_SIZE;
+    shared_ptr<buffer> data_buffer = shared_ptr<buffer> (new buffer (0));
+    kassert (data_buffer.get () != 0);
+    for (frame_t frame = boot_data_frame; frame != data_frame_end; ++frame) {
+      data_buffer->append_frame (frame);
+      // Drop the reference count.
+      size_t count = frame_manager::decref (frame);
+      kassert (count == 1);
+    }
+    
+    // Create the automaton.
+    pair<shared_ptr<automaton>, int> r = automaton::create_automaton (true, text, boot_automaton_size, data_buffer, shared_ptr<buffer> ());
+    
+    if (r.first.get () == 0) {
+      kout << "Could not create the boot automaton.  Halting." << endl;
+      halt ();
+    }
+    
+    system_automaton = r.first;
+
+    // Enable the system automaton.
+    system_automaton->enable ();
+
+    // Schedule the init action.
+    const paction* init_action = system_automaton->find_action (kstring ("init"));
+    if (init_action == 0 || init_action->type != INTERNAL || init_action->parameter_mode != PARAMETER) {
+      kout << "Boot automaton does not contain an init action.  Halting." << endl;
+      halt ();
+    }
+
+    scheduler::schedule (caction (system_automaton, init_action, system_automaton->aid ()));
   }
-
-  // Create a buffer to contain the initial data.
-  const size_t data_frame_end = boot_data_frame + align_up (boot_data_size, PAGE_SIZE) / PAGE_SIZE;
-  shared_ptr<buffer> data_buffer = shared_ptr<buffer> (new buffer (0));
-  kassert (data_buffer.get () != 0);
-  for (frame_t frame = boot_data_frame; frame != data_frame_end; ++frame) {
-    data_buffer->append_frame (frame);
-    // Drop the reference count.
-    size_t count = frame_manager::decref (frame);
-    kassert (count == 1);
-  }
-
-  // Create the automaton.
-  pair<shared_ptr<automaton>, int> r = automaton::create_automaton (true, text, boot_automaton_size, data_buffer, shared_ptr<buffer> ());
-
-  if (r.first.get () == 0) {
-    kout << "Could not create the boot automaton.  Halting." << endl;
-    halt ();
-  }
-
-  // Release these resources.
-  text = shared_ptr<buffer> ();
-  data_buffer = shared_ptr<buffer> ();
-  
-  system_automaton = r.first;
 
   // Start the scheduler.  Doesn't return.
   scheduler::finish (false, -1, -1);

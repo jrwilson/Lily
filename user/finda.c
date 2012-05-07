@@ -118,8 +118,7 @@ send_to_all (rcb_t* rcb)
   }
 }
 
-static void
-initialize (void)
+BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int param, bd_t bda, bd_t bdb)
 {
   if (!initialized) {
     initialized = true;
@@ -127,17 +126,13 @@ initialize (void)
     recv_bda = buffer_create (0);
     recv_bdb = buffer_create (0);
   }
+
+  finish_input (bda, bdb);
 }
 
-BEGIN_INTERNAL (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
-{
-  initialize ();
-  finish_internal ();
-}
 
 BEGIN_INPUT (AUTO_PARAMETER, SEND_IN_NO, FINDA_SEND_NAME, "", send_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
 {
-  initialize ();
   client_add (aid);
   rcb_t* rcb = rcb_create (bda, bdb);
   rcb_incref (rcb);
@@ -148,8 +143,6 @@ BEGIN_INPUT (AUTO_PARAMETER, SEND_IN_NO, FINDA_SEND_NAME, "", send_in, ano_t ano
 
 BEGIN_OUTPUT (AUTO_PARAMETER, RECV_OUT_NO, FINDA_RECV_NAME, "", recv_out, ano_t ano, aid_t aid)
 {
-  initialize ();
-  
   if (msg_head != 0 && msg_head->to == aid) {
     buffer_assign (recv_bda, msg_head->rcb->bda, 0, buffer_size (msg_head->rcb->bda));
     buffer_assign (recv_bdb, msg_head->rcb->bdb, 0, buffer_size (msg_head->rcb->bdb));

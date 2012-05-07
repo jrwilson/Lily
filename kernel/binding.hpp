@@ -20,10 +20,8 @@
 #include "action.hpp"
 #include "unordered_map.hpp"
 
-class automaton;
-
 struct binding {
-  bid_t bid;
+  bid_t const bid;
   caction const output_action;
   caction const input_action;
 
@@ -32,18 +30,24 @@ struct binding {
 	   const caction& ia) :
     bid (b),
     output_action (oa),
-    input_action (ia)
+    input_action (ia),
+    enabled_ (true)
   { }
 
   ~binding () {
-    kassert (bid == -1);
+    kassert (!enabled ());
   }
 
   bool
-  enabled () const
-  {
-    return bid != -1;
+  enabled () const;
+
+  void
+  disable () {
+    enabled_ = false;
   }
+
+private:
+  bool enabled_;
 };
 
 #endif /* __binding_hpp__ */

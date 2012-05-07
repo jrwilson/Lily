@@ -120,25 +120,15 @@ automaton::create_automaton (bool privileged,
     child->aid_ = child_aid;
     child->privileged_ = privileged;
     
-    // Add to the scheduler.
-    scheduler::add_automaton (child);
-    
     if (buffer_a_.get () != 0) {
       child->init_buffer_a_ = child->buffer_create (buffer_a_);
     }
     if (buffer_b_.get () != 0) {
       child->init_buffer_b_ = child->buffer_create (buffer_b_);
     }
-    
-    // Schedule the init action.
-    const kstring init_name ("init");
-    for (ano_to_action_map_type::const_iterator pos = child->ano_to_action_map_.begin ();
-	 pos != child->ano_to_action_map_.end ();
-	 ++pos) {
-      if (pos->second->name == init_name && pos->second->type == INTERNAL) {
-	scheduler::schedule (caction (child, pos->second, child_aid));
-      }
-    }
+
+    // Add to the scheduler.
+    scheduler::add_automaton (child);
   }
 
   // Unmap the text.
@@ -163,6 +153,8 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   kassert (ths.get () == this);
   
   kout << "TODO:  Generate destroy/exit event" << endl;
+
+  enabled_ = false;
 
   /*
     Address the instance variables:

@@ -196,12 +196,15 @@ describe (aid_t aid)
   return retval;
 }
 
+static aid_t aid = -1;
+
 aid_t
 getaid (void)
 {
-  aid_t retval;
-  syscall0r (LILY_SYSCALL_GETAID, retval);
-  return retval;
+  if (aid == -1) {
+    syscall0r (LILY_SYSCALL_GETAID, aid);    
+  }
+  return aid;
 }
 
 bd_t

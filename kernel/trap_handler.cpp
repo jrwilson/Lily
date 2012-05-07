@@ -76,7 +76,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_CREATE:
     {
-      pair<aid_t, lily_create_error_t> r = a->create (a, regs.ebx, regs.ecx, regs.edx, regs.esi);
+      pair<aid_t, lily_create_error_t> r = a->create (regs.ebx, regs.ecx, regs.edx, regs.esi);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -88,7 +88,7 @@ trap_dispatch (volatile registers regs)
       if (!a->verify_stack (ptr, sizeof (bind_args))) {
 	kpanic ("TODO:  Can't get bind arguments from the stack");
       }
-      pair<bid_t, lily_bind_error_t> r = a->bind (a, ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
+      pair<bid_t, lily_bind_error_t> r = a->bind (ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -96,7 +96,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_UNBIND:
     {
-      pair<int, lily_error_t> r = a->unbind (a, regs.ebx);
+      pair<int, lily_error_t> r = a->unbind (regs.ebx);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -104,15 +104,22 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_DESTROY:
     {
-      pair<int, lily_error_t> r = a->destroy (a, regs.ebx);
+      pair<int, lily_error_t> r = a->destroy (regs.ebx);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
     }
     break;
-  case LILY_SYSCALL_EXISTS:
+  case LILY_SYSCALL_ENABLED:
     {
-      regs.eax = automaton::exists (regs.ebx);
+      regs.eax = automaton::enabled (regs.ebx);
+      regs.ecx = LILY_ERROR_SUCCESS;
+      return;
+    }
+    break;
+  case LILY_SYSCALL_ENABLE:
+    {
+      regs.eax = a->enable (regs.ebx);
       regs.ecx = LILY_ERROR_SUCCESS;
       return;
     }
