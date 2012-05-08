@@ -26,7 +26,7 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o de.o system_msg.o
+boot_automaton : boot_automaton.o cpio.o de.o
 	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)

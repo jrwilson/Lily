@@ -5,6 +5,7 @@
 #include <lily/types.h>
 #include <lily/action.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /* Import the Lily namespace. */
 #define NO_PARAMETER LILY_ACTION_NO_PARAMETER
@@ -47,85 +48,10 @@ void func (ano, param);						\
 EMBED_ACTION_DESCRIPTOR (LILY_ACTION_INTERNAL, parameter_mode, func, action_no, action_name, action_desc); \
 void func (ano, param)
 
-#define syscall0(syscall)		\
-  __asm__ __volatile__ ("mov %0, %%eax\n" \
-	   "int $0x80\n" : : "g"(syscall) : "eax", "ecx");
-
-#define syscall1(syscall, p1)		\
-  __asm__ __volatile__ ("mov %0, %%eax\n" \
-	   "mov %1, %%ebx\n" \
-	   "int $0x80\n" : : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx");
-
-#define syscall2(syscall, p1, p2)		\
-  __asm__ __volatile__ ("mov %0, %%eax\n" \
-	   "mov %1, %%ebx\n" \
-	   "mov %2, %%ecx\n" \
-	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx");
-
-#define syscall3(syscall, p1, p2, p3)		\
-  __asm__ __volatile__ ("mov %0, %%eax\n" \
-	   "mov %1, %%ebx\n" \
-	   "mov %2, %%ecx\n" \
-	   "mov %3, %%edx\n" \
-	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx");
-
-#define syscall0r(syscall, retval)	\
-  __asm__ __volatile__ ("mov %1, %%eax\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall) : "eax", "ecx" );
-
-#define syscall1r(syscall, p1, retval)		\
-  __asm__ __volatile__ ("mov %1, %%eax\n"	\
-	   "mov %2, %%ebx\n"						\
-	   "int $0x80\n"						\
-	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx" );
-
-#define syscall2r(syscall, p1, p2, retval)	\
-  __asm__ __volatile__ ("mov %1, %%eax\n" \
-           "mov %2, %%ebx\n" \
-           "mov %3, %%ecx\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
-
-#define syscall0re(syscall, retval, error)	  \
-  __asm__ __volatile__ ("mov %2, %%eax\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall) : "eax", "ecx" );
-
-#define syscall1re(syscall, retval, error, p1)	\
-  __asm__ __volatile__ ("mov %2, %%eax\n" \
-	   "mov %3, %%ebx\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" );
-
-#define syscall2re(syscall, retval, error, p1, p2)	\
-  __asm__ __volatile__ ("mov %2, %%eax\n" \
-	   "mov %3, %%ebx\n" \
-	   "mov %4, %%ecx\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
-
-#define syscall3re(syscall, retval, error, p1, p2, p3)	\
-  __asm__ __volatile__ ("mov %2, %%eax\n" \
-	   "mov %3, %%ebx\n" \
-	   "mov %4, %%ecx\n" \
-	   "mov %5, %%edx\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
-
-#define syscall4re(syscall, retval, error, p1, p2, p3, p4)	\
-  __asm__ __volatile__ ("mov %2, %%eax\n" \
-	   "mov %3, %%ebx\n" \
-	   "mov %4, %%ecx\n" \
-	   "mov %5, %%edx\n" \
-	   "mov %6, %%esi\n" \
-	   "int $0x80\n" \
-	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3), "m"(p4) : "eax", "ebx", "ecx", "edx", "esi" );
+#define BEGIN_SYSTEM(parameter_mode, action_no, action_name, action_desc, func, ano, param) \
+void func (ano, param);						\
+EMBED_ACTION_DESCRIPTOR (LILY_ACTION_SYSTEM, parameter_mode, func, action_no, action_name, action_desc); \
+void func (ano, param)
 
 extern lily_error_t lily_error;
 
@@ -134,7 +60,7 @@ schedule (ano_t action_number,
 	  int parameter);
 
 void
-finish (int output_fired,
+finish (bool output_fired,
 	bd_t bda,
 	bd_t bdb);
 
@@ -143,12 +69,30 @@ finish_input (bd_t bda,
 	      bd_t bdb);
 
 void
-finish_output (int output_fired,
+finish_output (bool output_fired,
 	       bd_t bda,
 	       bd_t bdb);
 
 void
 finish_internal (void);
+
+aid_t
+create (bd_t text_bd,
+	bool retain_privilege);
+
+bid_t
+bind (aid_t output_automaton,
+      ano_t output_action,
+      int output_parameter,
+      aid_t input_automaton,
+      ano_t input_action,
+      int input_parameter);
+
+int
+unbind (bid_t bid);
+
+int
+destroy (aid_t aid);
 
 void
 exit (int code);

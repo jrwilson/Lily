@@ -30,7 +30,7 @@ trap.o \
 automaton.o \
 binding.o \
 global_fifo_scheduler.o \
-system_automaton.o
+boot_automaton.o
 
 # Headers that will be installed.
 HEADERS=lily/action.h lily/quote.h lily/syscall.h lily/types.h

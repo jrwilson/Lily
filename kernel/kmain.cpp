@@ -25,7 +25,7 @@
 #include "vm.hpp"
 #include "halt.hpp"
 #include "scheduler.hpp"
-#include "system_automaton.hpp"
+#include "boot_automaton.hpp"
 
 // Symbols to build the kernel's memory map.
 extern int text_begin;
@@ -308,20 +308,17 @@ kmain (uint32_t multiboot_magic,
       halt ();
     }
     
-    system_automaton = r.first;
-    boot_data = system_automaton->buffer_create (data_buffer);
-
-    // Enable the system automaton.
-    system_automaton->enable ();
+    boot_automaton = r.first;
+    boot_data = boot_automaton->buffer_create (data_buffer);
 
     // Schedule the init action.
-    const paction* init_action = system_automaton->find_action (kstring ("init"));
-    if (init_action == 0 || init_action->type != INTERNAL || init_action->parameter_mode != PARAMETER) {
+    const paction* init_action = boot_automaton->find_action (kstring ("init"));
+    if (init_action == 0 || (init_action->type != INTERNAL && init_action->type != SYSTEM)) {
       kout << "Boot automaton does not contain an init action.  Halting." << endl;
       halt ();
     }
 
-    scheduler::schedule (caction (system_automaton, init_action, system_automaton->aid ()));
+    scheduler::schedule (caction (boot_automaton, init_action, 0));
   }
 
   // Start the scheduler.  Doesn't return.

@@ -13,6 +13,7 @@ enum action_type_t {
   INPUT = LILY_ACTION_INPUT,
   OUTPUT = LILY_ACTION_OUTPUT,
   INTERNAL = LILY_ACTION_INTERNAL,
+  SYSTEM = LILY_ACTION_SYSTEM,
 };
 
 enum parameter_mode_t {

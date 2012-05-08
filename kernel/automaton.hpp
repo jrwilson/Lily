@@ -31,7 +31,7 @@
 #include "mutex.hpp"
 #include "lock.hpp"
 #include "shared_ptr.hpp"
-#include "system_automaton.hpp"
+#include "boot_automaton.hpp"
 
 // The stack.
 static const logical_address_t STACK_END = KERNEL_VIRTUAL_BASE;
@@ -123,7 +123,7 @@ private:
    */
 
 public:
-  static pair<shared_ptr<automaton>, lily_create_error_t>
+  static pair<shared_ptr<automaton>, lily_error_t>
   create_automaton (bool privileged,
 		    const shared_ptr<buffer>& text,
 		    size_t text_size);
@@ -131,17 +131,6 @@ public:
   /*
    * EXECUTION
    */
-
-public:
-  static inline bool
-  enabled (aid_t aid)
-  {
-    aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
-    if (pos == aid_to_automaton_map_.end ()) {
-      return false;
-    }
-    return pos->second->enabled ();
-  }
 
   /*
    * MEMORY MAP AND BUFFERS
@@ -240,8 +229,8 @@ private:
    * EXECUTION
    */
 
-  // Automaton is either enabled or disabled.
-  bool enabled_;
+  // Automaton is either okay to run or crashed.
+  bool crashed_;
 
   // Mutual exlusion lock for executing actions.
   mutex execution_mutex_;
@@ -429,23 +418,19 @@ public:
    * AUTOMATA HIERARCHY
    */
   
-  inline pair<aid_t, lily_create_error_t>
+  inline pair<aid_t, lily_error_t>
   create (bd_t text_bd,
-	  int retain_privilege)
+	  bool retain_privilege)
   {
-    if (this != system_automaton.get ()) {
-      return make_pair (-1, LILY_CREATE_ERROR_PERMISSION);
-    }
-
     // Find the text buffer.
     shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
     if (text_buffer.get () == 0) {
       // Buffer does not exist.
-      return make_pair (-1, LILY_CREATE_ERROR_BDDNE);
+      return make_pair (-1, LILY_ERROR_BDDNE);
     }
     
     // Create the automaton.
-    pair<shared_ptr<automaton>, lily_create_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE);
+    pair<shared_ptr<automaton>, lily_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE);
     
     if (r.first.get () != 0) {
       return make_pair (r.first->aid (), r.second);
@@ -463,10 +448,6 @@ public:
   inline pair<int, lily_error_t>
   destroy (aid_t aid)
   {
-    if (this != system_automaton.get ()) {
-      return make_pair (-1, LILY_ERROR_PERMISSION);
-    }
-
     aid_to_automaton_map_type::iterator pos = aid_to_automaton_map_.find (aid);
     if (pos == aid_to_automaton_map_.end ()) {
       return make_pair (-1, LILY_ERROR_AIDDNE);
@@ -485,28 +466,9 @@ public:
 
 public:
   inline bool
-  enabled () const
+  crashed () const
   {
-    return enabled_;
-  }
-
-  inline void
-  enable ()
-  {
-    enabled_ = true;
-  }
-
-  inline int
-  enable (aid_t aid)
-  {
-    if (this == system_automaton.get ()) {
-      aid_to_automaton_map_type::const_iterator pos = aid_to_automaton_map_.find (aid);
-      if (pos != aid_to_automaton_map_.end ()) {
-	pos->second->enable ();	
-	return 0;
-      }
-    }
-    return -1;
+    return crashed_;
   }
 
   inline void
@@ -523,7 +485,7 @@ public:
 	   const shared_ptr<buffer>& output_buffer_b_)
   {
     // Only execute if enabled.
-    if (enabled_) {
+    if (!crashed_) {
       
       // switch (action.type) {
       // case INPUT:
@@ -534,6 +496,9 @@ public:
       // 	break;
       // case INTERNAL:
       // 	kout << "#";
+      // 	break;
+      // case SYSTEM:
+      // 	kout << "S";
       // 	break;
       // }
       // kout << " " << aid_ << " " << action.name.c_str () << "(" << action.action_number << ")" << "\t" << parameter << endl;
@@ -570,6 +535,7 @@ public:
 	break;
       case OUTPUT:
       case INTERNAL:
+      case SYSTEM:
 	// Do nothing.
 	break;
       }
@@ -1236,7 +1202,7 @@ public:
     }
   }
 
-  inline pair<bid_t, lily_bind_error_t>
+  inline pair<bid_t, lily_error_t>
   bind (aid_t output_aid,
 	ano_t output_ano,
 	int output_parameter,
@@ -1244,20 +1210,16 @@ public:
 	ano_t input_ano,
 	int input_parameter)
   {
-    if (this != system_automaton.get ()) {
-      return make_pair (-1, LILY_BIND_ERROR_PERMISSION);
-    }
-
     aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
     if (output_pos == aid_to_automaton_map_.end ()) {
       // Output automaton DNE.
-      return make_pair (-1, LILY_BIND_ERROR_OAIDDNE);
+      return make_pair (-1, LILY_ERROR_OAIDDNE);
     }
     
     aid_to_automaton_map_type::const_iterator input_pos = aid_to_automaton_map_.find (input_aid);
     if (input_pos == aid_to_automaton_map_.end ()) {
       // Input automaton DNE.
-      return make_pair (-1, LILY_BIND_ERROR_IAIDDNE);
+      return make_pair (-1, LILY_ERROR_IAIDDNE);
     }
     
     shared_ptr<automaton> output_automaton = output_pos->second;
@@ -1266,7 +1228,7 @@ public:
     
     if (output_automaton == input_automaton) {
       // The output and input automata must be different.
-      return make_pair (-1, LILY_BIND_ERROR_SAME);
+      return make_pair (-1, LILY_ERROR_SAME);
     }
     
     // Check the output action dynamically.
@@ -1274,7 +1236,7 @@ public:
     if (output_action == 0 ||
 	output_action->type != OUTPUT) {
       // Output action does not exist or has the wrong type.
-      return make_pair (-1, LILY_BIND_ERROR_OANODNE);
+      return make_pair (-1, LILY_ERROR_OANODNE);
     }
     
     // Check the input action dynamically.
@@ -1282,21 +1244,21 @@ public:
     if (input_action == 0 ||
 	input_action->type != INPUT) {
       // Input action does not exist or has the wrong type.
-      return make_pair (-1, LILY_BIND_ERROR_IANODNE);
+      return make_pair (-1, LILY_ERROR_IANODNE);
     }
     
     // Check the parameters.
     switch (output_action->parameter_mode) {
     case NO_PARAMETER:
       if (output_parameter != 0) {
-	return make_pair (-1, LILY_BIND_ERROR_OANODNE);
+	return make_pair (-1, LILY_ERROR_OANODNE);
       }
       break;
     case PARAMETER:
       break;
     case AUTO_PARAMETER:
       if (output_parameter != input_automaton->aid ()) {
-	return make_pair (-1, LILY_BIND_ERROR_OANODNE);
+	return make_pair (-1, LILY_ERROR_OANODNE);
       }
       break;
     }
@@ -1304,14 +1266,14 @@ public:
     switch (input_action->parameter_mode) {
     case NO_PARAMETER:
       if (input_parameter != 0) {
-	return make_pair (-1, LILY_BIND_ERROR_IANODNE);
+	return make_pair (-1, LILY_ERROR_IANODNE);
       }
       break;
     case PARAMETER:
       break;
     case AUTO_PARAMETER:
       if (input_parameter != output_automaton->aid ()) {
-	return make_pair (-1, LILY_BIND_ERROR_IANODNE);
+	return make_pair (-1, LILY_ERROR_IANODNE);
       }
       break;
     }
@@ -1328,7 +1290,7 @@ public:
 	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
 	  if ((*pos2)->enabled ()) {
 	    // The input is bound to an enabled action.
-	    return make_pair (-1, LILY_BIND_ERROR_ALREADY);
+	    return make_pair (-1, LILY_ERROR_ALREADY);
 	  }
 	}
       }
@@ -1340,7 +1302,7 @@ public:
       if (pos1 != output_automaton->bound_outputs_map_.end ()) {
 	for (binding_set_type::const_iterator pos2 = pos1->second.begin (); pos2 != pos1->second.end (); ++pos2) {
 	  if ((*pos2)->enabled () && (*pos2)->input_action.automaton == input_automaton) {
-	    return make_pair (-1, LILY_BIND_ERROR_ALREADY);
+	    return make_pair (-1, LILY_ERROR_ALREADY);
 	  }
 	}
       }
@@ -1368,16 +1330,12 @@ public:
       r.first->second.insert (b);
     }
     
-    return make_pair (b->bid, LILY_BIND_ERROR_SUCCESS);
+    return make_pair (b->bid, LILY_ERROR_SUCCESS);
   }
 
   inline pair<int, lily_error_t>
   unbind (bid_t bid)
   {
-    if (this != system_automaton.get ()) {
-      return make_pair (-1, LILY_ERROR_PERMISSION);
-    }
-
     // Look up the binding.
     bid_to_binding_map_type::iterator pos = bid_to_binding_map_.find (bid);
     if (pos == bid_to_binding_map_.end ()) {
@@ -1389,61 +1347,6 @@ public:
     unbind (binding, true, true);
     
     return make_pair (0, LILY_ERROR_SUCCESS);
-  }
-  
-  inline size_t
-  binding_count (const shared_ptr<automaton>&ths,
-		 ano_t ano,
-		 int parameter)
-  {
-    kassert (ths.get () == this);
-
-    ano_to_action_map_type::const_iterator pos = ano_to_action_map_.find (ano);
-    if (pos != ano_to_action_map_.end ()) {
-      caction c (ths, pos->second, parameter);
-
-      switch (pos->second->type) {
-      case INPUT:
-	{
-	  bound_inputs_map_type::const_iterator pos2 = bound_inputs_map_.find (c);
-	  if (pos2 == bound_inputs_map_.end ()) {
-	    return 0;
-	  }
-	  size_t count = 0;
-	  for (binding_set_type::const_iterator pos3 = pos2->second.begin ();
-	       pos3 != pos2->second.end ();
-	       ++pos3) {
-	    if ((*pos3)->enabled ()) {
-	      ++count;
-	    }
-	  }
-	  return count;
-	}
-	break;
-      case OUTPUT:
-	{
-	  bound_outputs_map_type::const_iterator pos2 = bound_outputs_map_.find (c);
-	  if (pos2 == bound_outputs_map_.end ()) {
-	    return 0;
-	  }
-	  size_t count = 0;
-	  for (binding_set_type::const_iterator pos3 = pos2->second.begin ();
-	       pos3 != pos2->second.end ();
-	       ++pos3) {
-	    if ((*pos3)->enabled ()) {
-	      ++count;
-	    }
-	  }
-	  return count;
-	}
-	break;
-      case INTERNAL:
-	return 0;
-	break;
-      }
-    }
-
-    return 0;
   }
 
   /*
@@ -1678,7 +1581,7 @@ public:
       return make_pair (-1, LILY_ERROR_ANODNE);
     }
     
-    // Correct the parameter.
+    // Check the parameter.
     if (action->parameter_mode == NO_PARAMETER && parameter != 0) {
       return make_pair (-1, LILY_ERROR_INVAL);
     }
@@ -1713,7 +1616,7 @@ public:
   inline pair<bd_t, lily_error_t>
   get_boot_data (void) const
   {
-    if (this == system_automaton.get ()) {
+    if (this == boot_automaton.get ()) {
       if (boot_data != -1) {
 	bd_t bd = boot_data;
 	boot_data = -1;
@@ -1780,7 +1683,7 @@ public:
   automaton () :
     aid_ (-1),
     regenerate_description_ (false),
-    enabled_ (false),
+    crashed_ (false),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),
     heap_area_ (0),
     stack_area_ (0),

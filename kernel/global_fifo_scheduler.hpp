@@ -152,7 +152,7 @@ public:
   }
   
   static inline void
-  finish (int output_fired,
+  finish (bool output_fired,
 	  bd_t bda,
 	  bd_t bdb)
   {
@@ -192,6 +192,7 @@ public:
 	finish_output ();
 	break;
       case INTERNAL:
+      case SYSTEM:
 	// -EEE
 	action_.automaton->unlock_execution ();
 	break;
@@ -253,6 +254,7 @@ public:
 	  }
 	  break;
 	case INTERNAL:
+	case SYSTEM:
 	  // +EEE
 	  action_.automaton->lock_execution ();
 	  break;

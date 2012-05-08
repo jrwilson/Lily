@@ -1,6 +1,86 @@
 #include "automaton.h"
 #include "string.h"
 
+#define syscall0(syscall)		\
+  __asm__ __volatile__ ("mov %0, %%eax\n" \
+	   "int $0x80\n" : : "g"(syscall) : "eax", "ecx");
+
+#define syscall1(syscall, p1)		\
+  __asm__ __volatile__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx");
+
+#define syscall2(syscall, p1, p2)		\
+  __asm__ __volatile__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "mov %2, %%ecx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx");
+
+#define syscall3(syscall, p1, p2, p3)		\
+  __asm__ __volatile__ ("mov %0, %%eax\n" \
+	   "mov %1, %%ebx\n" \
+	   "mov %2, %%ecx\n" \
+	   "mov %3, %%edx\n" \
+	   "int $0x80\n" : : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx");
+
+#define syscall0r(syscall, retval)	\
+  __asm__ __volatile__ ("mov %1, %%eax\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall) : "eax", "ecx" );
+
+#define syscall1r(syscall, p1, retval)		\
+  __asm__ __volatile__ ("mov %1, %%eax\n"	\
+	   "mov %2, %%ebx\n"						\
+	   "int $0x80\n"						\
+	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1) : "eax", "ebx", "ecx" );
+
+#define syscall2r(syscall, p1, p2, retval)	\
+  __asm__ __volatile__ ("mov %1, %%eax\n" \
+           "mov %2, %%ebx\n" \
+           "mov %3, %%ecx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
+
+#define syscall0re(syscall, retval, error)	  \
+  __asm__ __volatile__ ("mov %2, %%eax\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall) : "eax", "ecx" );
+
+#define syscall1re(syscall, retval, error, p1)	\
+  __asm__ __volatile__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" );
+
+#define syscall2re(syscall, retval, error, p1, p2)	\
+  __asm__ __volatile__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
+
+#define syscall3re(syscall, retval, error, p1, p2, p3)	\
+  __asm__ __volatile__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "mov %5, %%edx\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
+
+#define syscall4re(syscall, retval, error, p1, p2, p3, p4)	\
+  __asm__ __volatile__ ("mov %2, %%eax\n" \
+	   "mov %3, %%ebx\n" \
+	   "mov %4, %%ecx\n" \
+	   "mov %5, %%edx\n" \
+	   "mov %6, %%esi\n" \
+	   "int $0x80\n" \
+	   "mov %%eax, %0\n" \
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3), "m"(p4) : "eax", "ebx", "ecx", "edx", "esi" );
+
 lily_error_t lily_error = LILY_ERROR_SUCCESS;
 
 int
@@ -13,7 +93,7 @@ schedule (ano_t action_number,
 }
 
 void
-finish (int output_fired,
+finish (bool output_fired,
 	bd_t bda,
 	bd_t bdb)
 {
@@ -38,13 +118,10 @@ finish_input (bd_t bda,
 }
 
 void
-finish_output (int output_fired,
+finish_output (bool output_fired,
 	       bd_t bda,
 	       bd_t bdb)
 {
-  /* char buffer[64]; */
-  /* snprintf (buffer, 64, "finish_output output_fired = %d\n", output_fired); */
-  /* logs (buffer); */
   do_schedule ();
   finish (output_fired, bda, bdb);
 }
@@ -54,6 +131,58 @@ finish_internal (void)
 {
   do_schedule ();
   finish (0, -1, -1);
+}
+
+aid_t
+create (bd_t text_bd,
+	bool retain_privilege)
+{
+  aid_t retval;
+  syscall2re (LILY_SYSCALL_CREATE, retval, lily_error, text_bd, retain_privilege);
+  return retval;
+}
+
+bid_t
+bind (aid_t output_automaton,
+      ano_t output_action,
+      int output_parameter,
+      aid_t input_automaton,
+      ano_t input_action,
+      int input_parameter)
+{
+  bid_t retval;
+  syscall1re (LILY_SYSCALL_BIND, retval, lily_error, &output_automaton);
+  return retval;
+
+  /* __asm__ __volatile__ ("push %8\n" */
+  /* 			"push %7\n" */
+  /* 			"push %6\n" */
+  /* 			"push %5\n" */
+  /* 			"push %4\n" */
+  /* 			"push %3\n" */
+  /* 			"mov %2, %%eax\n" */
+  /* 			"int $0x80\n" */
+  /* 			"mov %%eax, %0\n" */
+  /* 			"mov %%ecx, %1\n" */
+  /* 			"sub $24, %%esp\n" : "=g"(retval), "=g"(lily_error) : "g"(LILY_SYSCALL_BIND), "g"(output_automaton), "g"(output_action), "g"(output_parameter), "g"(input_automaton), "g"(input_action), "g"(input_parameter) : "eax", "ecx"); */
+
+  /* return retval; */
+}
+
+int
+unbind (bid_t bid)
+{
+  int retval;
+  syscall1re (LILY_SYSCALL_UNBIND, retval, lily_error, bid);
+  return retval;
+}
+
+int
+destroy (aid_t aid)
+{
+  int retval;
+  syscall1re (LILY_SYSCALL_DESTROY, retval, lily_error, aid);
+  return retval;
 }
 
 void
@@ -350,6 +479,16 @@ lily_error_string (lily_error_t err)
     return "buffer does not exist";
   case LILY_ERROR_NOMEM:
     return "out of memory";
+  case LILY_ERROR_OAIDDNE:
+    return "output automaton does not exist";
+  case LILY_ERROR_IAIDDNE:
+    return "input automaton does not exist";
+  case LILY_ERROR_SAME:
+    return "binding to same automaton";
+  case LILY_ERROR_OANODNE:
+    return "output action does not exist";
+  case LILY_ERROR_IANODNE:
+    return "input action does not exist";
   }
   
   return "unknown error";

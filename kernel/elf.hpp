@@ -368,6 +368,7 @@ namespace elf {
 		    case INPUT:
 		    case OUTPUT:
 		    case INTERNAL:
+		    case SYSTEM:
 		      break;
 		    default:
 		      // Unknown action type.

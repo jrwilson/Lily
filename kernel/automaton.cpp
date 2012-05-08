@@ -30,6 +30,7 @@ automaton::schedule (const shared_ptr<automaton>& ths,
     switch (action->type) {
     case OUTPUT:
     case INTERNAL:
+    case SYSTEM:
       scheduler::schedule (caction (ths, action, parameter));
       return make_pair (0, LILY_ERROR_SUCCESS);
       break;
@@ -68,7 +69,7 @@ automaton::exit (const shared_ptr<automaton>& ths,
   Context (2) acquires the id_lock_ before invoking this function for thread safety.
 */
 
-pair<shared_ptr<automaton>, lily_create_error_t>
+pair<shared_ptr<automaton>, lily_error_t>
 automaton::create_automaton (bool privileged,
 			     const shared_ptr<buffer>& text,
 			     size_t text_size)
@@ -131,10 +132,10 @@ automaton::create_automaton (bool privileged,
   text->override (begin, end);
 
   if (parse_result == 0) {
-    return make_pair (child, LILY_CREATE_ERROR_SUCCESS);
+    return make_pair (child, LILY_ERROR_SUCCESS);
   }
   else {
-    return make_pair (shared_ptr<automaton> (), LILY_CREATE_ERROR_INVAL);
+    return make_pair (shared_ptr<automaton> (), LILY_ERROR_INVAL);
   }
 }
 
@@ -145,7 +146,7 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   
   kout << "TODO:  Generate destroy/exit event" << endl;
 
-  enabled_ = false;
+  crashed_ = true;
 
   /*
     Address the instance variables:

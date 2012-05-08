@@ -5,7 +5,7 @@
 #include <buffer_file.h>
 
 /* The system automaton tries to bind to the following actions. */
-#define SA_INIT_IN_NAME "sa_init_in"
+#define SA_INIT_IN_NAME "init"
 #define SA_CREATE_REQUEST_OUT_NAME "sa_create_request_out"
 #define SA_CA_REQUEST_IN_NAME "sa_ca_request_in"
 #define SA_CA_RESPONSE_OUT_NAME "sa_ca_response_out"

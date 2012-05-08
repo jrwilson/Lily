@@ -4,5 +4,5 @@
 bool
 binding::enabled () const
 {
-  return enabled_ && output_action.automaton->enabled () && input_action.automaton->enabled ();
+  return enabled_ && !output_action.automaton->crashed () && !input_action.automaton->crashed ();
 }
