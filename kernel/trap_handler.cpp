@@ -76,7 +76,7 @@ trap_dispatch (volatile registers regs)
     break;
   case LILY_SYSCALL_CREATE:
     {
-      pair<aid_t, lily_create_error_t> r = a->create (regs.ebx, regs.ecx, regs.edx, regs.esi);
+      pair<aid_t, lily_create_error_t> r = a->create (regs.ebx, regs.ecx);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
@@ -251,26 +251,19 @@ trap_dispatch (volatile registers regs)
       return;
     }
     break;
-  case LILY_SYSCALL_GETINITA:
-    {
-      regs.eax = a->inita ();
-      regs.ecx = LILY_ERROR_SUCCESS;
-      return;
-    }
-    break;
-  case LILY_SYSCALL_GETINITB:
-    {
-      regs.eax = a->initb ();
-      regs.ecx = LILY_ERROR_SUCCESS;
-      return;
-    }
-    break;
   case LILY_SYSCALL_GETMONOTIME:
     {
       pair<int, lily_error_t> r = a->getmonotime (reinterpret_cast<mono_time_t*> (regs.ebx));
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
+    }
+    break;
+  case LILY_SYSCALL_GET_BOOT_DATA:
+    {
+      pair<bd_t, lily_error_t> r = a->get_boot_data ();
+      regs.eax = r.first;
+      regs.ecx = r.second;
     }
     break;
   case LILY_SYSCALL_MAP:

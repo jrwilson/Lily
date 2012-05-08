@@ -71,9 +71,7 @@ automaton::exit (const shared_ptr<automaton>& ths,
 pair<shared_ptr<automaton>, lily_create_error_t>
 automaton::create_automaton (bool privileged,
 			     const shared_ptr<buffer>& text,
-			     size_t text_size,
-			     const shared_ptr<buffer>& buffer_a_,
-			     const shared_ptr<buffer>& buffer_b_)
+			     size_t text_size)
 {
   // If the parent exists, we enter with the id_mutex_ locked and the parent's mod_mutex_ locked.
 
@@ -120,13 +118,6 @@ automaton::create_automaton (bool privileged,
     child->aid_ = child_aid;
     child->privileged_ = privileged;
     
-    if (buffer_a_.get () != 0) {
-      child->init_buffer_a_ = child->buffer_create (buffer_a_);
-    }
-    if (buffer_b_.get () != 0) {
-      child->init_buffer_b_ = child->buffer_create (buffer_b_);
-    }
-
     // Add to the scheduler.
     scheduler::add_automaton (child);
   }

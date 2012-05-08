@@ -78,12 +78,10 @@ static lily_create_error_t create_error;
 
 static aid_t
 create (bd_t text_bd,
-	bd_t bda,
-	bd_t bdb,
 	int retain_privilege)
 {
   aid_t retval;
-  syscall4re (LILY_SYSCALL_CREATE, retval, create_error, text_bd, bda, bdb, retain_privilege);
+  syscall2re (LILY_SYSCALL_CREATE, retval, create_error, text_bd, retain_privilege);
   return retval;
 }
 
@@ -117,7 +115,7 @@ static int
 unbind (bid_t bid)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_UNBIND, retval, bid);
+  syscall1re (LILY_SYSCALL_UNBIND, retval, lily_error, bid);
   return retval;
 }
 
@@ -125,7 +123,7 @@ static int
 destroy (aid_t aid)
 {
   int retval;
-  syscall1re (LILY_SYSCALL_DESTROY, retval, aid);
+  syscall1re (LILY_SYSCALL_DESTROY, retval, lily_error, aid);
   return retval;
 }
 
@@ -188,12 +186,10 @@ pop_init (void)
 
 static aid_t
 create_ (bd_t text_bd,
-	 bd_t bda,
-	 bd_t bdb,
 	 int retain_privilege)
 {
   /* Create the automaton. */
-  aid_t aid = create (text_bd, bda, bdb, retain_privilege);
+  aid_t aid = create (text_bd, retain_privilege);
 
   if (aid != -1) {
     /* Bind it to the system automaton. */
@@ -471,7 +467,7 @@ process_create_transaction (create_transaction_t* t)
 
     if (t->owner_approval == GRANTED) {
       /* Permission granted. */
-      t->aid = create_ (req->text_bd, req->bda, req->bdb, req->retain_privilege);
+      t->aid = create_ (req->text_bd, req->retain_privilege);
 
       if (t == tmpfs_transaction) {
 	tmpfs_transaction = 0;
@@ -765,8 +761,10 @@ pop_ba_request (void)
 
 /* Output buffer. */
 static bd_t output_bda = -1;
-static bd_t output_bdb = -1;
 static buffer_file_t output_bfa;
+
+static bd_t init_output_bda = -1;
+static bd_t init_output_bdb = -1;
 
 BEGIN_INTERNAL (PARAMETER, INIT_NO, "init", "", init, ano_t ano, aid_t aid)
 {
@@ -776,8 +774,9 @@ BEGIN_INTERNAL (PARAMETER, INIT_NO, "init", "", init, ano_t ano, aid_t aid)
     system_automaton_aid = getaid ();
 
     output_bda = buffer_create (0);
-    output_bdb = buffer_create (0);
-    if (output_bda == -1 || output_bdb == -1) {
+    init_output_bda = buffer_create (0);
+    init_output_bdb = buffer_create (0);
+    if (output_bda == -1 || init_output_bda == -1 || init_output_bdb == -1) {
       snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not create output buffer: %s", lily_error_string (lily_error));
       logs (log_buffer);
       exit (-1);
@@ -788,58 +787,52 @@ BEGIN_INTERNAL (PARAMETER, INIT_NO, "init", "", init, ano_t ano, aid_t aid)
       exit (-1);
     }
 
-    bd_t bda = getinita ();
-
-    cpio_archive_t archive;
-    if (cpio_archive_init (&archive, bda) != 0) {
-      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize cpio archive: %s", lily_error_string (lily_error));
-      logs (log_buffer);
-      exit (-1);
-    }
-
-    cpio_file_t file;
-    while (cpio_archive_read (&archive, &file) == 0) {
-      if ((file.mode & CPIO_TYPE_MASK) == CPIO_REGULAR) {
-	if (strcmp (file.name, TMPFS_PATH) == 0) {
-	  bd_t tmpfs_bd = cpio_file_read (&archive, &file);
-	  if (tmpfs_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read tmpfs image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	  tmpfs_transaction = insert_create_transaction (sa_create_request_create (tmpfs_bd, bda, -1, false, system_automaton_aid), system_automaton_aid);
-	  if (buffer_destroy (tmpfs_bd) != 0) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy tmpfs image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	}
-	else if (strcmp (file.name, JSH_PATH) == 0) {
-	  jsh_bd = cpio_file_read (&archive, &file);
-	  if (jsh_bd == -1) {
-	    snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read jsh image: %s", lily_error_string (lily_error));
-	    logs (log_buffer);
-	    exit (-1);
-	  }
-	}
-      }
-    }
-
+    bd_t bda = get_boot_data ();
     if (bda != -1) {
+      cpio_archive_t archive;
+      if (cpio_archive_init (&archive, bda) != 0) {
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize cpio archive: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
+      }
+      
+      cpio_file_t file;
+      while (cpio_archive_read (&archive, &file) == 0) {
+	if ((file.mode & CPIO_TYPE_MASK) == CPIO_REGULAR) {
+	  if (strcmp (file.name, TMPFS_PATH) == 0) {
+	    bd_t tmpfs_bd = cpio_file_read (&archive, &file);
+	    if (tmpfs_bd == -1) {
+	      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read tmpfs image: %s", lily_error_string (lily_error));
+	      logs (log_buffer);
+	      exit (-1);
+	    }
+	    tmpfs_transaction = insert_create_transaction (sa_create_request_create (tmpfs_bd, bda, -1, false, system_automaton_aid), system_automaton_aid);
+	    if (buffer_destroy (tmpfs_bd) != 0) {
+	      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy tmpfs image: %s", lily_error_string (lily_error));
+	      logs (log_buffer);
+	      exit (-1);
+	    }
+	  }
+	  else if (strcmp (file.name, JSH_PATH) == 0) {
+	    jsh_bd = cpio_file_read (&archive, &file);
+	    if (jsh_bd == -1) {
+	      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not read jsh image: %s", lily_error_string (lily_error));
+	      logs (log_buffer);
+	      exit (-1);
+	    }
+	  }
+	}
+      }
+      
       if (buffer_destroy (bda) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (lily_error));
-    	logs (log_buffer);
-    	exit (-1);
+	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (lily_error));
+	logs (log_buffer);
+	exit (-1);
       }
     }
-
-    bd_t bdb = getinitb ();
-    if (bdb != -1) {
-      if (buffer_destroy (bdb) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s", lily_error_string (lily_error));
-    	logs (log_buffer);
-    	exit (-1);
-      }
+    else {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, WARNING "no boot data");
+      logs (log_buffer);
     }
   }
 
@@ -851,12 +844,26 @@ BEGIN_OUTPUT (AUTO_PARAMETER, INIT_OUT_NO, "", "", init_out, ano_t ano, aid_t ai
   if (init_head != 0 && init_head->create_transaction->aid == aid) {
     // Enable the automaton.
     enable (aid);
+
+    bd_t bda = -1;
+    size_t bda_size = buffer_size (init_head->create_transaction->request->bda);
+    if (bda_size != -1) {
+      bda = init_output_bda;
+      buffer_assign (bda, init_head->create_transaction->request->bda, 0, bda_size);
+    }
+
+    bd_t bdb = -1;
+    size_t bdb_size = buffer_size (init_head->create_transaction->request->bdb);
+    if (bdb_size != -1) {
+      bdb = init_output_bdb;
+      buffer_assign (bdb, init_head->create_transaction->request->bdb, 0, bdb_size);
+    }
     
     // Find the create transaction.
     finish_create_transaction (init_head->create_transaction);
 
     pop_init ();
-    finish_output (true, -1, -1);
+    finish_output (true, bda, bdb);
   }
   finish_output (false, -1, -1);
 }

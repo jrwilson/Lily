@@ -372,9 +372,6 @@ BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int pa
     
     /* TODO:  Do we need to make the root its own parent? */
 
-    bd_t bda = getinita ();
-    bd_t bdb = getinitb ();
-
     /* Parse the cpio archive looking for files that we need. */
     cpio_archive_t archive;
     if (cpio_archive_init (&archive, bda) == 0) {
@@ -412,13 +409,6 @@ BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int pa
 	  }
 	}
       }
-    }
-
-    if (bda != -1) {
-      buffer_destroy (bda);
-    }
-    if (bdb != -1) {
-      buffer_destroy (bdb);
     }
   }
 

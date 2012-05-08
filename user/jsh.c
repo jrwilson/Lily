@@ -1202,9 +1202,6 @@ BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int pa
 
     this_automaton = create_automaton (system_get_this (&system), "this", 0);
 
-    bd_t bda = getinita ();
-    bd_t bdb = getinitb ();
-
     if (bda != -1) {
       buffer_file_t de_buffer;
       if (buffer_file_initr (&de_buffer, bda) != 0) {
@@ -1249,21 +1246,6 @@ BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int pa
     }
 
     /* finda_init (&finda, &constellation, finda_aid, SEND_NO, RECV_NO); */
-
-    if (bda != -1) {
-      if (buffer_destroy (bda) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s\n", lily_error_string (lily_error));
-    	logs (log_buffer);
-    	exit (-1);
-      }
-    }
-    if (bdb != -1) {
-      if (buffer_destroy (bdb) != 0) {
-    	snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not destroy init buffer: %s\n", lily_error_string (lily_error));
-    	logs (log_buffer);
-    	exit (-1);
-      }
-    }
 
     /* text_out_bd = buffer_create (0); */
     /* if (text_out_bd == -1) { */

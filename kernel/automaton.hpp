@@ -126,9 +126,7 @@ public:
   static pair<shared_ptr<automaton>, lily_create_error_t>
   create_automaton (bool privileged,
 		    const shared_ptr<buffer>& text,
-		    size_t text_size,
-		    const shared_ptr<buffer>& buffer_a,
-		    const shared_ptr<buffer>& buffer_b);
+		    size_t text_size);
 
   /*
    * EXECUTION
@@ -247,10 +245,6 @@ private:
 
   // Mutual exlusion lock for executing actions.
   mutex execution_mutex_;
-
-  // Initialization buffers.
-  bd_t init_buffer_a_;
-  bd_t init_buffer_b_;
 
   /*
    * MEMORY MAP AND BUFFERS
@@ -437,8 +431,6 @@ public:
   
   inline pair<aid_t, lily_create_error_t>
   create (bd_t text_bd,
-	  bd_t bda,
-	  bd_t bdb,
 	  int retain_privilege)
   {
     if (this != system_automaton.get ()) {
@@ -452,18 +444,8 @@ public:
       return make_pair (-1, LILY_CREATE_ERROR_BDDNE);
     }
     
-    // Find and synchronize the data buffers so the frames listed in the buffers are correct.
-    shared_ptr<buffer> buffer_a = lookup_buffer (bda);
-    if (buffer_a.get () != 0) {
-      buffer_a->sync (0, buffer_a->size ());
-    }
-    shared_ptr<buffer> buffer_b = lookup_buffer (bdb);
-    if (buffer_b.get () != 0) {
-      buffer_b->sync (0, buffer_b->size ());
-    }
-    
     // Create the automaton.
-    pair<shared_ptr<automaton>, lily_create_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE, buffer_a, buffer_b);
+    pair<shared_ptr<automaton>, lily_create_error_t> r = create_automaton (retain_privilege && privileged_, text_buffer, text_buffer->size () * PAGE_SIZE);
     
     if (r.first.get () != 0) {
       return make_pair (r.first->aid (), r.second);
@@ -654,17 +636,17 @@ public:
     execution_mutex_.unlock ();
   }
 
-  inline bd_t
-  inita () const
-  {
-    return init_buffer_a_;
-  }
+  // inline bd_t
+  // inita () const
+  // {
+  //   return init_buffer_a_;
+  // }
 
-  inline bd_t
-  initb () const
-  {
-    return init_buffer_b_;
-  }
+  // inline bd_t
+  // initb () const
+  // {
+  //   return init_buffer_b_;
+  // }
 
   /*
    * MEMORY MAP AND BUFFERS
@@ -1037,6 +1019,11 @@ public:
 
     if (begin > end ||
 	end > src_b->size ()) {
+      return make_pair (-1, LILY_ERROR_INVAL);
+    }
+
+    if (dest_b->begin () != 0) {
+      // The destination is mapped.
       return make_pair (-1, LILY_ERROR_INVAL);
     }
 
@@ -1723,6 +1710,19 @@ public:
     return make_pair (0, LILY_ERROR_SUCCESS);
   }
 
+  inline pair<bd_t, lily_error_t>
+  get_boot_data (void) const
+  {
+    if (this == system_automaton.get ()) {
+      if (boot_data != -1) {
+	bd_t bd = boot_data;
+	boot_data = -1;
+	return make_pair (bd, LILY_ERROR_SUCCESS);
+      }
+    }
+    return make_pair (-1, LILY_ERROR_BDDNE);
+  }
+
   /*
    * SUBSCRIPTIONS
    */
@@ -1781,8 +1781,6 @@ public:
     aid_ (-1),
     regenerate_description_ (false),
     enabled_ (false),
-    init_buffer_a_ (-1),
-    init_buffer_b_ (-1),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),
     heap_area_ (0),
     stack_area_ (0),

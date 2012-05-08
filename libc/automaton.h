@@ -87,35 +87,35 @@ void func (ano, param)
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" : "=g"(retval) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
 
-#define syscall0re(syscall, retval)	\
+#define syscall0re(syscall, retval, error)	  \
   __asm__ __volatile__ ("mov %2, %%eax\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall) : "eax", "ecx" );
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall) : "eax", "ecx" );
 
-#define syscall1re(syscall, retval, p1)	\
+#define syscall1re(syscall, retval, error, p1)	\
   __asm__ __volatile__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" );
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "g"(p1) : "eax", "ebx", "ecx" );
 
-#define syscall2re(syscall, retval, p1, p2)	\
+#define syscall2re(syscall, retval, error, p1, p2)	\
   __asm__ __volatile__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "mov %4, %%ecx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2) : "eax", "ebx", "ecx" );
 
-#define syscall3re(syscall, retval, p1, p2, p3)	\
+#define syscall3re(syscall, retval, error, p1, p2, p3)	\
   __asm__ __volatile__ ("mov %2, %%eax\n" \
 	   "mov %3, %%ebx\n" \
 	   "mov %4, %%ecx\n" \
 	   "mov %5, %%edx\n" \
 	   "int $0x80\n" \
 	   "mov %%eax, %0\n" \
-	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(lily_error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
+	   "mov %%ecx, %1\n" : "=g"(retval), "=g"(error) : "g"(syscall), "m"(p1), "m"(p2), "m"(p3) : "eax", "ebx", "ecx", "edx" );
 
 #define syscall4re(syscall, retval, error, p1, p2, p3, p4)	\
   __asm__ __volatile__ ("mov %2, %%eax\n" \
@@ -214,14 +214,11 @@ describe (aid_t aid);
 aid_t
 getaid (void);
 
-bd_t
-getinita (void);
-
-bd_t
-getinitb (void);
-
 int
 getmonotime (mono_time_t* t);
+
+bd_t
+get_boot_data (void);
 
 /* These calls can only be made by privileged automata. */
 int

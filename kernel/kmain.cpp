@@ -301,7 +301,7 @@ kmain (uint32_t multiboot_magic,
     }
     
     // Create the automaton.
-    pair<shared_ptr<automaton>, int> r = automaton::create_automaton (true, text, boot_automaton_size, data_buffer, shared_ptr<buffer> ());
+    pair<shared_ptr<automaton>, int> r = automaton::create_automaton (true, text, boot_automaton_size);
     
     if (r.first.get () == 0) {
       kout << "Could not create the boot automaton.  Halting." << endl;
@@ -309,6 +309,7 @@ kmain (uint32_t multiboot_magic,
     }
     
     system_automaton = r.first;
+    boot_data = system_automaton->buffer_create (data_buffer);
 
     // Enable the system automaton.
     system_automaton->enable ();

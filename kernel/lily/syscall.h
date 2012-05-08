@@ -30,11 +30,10 @@
 #define LILY_SYSCALL_BUFFER_UNMAP          0x48
 
 #define LILY_SYSCALL_SYSCONF               0x50
-#define LILY_SYSCALL_DESCRIBE              0x52
-#define LILY_SYSCALL_GETAID                0x53
-#define LILY_SYSCALL_GETINITA              0x54
-#define LILY_SYSCALL_GETINITB              0x55
-#define LILY_SYSCALL_GETMONOTIME           0x56
+#define LILY_SYSCALL_DESCRIBE              0x51
+#define LILY_SYSCALL_GETAID                0x52
+#define LILY_SYSCALL_GETMONOTIME           0x53
+#define LILY_SYSCALL_GET_BOOT_DATA         0X54
 
 /* Privileged system calls. */
 #define LILY_SYSCALL_MAP                   0x100
