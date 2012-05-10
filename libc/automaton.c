@@ -479,6 +479,8 @@ lily_error_string (lily_error_t err)
     return "buffer does not exist";
   case LILY_ERROR_NOMEM:
     return "out of memory";
+  case LILY_ERROR_CONTEXT:
+    return "operation not permitted in action";
   case LILY_ERROR_OAIDDNE:
     return "output automaton does not exist";
   case LILY_ERROR_IAIDDNE:

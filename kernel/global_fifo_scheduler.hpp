@@ -127,6 +127,13 @@ public:
     return action_.automaton;
   }
 
+  static inline const paction*
+  current_action ()
+  {
+    kassert (action_.action != 0);
+    return action_.action;
+  }
+
   static inline void
   schedule (const caction& ad)
   {

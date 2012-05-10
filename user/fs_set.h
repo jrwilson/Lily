@@ -5,14 +5,12 @@
 #include <buffer_file.h>
 #include "system.h"
 #include "fs_msg.h"
-#include "bind_stat.h"
 
 typedef void (*readfile_callback_t) (void* arg, const fs_readfile_response_t* res, bd_t bd);
 
 typedef struct fs fs_t;
 typedef struct {
   system_t* system;
-  bind_stat_t* bs;
   buffer_file_t* output_bfa;
   ano_t descend_request;
   ano_t descend_response;
@@ -25,7 +23,6 @@ typedef struct {
 void
 fs_set_init (fs_set_t* fs_set,
 	     system_t* system,
-	     bind_stat_t* bs,
 	     buffer_file_t* output_bfa,
 	     ano_t descend_request,
 	     ano_t descend_response,

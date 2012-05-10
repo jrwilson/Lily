@@ -29,12 +29,16 @@ struct fs {
   aid_t aid;
   char* name;
   fs_nodeid_t nodeid;
+  binding_t* descend_request_binding;
   descend_request_t* descend_request_head;
   descend_request_t** descend_request_tail;
+  binding_t* descend_response_binding;
   descend_request_t* descend_response_head;
   descend_request_t** descend_response_tail;
+  binding_t* readfile_request_binding;
   readfile_request_t* readfile_request_head;
   readfile_request_t** readfile_request_tail;
+  binding_t* readfile_response_binding;
   readfile_request_t* readfile_response_head;
   readfile_request_t** readfile_response_tail;
   fs_t* next;
@@ -68,23 +72,23 @@ find_fs_name (const fs_set_t* fs_set,
   return fs;
 }
 
-static void
-push_descend_request (fs_t* fs,
-		      fs_nodeid_t nodeid,
-		      const char* name_begin,
-		      const char* name_end,
-		      descend_callback_t callback,
-		      void* arg)
-{
-  descend_request_t* req = malloc (sizeof (descend_request_t));
-  memset (req, 0, sizeof (descend_request_t));
-  req->request = fs_descend_request_create (nodeid, name_begin, name_end);
-  req->callback = callback;
-  req->arg = arg;
+/* static void */
+/* push_descend_request (fs_t* fs, */
+/* 		      fs_nodeid_t nodeid, */
+/* 		      const char* name_begin, */
+/* 		      const char* name_end, */
+/* 		      descend_callback_t callback, */
+/* 		      void* arg) */
+/* { */
+/*   descend_request_t* req = malloc (sizeof (descend_request_t)); */
+/*   memset (req, 0, sizeof (descend_request_t)); */
+/*   req->request = fs_descend_request_create (nodeid, name_begin, name_end); */
+/*   req->callback = callback; */
+/*   req->arg = arg; */
   
-  *fs->descend_request_tail = req;
-  fs->descend_request_tail = &req->next;
-}
+/*   *fs->descend_request_tail = req; */
+/*   fs->descend_request_tail = &req->next; */
+/* } */
 
 static void
 shift_descend_request (fs_t* fs)
@@ -116,7 +120,7 @@ pop_descend_response (fs_t* fs)
 static bool
 fs_descend_request_precondition (const fs_t* fs)
 {
-  return fs->descend_request_head != 0 && bind_stat_output_bound (fs->fs_set->bs, fs->fs_set->descend_request, fs->aid) && bind_stat_input_bound (fs->fs_set->bs, fs->fs_set->descend_response, fs->aid);
+  return fs->descend_request_head != 0 && binding_bound (fs->descend_request_binding) && binding_bound (fs->descend_response_binding);
 }
 
 static void
@@ -208,7 +212,7 @@ pop_readfile_response (fs_t* fs)
 static bool
 fs_readfile_request_precondition (const fs_t* fs)
 {
-  return fs->readfile_request_head != 0 && bind_stat_output_bound (fs->fs_set->bs, fs->fs_set->readfile_request, fs->aid) && bind_stat_input_bound (fs->fs_set->bs, fs->fs_set->readfile_response, fs->aid);
+  return fs->readfile_request_head != 0 && binding_bound (fs->readfile_request_binding) && binding_bound (fs->readfile_response_binding);
 }
 
 static void
@@ -272,7 +276,6 @@ fs_schedule (const fs_t* fs)
 void
 fs_set_init (fs_set_t* vfs,
 	     system_t* system,
-	     bind_stat_t* bs,
 	     buffer_file_t* output_bfa,
 	     ano_t descend_request,
 	     ano_t descend_response,
@@ -280,7 +283,6 @@ fs_set_init (fs_set_t* vfs,
 	     ano_t readfile_response)
 {
   vfs->system = system;
-  vfs->bs = bs;
   vfs->output_bfa = output_bfa;
   vfs->descend_request = descend_request;
   vfs->descend_response = descend_response;
@@ -326,22 +328,18 @@ fs_set_insert (fs_set_t* fs_set,
   /* Bind. */
   automaton_t* this_a = system_get_this (fs_set->system);
   automaton_t* fs_a = system_add_unmanaged_automaton (fs_set->system, aid);
-  system_add_binding (fs_set->system,
-  		      this_a, 0, 0, fs_set->descend_request, 0,
-  		      fs_a, FS_DESCEND_REQUEST_IN_NAME, 0, -1, 0,
-  		      this_a);
-  system_add_binding (fs_set->system,
-  		      fs_a, FS_DESCEND_RESPONSE_OUT_NAME, 0, -1, 0,
-  		      this_a, 0, 0, fs_set->descend_response, 0,
-  		      this_a);
-  system_add_binding (fs_set->system,
-  		      this_a, 0, 0, fs_set->readfile_request, 0,
-  		      fs_a, FS_READFILE_REQUEST_IN_NAME, 0, -1, 0,
-  		      this_a);
-  system_add_binding (fs_set->system,
-  		      fs_a, FS_READFILE_RESPONSE_OUT_NAME, 0, -1, 0,
-  		      this_a, 0, 0, fs_set->readfile_response, 0,
-  		      this_a);
+  fs->descend_request_binding = system_add_binding (fs_set->system,
+						    this_a, 0, 0, fs_set->descend_request, 0,
+						    fs_a, FS_DESCEND_REQUEST_IN_NAME, 0, -1, 0);
+  fs->descend_response_binding = system_add_binding (fs_set->system,
+						     fs_a, FS_DESCEND_RESPONSE_OUT_NAME, 0, -1, 0,
+						     this_a, 0, 0, fs_set->descend_response, 0);
+  fs->readfile_request_binding = system_add_binding (fs_set->system,
+						     this_a, 0, 0, fs_set->readfile_request, 0,
+						     fs_a, FS_READFILE_REQUEST_IN_NAME, 0, -1, 0);
+  fs->readfile_response_binding = system_add_binding (fs_set->system,
+						      fs_a, FS_READFILE_RESPONSE_OUT_NAME, 0, -1, 0,
+						      this_a, 0, 0, fs_set->readfile_response, 0);
 }
 
 void

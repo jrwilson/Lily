@@ -5,6 +5,7 @@
 #include "cpio.h"
 #include "de.h"
 #include "environment.h"
+#include "system.h"
 
 /*
   The Boot Automaton
@@ -24,8 +25,6 @@
 /* Paths in the cpio archive. */
 #define TMPFS_PATH "bin/tmpfs"
 #define JSH_PATH "bin/jsh"
-
-#define INIT_NAME "init"
 
 /* Logging. */
 #define LOG_BUFFER_SIZE 128
@@ -144,7 +143,7 @@ BEGIN_SYSTEM (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
       action_desc_t desc;
 
       description_init (&description, tmpfs_aid);
-      if (description_read_name (&description, &desc, INIT_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      if (description_read_name (&description, &desc, SA_INIT_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
         if (bind (this_aid, INIT_OUT_NO, tmpfs_aid, tmpfs_aid, desc.number, 0) == -1) {
 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to tmpfs init action: %s", lily_error_string (lily_error));
 	  logs (log_buffer);
@@ -176,7 +175,7 @@ BEGIN_SYSTEM (NO_PARAMETER, INIT_NO, "init", "", init, ano_t ano, int param)
 
       /* Bind to the init action of the jsh. */
       description_init (&description, jsh_aid);
-      if (description_read_name (&description, &desc, INIT_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
+      if (description_read_name (&description, &desc, SA_INIT_IN_NAME, 0) == 0 && desc.type == LILY_ACTION_INPUT) {
         if (bind (this_aid, INIT_OUT_NO, jsh_aid, jsh_aid, desc.number, 0) == -1) {
 	  snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not bind to tmpfs init action: %s", lily_error_string (lily_error));
 	  logs (log_buffer);

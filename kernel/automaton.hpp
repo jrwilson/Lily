@@ -1203,13 +1203,18 @@ public:
   }
 
   inline pair<bid_t, lily_error_t>
-  bind (aid_t output_aid,
+  bind (const paction* action,
+	aid_t output_aid,
 	ano_t output_ano,
 	int output_parameter,
 	aid_t input_aid,
 	ano_t input_ano,
 	int input_parameter)
   {
+    if (action->type != SYSTEM) {
+      return make_pair (-1, LILY_ERROR_CONTEXT);
+    }
+
     aid_to_automaton_map_type::const_iterator output_pos = aid_to_automaton_map_.find (output_aid);
     if (output_pos == aid_to_automaton_map_.end ()) {
       // Output automaton DNE.

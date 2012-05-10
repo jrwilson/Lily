@@ -88,7 +88,7 @@ trap_dispatch (volatile registers regs)
       if (!a->verify_stack (ptr, sizeof (bind_args))) {
 	kpanic ("TODO:  Can't get bind arguments from the stack");
       }
-      pair<bid_t, lily_error_t> r = a->bind (ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
+      pair<bid_t, lily_error_t> r = a->bind (scheduler::current_action (), ptr->output_automaton, ptr->output_action, ptr->output_parameter, ptr->input_automaton, ptr->input_action, ptr->input_parameter);
       regs.eax = r.first;
       regs.ecx = r.second;
       return;
