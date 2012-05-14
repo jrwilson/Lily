@@ -146,7 +146,7 @@ automaton::destroy (const shared_ptr<automaton>& ths)
   
   kout << "TODO:  Generate destroy/exit event" << endl;
 
-  crashed_ = true;
+  enabled_ = false;
 
   /*
     Address the instance variables:

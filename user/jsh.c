@@ -22,6 +22,13 @@
 #define RECV_NO 9
 #define SEND_NO 10
 #define BIND_ACTION_NO 11
+#define INIT_OUT_NO 12
+#define STATUS_REQUEST_OUT_NO 13
+#define STATUS_REQUEST_IN_NO 14
+#define STATUS_RESPONSE_OUT_NO 15
+#define STATUS_RESPONSE_IN_NO 16
+#define BINDING_UPDATE_OUT_NO 17
+#define BINDING_UPDATE_IN_NO 18
 
 #define FS_DESCEND_REQUEST_OUT_NO 21
 #define FS_DESCEND_RESPONSE_IN_NO 22
@@ -85,31 +92,31 @@ struct automaton_item {
 /*   binding_item_t* next; */
 /* }; */
 
-static automaton_item_t* this_automaton = 0;
+//static automaton_item_t* this_automaton = 0;
 static automaton_item_t* automaton_head = 0;
 /* static binding_t* bindings_head = 0; */
 
-static automaton_item_t*
-create_automaton (automaton_t* a,
-		  const char* name_begin,
-		  const char* name_end)
-{
-  if (name_end == 0) {
-    name_end = name_begin + strlen (name_begin);
-  }
-  automaton_item_t* ai = malloc (sizeof (automaton_item_t));
-  memset (ai, 0, sizeof (automaton_item_t));
-  ai->automaton = a;
-  size_t name_size = name_end - name_begin;
-  ai->name_begin = malloc (name_size);
-  memcpy (ai->name_begin, name_begin, name_size);
-  ai->name_end = ai->name_begin + name_size;
+/* static automaton_item_t* */
+/* create_automaton (automaton_t* a, */
+/* 		  const char* name_begin, */
+/* 		  const char* name_end) */
+/* { */
+/*   if (name_end == 0) { */
+/*     name_end = name_begin + strlen (name_begin); */
+/*   } */
+/*   automaton_item_t* ai = malloc (sizeof (automaton_item_t)); */
+/*   memset (ai, 0, sizeof (automaton_item_t)); */
+/*   ai->automaton = a; */
+/*   size_t name_size = name_end - name_begin; */
+/*   ai->name_begin = malloc (name_size); */
+/*   memcpy (ai->name_begin, name_begin, name_size); */
+/*   ai->name_end = ai->name_begin + name_size; */
   
-  ai->next = automaton_head;
-  automaton_head = ai;
+/*   ai->next = automaton_head; */
+/*   automaton_head = ai; */
   
-  return ai;
-}
+/*   return ai; */
+/* } */
 
 /* static void */
 /* destroy_automaton (automaton_t* automaton) */
@@ -394,23 +401,23 @@ typedef struct {
 /* static const char* create_path = 0; */
 /* static size_t create_argv_idx = 0; */
 
-static void
-create_readfile_callback (void* arg,
-			  const fs_readfile_response_t* res,
-			  bd_t bd)
-{
-  automaton_item_t* ai = arg;
-  switch (res->error) {
-  case FS_READFILE_SUCCESS:
-    automaton_set_text (ai->automaton, bd);
-    buffer_destroy (bd);
-    break;
-  default:
-    /* TODO */
-    logs (ERROR "TODO:  could not read file");
-    break;
-  }
-}
+/* static void */
+/* create_readfile_callback (void* arg, */
+/* 			  const fs_readfile_response_t* res, */
+/* 			  bd_t bd) */
+/* { */
+/*   //automaton_item_t* ai = arg; */
+/*   switch (res->error) { */
+/*   case FS_READFILE_SUCCESS: */
+/*     //automaton_set_text (ai->automaton, bd); */
+/*     buffer_destroy (bd); */
+/*     break; */
+/*   default: */
+/*     /\* TODO *\/ */
+/*     logs (ERROR "TODO:  could not read file"); */
+/*     break; */
+/*   } */
+/* } */
 
 static void
 create_usage (void)
@@ -459,9 +466,9 @@ create_ (const string_t* strings,
     /* TODO:  Pass the arguments. */
 
     if (find_automaton (strings[name_idx].begin, strings[name_idx].end) == 0) {
-      automaton_t* a = system_add_managed_automaton (&system, -1, -1, -1, retain_privilege);
-      automaton_item_t* ai = create_automaton (a, strings[name_idx].begin, strings[name_idx].end);
-      fs_set_readfile (&fs_set, strings[path_idx].begin, strings[path_idx].end, create_readfile_callback, ai);
+      //automaton_t* a = system_add_managed_automaton (&system, -1, -1, -1, retain_privilege);
+      //automaton_item_t* ai = create_automaton (a, strings[name_idx].begin, strings[name_idx].end);
+      //fs_set_readfile (&fs_set, strings[path_idx].begin, strings[path_idx].end, create_readfile_callback, ai);
     }
     else {
       logs (ERROR "TODO:  name already taken");
@@ -1166,10 +1173,14 @@ BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int pa
       exit (-1);
     }
 
-    system_init (&system, &output_bfa, output_bdb, BIND_ACTION_NO);
+    if (system_init (&system) != 0) {
+      snprintf (log_buffer, LOG_BUFFER_SIZE, ERROR "could not initialize system");
+      logs (log_buffer);
+      exit (-1);
+    }
     fs_set_init (&fs_set, &system, &output_bfa, FS_DESCEND_REQUEST_OUT_NO, FS_DESCEND_RESPONSE_IN_NO, FS_READFILE_REQUEST_OUT_NO, FS_READFILE_RESPONSE_IN_NO);
 
-    this_automaton = create_automaton (system_get_this (&system), "this", 0);
+    //this_automaton = create_automaton (system_get_this (&system), "this", 0);
 
     if (bda != -1) {
       buffer_file_t de_buffer;
@@ -1435,7 +1446,42 @@ BEGIN_INPUT (NO_PARAMETER, INIT_NO, SA_INIT_IN_NAME, "", init, ano_t ano, int pa
 
 BEGIN_SYSTEM (NO_PARAMETER, BIND_ACTION_NO, "", "", bind_action, ano_t ano, int param)
 {
-  system_bind_action (&system);
+  //system_bind_action (&system);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, INIT_OUT_NO, SA_INIT_OUT_NAME, "", init_out, ano_t ano, aid_t aid)
+{
+  //system_init_out (&system, aid);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, STATUS_REQUEST_OUT_NO, SA_STATUS_REQUEST_OUT_NAME, "", status_request_out, ano_t ano, aid_t aid)
+{
+  //system_status_request_out (&system, aid);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, STATUS_REQUEST_IN_NO, SA_STATUS_REQUEST_IN_NAME, "", status_request_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  //system_status_request_in (&system, aid, bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, STATUS_RESPONSE_OUT_NO, SA_STATUS_RESPONSE_OUT_NAME, "", status_response_out, ano_t ano, aid_t aid)
+{
+  //system_status_response_out (&system, aid);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, STATUS_RESPONSE_IN_NO, SA_STATUS_RESPONSE_IN_NAME, "", status_response_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  //system_status_response_in (&system, aid, bda, bdb);
+}
+
+BEGIN_OUTPUT (AUTO_PARAMETER, BINDING_UPDATE_OUT_NO, SA_BINDING_UPDATE_OUT_NAME, "", binding_update_out, ano_t ano, aid_t aid)
+{
+  //system_binding_update_out (&system, aid);
+}
+
+BEGIN_INPUT (AUTO_PARAMETER, BINDING_UPDATE_IN_NO, SA_BINDING_UPDATE_IN_NAME, "", binding_update_in, ano_t ano, aid_t aid, bd_t bda, bd_t bdb)
+{
+  //system_binding_update_in (&system, aid, bda, bdb);
 }
 
 BEGIN_OUTPUT (AUTO_PARAMETER, FS_DESCEND_REQUEST_OUT_NO, "", "", fs_descend_request_out, ano_t ano, aid_t aid)

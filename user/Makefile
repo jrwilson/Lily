@@ -1,14 +1,13 @@
 CC=i586-pc-lily-gcc
 CFLAGS=-g -Wall -O2 -MD -std=c99
 PROGRAMS=\
-syslog \
 tmpfs \
-finda \
-jsh \
-ps2_keyboard_mouse \
-terminal \
-vga \
-ecma2unix
+jsh
+
+#ps2_keyboard_mouse \
+#terminal \
+#vga \
+#ecma2unix
 
 #pci \
 #ps2_keyboard_mouse_test \
@@ -26,8 +25,8 @@ TARGETS=boot_automaton boot_data
 .PHONY : all
 all : $(TARGETS)
 
-boot_automaton : boot_automaton.o cpio.o de.o
-	$(CC) -o $@ $^ -ldescription -lbuffer_file -ldymem
+boot_automaton : boot_automaton.o cpio.o de.o system.o
+	$(CC) -o $@ $^ -lbuffer_file -ldymem
 
 boot_data : to_buffer_file $(PROGRAMS) $(SCRIPTS)
 	mkdir -p init_fs/bin

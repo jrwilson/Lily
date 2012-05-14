@@ -229,8 +229,8 @@ private:
    * EXECUTION
    */
 
-  // Automaton is either okay to run or crashed.
-  bool crashed_;
+  // Automaton is either enabled or disabled.
+  bool enabled_;
 
   // Mutual exlusion lock for executing actions.
   mutex execution_mutex_;
@@ -419,9 +419,14 @@ public:
    */
   
   inline pair<aid_t, lily_error_t>
-  create (bd_t text_bd,
+  create (const paction* action,
+	  bd_t text_bd,
 	  bool retain_privilege)
   {
+    if (action->type != SYSTEM) {
+      return make_pair (-1, LILY_ERROR_CONTEXT);
+    }
+
     // Find the text buffer.
     shared_ptr<buffer> text_buffer = lookup_buffer (text_bd);
     if (text_buffer.get () == 0) {
@@ -466,9 +471,9 @@ public:
 
 public:
   inline bool
-  crashed () const
+  enabled () const
   {
-    return crashed_;
+    return enabled_;
   }
 
   inline void
@@ -485,7 +490,7 @@ public:
 	   const shared_ptr<buffer>& output_buffer_b_)
   {
     // Only execute if enabled.
-    if (!crashed_) {
+    if (enabled_) {
       
       // switch (action.type) {
       // case INPUT:
@@ -1688,7 +1693,7 @@ public:
   automaton () :
     aid_ (-1),
     regenerate_description_ (false),
-    crashed_ (false),
+    enabled_ (true),
     page_directory (frame_to_physical_address (frame_manager::alloc ())),
     heap_area_ (0),
     stack_area_ (0),
